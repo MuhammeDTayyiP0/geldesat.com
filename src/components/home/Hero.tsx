@@ -1,3 +1,6 @@
+"use client"
+
+import { useState } from "react"
 import Form from "next/form"
 import { Search, MapPin, Home, Car, ShoppingBag, ArrowRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -5,6 +8,8 @@ import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export function Hero() {
+    const [searchQuery, setSearchQuery] = useState("")
+
     return (
         <section className="relative w-full overflow-hidden bg-background pt-24 pb-32">
             {/* Background Decorative Elements */}
@@ -51,11 +56,7 @@ export function Hero() {
                             <Form action="/search" className="flex flex-col md:flex-row gap-3">
                                 <div className="relative flex-1 group">
                                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground group-focus-within:text-primary transition-colors" />
-                                    <Input name="q" placeholder="Ne arıyorsunuz? (Örn: iPhone 15, Satılık Daire)" className="pl-12 h-14 sm:h-16 text-base sm:text-lg rounded-2xl bg-background/50 border-border/50 focus-visible:ring-primary/50" />
-                                </div>
-                                <div className="relative md:w-1/3 group">
-                                    <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground group-focus-within:text-primary transition-colors" />
-                                    <Input name="city" placeholder="İl, İlçe veya Mahalle" className="pl-12 h-14 sm:h-16 text-base sm:text-lg rounded-2xl bg-background/50 border-border/50 focus-visible:ring-primary/50" />
+                                    <Input name="q" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Ne arıyorsunuz? (Örn: iPhone 15, Satılık Daire)" className="pl-12 h-14 sm:h-16 text-base sm:text-lg rounded-2xl bg-background/50 border-border/50 focus-visible:ring-primary/50" />
                                 </div>
                                 <Button type="submit" size="lg" className="h-14 sm:h-16 px-10 text-base sm:text-lg font-bold rounded-2xl shadow-lg hover:shadow-primary/25 transition-all">
                                     Hemen Ara <ArrowRight className="ml-2 w-5 h-5" />
@@ -69,11 +70,7 @@ export function Hero() {
                                 <input type="hidden" name="category" value="emlak" />
                                 <div className="relative flex-1 group">
                                     <Home className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground group-focus-within:text-primary transition-colors" />
-                                    <Input name="q" placeholder="Hangi emlağı arıyorsunuz? (Örn: 3+1 Kiralık)" className="pl-12 h-14 sm:h-16 text-base sm:text-lg rounded-2xl bg-background/50 border-border/50 focus-visible:ring-primary/50" />
-                                </div>
-                                <div className="relative md:w-1/3 group">
-                                    <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground group-focus-within:text-primary transition-colors" />
-                                    <Input name="city" placeholder="İl, İlçe veya Mahalle" className="pl-12 h-14 sm:h-16 text-base sm:text-lg rounded-2xl bg-background/50 border-border/50 focus-visible:ring-primary/50" />
+                                    <Input name="q" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Hangi emlağı arıyorsunuz? (Örn: 3+1 Kiralık)" className="pl-12 h-14 sm:h-16 text-base sm:text-lg rounded-2xl bg-background/50 border-border/50 focus-visible:ring-primary/50" />
                                 </div>
                                 <Button type="submit" size="lg" className="h-14 sm:h-16 px-10 text-base sm:text-lg font-bold rounded-2xl shadow-lg hover:shadow-primary/25 transition-all">
                                     Emlak Bul <ArrowRight className="ml-2 w-5 h-5" />
@@ -86,11 +83,7 @@ export function Hero() {
                                 <input type="hidden" name="category" value="vasita" />
                                 <div className="relative flex-1 group">
                                     <Car className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground group-focus-within:text-primary transition-colors" />
-                                    <Input name="q" placeholder="Hangi aracı arıyorsunuz? (Örn: Honda Civic)" className="pl-12 h-14 sm:h-16 text-base sm:text-lg rounded-2xl bg-background/50 border-border/50 focus-visible:ring-primary/50" />
-                                </div>
-                                <div className="relative md:w-1/3 group">
-                                    <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground group-focus-within:text-primary transition-colors" />
-                                    <Input name="city" placeholder="İl, İlçe veya Mahalle" className="pl-12 h-14 sm:h-16 text-base sm:text-lg rounded-2xl bg-background/50 border-border/50 focus-visible:ring-primary/50" />
+                                    <Input name="q" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Hangi aracı arıyorsunuz? (Örn: Honda Civic)" className="pl-12 h-14 sm:h-16 text-base sm:text-lg rounded-2xl bg-background/50 border-border/50 focus-visible:ring-primary/50" />
                                 </div>
                                 <Button type="submit" size="lg" className="h-14 sm:h-16 px-10 text-base sm:text-lg font-bold rounded-2xl shadow-lg hover:shadow-primary/25 transition-all">
                                     Vasıta Bul <ArrowRight className="ml-2 w-5 h-5" />
@@ -103,11 +96,7 @@ export function Hero() {
                                 <input type="hidden" name="category" value="alisveris" />
                                 <div className="relative flex-1 group">
                                     <ShoppingBag className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground group-focus-within:text-primary transition-colors" />
-                                    <Input name="q" placeholder="Ne almak istersiniz? (Örn: Playstation 5)" className="pl-12 h-14 sm:h-16 text-base sm:text-lg rounded-2xl bg-background/50 border-border/50 focus-visible:ring-primary/50" />
-                                </div>
-                                <div className="relative md:w-1/3 group">
-                                    <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground group-focus-within:text-primary transition-colors" />
-                                    <Input name="city" placeholder="İl, İlçe veya Mahalle" className="pl-12 h-14 sm:h-16 text-base sm:text-lg rounded-2xl bg-background/50 border-border/50 focus-visible:ring-primary/50" />
+                                    <Input name="q" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Ne almak istersiniz? (Örn: Playstation 5)" className="pl-12 h-14 sm:h-16 text-base sm:text-lg rounded-2xl bg-background/50 border-border/50 focus-visible:ring-primary/50" />
                                 </div>
                                 <Button type="submit" size="lg" className="h-14 sm:h-16 px-10 text-base sm:text-lg font-bold rounded-2xl shadow-lg hover:shadow-primary/25 transition-all">
                                     Ürün Bul <ArrowRight className="ml-2 w-5 h-5" />
