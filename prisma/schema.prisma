@@ -1,0 +1,253 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?
+  phoneNumber   String?   @unique
+  role          UserRole  @default(USER)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts      Account[] // Relation to Account model
+
+  listings      Listing[]
+  favorites     Favorite[]
+  categorySuggestions CategorySuggestion[]
+  
+  sentMessages     Message[] @relation("SentMessages")
+  receivedMessages Message[] @relation("ReceivedMessages")
+  
+  conversationsAsBuyer  Conversation[] @relation("BuyerConversations")
+  conversationsAsSeller Conversation[] @relation("SellerConversations")
+}
+
+model Account {
+  id                 String  @id @default(cuid())
+  userId             String
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String?  @db.Text
+  access_token       String?  @db.Text
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String?  @db.Text
+  session_state      String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+
+// ... existing enums ...
+
+// ... existing models ...
+
+model Conversation {
+  id        String   @id @default(cuid())
+  
+  listingId String
+  listing   Listing  @relation(fields: [listingId], references: [id])
+  
+  buyerId   String
+  buyer     User     @relation("BuyerConversations", fields: [buyerId], references: [id])
+  
+  sellerId  String
+  seller    User     @relation("SellerConversations", fields: [sellerId], references: [id])
+  
+  messages  Message[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([listingId, buyerId, sellerId])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  content        String
+  
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  
+  senderId       String
+  sender         User         @relation("SentMessages", fields: [senderId], references: [id])
+  
+  receiverId     String
+  receiver       User         @relation("ReceivedMessages", fields: [receiverId], references: [id])
+  
+  read           Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+model Listing {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  price       Decimal
+  currency    String   @default("TRY")
+  status      ListingStatus @default(ACTIVE)
+
+  // Location fields
+  city        String?
+  district    String?
+  
+  images      String[] // Array of image URLs
+  
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  
+  categoryId  String
+  category    Category @relation(fields: [categoryId], references: [id])
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  favorites   Favorite[]
+  conversations Conversation[]
+  attributeValues ListingAttributeValue[]
+
+  @@index([categoryId])
+  @@index([status])
+  @@index([price])
+  @@index([createdAt])
+  @@index([userId])
+  @@index([city])
+}
+
+enum ListingStatus {
+  ACTIVE
+  PENDING
+  SOLD
+  INACTIVE
+}
+
+model Category {
+  id       String    @id @default(cuid())
+  name     String
+  slug     String    @unique
+  parentId String?
+  parent   Category? @relation("CategoryToCategory", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryToCategory")
+  listings Listing[]
+  attributes CategoryAttribute[]
+  suggestedChildren CategorySuggestion[]
+  createdAt   DateTime? @default(now())
+  updatedAt   DateTime? @updatedAt
+
+  @@index([parentId])
+}
+
+model Favorite {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  listingId String
+  listing   Listing  @relation(fields: [listingId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([userId, listingId])
+  @@index([userId])
+  @@index([listingId])
+}
+
+model AttributeDefinition {
+  id        String   @id @default(cuid())
+  name      String   // e.g. "Vites Tipi", "Oda Sayısı"
+  type      AttributeType // TEXT, NUMBER, SELECT, BOOLEAN
+  options   String[] // For SELECT type e.g. ["Manuel", "Otomatik"]
+  
+  categoryLinks CategoryAttribute[]
+  values        ListingAttributeValue[]
+}
+
+model CategoryAttribute {
+  id          String @id @default(cuid())
+  categoryId  String
+  category    Category @relation(fields: [categoryId], references: [id])
+  
+  attributeId String
+  attribute   AttributeDefinition @relation(fields: [attributeId], references: [id])
+  
+  required    Boolean @default(false)
+  
+  @@unique([categoryId, attributeId])
+  @@index([categoryId])
+}
+
+model ListingAttributeValue {
+  id          String @id @default(cuid())
+  listingId   String
+  listing     Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  
+  attributeId String
+  attribute   AttributeDefinition @relation(fields: [attributeId], references: [id])
+  
+  value       String 
+  
+  @@unique([listingId, attributeId])
+  @@index([attributeId])
+  @@index([value])
+  @@index([listingId])
+}
+
+enum AttributeType {
+  TEXT
+  NUMBER
+  SELECT
+  BOOLEAN
+}
+
+model CategorySuggestion {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  categoryName String
+  description  String?
+  
+  parentId     String?
+  parent       Category? @relation(fields: [parentId], references: [id])
+  
+  status       String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+}
+
+
+model PasswordResetToken {
+  id      String   @id @default(cuid())
+  email   String
+  token   String   @unique
+  expires DateTime
+
+  @@unique([email, token])
+}
+
+model VerificationToken {
+  id      String   @id @default(cuid())
+  email   String
+  token   String   @unique
+  expires DateTime
+
+  @@unique([email, token])
+}
