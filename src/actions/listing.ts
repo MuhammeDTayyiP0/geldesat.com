@@ -159,7 +159,18 @@ export async function toggleListingStatus(listingId: string) {
     const listing = await db.listing.findUnique({ where: { id: listingId } })
     if (!listing) return { error: "İlan bulunamadı" }
 
-    if (listing.userId !== session.user.id && (session.user as any).role !== "ADMIN") {
+    let isAdmin = false
+    if ((session.user as any).role === "ADMIN") {
+        isAdmin = true
+    } else {
+        const user = await db.user.findUnique({
+            where: { id: session.user.id },
+            select: { role: true }
+        })
+        isAdmin = user?.role === "ADMIN"
+    }
+
+    if (listing.userId !== session.user.id && !isAdmin) {
         return { error: "Yetkisiz işlem" }
     }
 
@@ -171,6 +182,11 @@ export async function toggleListingStatus(listingId: string) {
     })
 
     revalidatePath("/my-listings")
+    revalidatePath(`/ilan/${listingId}`)
+    revalidatePath("/admin/listings")
+    revalidatePath("/favorites")
+    revalidatePath("/search")
+    revalidatePath("/")
     return { success: true, status: newStatus }
 }
 
@@ -181,12 +197,28 @@ export async function deleteListing(listingId: string) {
     const listing = await db.listing.findUnique({ where: { id: listingId } })
     if (!listing) return { error: "İlan bulunamadı" }
 
-    if (listing.userId !== session.user.id && (session.user as any).role !== "ADMIN") {
+    let isAdmin = false
+    if ((session.user as any).role === "ADMIN") {
+        isAdmin = true
+    } else {
+        const user = await db.user.findUnique({
+            where: { id: session.user.id },
+            select: { role: true }
+        })
+        isAdmin = user?.role === "ADMIN"
+    }
+
+    if (listing.userId !== session.user.id && !isAdmin) {
         return { error: "Yetkisiz işlem" }
     }
 
     await db.listing.delete({ where: { id: listingId } })
     revalidatePath("/my-listings")
+    revalidatePath(`/ilan/${listingId}`)
+    revalidatePath("/admin/listings")
+    revalidatePath("/favorites")
+    revalidatePath("/search")
+    revalidatePath("/")
     return { success: true }
 }
 

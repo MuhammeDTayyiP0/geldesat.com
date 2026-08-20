@@ -62,6 +62,11 @@ export async function deleteListing(listingId: string) {
             where: { id: listingId }
         })
         revalidatePath("/admin/listings")
+        revalidatePath(`/ilan/${listingId}`)
+        revalidatePath("/my-listings")
+        revalidatePath("/favorites")
+        revalidatePath("/search")
+        revalidatePath("/")
         return { success: true }
     } catch (error) {
         console.error("Delete error:", error)
@@ -79,6 +84,11 @@ export async function updateListingStatus(listingId: string, status: ListingStat
             data: { status }
         })
         revalidatePath("/admin/listings")
+        revalidatePath(`/ilan/${listingId}`)
+        revalidatePath("/my-listings")
+        revalidatePath("/favorites")
+        revalidatePath("/search")
+        revalidatePath("/")
         return { success: true }
     } catch (error) {
         console.error("Update status error:", error)

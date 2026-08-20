@@ -14,7 +14,10 @@ export default async function FavoritesPage() {
 
     const rawFavorites = await db.favorite.findMany({
         where: {
-            userId: session.user.id
+            userId: session.user.id,
+            listing: {
+                status: "ACTIVE"
+            }
         },
         include: {
             listing: {

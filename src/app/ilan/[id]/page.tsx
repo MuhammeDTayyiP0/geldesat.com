@@ -4,7 +4,7 @@ import { notFound } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { MapPin, User, ShieldCheck, ChevronRight } from "lucide-react"
+import { MapPin, User, ShieldCheck, ChevronRight, ShieldAlert } from "lucide-react"
 import { FavoriteButton } from "@/components/listing/FavoriteButton"
 import { SendMessageDialog } from "@/components/message/SendMessageDialog"
 import { ListingGallery } from "@/components/listing/ListingGallery"
@@ -24,6 +24,8 @@ export async function generateMetadata({ params }: ListingPageProps) {
         select: { 
             title: true,
             description: true,
+            status: true,
+            userId: true,
             category: {
                 select: { name: true }
             }
@@ -31,6 +33,35 @@ export async function generateMetadata({ params }: ListingPageProps) {
     })
     
     if (!listing) return { title: "İlan Bulunamadı" }
+
+    if (listing.status !== "ACTIVE") {
+        const session = await auth()
+        let isAuthorized = false
+
+        if (session?.user?.id) {
+            if (session.user.id === listing.userId) {
+                isAuthorized = true
+            } else {
+                const user = await db.user.findUnique({
+                    where: { id: session.user.id },
+                    select: { role: true }
+                })
+                if (user?.role === "ADMIN") {
+                    isAuthorized = true
+                }
+            }
+        }
+
+        if (!isAuthorized) {
+            return {
+                title: "İlan Bulunamadı",
+                robots: {
+                    index: false,
+                    follow: false,
+                }
+            }
+        }
+    }
 
     let displayTitle = listing.title;
     if (listing.category?.name && !displayTitle.toLowerCase().includes(listing.category.name.toLowerCase())) {
@@ -78,6 +109,23 @@ export default async function ListingDetailPage({ params }: ListingPageProps) {
     }
 
     const session = await auth()
+    let isOwner = false
+    let isAdmin = false
+
+    if (session?.user?.id) {
+        isOwner = session.user.id === listing.userId
+        const currentUser = await db.user.findUnique({
+            where: { id: session.user.id },
+            select: { role: true }
+        })
+        isAdmin = currentUser?.role === "ADMIN"
+    }
+
+    // İlan aktif değilse ve kullanıcı ne admin ne de ilanın sahibi ise 404 sayfasına yönlendir
+    if (listing.status !== "ACTIVE" && !isAdmin && !isOwner) {
+        notFound()
+    }
+
     let isFavorited = false
 
     if (session?.user?.id) {
@@ -97,6 +145,25 @@ export default async function ListingDetailPage({ params }: ListingPageProps) {
 
     return (
         <div className="container mx-auto px-4 py-6 max-w-7xl">
+            {listing.status !== "ACTIVE" && (
+                <div className="mb-6 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 flex items-start sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                        <ShieldAlert className="w-6 h-6 text-amber-600 shrink-0" />
+                        <div>
+                            <p className="font-semibold text-sm">
+                                Bu ilan şu anda yayında değildir (Durum: {listing.status === 'INACTIVE' ? 'Pasif / İnaktif' : listing.status}).
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                                Bu ilanı yalnızca siz ({isAdmin ? 'Yönetici' : 'İlan Sahibi'}) önizleme modunda görebilirsiniz. Diğer ziyaretçilere &quot;404 Sayfa Bulunamadı&quot; gösterilmektedir.
+                            </p>
+                        </div>
+                    </div>
+                    <span className="text-xs font-semibold px-2.5 py-1 rounded bg-amber-200/80 text-amber-900 shrink-0">
+                        {listing.status}
+                    </span>
+                </div>
+            )}
+
             {/* Breadcrumb */}
             <nav className="flex items-center text-sm text-muted-foreground mb-6 overflow-x-auto whitespace-nowrap pb-2">
                 <Link href="/" className="hover:text-primary transition-colors">Anasayfa</Link>
