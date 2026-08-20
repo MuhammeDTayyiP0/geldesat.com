@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Send, Loader2 } from "lucide-react"
@@ -12,47 +12,56 @@ interface ChatInputProps {
 
 export function ChatInput({ conversationId }: ChatInputProps) {
     const [message, setMessage] = useState("")
-    const [loading, setLoading] = useState(false)
+    const [sending, setSending] = useState(false)
+    const inputRef = useRef<HTMLInputElement>(null)
 
     const handleSend = async (e: React.FormEvent) => {
         e.preventDefault()
-        if (!message.trim()) return
+        const textToSend = message.trim()
+        if (!textToSend || sending) return
 
-        setLoading(true)
-        // Optimistic UI update could be improved here, but for now relying on server revalidate
-        const result = await sendMessage(conversationId, message)
+        setSending(true)
+        setMessage("")
+
+        // Keep input focused immediately on desktop and mobile
+        inputRef.current?.focus()
+
+        const result = await sendMessage(conversationId, textToSend)
 
         if (result.error) {
             alert(result.error)
-        } else {
-            setMessage("")
+            setMessage(textToSend) // restore text if send failed
+        } else if (result.message) {
+            window.dispatchEvent(new CustomEvent("message-sent", { detail: result.message }))
         }
-        setLoading(false)
+
+        setSending(false)
+        // Maintain focus after send finishes
+        setTimeout(() => {
+            inputRef.current?.focus()
+        }, 10)
     }
 
     return (
-        <form onSubmit={handleSend} className="flex items-end gap-2 bg-gray-50 p-2 rounded-xl border border-gray-200">
-            <Button type="button" size="icon" variant="ghost" className="text-gray-400 hover:text-gray-600 rounded-full shrink-0">
-                <span className="text-xl">+</span>
-            </Button>
-
+        <form onSubmit={handleSend} className="flex items-center gap-2 bg-gray-50 dark:bg-card p-2 rounded-2xl border border-gray-200 dark:border-gray-800 focus-within:border-primary/50 transition-colors">
             <Input
+                ref={inputRef}
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 placeholder="Bir mesaj yazın..."
-                className="flex-1 bg-transparent border-0 focus-visible:ring-0 focus-visible:ring-offset-0 px-0 min-h-[40px] max-h-[120px] py-2"
-                disabled={loading}
+                className="flex-1 bg-transparent border-0 focus-visible:ring-0 focus-visible:ring-offset-0 px-3 h-10 py-2 text-[16px] md:text-sm"
                 autoComplete="off"
             />
 
             <Button
                 type="submit"
                 size="icon"
-                disabled={loading || !message.trim()}
-                className={message.trim() ? "bg-primary text-white hover:bg-primary/90 rounded-full shrink-0 transition-all" : "bg-gray-200 text-gray-400 rounded-full shrink-0 transition-all"}
+                disabled={sending || !message.trim()}
+                className={message.trim() ? "bg-primary text-white hover:bg-primary/90 rounded-full shrink-0 transition-all shadow-sm" : "bg-gray-200 dark:bg-gray-800 text-gray-400 rounded-full shrink-0 transition-all"}
             >
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4 ml-0.5" />}
+                {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4 ml-0.5" />}
             </Button>
         </form>
     )
 }
+

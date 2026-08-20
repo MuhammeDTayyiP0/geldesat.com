@@ -43,10 +43,7 @@ export async function createConversation(formData: FormData) {
                 listingId,
                 OR: [
                     { buyerId: session.user.id, sellerId: receiverId },
-                    // Seller might be replying? But initially creating:
-                    // If CURRENT USER is SELLER, they can't start a convo with themselves usually, 
-                    // unless they are replying to an existing one. 
-                    // For now assume Buyer starts conversation.
+                    { buyerId: receiverId, sellerId: session.user.id }
                 ]
             }
         })
@@ -61,18 +58,24 @@ export async function createConversation(formData: FormData) {
             })
         }
 
-        await db.message.create({
+        const newMessage = await db.message.create({
             data: {
-                content,
+                content: content.trim(),
                 conversationId: conversation.id,
                 senderId: session.user.id,
                 receiverId,
             }
         })
 
+        await db.conversation.update({
+            where: { id: conversation.id },
+            data: { updatedAt: new Date() }
+        })
+
         revalidatePath(`/messages`)
+        revalidatePath(`/messages/${conversation.id}`)
         revalidatePath(`/ilan/${listingId}`)
-        return { success: true, conversationId: conversation.id }
+        return { success: true, conversationId: conversation.id, message: newMessage }
 
     } catch (error) {
         console.error("Message error:", error)
@@ -91,7 +94,8 @@ export async function sendMessage(conversationId: string, content: string) {
         return { error: "Mesaj göndermek için lütfen e-posta adresinizi doğrulayın." }
     }
 
-    if (!content.trim()) {
+    const trimmedContent = content.trim()
+    if (!trimmedContent) {
         return { error: "Mesaj boş olamaz." }
     }
 
@@ -105,12 +109,16 @@ export async function sendMessage(conversationId: string, content: string) {
             return { error: "Konuşma bulunamadı." }
         }
 
+        if (conversation.buyerId !== session.user.id && conversation.sellerId !== session.user.id) {
+            return { error: "Yetkisiz işlem." }
+        }
+
         // Determine receiver
         const receiverId = conversation.buyerId === session.user.id ? conversation.sellerId : conversation.buyerId
 
-        await db.message.create({
+        const newMessage = await db.message.create({
             data: {
-                content,
+                content: trimmedContent,
                 conversationId,
                 senderId: session.user.id,
                 receiverId,
@@ -123,7 +131,8 @@ export async function sendMessage(conversationId: string, content: string) {
         })
 
         revalidatePath(`/messages/${conversationId}`)
-        return { success: true }
+        revalidatePath(`/messages`)
+        return { success: true, message: newMessage }
 
     } catch (error) {
         console.error("Send message error:", error)
@@ -131,60 +140,145 @@ export async function sendMessage(conversationId: string, content: string) {
     }
 }
 
-export async function getNewMessages(conversationId: string, lastMessageId?: string) {
+export async function markMessagesAsRead(conversationId: string) {
     const session = await auth()
     if (!session?.user?.id) {
         return { success: false, error: "Unauthorized" }
     }
 
     try {
-        let afterDate = new Date(0);
-        if (lastMessageId) {
-            const lastMsg = await db.message.findUnique({ where: { id: lastMessageId } });
-            if (lastMsg) afterDate = lastMsg.createdAt;
-        }
-
-        const newMessages = await db.message.findMany({
+        await db.message.updateMany({
             where: {
                 conversationId,
-                createdAt: { gt: afterDate },
-                senderId: { not: session.user.id } // Only fetch messages from OTHERS
+                receiverId: session.user.id,
+                read: false
             },
+            data: { read: true }
+        })
+
+        return { success: true }
+    } catch (error) {
+        console.error("markMessagesAsRead error:", error)
+        return { success: false, error: "Failed to mark as read" }
+    }
+}
+
+export async function getNewMessages(conversationId: string) {
+    const session = await auth()
+    if (!session?.user?.id) {
+        return { success: false, error: "Unauthorized", messages: [] }
+    }
+
+    try {
+        // Automatically mark any incoming unread messages in this chat as read
+        await db.message.updateMany({
+            where: {
+                conversationId,
+                receiverId: session.user.id,
+                read: false
+            },
+            data: { read: true }
+        })
+
+        const messages = await db.message.findMany({
+            where: { conversationId },
             orderBy: {
                 createdAt: 'asc'
             }
         })
 
-        // Mark received messages as read
-        if (newMessages.length > 0) {
-            await db.message.updateMany({
-                where: {
-                    id: { in: newMessages.map(m => m.id) },
-                    receiverId: session.user.id
-                },
-                data: { read: true }
-            })
+        return {
+            success: true,
+            messages
         }
+    } catch (error) {
+        console.error("getNewMessages error:", error)
+        return { success: false, error: "Failed to fetch", messages: [] }
+    }
+}
 
-        // Fetch IDs of MY messages that were read by the other person
-        // We want messages I sent, that are read, and probably recently read 
-        // (or we can just return all read ones to be safe/simple for now since we map over client state)
-        // Optimization: better to query only those that client thinks are unread, but simpler for now:
-        const myReadMessages = await db.message.findMany({
+export async function getConversations() {
+    const session = await auth()
+    if (!session?.user?.id) {
+        return { success: false, error: "Unauthorized", conversations: [] }
+    }
+
+    try {
+        const rawConversations = await db.conversation.findMany({
             where: {
-                conversationId,
-                senderId: session.user.id,
-                read: true
+                OR: [
+                    { buyerId: session.user.id },
+                    { sellerId: session.user.id }
+                ]
             },
-            select: { id: true }
+            include: {
+                listing: {
+                    select: {
+                        id: true,
+                        title: true,
+                        price: true,
+                        currency: true,
+                        images: true
+                    }
+                },
+                buyer: {
+                    select: {
+                        id: true,
+                        name: true,
+                        image: true
+                    }
+                },
+                seller: {
+                    select: {
+                        id: true,
+                        name: true,
+                        image: true
+                    }
+                },
+                messages: {
+                    orderBy: {
+                        createdAt: 'desc'
+                    },
+                    take: 1
+                },
+                _count: {
+                    select: {
+                        messages: {
+                            where: {
+                                receiverId: session.user.id,
+                                read: false
+                            }
+                        }
+                    }
+                }
+            },
+            orderBy: {
+                updatedAt: 'desc'
+            }
         })
+
+        const conversations = rawConversations.map(conv => ({
+            id: conv.id,
+            listingId: conv.listingId,
+            listing: {
+                ...conv.listing,
+                price: Number(conv.listing.price)
+            },
+            buyerId: conv.buyerId,
+            buyer: conv.buyer,
+            sellerId: conv.sellerId,
+            seller: conv.seller,
+            updatedAt: conv.updatedAt,
+            messages: conv.messages,
+            unreadCount: conv._count.messages
+        }))
 
         return {
             success: true,
-            messages: newMessages,
-            readMessageIds: myReadMessages.map(m => m.id)
+            conversations
         }
     } catch (error) {
-        return { success: false, error: "Failed to fetch" }
+        console.error("getConversations error:", error)
+        return { success: false, error: "Failed to fetch conversations", conversations: [] }
     }
 }

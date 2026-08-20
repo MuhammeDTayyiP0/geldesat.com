@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
@@ -25,6 +26,7 @@ export function SendMessageDialog({ listingId, receiverId, listingTitle }: SendM
     const [open, setOpen] = useState(false)
     const [message, setMessage] = useState("Merhaba, ilanınız ile ilgileniyorum.")
     const [loading, setLoading] = useState(false)
+    const router = useRouter()
 
     const handleSend = async () => {
         if (!message.trim()) return
@@ -39,9 +41,9 @@ export function SendMessageDialog({ listingId, receiverId, listingTitle }: SendM
 
         if (result.error) {
             alert(result.error)
-        } else {
-            alert("Mesajınız gönderildi!")
+        } else if (result.conversationId) {
             setOpen(false)
+            router.push(`/messages/${result.conversationId}`)
         }
         setLoading(false)
     }

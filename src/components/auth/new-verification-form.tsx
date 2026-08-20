@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { useSearchParams } from "next/navigation"
-import { BeatLoader } from "react-spinners"
+import { Loader2 } from "lucide-react"
 import Link from "next/link"
 
 import { newVerification } from "@/actions/new-verification"
@@ -24,8 +24,8 @@ export const NewVerificationForm = () => {
 
         newVerification(token)
             .then((data) => {
-                setSuccess(data.success)
-                setError(data.error)
+                setSuccess(data?.success)
+                setError(data?.error)
             })
             .catch(() => {
                 setError("Bir şeyler ters gitti!")
@@ -46,15 +46,15 @@ export const NewVerificationForm = () => {
 
                 <div className="flex items-center justify-center w-full my-8">
                     {!success && !error && (
-                        <BeatLoader />
+                        <Loader2 className="w-8 h-8 animate-spin text-primary" />
                     )}
                     {success && (
-                        <div className="p-3 text-sm text-center text-green-500 bg-green-100 rounded-md w-full">
+                        <div className="p-3 text-sm text-center text-green-600 bg-green-50 border border-green-200 rounded-md w-full">
                             {success}
                         </div>
                     )}
                     {error && (
-                        <div className="p-3 text-sm text-center text-red-500 bg-red-100 rounded-md w-full">
+                        <div className="p-3 text-sm text-center text-red-600 bg-red-50 border border-red-200 rounded-md w-full">
                             {error}
                         </div>
                     )}
