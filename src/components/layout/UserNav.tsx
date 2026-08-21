@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { User, LogOut, Settings, Heart, PlusCircle, MessageSquare } from "lucide-react"
+import { User, LogOut, Heart, List, MessageSquare, Shield, Bell } from "lucide-react"
 import Link from "next/link"
 import { signOut } from "next-auth/react"
 import { useState } from "react"
@@ -56,7 +56,17 @@ export function UserNav({ user }: { user: any }) {
 
                     <DropdownMenuItem asChild>
                         <Link href="/profile" className="cursor-pointer py-2.5">
-                            <User className="mr-2 h-4 w-4 text-slate-500" /> Kullanıcı Bilgilerim
+                            <User className="mr-2 h-4 w-4 text-slate-500" /> Profilim
+                        </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                        <Link href="/my-listings" className="cursor-pointer py-2.5">
+                            <List className="mr-2 h-4 w-4 text-slate-500" /> İlanlarım
+                        </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                        <Link href="/favorites" className="cursor-pointer py-2.5">
+                            <Heart className="mr-2 h-4 w-4 text-slate-500" /> Favorilerim
                         </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
@@ -65,20 +75,15 @@ export function UserNav({ user }: { user: any }) {
                         </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
-                        <Link href="/my-listings" className="cursor-pointer py-2.5">
-                            <PlusCircle className="mr-2 h-4 w-4 text-slate-500" /> İlanlarım
-                        </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                        <Link href="/favorites" className="cursor-pointer py-2.5">
-                            <Heart className="mr-2 h-4 w-4 text-slate-500" /> Favorilerim
+                        <Link href="/bildirimler" className="cursor-pointer py-2.5">
+                            <Bell className="mr-2 h-4 w-4 text-slate-500" /> Bildirimler
                         </Link>
                     </DropdownMenuItem>
 
                     {user.role === "ADMIN" && (
                         <DropdownMenuItem asChild>
                             <Link href="/admin" className="cursor-pointer py-2.5 text-blue-600 font-medium">
-                                <Settings className="mr-2 h-4 w-4" /> Yönetim Paneli
+                                <Shield className="mr-2 h-4 w-4" /> Yönetim Paneli
                             </Link>
                         </DropdownMenuItem>
                     )}

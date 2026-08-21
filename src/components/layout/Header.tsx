@@ -5,6 +5,7 @@ import { SearchBar } from "@/components/search/SearchBar"
 import { auth } from "@/auth"
 import { MobileMenu } from "./MobileMenu"
 import { UserNav } from "./UserNav"
+import { NotificationBell } from "./NotificationBell"
 
 export async function Header() {
     const session = await auth()
@@ -41,7 +42,10 @@ export async function Header() {
                             </Button>
                         </div>
                     ) : (
-                        <UserNav user={user} />
+                        <div className="flex items-center gap-2">
+                            <NotificationBell />
+                            <UserNav user={user} />
+                        </div>
                     )}
 
                     <div className="h-8 w-px bg-border/60 mx-1 hidden md:block" />
