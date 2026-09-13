@@ -9,9 +9,8 @@ import { z } from "zod"
 
 import Google from "next-auth/providers/google"
 
-// Force a secret if env is missing (DEBUG ONLY)
-// Force a secret if env is missing (DEBUG ONLY)
-const secret = process.env.AUTH_SECRET
+// Force a secret if env is missing
+const secret = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET
 
 console.log("Auth Debug:", {
     hasSecret: !!secret,
@@ -20,7 +19,7 @@ console.log("Auth Debug:", {
 })
 
 if (!secret) {
-    console.warn("WARNING: AUTH_SECRET is missing!")
+    console.warn("WARNING: AUTH_SECRET / NEXTAUTH_SECRET is missing!")
 }
 
 // remove callbacks from authConfig to avoid duplicate key error
@@ -76,6 +75,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         Google({
             clientId: process.env.GOOGLE_CLIENT_ID,
             clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+            allowDangerousEmailAccountLinking: true,
         }),
 
         Credentials({
