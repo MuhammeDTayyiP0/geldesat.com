@@ -1,0 +1,106 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@theme {
+  --font-sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-display: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+
+  --color-bg: #f3f5f8;
+  --color-fg: #12151c;
+  --color-muted: #5a6270;
+  --color-subtle: #8a929e;
+  --color-surface: #ffffff;
+  --color-elevated: #eef1f5;
+  --color-border: #d8dee6;
+  --color-primary: #1a4fd8;
+  --color-primary-fg: #f7f8fc;
+  --color-ink: #0d1117;
+  --color-danger: #b42318;
+  --color-ok: #1f7a4d;
+  --color-warn: #9a6700;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+
+  --shadow-card: 0 1px 2px rgb(13 17 23 / 0.04), 0 8px 24px -16px rgb(13 17 23 / 0.18);
+  --shadow-lift: 0 1px 2px rgb(13 17 23 / 0.06), 0 16px 32px -18px rgb(13 17 23 / 0.28);
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  body {
+    background: var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    line-height: 1.5;
+    min-height: 100dvh;
+  }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+    letter-spacing: -0.02em;
+  }
+  p {
+    text-wrap: pretty;
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--color-primary) 28%, white);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (max-width: 767px) {
+  [data-chat-pane="list"] .chat-thread {
+    display: none;
+  }
+  [data-chat-pane="thread"] .chat-list {
+    display: none;
+  }
+}
+
+@layer components {
+  .field-select {
+    height: 2.75rem;
+    width: 100%;
+    appearance: none;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+    background-color: var(--color-surface);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235a6270' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    padding: 0 2.5rem 0 0.75rem;
+    font-size: 0.875rem;
+    color: var(--color-fg);
+    outline: none;
+  }
+  .field-select:focus {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px color-mix(in oklab, var(--color-primary) 20%, transparent);
+  }
+  .field-select:disabled {
+    opacity: 0.5;
+  }
+}

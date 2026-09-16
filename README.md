@@ -1,36 +1,46 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# GeldeSat
 
-## Getting Started
+Türkiye ilan platformu — emlak, vasıta ve ikinci el.
 
-First, run the development server:
+Grok oturumundaki güncel kaynak, Grok workspace dosyaları (`.grok`, ekran görüntüleri, PWA köprüsü) ayıklanmış hali.
+
+## Gereksinimler
+
+- Node.js 22+
+- npm
+
+## Kurulum
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Tarayıcı: [http://localhost:8080](http://localhost:8080)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+İlk açılışta veritabanı migrasyonları çalışır; bir kez biraz sürebilir.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Veritabanı
 
-## Learn More
+- **Yerel:** `DATABASE_URL` yoksa gömülü PGLite kullanılır. Ekstra kurulum gerekmez.
+- **Canlı:** Postgres / Neon bağlantısını `DATABASE_URL` olarak verin.
 
-To learn more about Next.js, take a look at the following resources:
+Şema: `migrations/` klasörü.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Production derleme
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npm run build
+```
 
-## Deploy on Vercel
+Çıktı Vercel (Nitro) preset’ine göredir. Vercel’e atabilir veya Node sunucuda çalıştırabilirsiniz.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Dizin
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```
+src/routes/        sayfalar
+src/components/    arayüz
+src/lib/server/    ilan, hesap, mesaj
+migrations/        veritabanı
+public/            favicon, og görseli
+```
