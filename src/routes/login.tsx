@@ -4,6 +4,7 @@ import { GROK_PROVIDERS, authClient, authEnabled, signIn } from "@/lib/auth/clie
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { toast } from "sonner";
+import { LogoMark } from "@/components/brand/LogoMark";
 
 export const Route = createFileRoute("/login")({ component: Login });
 
@@ -43,7 +44,7 @@ function Login() {
     <div className="mx-auto grid min-h-[70dvh] max-w-md place-items-center px-4 py-12 pb-32">
       <div className="w-full rounded-xl border border-border bg-surface p-6 shadow-card sm:p-8">
         <div className="mb-6 flex items-center gap-3">
-          <span className="grid size-10 place-items-center rounded-lg bg-primary text-base font-bold text-primary-fg">G</span>
+          <LogoMark className="size-10 text-ink" />
           <div>
             <h1 className="text-xl font-semibold tracking-tight">GeldeSat hesabı</h1>
             <p className="text-sm text-muted">İlan, mesaj ve favori için giriş yapın.</p>

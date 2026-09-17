@@ -1,6 +1,20 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Bell, Heart, LayoutGrid, LogOut, Menu, MessageCircle, Plus, Search, Shield, User } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import {
+  Bell,
+  ChevronRight,
+  Heart,
+  LayoutGrid,
+  LogOut,
+  Map,
+  Menu,
+  MessageCircle,
+  Plus,
+  Search,
+  Shield,
+  User,
+  X,
+} from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { SignedIn, SignedOut } from "@/lib/auth/gates";
 import { authEnabled, signOut } from "@/lib/auth/client";
 import { hasGateSessionMarker } from "@/lib/auth/gate-session-marker";
@@ -9,11 +23,13 @@ import { unreadCount } from "@/lib/server/social";
 import { getMe } from "@/lib/server/account";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { LogoMark } from "@/components/brand/LogoMark";
+import { cn } from "@/lib/utils";
 
 function Wordmark() {
   return (
     <Link to="/" className="flex items-center gap-2 text-ink">
-      <span className="grid size-8 place-items-center rounded-lg bg-primary text-sm font-bold text-primary-fg">G</span>
+      <LogoMark className="size-8" />
       <span className="text-lg font-semibold tracking-tight">GeldeSat</span>
     </Link>
   );
@@ -91,10 +107,214 @@ function UnreadDot({ n, tone = "danger" }: { n: number; tone?: "danger" | "prima
   if (n <= 0) return null;
   return (
     <span
-      className={`absolute right-1.5 top-1.5 min-w-4 rounded-full px-1 text-center text-xs font-medium text-primary-fg tabular-nums ${tone === "primary" ? "bg-primary" : "bg-danger"}`}
+      className={cn(
+        "absolute right-1.5 top-1.5 min-w-4 rounded-full px-1 text-center text-xs font-medium text-primary-fg tabular-nums",
+        tone === "primary" ? "bg-primary" : "bg-danger",
+      )}
     >
       {n > 99 ? "99+" : n}
     </span>
+  );
+}
+
+function MenuRow({
+  to,
+  icon: Icon,
+  label,
+  badge,
+  onClick,
+}: {
+  to: "/search" | "/harita" | "/ilanlarim" | "/favoriler" | "/mesajlar" | "/bildirimler" | "/profil" | "/admin" | "/login";
+  icon: typeof Search;
+  label: string;
+  badge?: number;
+  onClick: () => void;
+}) {
+  return (
+    <Link
+      to={to}
+      onClick={onClick}
+      className="flex min-h-12 items-center gap-3 rounded-xl px-2 pr-3 text-sm font-medium text-fg transition-colors duration-150 hover:bg-elevated active:scale-[0.96]"
+    >
+      <span className="grid size-10 place-items-center rounded-lg bg-elevated text-primary">
+        <Icon className="size-5" />
+      </span>
+      <span className="flex-1">{label}</span>
+      {badge && badge > 0 ? (
+        <span className="min-w-5 rounded-full bg-primary px-1.5 py-0.5 text-center text-xs font-medium text-primary-fg tabular-nums">
+          {badge > 99 ? "99+" : badge}
+        </span>
+      ) : (
+        <ChevronRight className="size-4 text-subtle" />
+      )}
+    </Link>
+  );
+}
+
+function MobileDrawer({
+  open,
+  onClose,
+  q,
+  setQ,
+  onSearch,
+  admin,
+  msgUnread,
+  noteUnread,
+}: {
+  open: boolean;
+  onClose: () => void;
+  q: string;
+  setQ: (v: string) => void;
+  onSearch: (e: React.FormEvent) => void;
+  admin: boolean;
+  msgUnread: number;
+  noteUnread: number;
+}) {
+  const { user } = useCurrentUserState();
+  const [signingOut, setSigningOut] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const canSignOut = authEnabled && !hasGateSessionMarker();
+  const label = user?.displayName ?? user?.primaryEmail ?? "Hesap";
+
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    panelRef.current?.querySelector<HTMLElement>("button, a, input")?.focus();
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open, onClose]);
+
+  return (
+    <div className="md:hidden" aria-hidden={!open}>
+      <div
+        className="fixed inset-0 z-50 bg-ink/40"
+        style={{
+          opacity: open ? 1 : 0,
+          pointerEvents: open ? "auto" : "none",
+          transition: "opacity 200ms ease-out",
+        }}
+        onClick={onClose}
+      />
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Menü"
+        className="fixed inset-y-0 right-0 z-50 flex w-80 max-w-full flex-col bg-surface shadow-lift"
+        style={{
+          transform: open ? "translateX(0)" : "translateX(100%)",
+          transition: "transform 200ms ease-out",
+          pointerEvents: open ? "auto" : "none",
+        }}
+        inert={!open}
+      >
+        <div className="flex h-16 shrink-0 items-center justify-between gap-2 border-b border-border px-4">
+          <Link to="/" onClick={onClose} className="flex items-center gap-2 text-ink">
+            <LogoMark className="size-8" />
+            <span className="text-lg font-semibold tracking-tight">GeldeSat</span>
+          </Link>
+          <button
+            type="button"
+            className="grid size-11 place-items-center rounded-lg hover:bg-elevated"
+            onClick={onClose}
+            aria-label="Kapat"
+          >
+            <X className="size-5" />
+          </button>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+          <form onSubmit={onSearch} className="px-1 pb-3">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle" />
+              <Input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Ne arıyorsunuz?"
+                className="rounded-xl pl-9"
+                aria-label="Ara"
+              />
+            </div>
+          </form>
+
+          {user ? (
+            <Link
+              to="/profil"
+              onClick={onClose}
+              className="mb-3 flex items-center gap-3 rounded-2xl bg-elevated p-3"
+            >
+              {user.profileImageUrl ? (
+                <img src={user.profileImageUrl} alt="" className="size-11 rounded-full object-cover" />
+              ) : (
+                <span className="grid size-11 place-items-center rounded-full bg-surface text-sm font-semibold">
+                  {label.slice(0, 1).toLocaleUpperCase("tr")}
+                </span>
+              )}
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium">{label}</span>
+                <span className="block text-xs text-muted">Hesabı görüntüle</span>
+              </span>
+              <ChevronRight className="size-4 text-subtle" />
+            </Link>
+          ) : null}
+
+          <p className="px-3 pb-1 pt-1 text-xs font-semibold uppercase tracking-wide text-subtle">Keşfet</p>
+          <nav className="flex flex-col">
+            <MenuRow to="/search" icon={Search} label="Tüm ilanlar" onClick={onClose} />
+            <MenuRow to="/harita" icon={Map} label="Harita" onClick={onClose} />
+          </nav>
+
+          <SignedOut>
+            <p className="px-3 pb-1 pt-4 text-xs font-semibold uppercase tracking-wide text-subtle">Hesap</p>
+            <nav className="flex flex-col">
+              <MenuRow to="/login" icon={User} label="Giriş yap" onClick={onClose} />
+            </nav>
+          </SignedOut>
+          <SignedIn>
+            <p className="px-3 pb-1 pt-4 text-xs font-semibold uppercase tracking-wide text-subtle">Hesap</p>
+            <nav className="flex flex-col">
+              <MenuRow to="/ilanlarim" icon={LayoutGrid} label="İlanlarım" onClick={onClose} />
+              <MenuRow to="/favoriler" icon={Heart} label="Favoriler" onClick={onClose} />
+              <MenuRow to="/mesajlar" icon={MessageCircle} label="Mesajlar" badge={msgUnread} onClick={onClose} />
+              <MenuRow to="/bildirimler" icon={Bell} label="Bildirimler" badge={noteUnread} onClick={onClose} />
+              <MenuRow to="/profil" icon={User} label="Profil" onClick={onClose} />
+              {admin ? <MenuRow to="/admin" icon={Shield} label="Yönetim" onClick={onClose} /> : null}
+            </nav>
+            {canSignOut ? (
+              <button
+                type="button"
+                disabled={signingOut}
+                className="mt-2 flex min-h-12 w-full items-center gap-3 rounded-xl px-2 text-sm font-medium text-muted hover:bg-elevated"
+                onClick={() => {
+                  setSigningOut(true);
+                  void signOut().catch(() => setSigningOut(false));
+                }}
+              >
+                <span className="grid size-10 place-items-center rounded-lg bg-elevated">
+                  <LogOut className="size-5" />
+                </span>
+                {signingOut ? "Çıkılıyor…" : "Çıkış"}
+              </button>
+            ) : null}
+          </SignedIn>
+        </div>
+
+        <div className="drawer-safe shrink-0 border-t border-border p-4">
+          <Link to="/ilan-ver" onClick={onClose} className="block">
+            <Button className="h-12 w-full rounded-xl">
+              <Plus className="size-4" /> Ücretsiz ilan ver
+            </Button>
+          </Link>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -131,10 +351,12 @@ export function Header() {
     };
   }, [user]);
 
+  const closeMenu = useCallback(() => setOpen(false), []);
+
   function goSearch(e: React.FormEvent) {
     e.preventDefault();
     void nav({ to: "/search", search: { q } });
-    setOpen(false);
+    closeMenu();
   }
 
   return (
@@ -178,64 +400,62 @@ export function Header() {
             </Button>
           </Link>
         </nav>
-        <div className="ml-auto flex items-center gap-1 md:hidden">
-          <Link to="/ilan-ver">
-            <Button size="sm">
-              <Plus className="size-4" /> İlan
-            </Button>
+        <div className="ml-auto flex items-center gap-0.5 md:hidden">
+          <Link
+            to={user ? "/mesajlar" : "/login"}
+            className={cn(
+              "relative grid size-11 place-items-center rounded-lg hover:bg-elevated",
+              msgUnread > 0 && "text-primary",
+            )}
+            aria-label={msgUnread > 0 ? `Mesajlar, ${msgUnread} okunmamış` : "Mesajlar"}
+          >
+            <MessageCircle className="size-5" />
+            {msgUnread > 0 ? (
+              <span className="absolute right-0 top-0 grid place-items-center">
+                <span className="absolute size-5 animate-ping rounded-full bg-primary opacity-40" />
+                <span className="relative min-w-5 rounded-full bg-primary px-1 text-center text-xs font-medium leading-5 text-primary-fg tabular-nums">
+                  {msgUnread > 99 ? "99+" : msgUnread}
+                </span>
+              </span>
+            ) : null}
           </Link>
           <button
             type="button"
-            className="grid size-11 place-items-center rounded-lg"
+            className="grid size-11 place-items-center rounded-lg hover:bg-elevated"
             onClick={() => setOpen((v) => !v)}
-            aria-label="Menü"
+            aria-label={open ? "Menüyü kapat" : "Menü"}
+            aria-expanded={open}
+            aria-controls="mobile-menu"
           >
-            <Menu className="size-5" />
+            <span className="relative size-5">
+              <Menu
+                className={cn(
+                  "absolute inset-0 size-5 transition-[opacity,transform,filter] duration-200 ease-out",
+                  open ? "scale-[0.25] opacity-0 blur-sm" : "scale-100 opacity-100 blur-none",
+                )}
+              />
+              <X
+                className={cn(
+                  "absolute inset-0 size-5 transition-[opacity,transform,filter] duration-200 ease-out",
+                  open ? "scale-100 opacity-100 blur-none" : "scale-[0.25] opacity-0 blur-sm",
+                )}
+              />
+            </span>
           </button>
         </div>
       </div>
-      {open ? (
-        <div className="space-y-3 border-t border-border bg-surface px-4 py-4 md:hidden">
-          <form onSubmit={goSearch}>
-            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ne arıyorsunuz?" />
-          </form>
-          <div className="flex flex-col text-sm">
-            <Link to="/search" onClick={() => setOpen(false)} className="rounded-lg px-3 py-3 hover:bg-elevated">
-              Tüm ilanlar
-            </Link>
-            <Link to="/harita" onClick={() => setOpen(false)} className="rounded-lg px-3 py-3 hover:bg-elevated">
-              Harita
-            </Link>
-            <SignedOut>
-              <Link to="/login" onClick={() => setOpen(false)} className="rounded-lg px-3 py-3 hover:bg-elevated">
-                Giriş yap
-              </Link>
-            </SignedOut>
-            <SignedIn>
-              <Link to="/ilanlarim" onClick={() => setOpen(false)} className="rounded-lg px-3 py-3 hover:bg-elevated">
-                İlanlarım
-              </Link>
-              <Link to="/favoriler" onClick={() => setOpen(false)} className="rounded-lg px-3 py-3 hover:bg-elevated">
-                Favoriler
-              </Link>
-              <Link to="/mesajlar" onClick={() => setOpen(false)} className="rounded-lg px-3 py-3 hover:bg-elevated">
-                Mesajlar{msgUnread > 0 ? ` (${msgUnread})` : ""}
-              </Link>
-              <Link to="/bildirimler" onClick={() => setOpen(false)} className="rounded-lg px-3 py-3 hover:bg-elevated">
-                Bildirimler{noteUnread > 0 ? ` (${noteUnread})` : ""}
-              </Link>
-              <Link to="/profil" onClick={() => setOpen(false)} className="rounded-lg px-3 py-3 hover:bg-elevated">
-                Profil
-              </Link>
-              {admin ? (
-                <Link to="/admin" onClick={() => setOpen(false)} className="rounded-lg px-3 py-3 hover:bg-elevated">
-                  Yönetim
-                </Link>
-              ) : null}
-            </SignedIn>
-          </div>
-        </div>
-      ) : null}
+      <div id="mobile-menu">
+        <MobileDrawer
+          open={open}
+          onClose={closeMenu}
+          q={q}
+          setQ={setQ}
+          onSearch={goSearch}
+          admin={admin}
+          msgUnread={msgUnread}
+          noteUnread={noteUnread}
+        />
+      </div>
     </header>
   );
 }

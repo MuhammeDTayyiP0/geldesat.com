@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { getSiteSettings } from "@/lib/server/catalog";
+import { LogoMark } from "@/components/brand/LogoMark";
 
 const cols = [
   {
@@ -69,7 +70,7 @@ export function Footer() {
         <div>
           <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-subtle">İletişim</p>
           <div className="mb-3 flex items-center gap-2">
-            <span className="grid size-8 place-items-center rounded-lg bg-primary text-sm font-bold text-primary-fg">G</span>
+            <LogoMark className="size-8 text-primary-fg" />
             <span className="text-sm font-medium">{company}</span>
           </div>
           <p className="text-sm text-primary-fg/80">{email}</p>
