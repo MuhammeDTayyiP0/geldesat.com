@@ -49,27 +49,32 @@ function Login() {
             <p className="text-sm text-muted">İlan, mesaj ve favori için giriş yapın.</p>
           </div>
         </div>
-        {authEnabled ? (
-          <div className="mt-6 space-y-2">
-            {GROK_PROVIDERS.filter((p) => p.idp === "google").map((p) => (
-              <Button
-                key={p.providerId}
-                variant="outline"
-                className="w-full"
-                onClick={() => void signIn(p.providerId, { callbackURL: "/" })}
-              >
-                {p.label} ile devam et
-              </Button>
-            ))}
-          </div>
+        {authEnabled && import.meta.env.VITE_SELF_HOST !== "true" ? (
+          <>
+            <div className="mt-6 space-y-2">
+              {GROK_PROVIDERS.filter((p) => p.idp === "google").map((p) => (
+                <Button
+                  key={p.providerId}
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => void signIn(p.providerId, { callbackURL: "/" })}
+                >
+                  {p.label} ile devam et
+                </Button>
+              ))}
+            </div>
+            <div className="my-6 flex items-center gap-3 text-xs text-subtle">
+              <span className="h-px flex-1 bg-border" />
+              e-posta
+              <span className="h-px flex-1 bg-border" />
+            </div>
+          </>
         ) : (
-          <p className="mt-4 text-sm text-muted">Giriş şu an kapalı.</p>
+          <div className="mt-6" />
         )}
-        <div className="my-6 flex items-center gap-3 text-xs text-subtle">
-          <span className="h-px flex-1 bg-border" />
-          e-posta
-          <span className="h-px flex-1 bg-border" />
-        </div>
+        {!authEnabled ? (
+          <p className="mt-4 text-sm text-muted">Giriş şu an kapalı.</p>
+        ) : null}
         <div className="mb-4 flex rounded-lg bg-elevated p-1 text-sm">
           <button type="button" className={`flex-1 rounded-md py-2 ${mode === "in" ? "bg-surface font-medium shadow-card" : "text-muted"}`} onClick={() => setMode("in")}>
             Giriş
