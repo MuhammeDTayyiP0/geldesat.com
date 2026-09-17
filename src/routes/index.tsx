@@ -51,6 +51,14 @@ function Home() {
             {stats.listings} yayındaki ilan
             {stats.cities ? `, ${stats.cities} il` : ""}. Ücretsiz ilan verin, satıcıyla doğrudan konuşun.
           </p>
+          <p className="mt-4">
+            <Link
+              to="/arsiv"
+              className="inline-flex items-center rounded-lg border border-border bg-bg px-3 py-2 text-sm font-medium text-primary hover:border-primary/40"
+            >
+              Proje arşivini indir
+            </Link>
+          </p>
           <div className="mt-6 max-w-3xl rounded-xl border border-border bg-bg p-2 shadow-card">
             <div className="mb-2 flex flex-wrap gap-1">
               {[

@@ -14,6 +14,24 @@ HTTPS olmadan üye girişi çalışmaz.
 
 ---
 
+## Coolify / Nixpacks
+
+Coolify varsayılan olarak Nixpacks kullanır. Bu projenin `nixpacks.toml` dosyası derlemeyi düzeltir.
+
+**Ortam değişkenleri** (NEXTAUTH / AUTH_SECRET değil):
+
+```
+DATABASE_URL=postgres://...
+BETTER_AUTH_URL=https://siteniz.com
+BETTER_AUTH_SECRET=en-az-32-karakter-rastgele
+VITE_AUTH_ENABLED=true
+VITE_SELF_HOST=true
+```
+
+İsteğe bağlı: Build Pack olarak **Dockerfile** seçin — o zaman Nixpacks devreye girmez.
+
+---
+
 ## 1) En kolay yol: Docker
 
 Sunucuda:

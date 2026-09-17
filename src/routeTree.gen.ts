@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminRouteImport } from './routes/admin'
+import { Route as ArsivRouteImport } from './routes/arsiv'
 import { Route as BildirimlerRouteImport } from './routes/bildirimler'
 import { Route as DopingRouteImport } from './routes/doping'
 import { Route as FavorilerRouteImport } from './routes/favoriler'
@@ -38,6 +39,11 @@ const IndexRoute = IndexRouteImport.update({
 const AdminRoute = AdminRouteImport.update({
   id: '/admin',
   path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ArsivRoute = ArsivRouteImport.update({
+  id: '/arsiv',
+  path: '/arsiv',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BildirimlerRoute = BildirimlerRouteImport.update({
@@ -134,6 +140,7 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/arsiv': typeof ArsivRoute
   '/bildirimler': typeof BildirimlerRoute
   '/doping': typeof DopingRoute
   '/favoriler': typeof FavorilerRoute
@@ -156,6 +163,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/arsiv': typeof ArsivRoute
   '/bildirimler': typeof BildirimlerRoute
   '/doping': typeof DopingRoute
   '/favoriler': typeof FavorilerRoute
@@ -178,6 +186,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/arsiv': typeof ArsivRoute
   '/bildirimler': typeof BildirimlerRoute
   '/doping': typeof DopingRoute
   '/favoriler': typeof FavorilerRoute
@@ -202,6 +211,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/admin'
+    | '/arsiv'
     | '/bildirimler'
     | '/doping'
     | '/favoriler'
@@ -224,6 +234,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/admin'
+    | '/arsiv'
     | '/bildirimler'
     | '/doping'
     | '/favoriler'
@@ -245,6 +256,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/admin'
+    | '/arsiv'
     | '/bildirimler'
     | '/doping'
     | '/favoriler'
@@ -268,6 +280,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
+  ArsivRoute: typeof ArsivRoute
   BildirimlerRoute: typeof BildirimlerRoute
   DopingRoute: typeof DopingRoute
   FavorilerRoute: typeof FavorilerRoute
@@ -300,6 +313,13 @@ declare module '@tanstack/react-router' {
       path: '/admin'
       fullPath: '/admin'
       preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/arsiv': {
+      id: '/arsiv'
+      path: '/arsiv'
+      fullPath: '/arsiv'
+      preLoaderRoute: typeof ArsivRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/bildirimler': {
@@ -448,6 +468,7 @@ const MesajlarRouteWithChildren = MesajlarRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
+  ArsivRoute: ArsivRoute,
   BildirimlerRoute: BildirimlerRoute,
   DopingRoute: DopingRoute,
   FavorilerRoute: FavorilerRoute,

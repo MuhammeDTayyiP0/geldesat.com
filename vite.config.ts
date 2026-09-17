@@ -170,8 +170,12 @@ export default defineConfig(({ command, isPreview }) => ({
     ...(command === "build" || isPreview
       ? [
           nitro({
-            // Default stays Vercel (Grok deploy). Self-host: NITRO_PRESET=node-server
-            preset: process.env.NITRO_PRESET === "node-server" ? "node-server" : "vercel",
+            preset:
+              process.env.NITRO_PRESET === "node-server" ||
+              process.env.COOLIFY ||
+              process.env.NIXPACKS_METADATA
+                ? "node-server"
+                : "vercel",
             // Auto-registers server/middleware/* (the PWA install page +
             // manifest + head-tag middleware). Nitro v3 defaults serverDir to
             // false, so removing this silently unwires /?install=1 on deploys.
