@@ -26,6 +26,9 @@
 
   --shadow-card: 0 1px 2px rgb(13 17 23 / 0.04), 0 8px 24px -16px rgb(13 17 23 / 0.18);
   --shadow-lift: 0 1px 2px rgb(13 17 23 / 0.06), 0 16px 32px -18px rgb(13 17 23 / 0.28);
+
+  --ease-sheet: cubic-bezier(0.22, 1, 0.36, 1);
+  --header-h: 4rem;
 }
 
 @layer base {
@@ -113,5 +116,116 @@ body {
   }
   .drawer-safe {
     padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+}
+
+/*
+  Mobile nav lives in a portal on <body> (header backdrop-filter would
+  otherwise trap position:fixed descendants inside the 64px bar).
+
+  Unlayered on purpose: Tailwind utilities (cookie banner z-50) beat
+  @layer components, which is why the old sheet sat under the cookie bar.
+*/
+.site-header {
+  z-index: 90;
+}
+
+.nav-burger {
+  position: relative;
+  display: block;
+  width: 22px;
+  height: 16px;
+}
+.nav-burger span {
+  position: absolute;
+  left: 0;
+  width: 22px;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+  transform-origin: center;
+  transition:
+    transform 220ms var(--ease-sheet),
+    opacity 160ms ease-out,
+    top 220ms var(--ease-sheet),
+    width 220ms var(--ease-sheet),
+    left 220ms var(--ease-sheet);
+}
+.nav-burger span:nth-child(1) {
+  top: 0;
+}
+.nav-burger span:nth-child(2) {
+  top: 7px;
+}
+.nav-burger span:nth-child(3) {
+  top: 14px;
+}
+.nav-burger[data-open="true"] span:nth-child(1) {
+  top: 7px;
+  transform: rotate(45deg);
+}
+.nav-burger[data-open="true"] span:nth-child(2) {
+  opacity: 0;
+}
+.nav-burger[data-open="true"] span:nth-child(3) {
+  top: 7px;
+  transform: rotate(-45deg);
+}
+
+.mobile-nav-root {
+  position: fixed;
+  top: var(--header-h);
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 80;
+  visibility: hidden;
+  pointer-events: none;
+}
+.mobile-nav-root[data-open="true"] {
+  visibility: visible;
+  pointer-events: auto;
+}
+.mobile-nav-backdrop {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in oklab, var(--color-ink) 42%, transparent);
+  opacity: 0;
+  transition: opacity 220ms var(--ease-sheet);
+}
+.mobile-nav-root[data-open="true"] .mobile-nav-backdrop {
+  opacity: 1;
+}
+.mobile-nav-panel {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface);
+  color: var(--color-fg);
+  box-shadow: var(--shadow-lift);
+  transform: translate3d(100%, 0, 0);
+  transition: transform 280ms var(--ease-sheet);
+  overflow: hidden;
+}
+.mobile-nav-root[data-open="true"] .mobile-nav-panel {
+  transform: translate3d(0, 0, 0);
+}
+.mobile-nav-root[data-open="false"] .mobile-nav-panel {
+  transition-duration: 180ms;
+}
+.mobile-nav-scroll {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+html.mobile-nav-lock,
+html.mobile-nav-lock body {
+  overflow: hidden;
+}
+
+@media (min-width: 768px) {
+  .mobile-nav-root {
+    display: none;
   }
 }

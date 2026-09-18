@@ -12,7 +12,8 @@
 dist
 # testing
 /coverage
-
+.grok
+screenshots
 # next.js
 /.next/
 /out/

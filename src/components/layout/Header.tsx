@@ -6,15 +6,14 @@ import {
   LayoutGrid,
   LogOut,
   Map,
-  Menu,
   MessageCircle,
   Plus,
   Search,
   Shield,
   User,
-  X,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { SignedIn, SignedOut } from "@/lib/auth/gates";
 import { authEnabled, signOut } from "@/lib/auth/client";
 import { hasGateSessionMarker } from "@/lib/auth/gate-session-marker";
@@ -117,6 +116,27 @@ function UnreadDot({ n, tone = "danger" }: { n: number; tone?: "danger" | "prima
   );
 }
 
+type MenuTo =
+  | "/search"
+  | "/harita"
+  | "/ilanlarim"
+  | "/favoriler"
+  | "/mesajlar"
+  | "/bildirimler"
+  | "/profil"
+  | "/admin"
+  | "/login";
+
+function BurgerIcon({ open }: { open: boolean }) {
+  return (
+    <span className="nav-burger" data-open={open ? "true" : "false"} aria-hidden="true">
+      <span />
+      <span />
+      <span />
+    </span>
+  );
+}
+
 function MenuRow({
   to,
   icon: Icon,
@@ -124,7 +144,7 @@ function MenuRow({
   badge,
   onClick,
 }: {
-  to: "/search" | "/harita" | "/ilanlarim" | "/favoriler" | "/mesajlar" | "/bildirimler" | "/profil" | "/admin" | "/login";
+  to: MenuTo;
   icon: typeof Search;
   label: string;
   badge?: number;
@@ -151,6 +171,38 @@ function MenuRow({
   );
 }
 
+function NavChip({
+  to,
+  icon: Icon,
+  label,
+  badge,
+  onClick,
+}: {
+  to: MenuTo;
+  icon: typeof Search;
+  label: string;
+  badge?: number;
+  onClick: () => void;
+}) {
+  return (
+    <Link
+      to={to}
+      onClick={onClick}
+      className="relative flex min-h-16 flex-col items-center justify-center gap-1.5 rounded-xl bg-elevated px-1 text-center transition-colors duration-150 hover:bg-border/60 active:scale-[0.96]"
+    >
+      <span className="relative grid size-9 place-items-center rounded-lg bg-surface text-primary shadow-card">
+        <Icon className="size-5" />
+        {badge && badge > 0 ? (
+          <span className="absolute -right-1.5 -top-1.5 min-w-4 rounded-full bg-primary px-1 text-center text-xs font-medium leading-4 text-primary-fg tabular-nums">
+            {badge > 99 ? "99+" : badge}
+          </span>
+        ) : null}
+      </span>
+      <span className="max-w-full truncate text-xs font-medium text-fg">{label}</span>
+    </Link>
+  );
+}
+
 function MobileDrawer({
   open,
   onClose,
@@ -172,73 +224,85 @@ function MobileDrawer({
 }) {
   const { user } = useCurrentUserState();
   const [signingOut, setSigningOut] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const canSignOut = authEnabled && !hasGateSessionMarker();
   const label = user?.displayName ?? user?.primaryEmail ?? "Hesap";
 
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (open) root.classList.add("mobile-nav-lock");
+    else root.classList.remove("mobile-nav-lock");
+    return () => root.classList.remove("mobile-nav-lock");
+  }, [open]);
+
+  useEffect(() => {
     if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const panel = panelRef.current;
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab" || !panel) return;
+      const nodes = panel.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      if (nodes.length === 0) return;
+      const first = nodes[0];
+      const last = nodes[nodes.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+    function onResize() {
+      if (window.matchMedia("(min-width: 768px)").matches) onClose();
     }
     window.addEventListener("keydown", onKey);
-    panelRef.current?.querySelector<HTMLElement>("button, a, input")?.focus();
+    window.addEventListener("resize", onResize);
+    panel?.focus({ preventScroll: true });
     return () => {
-      document.body.style.overflow = prev;
       window.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", onResize);
     };
   }, [open, onClose]);
 
-  return (
-    <div className="md:hidden" aria-hidden={!open}>
-      <div
-        className="fixed inset-0 z-50 bg-ink/40"
-        style={{
-          opacity: open ? 1 : 0,
-          pointerEvents: open ? "auto" : "none",
-          transition: "opacity 200ms ease-out",
-        }}
-        onClick={onClose}
-      />
+  if (!mounted) return null;
+
+  return createPortal(
+    <div
+      className="mobile-nav-root"
+      data-open={open ? "true" : "false"}
+      aria-hidden={!open}
+    >
+      <div className="mobile-nav-backdrop" onClick={onClose} />
       <div
         ref={panelRef}
+        id="mobile-menu"
         role="dialog"
         aria-modal="true"
         aria-label="Menü"
-        className="fixed inset-y-0 right-0 z-50 flex w-80 max-w-full flex-col bg-surface shadow-lift"
-        style={{
-          transform: open ? "translateX(0)" : "translateX(100%)",
-          transition: "transform 200ms ease-out",
-          pointerEvents: open ? "auto" : "none",
-        }}
+        tabIndex={-1}
+        className="mobile-nav-panel"
         inert={!open}
       >
-        <div className="flex h-16 shrink-0 items-center justify-between gap-2 border-b border-border px-4">
-          <Link to="/" onClick={onClose} className="flex items-center gap-2 text-ink">
-            <LogoMark className="size-8" />
-            <span className="text-lg font-semibold tracking-tight">GeldeSat</span>
-          </Link>
-          <button
-            type="button"
-            className="grid size-11 place-items-center rounded-lg hover:bg-elevated"
-            onClick={onClose}
-            aria-label="Kapat"
-          >
-            <X className="size-5" />
-          </button>
-        </div>
-
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
-          <form onSubmit={onSearch} className="px-1 pb-3">
+        <div className="mobile-nav-scroll min-h-0 flex-1 overflow-y-auto px-4 py-4">
+          <form onSubmit={onSearch} className="pb-4">
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle" />
               <Input
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 placeholder="Ne arıyorsunuz?"
-                className="rounded-xl pl-9"
+                className="h-12 rounded-xl bg-elevated pl-9"
                 aria-label="Ara"
               />
             </div>
@@ -248,12 +312,12 @@ function MobileDrawer({
             <Link
               to="/profil"
               onClick={onClose}
-              className="mb-3 flex items-center gap-3 rounded-2xl bg-elevated p-3"
+              className="mb-4 flex items-center gap-3 rounded-xl border border-border bg-bg p-3"
             >
               {user.profileImageUrl ? (
                 <img src={user.profileImageUrl} alt="" className="size-11 rounded-full object-cover" />
               ) : (
-                <span className="grid size-11 place-items-center rounded-full bg-surface text-sm font-semibold">
+                <span className="grid size-11 place-items-center rounded-full bg-elevated text-sm font-semibold">
                   {label.slice(0, 1).toLocaleUpperCase("tr")}
                 </span>
               )}
@@ -265,24 +329,27 @@ function MobileDrawer({
             </Link>
           ) : null}
 
-          <p className="px-3 pb-1 pt-1 text-xs font-semibold uppercase tracking-wide text-subtle">Keşfet</p>
-          <nav className="flex flex-col">
-            <MenuRow to="/search" icon={Search} label="Tüm ilanlar" onClick={onClose} />
-            <MenuRow to="/harita" icon={Map} label="Harita" onClick={onClose} />
-          </nav>
+          <p className="px-1 pb-2 text-xs font-semibold uppercase tracking-wide text-subtle">Keşfet</p>
+          <div className={cn("mb-4 grid gap-2", user ? "grid-cols-4" : "grid-cols-2")}>
+            <NavChip to="/search" icon={Search} label="İlanlar" onClick={onClose} />
+            <NavChip to="/harita" icon={Map} label="Harita" onClick={onClose} />
+            <SignedIn>
+              <NavChip to="/favoriler" icon={Heart} label="Favoriler" onClick={onClose} />
+              <NavChip to="/mesajlar" icon={MessageCircle} label="Mesajlar" badge={msgUnread} onClick={onClose} />
+            </SignedIn>
+          </div>
 
           <SignedOut>
-            <p className="px-3 pb-1 pt-4 text-xs font-semibold uppercase tracking-wide text-subtle">Hesap</p>
+            <p className="px-1 pb-1 pt-1 text-xs font-semibold uppercase tracking-wide text-subtle">Hesap</p>
             <nav className="flex flex-col">
               <MenuRow to="/login" icon={User} label="Giriş yap" onClick={onClose} />
             </nav>
+            <p className="px-3 pt-1 text-xs text-muted">İlan vermek ve mesajlaşmak için giriş yapın.</p>
           </SignedOut>
           <SignedIn>
-            <p className="px-3 pb-1 pt-4 text-xs font-semibold uppercase tracking-wide text-subtle">Hesap</p>
+            <p className="px-1 pb-1 pt-1 text-xs font-semibold uppercase tracking-wide text-subtle">Hesap</p>
             <nav className="flex flex-col">
               <MenuRow to="/ilanlarim" icon={LayoutGrid} label="İlanlarım" onClick={onClose} />
-              <MenuRow to="/favoriler" icon={Heart} label="Favoriler" onClick={onClose} />
-              <MenuRow to="/mesajlar" icon={MessageCircle} label="Mesajlar" badge={msgUnread} onClick={onClose} />
               <MenuRow to="/bildirimler" icon={Bell} label="Bildirimler" badge={noteUnread} onClick={onClose} />
               <MenuRow to="/profil" icon={User} label="Profil" onClick={onClose} />
               {admin ? <MenuRow to="/admin" icon={Shield} label="Yönetim" onClick={onClose} /> : null}
@@ -291,7 +358,7 @@ function MobileDrawer({
               <button
                 type="button"
                 disabled={signingOut}
-                className="mt-2 flex min-h-12 w-full items-center gap-3 rounded-xl px-2 text-sm font-medium text-muted hover:bg-elevated"
+                className="mt-1 flex min-h-12 w-full items-center gap-3 rounded-xl px-2 text-sm font-medium text-muted hover:bg-elevated"
                 onClick={() => {
                   setSigningOut(true);
                   void signOut().catch(() => setSigningOut(false));
@@ -306,7 +373,7 @@ function MobileDrawer({
           </SignedIn>
         </div>
 
-        <div className="drawer-safe shrink-0 border-t border-border p-4">
+        <div className="drawer-safe shrink-0 border-t border-border bg-surface px-4 pt-3">
           <Link to="/ilan-ver" onClick={onClose} className="block">
             <Button className="h-12 w-full rounded-xl">
               <Plus className="size-4" /> Ücretsiz ilan ver
@@ -314,7 +381,8 @@ function MobileDrawer({
           </Link>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -326,6 +394,7 @@ export function Header() {
   const [noteUnread, setNoteUnread] = useState(0);
   const [msgUnread, setMsgUnread] = useState(0);
   const [admin, setAdmin] = useState(false);
+  const menuBtnRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -351,7 +420,10 @@ export function Header() {
     };
   }, [user]);
 
-  const closeMenu = useCallback(() => setOpen(false), []);
+  const closeMenu = useCallback(() => {
+    setOpen(false);
+    queueMicrotask(() => menuBtnRef.current?.focus());
+  }, []);
 
   function goSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -360,7 +432,7 @@ export function Header() {
   }
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-surface/90 backdrop-blur-md">
+    <header className="site-header sticky top-0 border-b border-border bg-surface/90 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-6xl items-center gap-3 px-4">
         <Wordmark />
         <form onSubmit={goSearch} className="relative hidden flex-1 md:block">
@@ -420,6 +492,7 @@ export function Header() {
             ) : null}
           </Link>
           <button
+            ref={menuBtnRef}
             type="button"
             className="grid size-11 place-items-center rounded-lg hover:bg-elevated"
             onClick={() => setOpen((v) => !v)}
@@ -427,35 +500,20 @@ export function Header() {
             aria-expanded={open}
             aria-controls="mobile-menu"
           >
-            <span className="relative size-5">
-              <Menu
-                className={cn(
-                  "absolute inset-0 size-5 transition-[opacity,transform,filter] duration-200 ease-out",
-                  open ? "scale-[0.25] opacity-0 blur-sm" : "scale-100 opacity-100 blur-none",
-                )}
-              />
-              <X
-                className={cn(
-                  "absolute inset-0 size-5 transition-[opacity,transform,filter] duration-200 ease-out",
-                  open ? "scale-100 opacity-100 blur-none" : "scale-[0.25] opacity-0 blur-sm",
-                )}
-              />
-            </span>
+            <BurgerIcon open={open} />
           </button>
         </div>
       </div>
-      <div id="mobile-menu">
-        <MobileDrawer
-          open={open}
-          onClose={closeMenu}
-          q={q}
-          setQ={setQ}
-          onSearch={goSearch}
-          admin={admin}
-          msgUnread={msgUnread}
-          noteUnread={noteUnread}
-        />
-      </div>
+      <MobileDrawer
+        open={open}
+        onClose={closeMenu}
+        q={q}
+        setQ={setQ}
+        onSearch={goSearch}
+        admin={admin}
+        msgUnread={msgUnread}
+        noteUnread={noteUnread}
+      />
     </header>
   );
 }
