@@ -177,6 +177,8 @@ export const listConversations = createServerFn({ method: "GET" })
               l.price, l.currency,
               case when cv.buyer_id = $1 then sp.display_name else bp.display_name end as other_name,
               case when cv.buyer_id = $1 then cv.seller_id else cv.buyer_id end as other_id,
+              case when cv.buyer_id = $1 then sp.avatar_url else bp.avatar_url end as other_avatar,
+              case when cv.buyer_id = $1 then sp.last_seen_at else bp.last_seen_at end as other_last_seen,
               (select content from messages m where m.conversation_id=cv.id order by created_at desc limit 1) as last_content,
               (select sender_id from messages m where m.conversation_id=cv.id order by created_at desc limit 1) as last_sender_id,
               (select count(*)::int from messages m where m.conversation_id=cv.id and m.sender_id <> $1 and m.read_at is null) as unread
@@ -196,6 +198,8 @@ export const listConversations = createServerFn({ method: "GET" })
       listing_image: r.images ? (asJson<string[]>(r.images, [])[0] ?? null) : null,
       other_name: String(r.other_name ?? "Üye"),
       other_id: String(r.other_id),
+      other_avatar: r.other_avatar ? String(r.other_avatar) : null,
+      other_last_seen: r.other_last_seen ? asIso(r.other_last_seen) : null,
       last_content:
         r.last_content == null
           ? ""
@@ -216,7 +220,9 @@ export const getThread = createServerFn({ method: "POST" })
     const sql = await getSql();
     const conv = await sql.query<Record<string, unknown>>(
       `select cv.*, l.title, l.slug, l.images, l.price,
-              case when cv.buyer_id = $2 then sp.display_name else bp.display_name end as other_name
+              case when cv.buyer_id = $2 then sp.display_name else bp.display_name end as other_name,
+              case when cv.buyer_id = $2 then sp.avatar_url else bp.avatar_url end as other_avatar,
+              case when cv.buyer_id = $2 then sp.last_seen_at else bp.last_seen_at end as other_last_seen
        from conversations cv
        left join listings l on l.id = cv.listing_id
        left join profiles bp on bp.user_id = cv.buyer_id
@@ -264,6 +270,8 @@ export const getThread = createServerFn({ method: "POST" })
         listing_image: conv[0].images ? (asJson<string[]>(conv[0].images, [])[0] ?? null) : null,
         listing_price: conv[0].price ? num(conv[0].price) : null,
         other_name: String(conv[0].other_name ?? "Üye"),
+        other_avatar: conv[0].other_avatar ? String(conv[0].other_avatar) : null,
+        other_last_seen: conv[0].other_last_seen ? asIso(conv[0].other_last_seen) : null,
         buyer_id: String(conv[0].buyer_id),
         seller_id: String(conv[0].seller_id),
       },

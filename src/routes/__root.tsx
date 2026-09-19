@@ -16,7 +16,7 @@ export const Route = createRootRoute({
   head: () => ({
     meta: [
       { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
+      { name: "viewport", content: "width=device-width, initial-scale=1, interactive-widget=resizes-content" },
       { title: `${APP_NAME} — Türkiye ilan platformu` },
       { name: "description", content: "Emlak, vasıta ve ikinci el ilanlar. Güvenli alım satım." },
       { name: "theme-color", content: "#1A4FD8" },
@@ -43,9 +43,12 @@ function Shell() {
   const isChat = useRouterState({
     select: (s) => s.location.pathname.startsWith("/mesajlar"),
   });
+  const isChatThread = useRouterState({
+    select: (s) => s.matches.some((m) => m.routeId === "/mesajlar/$id"),
+  });
   return (
     <div className={isChat ? "flex h-dvh flex-col overflow-hidden" : "flex min-h-dvh flex-1 flex-col"}>
-      <Header />
+      <Header className={isChatThread ? "hidden md:block" : undefined} />
       <main className={isChat ? "flex min-h-0 flex-1 flex-col overflow-hidden" : "flex-1 pb-24"}>
         <Outlet />
       </main>

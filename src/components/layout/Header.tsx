@@ -386,7 +386,7 @@ function MobileDrawer({
   );
 }
 
-export function Header() {
+export function Header({ className }: { className?: string } = {}) {
   const nav = useNavigate();
   const { user, isPending } = useCurrentUserState();
   const [q, setQ] = useState("");
@@ -432,7 +432,7 @@ export function Header() {
   }
 
   return (
-    <header className="site-header sticky top-0 border-b border-border bg-surface/90 backdrop-blur-md">
+    <header className={cn("site-header sticky top-0 border-b border-border bg-surface/90 backdrop-blur-md", className)}>
       <div className="mx-auto flex h-16 max-w-6xl items-center gap-3 px-4">
         <Wordmark />
         <form onSubmit={goSearch} className="relative hidden flex-1 md:block">
