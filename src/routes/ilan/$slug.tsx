@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { getListing, incrementView } from "@/lib/server/catalog";
 import { favoriteIds, leaveReview, reportListing, startConversation, toggleFavorite } from "@/lib/server/social";
 import { revealPhone } from "@/lib/server/account";
-import { formatDate, formatNumber, formatPrice, listingStatusLabel } from "@/lib/utils";
+import { cleanPhone, formatDate, formatNumber, formatPhone, formatPrice, listingStatusLabel } from "@/lib/utils";
 import { REPORT_REASONS } from "@/lib/data/geo";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -241,28 +241,43 @@ function ListingPage() {
                 </>
               ) : live ? (
                 <>
-                  <Button
-                    className="w-full"
-                    variant="outline"
-                    onClick={async () => {
-                      if (!(await needUser())) return;
-                      try {
-                        const r = await revealPhone({ data: { listingId: listing.id } });
-                        setPhone(r.phone);
-                      } catch (e) {
-                        toast.error(e instanceof Error ? e.message : "Telefon yok");
-                      }
-                    }}
-                  >
-                    <Phone className="size-4" /> {phone ?? "Telefonu göster"}
-                  </Button>
                   {phone ? (
-                    <a className="block" href={`https://wa.me/90${phone.replace(/\D/g, "").replace(/^0/, "")}?text=${encodeURIComponent(listing.title + " ilanınız hakkında")}`} target="_blank" rel="noreferrer">
-                      <Button className="w-full" variant="ink">
-                        WhatsApp
-                      </Button>
-                    </a>
-                  ) : null}
+                    <div className="space-y-2">
+                      <a
+                        href={`tel:${cleanPhone(phone)}`}
+                        className="flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-surface px-4 py-2.5 text-sm font-bold text-fg hover:bg-elevated transition-colors shadow-2xs font-mono tabular-nums"
+                      >
+                        <Phone className="size-4 text-ok" />
+                        <span>{formatPhone(phone)}</span>
+                      </a>
+                      <a
+                        className="block"
+                        href={`https://wa.me/90${cleanPhone(phone).replace(/^0/, "")}?text=${encodeURIComponent(listing.title + " ilanınız hakkında bilgi almak istiyorum.")}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <Button className="w-full bg-[#25D366] hover:bg-[#1EBE5D] text-white font-semibold">
+                          WhatsApp ile İletişime Geç
+                        </Button>
+                      </a>
+                    </div>
+                  ) : (
+                    <Button
+                      className="w-full"
+                      variant="outline"
+                      onClick={async () => {
+                        if (!(await needUser())) return;
+                        try {
+                          const r = await revealPhone({ data: { listingId: listing.id } });
+                          setPhone(r.phone);
+                        } catch (e) {
+                          toast.error(e instanceof Error ? e.message : "Telefon yok");
+                        }
+                      }}
+                    >
+                      <Phone className="size-4" /> Telefonu Göster
+                    </Button>
+                  )}
                   <form
                     className="space-y-2"
                     onSubmit={async (e) => {

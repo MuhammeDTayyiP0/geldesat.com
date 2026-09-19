@@ -9,8 +9,9 @@ import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select, Textarea } from "@/components/ui/input";
+import { PhoneInput } from "@/components/ui/phone-input";
 import { Check } from "lucide-react";
-import { formatPrice } from "@/lib/utils";
+import { cleanPhone, formatPhone, formatPrice } from "@/lib/utils";
 import { toast } from "sonner";
 import type { AttrDef, CategoryRow } from "@/lib/server/helpers";
 import { CategoryButtons } from "@/components/listing/CategoryPicker";
@@ -119,7 +120,7 @@ function PostForm() {
     void getMe().then((m) => {
       if (m.store) setStoreId(m.store.id);
       if (!editId && !userProfileLoaded.current) {
-        if (m.profile?.phone) setPhone(m.profile.phone);
+        if (m.profile?.phone) setPhone(formatPhone(m.profile.phone));
         if (m.profile?.city) setCity(m.profile.city);
         userProfileLoaded.current = true;
       }
@@ -140,7 +141,7 @@ function PostForm() {
         setCity(r.listing.city ?? "");
         setDistrict(r.listing.district ?? "");
         setNeighborhood(r.listing.neighborhood ?? "");
-        if (r.phone) setPhone(r.phone);
+        if (r.phone) setPhone(formatPhone(r.phone));
         setImages(r.listing.images);
         setValues(r.listing.attrs ?? {});
         if (r.listing.store_id) setStoreId(r.listing.store_id);
@@ -191,7 +192,7 @@ function PostForm() {
           city,
           district,
           neighborhood: neighborhood || undefined,
-          phone: phone || undefined,
+          phone: cleanPhone(phone) || undefined,
           images,
           attrs: values,
           storeId,
@@ -331,8 +332,9 @@ function PostForm() {
             </div>
           ) : null}
           <div>
-            <Label>Telefon</Label>
-            <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="05xx xxx xx xx" />
+            <Label>İletişim Telefonu</Label>
+            <PhoneInput value={phone} onChange={(e) => setPhone(e.target.value)} />
+            <p className="mt-1 text-xs text-muted">İlanda alıcıların göreceği irtibat numarası.</p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             {attrs

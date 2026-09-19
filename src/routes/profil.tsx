@@ -8,6 +8,8 @@ import { authClient, signOut } from "@/lib/auth/client";
 import { TURKEY_CITIES } from "@/lib/data/locations";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select, Textarea } from "@/components/ui/input";
+import { PhoneInput } from "@/components/ui/phone-input";
+import { cleanPhone, formatPhone } from "@/lib/utils";
 import { CheckCircle2, Lock, LogOut, Mail, Shield, Store, User as UserIcon } from "lucide-react";
 import { toast } from "sonner";
 
@@ -40,7 +42,7 @@ function Profil() {
       setMe(m);
       if (!initializedRef.current) {
         setName(m.profile?.display_name ?? "");
-        setPhone(m.profile?.phone ?? "");
+        setPhone(formatPhone(m.profile?.phone ?? ""));
         setBio(m.profile?.bio ?? "");
         setCity(m.profile?.city ?? "");
         setStoreName(m.store?.name ?? "");
@@ -57,7 +59,7 @@ function Profil() {
     e.preventDefault();
     setProfileBusy(true);
     try {
-      await updateProfile({ data: { display_name: name, phone, bio, city } });
+      await updateProfile({ data: { display_name: name, phone: cleanPhone(phone), bio, city } });
       toast.success("Profil bilgileri kaydedildi");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Profil kaydedilemedi");
@@ -151,13 +153,12 @@ function Profil() {
 
         <div>
           <Label htmlFor="profile-phone">Telefon Numarası</Label>
-          <Input
+          <PhoneInput
             id="profile-phone"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
-            placeholder="05xx xxx xx xx"
           />
-          <p className="mt-1 text-xs text-muted">İlanlarınızda ve alıcılarla iletişimde kullanılır.</p>
+          <p className="mt-1 text-xs text-muted">İlanlarınızda ve alıcılarla iletişimde kullanılır (05xx xxx xx xx).</p>
         </div>
 
         <div>
@@ -267,7 +268,7 @@ function Profil() {
         onSubmit={async (e) => {
           e.preventDefault();
           try {
-            const s = await upsertStore({ data: { name: storeName, description: storeDesc, city, phone } });
+            const s = await upsertStore({ data: { name: storeName, description: storeDesc, city, phone: cleanPhone(phone) } });
             toast.success("Mağaza bilgileri güncellendi");
             setMe((m) =>
               m ? { ...m, store: { id: s.id, name: storeName, slug: s.slug, plan: m.store?.plan ?? "BASIC", city } } : m,

@@ -110,3 +110,70 @@ export function pingInbox() {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new Event("geldesat:inbox"));
 }
+
+/**
+ * Extract canonical 11-digit TR phone digits (05XXXXXXXXX).
+ */
+export function cleanPhone(raw: string | null | undefined): string {
+  if (!raw) return "";
+  let digits = raw.replace(/\D/g, "");
+  if (digits.startsWith("90") && digits.length >= 12) {
+    digits = digits.slice(2);
+  }
+  if (digits.startsWith("5") && digits.length <= 10) {
+    digits = `0${digits}`;
+  }
+  return digits.slice(0, 11);
+}
+
+/**
+ * Format any raw phone number to standard TR visual format: "05XX XXX XX XX".
+ */
+export function formatPhone(raw: string | null | undefined): string {
+  if (!raw) return "";
+  const digits = cleanPhone(raw);
+  if (!digits) return "";
+
+  const p1 = digits.slice(0, 4); // 05XX
+  const p2 = digits.slice(4, 7); // XXX
+  const p3 = digits.slice(7, 9); // XX
+  const p4 = digits.slice(9, 11); // XX
+
+  let res = p1;
+  if (p2) res += ` ${p2}`;
+  if (p3) res += ` ${p3}`;
+  if (p4) res += ` ${p4}`;
+  return res;
+}
+
+/**
+ * Live mask algorithm as user types/pastes into input field.
+ */
+export function maskPhoneInput(val: string): string {
+  if (!val) return "";
+  let digits = val.replace(/\D/g, "");
+
+  if (digits.startsWith("90") && digits.length > 2) {
+    digits = digits.slice(2);
+  }
+
+  if (digits.length === 1 && digits === "5") {
+    digits = "05";
+  } else if (digits.length > 0 && !digits.startsWith("0")) {
+    digits = `0${digits}`;
+  }
+
+  digits = digits.slice(0, 11);
+
+  const p1 = digits.slice(0, 4);
+  const p2 = digits.slice(4, 7);
+  const p3 = digits.slice(7, 9);
+  const p4 = digits.slice(9, 11);
+
+  let res = p1;
+  if (p2) res += ` ${p2}`;
+  if (p3) res += ` ${p3}`;
+  if (p4) res += ` ${p4}`;
+  return res;
+}
+

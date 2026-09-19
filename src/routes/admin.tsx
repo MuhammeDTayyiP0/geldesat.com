@@ -20,6 +20,7 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input, Label } from "@/components/ui/input";
+import { PhoneInput } from "@/components/ui/phone-input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
@@ -40,7 +41,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { CategoryAdminTree } from "@/components/listing/CategoryAdminTree";
-import { formatDate, formatPrice, listingStatusLabel } from "@/lib/utils";
+import { cleanPhone, formatDate, formatPhone, formatPrice, listingStatusLabel } from "@/lib/utils";
 import { toast } from "sonner";
 import type { CategoryRow } from "@/lib/server/helpers";
 import {
@@ -200,7 +201,7 @@ function Admin() {
       void getSiteSettings().then((s) => {
         setCompany(s.company_name);
         setSupportEmail(s.support_email);
-        setSupportPhone(s.support_phone);
+        setSupportPhone(formatPhone(s.support_phone));
         setBankName(s.bank_name || "");
         setAccountHolder(s.account_holder || "");
         setIban(s.iban || "");
@@ -1274,8 +1275,8 @@ function Admin() {
                               )}
                               {u.phone && (
                                 <div className="flex items-center gap-1 text-muted">
-                                  <Phone className="size-3" />
-                                  <span>{u.phone}</span>
+                                  <Phone className="size-3 text-subtle" />
+                                  <span className="font-mono tabular-nums">{formatPhone(u.phone)}</span>
                                 </div>
                               )}
                             </div>
@@ -1671,7 +1672,7 @@ function Admin() {
                   bank_name: bankName.trim(),
                   account_holder: accountHolder.trim(),
                   support_email: supportEmail.trim() || "destek@geldesat.com",
-                  support_phone: supportPhone.trim(),
+                  support_phone: cleanPhone(supportPhone),
                 },
               })
                 .then(() => toast.success("Site ayarları başarıyla kaydedildi."))
@@ -1710,11 +1711,9 @@ function Admin() {
               </div>
               <div>
                 <Label>Destek Telefon Numarası</Label>
-                <Input
+                <PhoneInput
                   value={supportPhone}
                   onChange={(e) => setSupportPhone(e.target.value)}
-                  placeholder="05xx xxx xx xx"
-                  maxLength={20}
                   className="mt-1.5"
                 />
               </div>
