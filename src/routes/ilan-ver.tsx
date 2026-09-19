@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { Check } from "lucide-react";
-import { cleanPhone, formatPhone, formatPrice } from "@/lib/utils";
+import { cleanPhone, formatPhone, formatPrice, maskPhone10 } from "@/lib/utils";
 import { toast } from "sonner";
 import type { AttrDef, CategoryRow } from "@/lib/server/helpers";
 import { CategoryButtons } from "@/components/listing/CategoryPicker";
@@ -120,7 +120,7 @@ function PostForm() {
     void getMe().then((m) => {
       if (m.store) setStoreId(m.store.id);
       if (!editId && !userProfileLoaded.current) {
-        if (m.profile?.phone) setPhone(formatPhone(m.profile.phone));
+        if (m.profile?.phone) setPhone(maskPhone10(m.profile.phone));
         if (m.profile?.city) setCity(m.profile.city);
         userProfileLoaded.current = true;
       }
@@ -141,7 +141,7 @@ function PostForm() {
         setCity(r.listing.city ?? "");
         setDistrict(r.listing.district ?? "");
         setNeighborhood(r.listing.neighborhood ?? "");
-        if (r.phone) setPhone(formatPhone(r.phone));
+        if (r.phone) setPhone(maskPhone10(r.phone));
         setImages(r.listing.images);
         setValues(r.listing.attrs ?? {});
         if (r.listing.store_id) setStoreId(r.listing.store_id);
@@ -334,7 +334,7 @@ function PostForm() {
           <div>
             <Label>İletişim Telefonu</Label>
             <PhoneInput value={phone} onChange={(e) => setPhone(e.target.value)} />
-            <p className="mt-1 text-xs text-muted">İlanda alıcıların göreceği irtibat numarası.</p>
+            <p className="mt-1 text-xs text-muted">İlanda alıcıların göreceği irtibat numarası (5xx xxx xx xx).</p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             {attrs

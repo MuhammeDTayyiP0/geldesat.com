@@ -1,5 +1,5 @@
 import { forwardRef } from "react";
-import { cn, maskPhoneInput } from "@/lib/utils";
+import { cn, maskPhone10, maskPhoneInput } from "@/lib/utils";
 import { Phone } from "lucide-react";
 
 export interface PhoneInputProps
@@ -18,14 +18,18 @@ export const PhoneInput = forwardRef<HTMLInputElement, PhoneInputProps>(
       onChange,
       onRawChange,
       showFlag = true,
-      placeholder = "05xx xxx xx xx",
+      placeholder,
       disabled,
       ...props
     },
     ref,
   ) => {
+    const maskFn = showFlag ? maskPhone10 : maskPhoneInput;
+    const defaultPlaceholder = showFlag ? "5xx xxx xx xx" : "05xx xxx xx xx";
+    const maxLen = showFlag ? 13 : 14;
+
     function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-      const masked = maskPhoneInput(e.target.value);
+      const masked = maskFn(e.target.value);
       e.target.value = masked;
 
       if (onChange) {
@@ -54,11 +58,11 @@ export const PhoneInput = forwardRef<HTMLInputElement, PhoneInputProps>(
           type="tel"
           inputMode="numeric"
           autoComplete="tel"
-          maxLength={14}
-          value={maskPhoneInput(value)}
+          maxLength={maxLen}
+          value={maskFn(value)}
           onChange={handleChange}
           disabled={disabled}
-          placeholder={placeholder}
+          placeholder={placeholder ?? defaultPlaceholder}
           className={cn(
             "h-11 w-full rounded-md border border-border bg-surface text-base text-fg placeholder:text-subtle outline-none transition-[border-color,box-shadow] duration-150 focus:border-primary focus:ring-2 focus:ring-primary/20 md:text-sm font-sans tabular-nums",
             showFlag ? "pl-20 pr-3 font-mono tracking-wide" : "pl-10 pr-3 font-mono",

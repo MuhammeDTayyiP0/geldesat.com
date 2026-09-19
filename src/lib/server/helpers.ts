@@ -234,7 +234,7 @@ export function normalizeTrPhone(raw: string): string {
   if (n.startsWith("90") && n.length === 12) n = n.slice(2);
   if (n.length === 10 && n.startsWith("5")) n = `0${n}`;
   if (!/^05\d{9}$/.test(n)) {
-    throw new Error("Geçerli bir cep telefonu girin (05xx xxx xx xx).");
+    throw new Error("Geçerli bir cep telefonu girin (5xx xxx xx xx).");
   }
   return n;
 }

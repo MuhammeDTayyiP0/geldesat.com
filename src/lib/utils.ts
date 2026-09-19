@@ -147,7 +147,59 @@ export function formatPhone(raw: string | null | undefined): string {
 }
 
 /**
- * Live mask algorithm as user types/pastes into input field.
+ * Format to international format: "+90 5XX XXX XX XX".
+ */
+export function formatPhoneIntl(raw: string | null | undefined): string {
+  if (!raw) return "";
+  const digits = cleanPhone(raw);
+  if (!digits) return "";
+  const ten = digits.startsWith("0") ? digits.slice(1) : digits;
+  const p1 = ten.slice(0, 3);
+  const p2 = ten.slice(3, 6);
+  const p3 = ten.slice(6, 8);
+  const p4 = ten.slice(8, 10);
+  let res = `+90 ${p1}`;
+  if (p2) res += ` ${p2}`;
+  if (p3) res += ` ${p3}`;
+  if (p4) res += ` ${p4}`;
+  return res;
+}
+
+/**
+ * Live mask for input field with "+90" prefix badge:
+ * Formats strictly as "5XX XXX XX XX" (10 digits).
+ * Leading "0" or "90" is automatically stripped!
+ */
+export function maskPhone10(val: string): string {
+  if (!val) return "";
+  let digits = val.replace(/\D/g, "");
+
+  if (digits.startsWith("90") && digits.length > 2) {
+    digits = digits.slice(2);
+  }
+
+  while (digits.startsWith("0")) {
+    digits = digits.slice(1);
+  }
+
+  digits = digits.slice(0, 10);
+
+  const p1 = digits.slice(0, 3);
+  const p2 = digits.slice(3, 6);
+  const p3 = digits.slice(6, 8);
+  const p4 = digits.slice(8, 10);
+
+  let res = p1;
+  if (p2) res += ` ${p2}`;
+  if (p3) res += ` ${p3}`;
+  if (p4) res += ` ${p4}`;
+  return res;
+}
+
+export const formatPhone10 = maskPhone10;
+
+/**
+ * Live mask algorithm as user types/pastes into standalone 11-digit input field (05XX...).
  */
 export function maskPhoneInput(val: string): string {
   if (!val) return "";
@@ -176,4 +228,5 @@ export function maskPhoneInput(val: string): string {
   if (p4) res += ` ${p4}`;
   return res;
 }
+
 

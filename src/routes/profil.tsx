@@ -9,7 +9,7 @@ import { TURKEY_CITIES } from "@/lib/data/locations";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import { PhoneInput } from "@/components/ui/phone-input";
-import { cleanPhone, formatPhone } from "@/lib/utils";
+import { cleanPhone, formatPhone, maskPhone10 } from "@/lib/utils";
 import { CheckCircle2, Lock, LogOut, Mail, Shield, Store, User as UserIcon } from "lucide-react";
 import { toast } from "sonner";
 
@@ -42,7 +42,7 @@ function Profil() {
       setMe(m);
       if (!initializedRef.current) {
         setName(m.profile?.display_name ?? "");
-        setPhone(formatPhone(m.profile?.phone ?? ""));
+        setPhone(maskPhone10(m.profile?.phone ?? ""));
         setBio(m.profile?.bio ?? "");
         setCity(m.profile?.city ?? "");
         setStoreName(m.store?.name ?? "");
@@ -158,7 +158,7 @@ function Profil() {
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
           />
-          <p className="mt-1 text-xs text-muted">İlanlarınızda ve alıcılarla iletişimde kullanılır (05xx xxx xx xx).</p>
+          <p className="mt-1 text-xs text-muted">İlanlarınızda ve alıcılarla iletişimde kullanılır (5xx xxx xx xx).</p>
         </div>
 
         <div>

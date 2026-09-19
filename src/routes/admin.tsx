@@ -41,7 +41,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { CategoryAdminTree } from "@/components/listing/CategoryAdminTree";
-import { cleanPhone, formatDate, formatPhone, formatPrice, listingStatusLabel } from "@/lib/utils";
+import { cleanPhone, formatDate, formatPhone, formatPrice, listingStatusLabel, maskPhone10 } from "@/lib/utils";
 import { toast } from "sonner";
 import type { CategoryRow } from "@/lib/server/helpers";
 import {
@@ -201,7 +201,7 @@ function Admin() {
       void getSiteSettings().then((s) => {
         setCompany(s.company_name);
         setSupportEmail(s.support_email);
-        setSupportPhone(formatPhone(s.support_phone));
+        setSupportPhone(maskPhone10(s.support_phone));
         setBankName(s.bank_name || "");
         setAccountHolder(s.account_holder || "");
         setIban(s.iban || "");
