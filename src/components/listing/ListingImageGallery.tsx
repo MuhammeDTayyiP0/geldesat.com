@@ -1,4 +1,5 @@
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, Maximize2, X, ImageIcon } from "lucide-react";
 
 interface ListingImageGalleryProps {
@@ -10,8 +11,16 @@ interface ListingImageGalleryProps {
 export function ListingImageGallery({ images, title, categoryName }: ListingImageGalleryProps) {
   const [currentIdx, setCurrentIdx] = React.useState(0);
   const [isFullscreen, setIsFullscreen] = React.useState(false);
+  const [mounted, setMounted] = React.useState(false);
+
   const touchStartX = React.useRef<number | null>(null);
+  const touchStartY = React.useRef<number | null>(null);
   const touchEndX = React.useRef<number | null>(null);
+  const touchEndY = React.useRef<number | null>(null);
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const validImages = React.useMemo(() => {
     return Array.isArray(images) ? images.filter((img): img is string => Boolean(img && img.trim())) : [];
@@ -29,50 +38,99 @@ export function ListingImageGallery({ images, title, categoryName }: ListingImag
     setCurrentIdx((prev) => (prev - 1 + total) % total);
   }, [total]);
 
-  // Keyboard navigation for fullscreen lightbox
+  const closeFullscreen = React.useCallback(() => {
+    setIsFullscreen(false);
+    if (typeof window !== "undefined" && window.history.state?.gallery_fullscreen) {
+      window.history.back();
+    }
+  }, []);
+
+  const openFullscreen = React.useCallback(() => {
+    setIsFullscreen(true);
+    if (typeof window !== "undefined") {
+      window.history.pushState({ gallery_fullscreen: true }, "");
+    }
+  }, []);
+
+  // History back button (Android & browser back button) listener
   React.useEffect(() => {
+    if (!isFullscreen) return;
+    const handlePopState = () => {
+      setIsFullscreen(false);
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [isFullscreen]);
+
+  // Keyboard navigation for fullscreen lightbox (ESC, ArrowLeft, ArrowRight)
+  React.useEffect(() => {
+    if (!isFullscreen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (!isFullscreen) return;
-      if (e.key === "Escape") setIsFullscreen(false);
-      else if (e.key === "ArrowRight") nextImage();
-      else if (e.key === "ArrowLeft") prevImage();
+      if (e.key === "Escape") {
+        e.preventDefault();
+        closeFullscreen();
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        nextImage();
+      } else if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        prevImage();
+      }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isFullscreen, nextImage, prevImage]);
+  }, [isFullscreen, nextImage, prevImage, closeFullscreen]);
 
   // Lock body scroll when fullscreen lightbox is active
   React.useEffect(() => {
     if (isFullscreen) {
+      const originalOverflow = document.body.style.overflow;
       document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
     }
-    return () => {
-      document.body.style.overflow = "";
-    };
   }, [isFullscreen]);
 
-  // Touch swipe handling
+  // Touch swipe handling (both horizontal next/prev and vertical pull-down-to-close)
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.targetTouches[0].clientX;
+    touchStartY.current = e.targetTouches[0].clientY;
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
     touchEndX.current = e.targetTouches[0].clientX;
+    touchEndY.current = e.targetTouches[0].clientY;
   };
 
-  const handleTouchEnd = () => {
-    if (touchStartX.current == null || touchEndX.current == null) return;
-    const distance = touchStartX.current - touchEndX.current;
-    const minSwipeDistance = 45;
-    if (distance > minSwipeDistance) {
-      nextImage();
-    } else if (distance < -minSwipeDistance) {
-      prevImage();
+  const handleTouchEnd = (inFullscreen = false) => {
+    if (
+      touchStartX.current == null ||
+      touchEndX.current == null ||
+      touchStartY.current == null ||
+      touchEndY.current == null
+    ) {
+      return;
     }
+
+    const diffX = touchStartX.current - touchEndX.current;
+    const diffY = touchEndY.current - touchStartY.current; // positive means swipe down
+
+    // In fullscreen: if user swipes down distinctly, close fullscreen!
+    if (inFullscreen && diffY > 70 && Math.abs(diffY) > Math.abs(diffX)) {
+      closeFullscreen();
+    } else if (Math.abs(diffX) > 40) {
+      if (diffX > 0) {
+        nextImage();
+      } else {
+        prevImage();
+      }
+    }
+
     touchStartX.current = null;
     touchEndX.current = null;
+    touchStartY.current = null;
+    touchEndY.current = null;
   };
 
   if (total === 0) {
@@ -91,22 +149,22 @@ export function ListingImageGallery({ images, title, categoryName }: ListingImag
     <div className="space-y-3">
       {/* Main Image Container */}
       <div
-        className="group relative aspect-[16/10] w-full overflow-hidden rounded-2xl border border-border bg-ink/90 shadow-card select-none"
+        className="group relative aspect-[16/10] w-full overflow-hidden rounded-2xl border border-border bg-ink/90 shadow-card select-none cursor-pointer"
+        onClick={openFullscreen}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
+        onTouchEnd={() => handleTouchEnd(false)}
       >
         <img
           src={validImages[currentIdx]}
           alt={`${title} - Görsel ${currentIdx + 1}`}
           className="size-full cursor-zoom-in object-contain transition-transform duration-300 group-hover:scale-[1.01]"
-          onClick={() => setIsFullscreen(true)}
           loading="eager"
         />
 
         {/* Counter Badge */}
         {total > 1 ? (
-          <div className="absolute top-3 left-3 flex items-center gap-1.5 rounded-full bg-ink/75 px-3 py-1 text-xs font-semibold text-white backdrop-blur-md shadow-xs pointer-events-none">
+          <div className="absolute top-3 left-3 flex items-center gap-1.5 rounded-full bg-ink/80 px-3 py-1 text-xs font-semibold text-white backdrop-blur-md shadow-xs pointer-events-none">
             <span>{currentIdx + 1}</span>
             <span className="opacity-50">/</span>
             <span>{total}</span>
@@ -116,15 +174,18 @@ export function ListingImageGallery({ images, title, categoryName }: ListingImag
         {/* Fullscreen Button */}
         <button
           type="button"
-          onClick={() => setIsFullscreen(true)}
-          className="absolute top-3 right-3 grid size-9 place-items-center rounded-full bg-ink/75 text-white backdrop-blur-md transition-transform hover:scale-105 active:scale-95 shadow-xs"
+          onClick={(e) => {
+            e.stopPropagation();
+            openFullscreen();
+          }}
+          className="absolute top-3 right-3 grid size-9 place-items-center rounded-full bg-ink/80 text-white backdrop-blur-md transition-transform hover:scale-105 active:scale-95 shadow-xs"
           title="Tam Ekran Aç"
           aria-label="Tam Ekran Aç"
         >
           <Maximize2 className="size-4" />
         </button>
 
-        {/* Navigation Arrows */}
+        {/* Navigation Arrows on Main Image */}
         {total > 1 ? (
           <>
             <button
@@ -179,89 +240,109 @@ export function ListingImageGallery({ images, title, categoryName }: ListingImag
         </div>
       ) : null}
 
-      {/* Fullscreen Lightbox Modal */}
-      {isFullscreen ? (
-        <div
-          className="fixed inset-0 z-50 flex flex-col bg-black/95 backdrop-blur-xl animate-in fade-in duration-200"
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
-        >
-          {/* Top Bar */}
-          <div className="flex h-16 w-full items-center justify-between px-4 sm:px-6 bg-gradient-to-b from-black/80 to-transparent">
-            <div className="flex items-center gap-3">
-              <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-medium tracking-wider text-white backdrop-blur-md">
-                {currentIdx + 1} / {total}
-              </span>
-              <span className="hidden sm:inline-block max-w-md truncate text-sm font-medium text-white/80">
-                {title}
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={() => setIsFullscreen(false)}
-              className="grid size-10 place-items-center rounded-full bg-white/10 text-white backdrop-blur-md transition-all hover:bg-white/20 hover:scale-105 active:scale-95"
-              title="Kapat (ESC)"
-              aria-label="Kapat"
+      {/* Fullscreen Lightbox Modal (Rendered in Document Body Portal above everything with z-[99999]) */}
+      {isFullscreen && mounted
+        ? createPortal(
+            <div
+              className="fixed inset-0 z-[99999] flex flex-col bg-black/95 backdrop-blur-2xl animate-in fade-in duration-150 select-none cursor-zoom-out"
+              onClick={closeFullscreen}
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={() => handleTouchEnd(true)}
             >
-              <X className="size-6" />
-            </button>
-          </div>
+              {/* Top Navigation Bar */}
+              <div
+                className="relative z-50 flex h-16 w-full items-center justify-between px-4 sm:px-6 bg-gradient-to-b from-black/90 via-black/60 to-transparent pointer-events-auto"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-semibold tracking-wider text-white backdrop-blur-md">
+                    {currentIdx + 1} / {total}
+                  </span>
+                  <span className="hidden sm:inline-block max-w-md truncate text-sm font-medium text-white/80">
+                    {title}
+                  </span>
+                </div>
 
-          {/* Main Viewer Area */}
-          <div className="relative flex flex-1 items-center justify-center p-2 sm:p-6 overflow-hidden">
-            <img
-              src={validImages[currentIdx]}
-              alt={`${title} - Büyük Görsel ${currentIdx + 1}`}
-              className="max-h-[82vh] max-w-full object-contain select-none transition-all duration-200"
-            />
-
-            {/* Arrows in Fullscreen */}
-            {total > 1 ? (
-              <>
+                {/* Prominent, Highly Visible Close Button */}
                 <button
                   type="button"
-                  onClick={prevImage}
-                  className="absolute left-4 top-1/2 -translate-y-1/2 grid size-12 place-items-center rounded-full bg-white/10 text-white backdrop-blur-md transition-all hover:bg-white/25 hover:scale-110 active:scale-95"
-                  title="Önceki"
-                  aria-label="Önceki"
+                  onClick={closeFullscreen}
+                  className="flex items-center gap-1.5 rounded-full bg-white/20 hover:bg-white/30 text-white px-3.5 py-2 backdrop-blur-md transition-all hover:scale-105 active:scale-95 shadow-md cursor-pointer"
+                  title="Kapat (ESC / Tıkla)"
+                  aria-label="Kapat"
                 >
-                  <ChevronLeft className="size-7" />
+                  <X className="size-5" />
+                  <span className="text-xs font-semibold">Kapat</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={nextImage}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 grid size-12 place-items-center rounded-full bg-white/10 text-white backdrop-blur-md transition-all hover:bg-white/25 hover:scale-110 active:scale-95"
-                  title="Sonraki"
-                  aria-label="Sonraki"
-                >
-                  <ChevronRight className="size-7" />
-                </button>
-              </>
-            ) : null}
-          </div>
+              </div>
 
-          {/* Bottom Thumbnails Strip in Fullscreen */}
-          {total > 1 ? (
-            <div className="flex h-20 w-full items-center justify-center gap-2 overflow-x-auto px-4 pb-4 pt-1 bg-gradient-to-t from-black/80 to-transparent scrollbar-none">
-              {validImages.map((img, i) => (
-                <button
-                  key={`fs-${img}-${i}`}
-                  type="button"
-                  onClick={() => setCurrentIdx(i)}
-                  className={`relative h-14 w-18 shrink-0 overflow-hidden rounded-lg transition-all duration-150 ${
-                    i === currentIdx
-                      ? "ring-2 ring-primary scale-110 opacity-100"
-                      : "opacity-40 hover:opacity-80"
-                  }`}
+              {/* Main Viewer Area (Clicking empty background closes lightbox) */}
+              <div className="relative flex flex-1 items-center justify-center p-2 sm:p-6 overflow-hidden">
+                <img
+                  src={validImages[currentIdx]}
+                  alt={`${title} - Büyük Görsel ${currentIdx + 1}`}
+                  className="max-h-[82vh] max-w-full object-contain transition-all duration-200 cursor-default shadow-2xl"
+                  onClick={(e) => e.stopPropagation()}
+                />
+
+                {/* Left/Right Arrows in Fullscreen */}
+                {total > 1 ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        prevImage();
+                      }}
+                      className="absolute left-3 sm:left-6 top-1/2 -translate-y-1/2 grid size-12 place-items-center rounded-full bg-white/15 hover:bg-white/30 text-white backdrop-blur-md transition-all hover:scale-110 active:scale-95 shadow-lg cursor-pointer z-20"
+                      title="Önceki (Sol Ok)"
+                      aria-label="Önceki"
+                    >
+                      <ChevronLeft className="size-7" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        nextImage();
+                      }}
+                      className="absolute right-3 sm:right-6 top-1/2 -translate-y-1/2 grid size-12 place-items-center rounded-full bg-white/15 hover:bg-white/30 text-white backdrop-blur-md transition-all hover:scale-110 active:scale-95 shadow-lg cursor-pointer z-20"
+                      title="Sonraki (Sağ Ok)"
+                      aria-label="Sonraki"
+                    >
+                      <ChevronRight className="size-7" />
+                    </button>
+                  </>
+                ) : null}
+              </div>
+
+              {/* Bottom Thumbnails Strip in Fullscreen */}
+              {total > 1 ? (
+                <div
+                  className="relative z-50 flex h-20 w-full items-center justify-center gap-2 overflow-x-auto px-4 pb-4 pt-1 bg-gradient-to-t from-black/90 via-black/60 to-transparent scrollbar-none pointer-events-auto"
+                  onClick={(e) => e.stopPropagation()}
                 >
-                  <img src={img} alt="" className="size-full object-cover" />
-                </button>
-              ))}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
+                  {validImages.map((img, i) => (
+                    <button
+                      key={`fs-${img}-${i}`}
+                      type="button"
+                      onClick={() => setCurrentIdx(i)}
+                      className={`relative h-14 w-18 shrink-0 overflow-hidden rounded-lg transition-all duration-150 cursor-pointer ${
+                        i === currentIdx
+                          ? "ring-2 ring-primary scale-110 opacity-100 shadow-md"
+                          : "opacity-40 hover:opacity-80"
+                      }`}
+                    >
+                      <img src={img} alt="" className="size-full object-cover" />
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>,
+            document.body
+          )
+        : null}
     </div>
   );
 }
