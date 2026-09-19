@@ -262,7 +262,13 @@ export const saveListing = createServerFn({ method: "POST" })
 
 export const setListingStatus = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator(z.object({ id: z.string(), status: z.enum(["ACTIVE", "INACTIVE", "SOLD", "PENDING", "REJECTED"]) }))
+  .validator(
+    z.object({
+      id: z.string(),
+      status: z.enum(["ACTIVE", "INACTIVE", "SOLD", "PENDING", "REJECTED"]),
+      reason: z.string().optional(),
+    }),
+  )
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     const me = await ensureProfile(context.userId);
@@ -283,11 +289,14 @@ export const setListingStatus = createServerFn({ method: "POST" })
     await sql.query("update listings set status=$2, updated_at=now() where id=$1", [data.id, data.status]);
     if (data.status === "ACTIVE" || data.status === "REJECTED") {
       const slug = await sql.query<{ slug: string }>("select slug from listings where id=$1", [data.id]);
+      const rejectReason = data.reason?.trim() || "İlanınız yönetim ve yayın politikalarımıza uygun bulunmadı.";
       await notify(
         row[0].user_id,
         "listing",
         data.status === "ACTIVE" ? "İlanınız yayında" : "İlanınız reddedildi",
-        data.status === "ACTIVE" ? "İlanınız onaylandı ve yayına alındı." : "",
+        data.status === "ACTIVE"
+          ? "İlanınız onaylandı ve yayına alındı."
+          : `İlanınız şu gerekçeyle reddedildi: ${rejectReason}. İlanınızı düzenleyip tekrar onaya gönderebilirsiniz.`,
         `/ilan/${slug[0]?.slug ?? data.id}`,
       );
     }
