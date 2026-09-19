@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   Bell,
   ChevronRight,
@@ -25,9 +25,9 @@ import { Input } from "@/components/ui/input";
 import { LogoMark } from "@/components/brand/LogoMark";
 import { cn } from "@/lib/utils";
 
-function Wordmark() {
+function Wordmark({ onClick }: { onClick?: () => void } = {}) {
   return (
-    <Link to="/" className="flex items-center gap-2 text-ink">
+    <Link to="/" onClick={onClick} className="flex items-center gap-2 text-ink">
       <LogoMark className="size-8" />
       <span className="text-lg font-semibold tracking-tight">GeldeSat</span>
     </Link>
@@ -395,6 +395,13 @@ export function Header({ className }: { className?: string } = {}) {
   const [msgUnread, setMsgUnread] = useState(0);
   const [admin, setAdmin] = useState(false);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const searchStr = useRouterState({ select: (s) => s.location.searchStr });
+
+  // Close mobile menu on any navigation / route change
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname, searchStr]);
 
   useEffect(() => {
     if (!user) return;
@@ -474,7 +481,7 @@ export function Header({ className }: { className?: string } = {}) {
   return (
     <header className={cn("site-header sticky top-0 border-b border-border bg-surface/90 backdrop-blur-md", className)}>
       <div className="mx-auto flex h-16 max-w-6xl items-center gap-3 px-4">
-        <Wordmark />
+        <Wordmark onClick={closeMenu} />
         <form onSubmit={goSearch} className="relative hidden flex-1 md:block">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle" />
           <Input
@@ -526,6 +533,7 @@ export function Header({ className }: { className?: string } = {}) {
         <div className="ml-auto flex items-center gap-0.5 md:hidden">
           <Link
             to={user ? "/mesajlar" : "/login"}
+            onClick={closeMenu}
             className={cn(
               "relative grid size-11 place-items-center rounded-lg hover:bg-elevated",
               msgUnread > 0 && "text-primary",
