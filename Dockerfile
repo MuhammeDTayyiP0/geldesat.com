@@ -7,7 +7,7 @@ COPY . .
 ENV NITRO_PRESET=node-server
 ENV VITE_AUTH_ENABLED=true
 ENV VITE_SELF_HOST=true
-RUN node scripts/with-app-env.mjs vite build
+RUN npm run build:node
 
 FROM node:22-bookworm-slim
 WORKDIR /app
