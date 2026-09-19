@@ -213,11 +213,14 @@ export function assertImages(images: string[]) {
   }
 }
 
-export function listingSelect(extra = "") {
+export function listingSelect(extra = "", onlyCover = false) {
+  const imagesExpr = onlyCover
+    ? "case when jsonb_array_length(l.images) > 0 then jsonb_build_array(l.images->0) else '[]'::jsonb end as images"
+    : "l.images";
   return `
     l.id, l.slug, l.user_id, l.store_id, l.category_id, l.title, l.description,
     l.price, l.currency, l.status, l.city, l.district, l.neighborhood, l.lat, l.lng,
-    l.images, l.attrs, l.view_count, l.featured_until, l.expires_at, l.created_at, l.updated_at,
+    ${imagesExpr}, l.attrs, l.view_count, l.featured_until, l.expires_at, l.created_at, l.updated_at,
     c.name as category_name, c.slug as category_slug,
     coalesce(p.display_name, 'Satıcı') as seller_name,
     s.name as store_name, s.slug as store_slug

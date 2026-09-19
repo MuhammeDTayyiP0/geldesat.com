@@ -1,5 +1,3 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
 # dependencies
 /node_modules
 /.pnp
@@ -9,38 +7,50 @@
 !.yarn/plugins
 !.yarn/releases
 !.yarn/versions
+.node_modules.lock
+
+# production & build outputs
 dist
-# testing
+/build
+/.next/
+/out/
+.output/
+.nitro/
+.vercel
+
+# testing & grok / ai artifacts
 /coverage
 .grok
 screenshots
-# next.js
-/.next/
-/out/
+artifacts/
+attachments/
 
-# production
-/build
+# env files (örnek dosyalar hariç tüm gizli anahtarlar yoksayılır)
+.env*
+!.env.example
+!env.ornek
 
-# misc
+# misc & OS
 .DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
 *.pem
 
-# debug
+# IDEs
+.vscode/
+.idea/
+
+# debug & logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+build.log
 
-# env files (can opt-in for committing if needed)
-.env*
-
-# vercel
-.vercel
-
-# typescript
+# typescript & prisma
 *.tsbuildinfo
 next-env.d.ts
-
 /src/generated/prisma
 
 # Uploads & local archives
@@ -48,4 +58,3 @@ next-env.d.ts
 !/public/uploads/.gitkeep
 *.rar
 *.zip
-build.log

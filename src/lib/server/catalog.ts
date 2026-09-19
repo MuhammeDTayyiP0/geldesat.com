@@ -144,7 +144,7 @@ async function searchListings(f: SearchFilters): Promise<{
   const off = params.length;
 
   const rows = await sql.query<Record<string, unknown>>(
-    `select ${listingSelect()},
+    `select ${listingSelect("", true)},
        coalesce((
          select json_agg(b.kind) from boosts b
          where b.listing_id = l.id and b.ends_at > now()

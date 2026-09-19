@@ -1,5 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { Download } from "lucide-react";
+import { createFileRoute, Link } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/arsiv")({ component: Arsiv });
 
@@ -12,15 +11,13 @@ function Arsiv() {
         <p className="mt-3 text-sm text-muted">
           Kaynak kod, veritabanı şeması, Docker ve kurulum rehberi. Zip’i indirip kendi sunucuna yükleyebilirsin.
         </p>
-        <a
-          href="/GeldeSat.zip"
-          download="GeldeSat.zip"
+        <Link
+          to="/"
           className="mt-6 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary text-sm font-medium text-primary-fg hover:opacity-90"
         >
-          <Download className="size-4" />
-          GeldeSat.zip indir
-        </a>
-        <p className="mt-4 text-xs text-subtle">Açtıktan sonra KURULUM.md dosyasına bakın. HTTPS ve e-posta ile üyelik gerekir.</p>
+          Anasayfaya dön
+        </Link>
+        <p className="mt-4 text-xs text-subtle">Sunucu kurulumu ve yapılandırma için proje kök dizinindeki KURULUM.md dosyasına bakın.</p>
       </div>
     </div>
   );

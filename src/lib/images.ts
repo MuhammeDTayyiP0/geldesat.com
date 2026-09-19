@@ -59,7 +59,7 @@ async function bitmapFrom(file: File) {
 
 export async function compressImage(file: File): Promise<string> {
   if (!file.type.startsWith("image/")) throw new Error("Yalnızca görsel dosyaları");
-  if (file.size > 8 * 1024 * 1024) throw new Error("Dosya 8 MB'dan büyük olamaz");
+  if (file.size > 30 * 1024 * 1024) throw new Error("Dosya 30 MB'dan büyük olamaz");
   const bitmap = await bitmapFrom(file);
   const max = 1280;
   const scale = Math.min(1, max / Math.max(bitmap.width, bitmap.height));
@@ -89,11 +89,24 @@ export async function compressImage(file: File): Promise<string> {
   drawBackdrop(ctx, cw, ch);
   ctx.drawImage(bitmap, Math.round((cw - dw) / 2), Math.round((ch - dh) / 2), dw, dh);
   drawOverlayMark(ctx, cw, ch);
-  const data = canvas.toDataURL("image/jpeg", 0.7);
-  if (data.length > 420_000) {
-    const smaller = canvas.toDataURL("image/jpeg", 0.52);
-    if (smaller.length > 420_000) throw new Error("Görsel hâlâ çok büyük, başka bir kare deneyin");
-    return smaller;
+
+  // Kademeli sıkıştırma: 420 KB sınırının altında kalacak şekilde kaliteyi ayarla
+  const qualities = [0.72, 0.58, 0.45, 0.35];
+  for (const q of qualities) {
+    const data = canvas.toDataURL("image/jpeg", q);
+    if (data.length <= 420_000) return data;
   }
-  return data;
+
+  // Hâlâ büyükse son çare olarak 960px ölçeklendir
+  const smallCanvas = document.createElement("canvas");
+  smallCanvas.width = Math.round(cw * 0.75);
+  smallCanvas.height = Math.round(ch * 0.75);
+  const smallCtx = smallCanvas.getContext("2d");
+  if (smallCtx) {
+    smallCtx.imageSmoothingEnabled = true;
+    smallCtx.drawImage(canvas, 0, 0, smallCanvas.width, smallCanvas.height);
+    return smallCanvas.toDataURL("image/jpeg", 0.5);
+  }
+
+  return canvas.toDataURL("image/jpeg", 0.35);
 }
