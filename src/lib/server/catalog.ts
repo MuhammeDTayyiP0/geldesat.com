@@ -10,6 +10,7 @@ import {
   type CategoryRow,
   type ListingCard,
 } from "./helpers";
+import { CITY_COORDS } from "@/lib/data/geo";
 
 const Filters = z.object({
   q: z.string().optional(),
@@ -250,7 +251,9 @@ export const getListing = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const sql = await getSql();
     const rows = await sql.query<Record<string, unknown>>(
-      `select ${listingSelect()}, l.phone_override,
+      `select ${listingSelect()}, l.phone_override, p.phone as profile_phone, p.avatar_url as profile_avatar,
+         (select count(*)::int from favorites where listing_id = l.id) as fav_count,
+         (select count(*)::int from phone_reveals where listing_id = l.id) as phone_reveal_count,
          coalesce((select json_agg(b.kind) from boosts b where b.listing_id = l.id and b.ends_at > now()), '[]'::json) as boosts
        from listings l
        join categories c on c.id = l.category_id
@@ -261,6 +264,10 @@ export const getListing = createServerFn({ method: "POST" })
     );
     if (!rows[0]) return null;
     const listing = mapListing(rows[0]);
+    if ((listing.lat == null || listing.lng == null) && listing.city && CITY_COORDS[listing.city]) {
+      listing.lat = CITY_COORDS[listing.city].lat;
+      listing.lng = CITY_COORDS[listing.city].lng;
+    }
     const pathRows = await sql.query<CategoryRow>(
       `with recursive chain as (
          select id, name, slug, parent_id, icon, sort_order from categories where id = $1
@@ -276,13 +283,22 @@ export const getListing = createServerFn({ method: "POST" })
       "select price, recorded_at from price_history where listing_id = $1 order by recorded_at asc",
       [listing.id],
     );
-    const similar = await searchListings({
+    let similar = await searchListings({
       category: listing.category_id,
-      minPrice: listing.price * 0.7,
-      maxPrice: listing.price * 1.3,
+      minPrice: listing.price > 0 ? listing.price * 0.7 : undefined,
+      maxPrice: listing.price > 0 ? listing.price * 1.3 : undefined,
       limit: 6,
       page: 1,
     });
+    let filteredSimilar = similar.listings.filter((x) => x.id !== listing.id);
+    if (filteredSimilar.length === 0) {
+      similar = await searchListings({
+        category: listing.category_id,
+        limit: 6,
+        page: 1,
+      });
+      filteredSimilar = similar.listings.filter((x) => x.id !== listing.id);
+    }
     const seller = await sql.query<Record<string, unknown>>(
       `select p.user_id, p.display_name, p.city, p.created_at, p.avatar_url, p.bio,
               (select count(*)::int from listings where user_id = p.user_id and status = 'ACTIVE') as listing_count,
@@ -291,25 +307,37 @@ export const getListing = createServerFn({ method: "POST" })
        from profiles p where p.user_id = $1`,
       [listing.user_id],
     );
+    const hasPhone = Boolean(
+      (typeof rows[0].phone_override === "string" && rows[0].phone_override.trim()) ||
+      (typeof rows[0].profile_phone === "string" && rows[0].profile_phone.trim())
+    );
     return {
       listing,
       path,
       history: history.map((h) => ({ price: num(h.price), at: String(h.recorded_at) })),
-      similar: similar.listings.filter((x) => x.id !== listing.id).slice(0, 4),
+      similar: filteredSimilar.slice(0, 4),
       seller: seller[0]
         ? {
             id: String(seller[0].user_id),
             name: String(seller[0].display_name ?? "Satıcı"),
             city: seller[0].city ? String(seller[0].city) : null,
             since: String(seller[0].created_at),
-            avatar: seller[0].avatar_url ? String(seller[0].avatar_url) : null,
+            avatar: seller[0].avatar_url ? String(seller[0].avatar_url) : (rows[0].profile_avatar ? String(rows[0].profile_avatar) : null),
             bio: seller[0].bio ? String(seller[0].bio) : null,
             listing_count: num(seller[0].listing_count),
             rating_avg: num(seller[0].rating_avg),
             rating_count: num(seller[0].rating_count),
           }
         : null,
-      has_phone: Boolean(rows[0].phone_override) || true,
+      store: rows[0].store_name
+        ? {
+            name: String(rows[0].store_name),
+            slug: String(rows[0].store_slug ?? ""),
+          }
+        : null,
+      has_phone: hasPhone,
+      fav_count: num(rows[0].fav_count),
+      phone_reveal_count: num(rows[0].phone_reveal_count),
     };
   });
 

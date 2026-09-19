@@ -426,6 +426,32 @@ export const leaveReview = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+export const checkReviewEligibility = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ sellerId: z.string(), listingId: z.string().optional() }))
+  .handler(async ({ context, data }) => {
+    if (data.sellerId === context.userId) return { eligible: false, reason: "self", existing: null };
+    const sql = await getSql();
+    const talked = await sql.query<{ id: string }>(
+      `select id from conversations
+       where (buyer_id=$1 and seller_id=$2) or (buyer_id=$2 and seller_id=$1)
+       limit 1`,
+      [context.userId, data.sellerId],
+    );
+    if (!talked[0]) return { eligible: false, reason: "not_contacted", existing: null };
+    const existing = await sql.query<{ rating: number; comment: string | null }>(
+      `select rating, comment from reviews
+       where seller_id=$1 and reviewer_id=$2 and listing_id is not distinct from $3
+       limit 1`,
+      [data.sellerId, context.userId, data.listingId || null],
+    );
+    return {
+      eligible: true,
+      reason: null,
+      existing: existing[0] ? { rating: Number(existing[0].rating), comment: existing[0].comment } : null,
+    };
+  });
+
 export const myNotifications = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
