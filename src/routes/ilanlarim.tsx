@@ -7,6 +7,7 @@ import { ListingCard } from "@/components/listing/ListingCard";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatDate, listingStatusLabel } from "@/lib/utils";
+import { BrandSpinner } from "@/components/brand/BrandSpinner";
 import { toast } from "sonner";
 import type { ListingCard as Listing } from "@/lib/server/helpers";
 
@@ -30,7 +31,7 @@ function Mine() {
     if (user) reload();
   }, [user]);
 
-  if (isPending) return <p className="p-10 text-center text-muted">Yükleniyor…</p>;
+  if (isPending) return <BrandSpinner fullPage text="İlanlarınız yükleniyor…" />;
   if (!user) return <RedirectToSignIn />;
 
   return (

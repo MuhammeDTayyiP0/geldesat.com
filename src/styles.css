@@ -239,3 +239,35 @@ html.mobile-nav-lock body {
     display: none;
   }
 }
+
+/* GeldeSat Brand Spinner Animation (Acceleration + Deceleration 360 Loop) */
+@keyframes brand-spin-dynamic {
+  0% {
+    transform: rotate(0deg) scale(0.94);
+    filter: drop-shadow(0 0 0px rgba(26, 79, 216, 0));
+  }
+  42% {
+    transform: rotate(180deg) scale(1.08);
+    filter: drop-shadow(0 4px 14px rgba(26, 79, 216, 0.45));
+  }
+  78% {
+    transform: rotate(325deg) scale(1.02);
+    filter: drop-shadow(0 2px 8px rgba(26, 79, 216, 0.25));
+  }
+  100% {
+    transform: rotate(360deg) scale(0.94);
+    filter: drop-shadow(0 0 0px rgba(26, 79, 216, 0));
+  }
+}
+
+.animate-brand-spin {
+  animation: brand-spin-dynamic 1.35s cubic-bezier(0.5, 0.05, 0.15, 0.95) infinite;
+  transform-origin: center center;
+  will-change: transform, filter;
+}
+
+/* Top Progress Bar Glow */
+.top-progress-bar-glow {
+  box-shadow: 0 0 10px #1a4fd8, 0 0 4px #3b82f6;
+  background: linear-gradient(90deg, #1a4fd8 0%, #3b82f6 50%, #60a5fa 100%);
+}

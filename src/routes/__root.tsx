@@ -4,6 +4,7 @@ import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { CookieBanner } from "@/components/layout/CookieBanner";
+import { TopProgressBar } from "@/components/layout/TopProgressBar";
 import { Toaster } from "sonner";
 import appCss from "../styles.css?url";
 
@@ -48,6 +49,7 @@ function Shell() {
   });
   return (
     <div className={isChat ? "flex h-dvh flex-col overflow-hidden" : "flex min-h-dvh flex-1 flex-col"}>
+      <TopProgressBar />
       <Header className={isChatThread ? "hidden md:block" : undefined} />
       <main className={isChat ? "flex min-h-0 flex-1 flex-col overflow-hidden" : "flex-1 pb-24"}>
         <Outlet />

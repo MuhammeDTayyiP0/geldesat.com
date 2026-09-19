@@ -17,6 +17,7 @@ import {
 import { getSiteSettings, listCategories } from "@/lib/server/catalog";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { BrandSpinner } from "@/components/brand/BrandSpinner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input, Label } from "@/components/ui/input";
@@ -376,14 +377,7 @@ function Admin() {
   }, [reports, reportFilter]);
 
   if (isPending) {
-    return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="flex flex-col items-center gap-3 text-muted">
-          <div className="size-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-          <p className="text-sm font-medium">Yönetim konsolu yükleniyor…</p>
-        </div>
-      </div>
-    );
+    return <BrandSpinner fullPage text="Yönetim konsolu yükleniyor…" />;
   }
 
   if (!user) return <RedirectToSignIn />;

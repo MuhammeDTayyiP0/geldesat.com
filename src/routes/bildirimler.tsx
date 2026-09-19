@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { markNotificationsRead, myNotifications } from "@/lib/server/social";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { BrandSpinner } from "@/components/brand/BrandSpinner";
 import { timeAgo } from "@/lib/utils";
 
 export const Route = createFileRoute("/bildirimler")({ component: Notes });
@@ -16,7 +17,7 @@ function Notes() {
     void myNotifications().then(setRows);
     void markNotificationsRead();
   }, [user]);
-  if (isPending) return <p className="p-10 text-center text-muted">Yükleniyor…</p>;
+  if (isPending) return <BrandSpinner fullPage text="Bildirimleriniz yükleniyor…" />;
   if (!user) return <RedirectToSignIn />;
   return (
     <div className="mx-auto max-w-2xl px-4 py-10">

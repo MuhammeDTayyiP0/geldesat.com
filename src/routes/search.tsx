@@ -5,6 +5,7 @@ import { getCategory, searchCatalog } from "@/lib/server/catalog";
 import { attrsToSearch, parseSearch, toFilters, type CatalogSearch } from "@/lib/search-params";
 import { ListingCard } from "@/components/listing/ListingCard";
 import { Filters, type FilterState } from "@/components/listing/Filters";
+import { ListingGridSkeleton } from "@/components/listing/ListingGridSkeleton";
 import { Button } from "@/components/ui/button";
 import { saveSearch } from "@/lib/server/social";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
@@ -18,6 +19,7 @@ export const Route = createFileRoute("/search")({
     const result = await searchCatalog({ data: toFilters(deps) });
     return { result, attributes: cat?.attributes ?? [] };
   },
+  pendingComponent: ListingGridSkeleton,
   component: SearchPage,
 });
 

@@ -6,6 +6,7 @@ import { attrsToSearch, parseSearch, toFilters } from "@/lib/search-params";
 import { ListingCard } from "@/components/listing/ListingCard";
 import { Filters, type FilterState } from "@/components/listing/Filters";
 import { SubcategoryGrid } from "@/components/listing/CategoryPicker";
+import { ListingGridSkeleton } from "@/components/listing/ListingGridSkeleton";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/category/$slug")({
@@ -16,6 +17,7 @@ export const Route = createFileRoute("/category/$slug")({
     const result = await searchCatalog({ data: { ...toFilters(deps), category: params.slug } });
     return { cat, result };
   },
+  pendingComponent: ListingGridSkeleton,
   component: CategoryPage,
 });
 

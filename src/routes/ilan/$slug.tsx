@@ -10,11 +10,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea, Select } from "@/components/ui/input";
 import { ListingCard } from "@/components/listing/ListingCard";
+import { ListingDetailSkeleton } from "@/components/listing/ListingDetailSkeleton";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/ilan/$slug")({
   loader: async ({ params }) => getListing({ data: { slug: params.slug } }),
+  pendingComponent: ListingDetailSkeleton,
   component: ListingPage,
 });
 

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { myFavorites } from "@/lib/server/social";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { BrandSpinner } from "@/components/brand/BrandSpinner";
 import { ListingCard } from "@/components/listing/ListingCard";
 import type { ListingCard as Listing } from "@/lib/server/helpers";
 
@@ -15,7 +16,7 @@ function Favs() {
   useEffect(() => {
     if (user) void myFavorites().then(setRows).catch(() => setRows([]));
   }, [user]);
-  if (isPending) return <p className="p-10 text-center text-muted">Yükleniyor…</p>;
+  if (isPending) return <BrandSpinner fullPage text="Favorileriniz yükleniyor…" />;
   if (!user) return <RedirectToSignIn />;
   return (
     <div className="mx-auto max-w-4xl px-4 py-10">

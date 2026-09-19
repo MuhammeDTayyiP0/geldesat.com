@@ -11,6 +11,7 @@ import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { cleanPhone, formatPhone, maskPhone10 } from "@/lib/utils";
 import { CheckCircle2, Lock, LogOut, Mail, Shield, Store, User as UserIcon } from "lucide-react";
+import { BrandSpinner } from "@/components/brand/BrandSpinner";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/profil")({ component: Profil });
@@ -52,7 +53,7 @@ function Profil() {
     void mySavedSearches().then(setSaved).catch(() => setSaved([]));
   }, [userId]);
 
-  if (isPending) return <p className="p-10 text-center text-muted">Yükleniyor…</p>;
+  if (isPending) return <BrandSpinner fullPage text="Profiliniz yükleniyor…" />;
   if (!user) return <RedirectToSignIn />;
 
   async function handleSaveProfile(e: React.FormEvent) {
