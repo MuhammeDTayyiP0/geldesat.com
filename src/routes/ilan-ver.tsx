@@ -112,16 +112,19 @@ function PostForm() {
     setValues({});
   }, [selected]);
 
+  const userProfileLoaded = useRef(false);
+
   useEffect(() => {
-    if (!user) return;
+    if (!userId) return;
     void getMe().then((m) => {
       if (m.store) setStoreId(m.store.id);
-      if (!editId) {
+      if (!editId && !userProfileLoaded.current) {
         if (m.profile?.phone) setPhone(m.profile.phone);
         if (m.profile?.city) setCity(m.profile.city);
+        userProfileLoaded.current = true;
       }
     });
-  }, [user, editId]);
+  }, [userId, editId]);
 
   useEffect(() => {
     if (!editId || !userId) return;
