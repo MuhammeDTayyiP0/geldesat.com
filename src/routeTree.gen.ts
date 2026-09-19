@@ -30,6 +30,7 @@ import { Route as MesajlarIdRouteImport } from './routes/mesajlar/$id'
 import { Route as SaticiIdRouteImport } from './routes/satici/$id'
 import { Route as SayfaSlugRouteImport } from './routes/sayfa/$slug'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as ApiChatStreamRouteImport } from './routes/api/chat/stream'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -136,6 +137,11 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiChatStreamRoute = ApiChatStreamRouteImport.update({
+  id: '/api/chat/stream',
+  path: '/api/chat/stream',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -159,6 +165,7 @@ export interface FileRoutesByFullPath {
   '/sayfa/$slug': typeof SayfaSlugRoute
   '/mesajlar/': typeof MesajlarIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/chat/stream': typeof ApiChatStreamRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -181,6 +188,7 @@ export interface FileRoutesByTo {
   '/sayfa/$slug': typeof SayfaSlugRoute
   '/mesajlar': typeof MesajlarIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/chat/stream': typeof ApiChatStreamRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -205,6 +213,7 @@ export interface FileRoutesById {
   '/sayfa/$slug': typeof SayfaSlugRoute
   '/mesajlar/': typeof MesajlarIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/chat/stream': typeof ApiChatStreamRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -230,6 +239,7 @@ export interface FileRouteTypes {
     | '/sayfa/$slug'
     | '/mesajlar/'
     | '/api/auth/$'
+    | '/api/chat/stream'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -252,6 +262,7 @@ export interface FileRouteTypes {
     | '/sayfa/$slug'
     | '/mesajlar'
     | '/api/auth/$'
+    | '/api/chat/stream'
   id:
     | '__root__'
     | '/'
@@ -275,6 +286,7 @@ export interface FileRouteTypes {
     | '/sayfa/$slug'
     | '/mesajlar/'
     | '/api/auth/$'
+    | '/api/chat/stream'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -297,6 +309,7 @@ export interface RootRouteChildren {
   SaticiIdRoute: typeof SaticiIdRoute
   SayfaSlugRoute: typeof SayfaSlugRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiChatStreamRoute: typeof ApiChatStreamRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -448,6 +461,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/chat/stream': {
+      id: '/api/chat/stream'
+      path: '/api/chat/stream'
+      fullPath: '/api/chat/stream'
+      preLoaderRoute: typeof ApiChatStreamRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -485,6 +505,7 @@ const rootRouteChildren: RootRouteChildren = {
   SaticiIdRoute: SaticiIdRoute,
   SayfaSlugRoute: SayfaSlugRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiChatStreamRoute: ApiChatStreamRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
@@ -498,3 +519,4 @@ declare module '@tanstack/react-start' {
     router: Awaited<ReturnType<typeof getRouter>>
   }
 }
+

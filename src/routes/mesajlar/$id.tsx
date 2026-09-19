@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Ban, Check, CheckCheck, ChevronLeft, Flag, ImageIcon, Send } from "lucide-react";
+import { Ban, Check, CheckCheck, ChevronLeft, Flag, ImageIcon, Send, ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { blockUser, getThread, pollThread, reportListing, sendMessage } from "@/lib/server/social";
+import { blockUser, unblockUser, getThread, pollThread, reportListing, sendMessage } from "@/lib/server/social";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { Button } from "@/components/ui/button";
@@ -39,7 +39,8 @@ function Thread() {
   const [other, setOther] = useState("Üye");
   const [listingId, setListingId] = useState("");
   const [otherId, setOtherId] = useState("");
-  const [blocked, setBlocked] = useState(false);
+  const [blockedByMe, setBlockedByMe] = useState(false);
+  const [blockedByOther, setBlockedByOther] = useState(false);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -57,6 +58,7 @@ function Thread() {
     setError("");
     setLoading(true);
     lastRef.current = undefined;
+
     void getThread({ data: { conversationId: id } })
       .then((t) => {
         if (stop) return;
@@ -67,7 +69,8 @@ function Thread() {
         setOther(t.conversation.other_name);
         setListingId(t.conversation.listing_id);
         setOtherId(t.conversation.buyer_id === user.id ? t.conversation.seller_id : t.conversation.buyer_id);
-        setBlocked(false);
+        setBlockedByMe(Boolean(t.blockedByMe));
+        setBlockedByOther(Boolean(t.blockedByOther));
         setMessages(t.messages);
         lastRef.current = t.messages.at(-1)?.created_at;
         stickRef.current = true;
@@ -82,20 +85,60 @@ function Thread() {
         toast.error(e instanceof Error ? e.message : "Açılamadı");
       });
 
+    // Real-time SSE connection for sub-10ms instant message push & read updates
+    let es: EventSource | null = null;
+    try {
+      es = new EventSource(`/api/chat/stream?conversationId=${encodeURIComponent(id)}`);
+      es.onmessage = (event) => {
+        if (stop) return;
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === "message" && data.message) {
+            const m = data.message as Msg;
+            setMessages((prev) => {
+              if (prev.some((x) => x.id === m.id)) return prev;
+              const cleaned = prev.filter((x) => {
+                if (x.id.startsWith("tmp_") && x.sender_id === m.sender_id && x.content === m.content) {
+                  return false;
+                }
+                return true;
+              });
+              return [...cleaned, m];
+            });
+            lastRef.current = m.created_at;
+            pingInbox();
+          } else if (data.type === "read" && Array.isArray(data.reads)) {
+            const reads = data.reads as { id: string; read_at: string }[];
+            if (reads.length > 0) {
+              const map = new Map(reads.map((r) => [r.id, r.read_at]));
+              setMessages((prev) => prev.map((m) => (map.has(m.id) ? { ...m, read_at: map.get(m.id)! } : m)));
+            }
+          }
+        } catch {
+          // ignore keepalive or parse error
+        }
+      };
+    } catch {
+      // EventSource failed to create
+    }
+
+    // Relaxed background fallback poll (every 15s) in case SSE is interrupted by client network
     const timer = window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
       void pollThread({ data: { conversationId: id, after: lastRef.current } })
         .then((extra) => {
+          if (stop) return;
           const incoming = extra.messages;
           const reads = extra.reads;
+          if (!incoming.length && !reads.length) return;
           setMessages((prev) => {
             const ids = new Set(prev.map((m) => m.id));
             const fresh = incoming.filter((m) => !ids.has(m.id));
             let next = fresh.length ? [...prev, ...fresh] : prev;
-            const confirmed = new Set(
-              next.filter((m) => !m.id.startsWith("tmp_")).map((m) => `${m.sender_id}:${m.content}`),
-            );
-            next = next.filter((m) => !m.id.startsWith("tmp_") || !confirmed.has(`${m.sender_id}:${m.content}`));
+            if (fresh.length > 0) {
+              const freshContents = new Set(fresh.map((m) => `${m.sender_id}:${m.content}`));
+              next = next.filter((m) => !m.id.startsWith("tmp_") || !freshContents.has(`${m.sender_id}:${m.content}`));
+            }
             if (reads.length) {
               const map = new Map(reads.map((r) => [r.id, r.read_at]));
               next = next.map((m) => (map.has(m.id) ? { ...m, read_at: map.get(m.id)! } : m));
@@ -107,10 +150,13 @@ function Thread() {
           if (incoming.length) pingInbox();
         })
         .catch(() => undefined);
-    }, 2500);
+    }, 15000);
 
     return () => {
       stop = true;
+      if (es) {
+        es.close();
+      }
       window.clearInterval(timer);
     };
   }, [id, user]);
@@ -132,9 +178,37 @@ function Thread() {
     el.style.height = `${Math.min(el.scrollHeight, 128)}px`;
   }
 
+  async function handleToggleBlock() {
+    if (!otherId || busy) return;
+    if (blockedByMe) {
+      try {
+        setBusy(true);
+        await unblockUser({ data: { userId: otherId } });
+        setBlockedByMe(false);
+        toast.success(`${other} engelini kaldırdınız`);
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Engel kaldırılamadı");
+      } finally {
+        setBusy(false);
+      }
+    } else {
+      if (!confirm(`${other} engellensin mi? Karşılıklı mesaj gönderemezsiniz.`)) return;
+      try {
+        setBusy(true);
+        await blockUser({ data: { userId: otherId } });
+        setBlockedByMe(true);
+        toast.success("Kullanıcı engellendi");
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Engellenemedi");
+      } finally {
+        setBusy(false);
+      }
+    }
+  }
+
   async function submit(raw?: string) {
     const content = (raw ?? text).trim();
-    if (!content || busy || !user || blocked) return;
+    if (!content || busy || !user || blockedByMe || blockedByOther) return;
     const tempId = `tmp_${crypto.randomUUID().slice(0, 12)}`;
     const optimistic: Msg = {
       id: tempId,
@@ -200,39 +274,40 @@ function Thread() {
             ) : null}
           </Link>
         ) : (
-          <p className="text-sm font-medium">{title || "Konuşma"}</p>
+          <div className="flex min-w-0 flex-1 items-center gap-3 px-1 py-1">
+            <div className="grid size-11 shrink-0 place-items-center rounded-md bg-elevated text-sm font-semibold">{other.slice(0, 1)}</div>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold">{other}</p>
+              <p className="truncate text-xs text-muted">{title || "İlan yayından kaldırıldı"}</p>
+            </div>
+          </div>
         )}
         {otherId ? (
-          <div className="flex shrink-0">
+          <div className="flex shrink-0 items-center gap-1">
+            {listingId ? (
+              <button
+                type="button"
+                className="grid size-11 place-items-center rounded-md hover:bg-elevated"
+                aria-label="Şikayet et"
+                title="Şikayet et"
+                onClick={() => {
+                  if (!confirm("Bu konuşmayı şikayet etmek istiyor musunuz?")) return;
+                  void reportListing({ data: { listingId, reason: "Uygunsuz mesaj" } })
+                    .then(() => toast.success("Şikayet alındı"))
+                    .catch((e) => toast.error(e instanceof Error ? e.message : "Gönderilemedi"));
+                }}
+              >
+                <Flag className="size-4" />
+              </button>
+            ) : null}
             <button
               type="button"
-              className="grid size-11 place-items-center rounded-md hover:bg-elevated"
-              aria-label="Şikayet et"
-              onClick={() => {
-                if (!listingId) return;
-                if (!confirm("Bu konuşmayı şikayet etmek istiyor musunuz?")) return;
-                void reportListing({ data: { listingId, reason: "Uygunsuz mesaj" } })
-                  .then(() => toast.success("Şikayet alındı"))
-                  .catch((e) => toast.error(e instanceof Error ? e.message : "Gönderilemedi"));
-              }}
+              className={`grid size-11 place-items-center rounded-md hover:bg-elevated ${blockedByMe ? "text-danger" : ""}`}
+              aria-label={blockedByMe ? "Engeli kaldır" : "Engelle"}
+              title={blockedByMe ? "Engeli kaldır" : "Engelle"}
+              onClick={() => void handleToggleBlock()}
             >
-              <Flag className="size-4" />
-            </button>
-            <button
-              type="button"
-              className="grid size-11 place-items-center rounded-md hover:bg-elevated"
-              aria-label="Engelle"
-              onClick={() => {
-                if (!confirm(`${other} engellensin mi? Bundan sonra mesaj gönderemezsiniz.`)) return;
-                void blockUser({ data: { userId: otherId } })
-                  .then(() => {
-                    setBlocked(true);
-                    toast.success("Kullanıcı engellendi");
-                  })
-                  .catch((e) => toast.error(e instanceof Error ? e.message : "Engellenemedi"));
-              }}
-            >
-              <Ban className="size-4" />
+              {blockedByMe ? <ShieldCheck className="size-4" /> : <Ban className="size-4" />}
             </button>
           </div>
         ) : null}
@@ -295,52 +370,67 @@ function Thread() {
         )}
       </div>
 
-      {blocked ? (
-        <p className="border-t border-border bg-surface px-4 py-3 text-center text-sm text-muted">Bu kullanıcıyı engellediniz.</p>
-      ) : (
-      <form
-        className="flex items-end gap-2 border-t border-border bg-surface p-3"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void submit();
-        }}
-      >
-        {image ? (
+      {blockedByMe ? (
+        <div className="flex flex-col items-center justify-center gap-2 border-t border-border bg-surface px-4 py-4 text-center">
+          <p className="text-sm font-medium text-muted">Bu kullanıcıyı engellediniz.</p>
           <Button
             type="button"
             variant="outline"
-            size="icon"
-            aria-label="İlan fotoğrafını gönder"
-            disabled={busy || Boolean(error)}
-            onClick={() => void submit(LISTING_PHOTO_MSG)}
+            size="sm"
+            disabled={busy}
+            onClick={() => void handleToggleBlock()}
           >
-            <ImageIcon className="size-4" />
+            Engeli Kaldır
           </Button>
-        ) : null}
-        <textarea
-          ref={box}
-          value={text}
-          onChange={(e) => {
-            setText(e.target.value);
-            grow(e.target);
+        </div>
+      ) : blockedByOther ? (
+        <div className="border-t border-border bg-surface px-4 py-4 text-center">
+          <p className="text-sm font-medium text-muted">Bu kullanıcı sizinle iletişimi kısıtladı. Mesaj gönderemezsiniz.</p>
+        </div>
+      ) : (
+        <form
+          className="flex items-end gap-2 border-t border-border bg-surface p-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void submit();
           }}
-          onKeyDown={(e) => {
-            if (e.nativeEvent.isComposing || e.keyCode === 229) return;
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              void submit();
-            }
-          }}
-          placeholder="Mesaj yazın"
-          maxLength={2000}
-          rows={1}
-          disabled={Boolean(error)}
-          className="max-h-32 min-h-11 flex-1 resize-none rounded-md border border-border bg-bg px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-        />
-        <Button type="submit" size="icon" disabled={busy || !text.trim() || Boolean(error)} aria-label="Gönder">
-          <Send className="size-4" />
-        </Button>
-      </form>
+        >
+          {image ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              aria-label="İlan fotoğrafını gönder"
+              disabled={busy || Boolean(error)}
+              onClick={() => void submit(LISTING_PHOTO_MSG)}
+            >
+              <ImageIcon className="size-4" />
+            </Button>
+          ) : null}
+          <textarea
+            ref={box}
+            value={text}
+            onChange={(e) => {
+              setText(e.target.value);
+              grow(e.target);
+            }}
+            onKeyDown={(e) => {
+              if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                void submit();
+              }
+            }}
+            placeholder="Mesaj yazın"
+            maxLength={2000}
+            rows={1}
+            disabled={Boolean(error)}
+            className="max-h-32 min-h-11 flex-1 resize-none rounded-md border border-border bg-bg px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+          />
+          <Button type="submit" size="icon" disabled={busy || !text.trim() || Boolean(error)} aria-label="Gönder">
+            <Send className="size-4" />
+          </Button>
+        </form>
       )}
     </div>
   );

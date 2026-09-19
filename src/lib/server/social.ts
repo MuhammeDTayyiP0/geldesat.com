@@ -5,6 +5,7 @@ import { getSql } from "@/lib/db";
 import { newId, num, asJson, asIso, LISTING_PHOTO_MSG } from "@/lib/utils";
 import { ensureProfile, mapListing, notify, rateLimit } from "./helpers";
 import { sweepExpiryReminders } from "./ops";
+import { broadcastChatMessage, broadcastChatRead } from "./chat-bus";
 
 function mapMsg(m: Record<string, unknown>) {
   return {
@@ -85,7 +86,7 @@ export const startConversation = createServerFn({ method: "POST" })
   .validator(
     z.object({
       listingId: z.string(),
-      content: z.string().min(1).max(2000),
+      content: z.string().trim().min(1, "Mesaj boş olamaz").max(2000),
     }),
   )
   .handler(async ({ context, data }) => {
@@ -101,36 +102,39 @@ export const startConversation = createServerFn({ method: "POST" })
     if (await blockedBetween(context.userId, listing[0].user_id)) {
       throw new Error("Bu kullanıcıyla mesajlaşamazsınız.");
     }
-    let conv = await sql.query<{ id: string }>(
+    const id = newId("cnv");
+    await sql.query(
+      `insert into conversations (id, listing_id, buyer_id, seller_id)
+       values ($1,$2,$3,$4)
+       on conflict (listing_id, buyer_id) do update set updated_at = now()`,
+      [id, data.listingId, context.userId, listing[0].user_id],
+    );
+    const conv = await sql.query<{ id: string }>(
       "select id from conversations where listing_id=$1 and buyer_id=$2",
       [data.listingId, context.userId],
     );
-    if (!conv[0]) {
-      const id = newId("cnv");
-      await sql.query(
-        "insert into conversations (id, listing_id, buyer_id, seller_id) values ($1,$2,$3,$4)",
-        [id, data.listingId, context.userId, listing[0].user_id],
-      );
-      conv = [{ id }];
-    }
-    await sql.query(
-      "insert into messages (id, conversation_id, sender_id, content) values ($1,$2,$3,$4)",
-      [newId("msg"), conv[0].id, context.userId, data.content.trim()],
+    const convId = conv[0]?.id || id;
+    const msgId = newId("msg");
+    const inserted = await sql.query<{ id: string; sender_id: string; content: string; created_at: string; read_at: string | null }>(
+      "insert into messages (id, conversation_id, sender_id, content) values ($1,$2,$3,$4) returning id, sender_id, content, created_at, read_at",
+      [msgId, convId, context.userId, data.content.trim()],
     );
-    await sql.query("update conversations set updated_at=now() where id=$1", [conv[0].id]);
+    await sql.query("update conversations set updated_at=now() where id=$1", [convId]);
+    const msg = mapMsg(inserted[0] ?? { id: msgId, sender_id: context.userId, content: data.content.trim(), created_at: new Date().toISOString(), read_at: null });
+    broadcastChatMessage(convId, msg);
     await notify(
       listing[0].user_id,
       "message",
       "Yeni mesaj",
       data.content.slice(0, 80),
-      `/mesajlar/${conv[0].id}`,
+      `/mesajlar/${convId}`,
     );
-    return { conversationId: conv[0].id };
+    return { conversationId: convId };
   });
 
 export const sendMessage = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator(z.object({ conversationId: z.string(), content: z.string().min(1).max(2000) }))
+  .validator(z.object({ conversationId: z.string(), content: z.string().trim().min(1, "Mesaj boş olamaz").max(2000) }))
   .handler(async ({ context, data }) => {
     rateLimit(`msg:${context.userId}`, 40, 60_000);
     const sql = await getSql();
@@ -153,6 +157,7 @@ export const sendMessage = createServerFn({ method: "POST" })
     );
     await sql.query("update conversations set updated_at=now() where id=$1", [data.conversationId]);
     const msg = mapMsg(inserted[0] ?? { id, sender_id: context.userId, content: data.content.trim(), created_at: new Date().toISOString(), read_at: null });
+    broadcastChatMessage(data.conversationId, msg);
     await notify(
       receiver,
       "message",
@@ -176,7 +181,7 @@ export const listConversations = createServerFn({ method: "GET" })
               (select sender_id from messages m where m.conversation_id=cv.id order by created_at desc limit 1) as last_sender_id,
               (select count(*)::int from messages m where m.conversation_id=cv.id and m.sender_id <> $1 and m.read_at is null) as unread
        from conversations cv
-       join listings l on l.id = cv.listing_id
+       left join listings l on l.id = cv.listing_id
        left join profiles bp on bp.user_id = cv.buyer_id
        left join profiles sp on sp.user_id = cv.seller_id
        where cv.buyer_id=$1 or cv.seller_id=$1
@@ -185,10 +190,10 @@ export const listConversations = createServerFn({ method: "GET" })
     );
     return rows.map((r) => ({
       id: String(r.id),
-      listing_id: String(r.listing_id),
-      listing_title: String(r.listing_title),
-      listing_slug: String(r.listing_slug),
-      listing_image: asJson<string[]>(r.images, [])[0] ?? null,
+      listing_id: r.listing_id ? String(r.listing_id) : "",
+      listing_title: r.listing_title ? String(r.listing_title) : "İlan kaldırıldı",
+      listing_slug: r.listing_slug ? String(r.listing_slug) : "",
+      listing_image: r.images ? (asJson<string[]>(r.images, [])[0] ?? null) : null,
       other_name: String(r.other_name ?? "Üye"),
       other_id: String(r.other_id),
       last_content:
@@ -200,7 +205,7 @@ export const listConversations = createServerFn({ method: "GET" })
       last_sender_id: r.last_sender_id ? String(r.last_sender_id) : "",
       unread: num(r.unread),
       updated_at: asIso(r.updated_at),
-      price: num(r.price),
+      price: r.price ? num(r.price) : 0,
     }));
   });
 
@@ -213,7 +218,7 @@ export const getThread = createServerFn({ method: "POST" })
       `select cv.*, l.title, l.slug, l.images, l.price,
               case when cv.buyer_id = $2 then sp.display_name else bp.display_name end as other_name
        from conversations cv
-       join listings l on l.id = cv.listing_id
+       left join listings l on l.id = cv.listing_id
        left join profiles bp on bp.user_id = cv.buyer_id
        left join profiles sp on sp.user_id = cv.seller_id
        where cv.id=$1`,
@@ -223,10 +228,29 @@ export const getThread = createServerFn({ method: "POST" })
     if (String(conv[0].buyer_id) !== context.userId && String(conv[0].seller_id) !== context.userId) {
       throw new Error("Yetkisiz işlem");
     }
-    await sql.query(
-      "update messages set read_at=now() where conversation_id=$1 and sender_id<>$2 and read_at is null",
+    const otherId = String(conv[0].buyer_id === context.userId ? conv[0].seller_id : conv[0].buyer_id);
+    const [blockedByMeRows, blockedByOtherRows] = await Promise.all([
+      sql.query<{ n: number }>("select 1 as n from user_blocks where blocker_id=$1 and blocked_id=$2 limit 1", [context.userId, otherId]),
+      sql.query<{ n: number }>("select 1 as n from user_blocks where blocker_id=$1 and blocked_id=$2 limit 1", [otherId, context.userId]),
+    ]);
+    const blockedByMe = Boolean(blockedByMeRows[0]);
+    const blockedByOther = Boolean(blockedByOtherRows[0]);
+    const isBlocked = blockedByMe || blockedByOther;
+
+    // Okunmamış mesaj varsa tek seferde güncelle ve karşı tarafa okundu yayını yap
+    const unread = await sql.query<{ id: string }>(
+      "select id from messages where conversation_id=$1 and sender_id<>$2 and read_at is null",
       [data.conversationId, context.userId],
     );
+    if (unread.length > 0) {
+      await sql.query(
+        "update messages set read_at=now() where conversation_id=$1 and sender_id<>$2 and read_at is null",
+        [data.conversationId, context.userId],
+      );
+      const nowIso = new Date().toISOString();
+      broadcastChatRead(data.conversationId, unread.map((u) => ({ id: u.id, read_at: nowIso })));
+    }
+
     const messages = await sql.query<Record<string, unknown>>(
       "select id, sender_id, content, created_at, read_at from messages where conversation_id=$1 order by created_at asc",
       [data.conversationId],
@@ -234,16 +258,20 @@ export const getThread = createServerFn({ method: "POST" })
     return {
       conversation: {
         id: String(conv[0].id),
-        listing_id: String(conv[0].listing_id),
-        listing_title: String(conv[0].title),
-        listing_slug: String(conv[0].slug),
-        listing_image: asJson<string[]>(conv[0].images, [])[0] ?? null,
-        listing_price: num(conv[0].price),
+        listing_id: conv[0].listing_id ? String(conv[0].listing_id) : "",
+        listing_title: conv[0].title ? String(conv[0].title) : "İlan kaldırıldı",
+        listing_slug: conv[0].slug ? String(conv[0].slug) : "",
+        listing_image: conv[0].images ? (asJson<string[]>(conv[0].images, [])[0] ?? null) : null,
+        listing_price: conv[0].price ? num(conv[0].price) : null,
         other_name: String(conv[0].other_name ?? "Üye"),
         buyer_id: String(conv[0].buyer_id),
         seller_id: String(conv[0].seller_id),
       },
       messages: messages.map((m) => mapMsg(m)),
+      otherId,
+      isBlocked,
+      blockedByMe,
+      blockedByOther,
     };
   });
 
@@ -260,10 +288,21 @@ export const pollThread = createServerFn({ method: "POST" })
     if (conv[0].buyer_id !== context.userId && conv[0].seller_id !== context.userId) {
       throw new Error("Yetkisiz işlem");
     }
-    await sql.query(
-      "update messages set read_at=now() where conversation_id=$1 and sender_id<>$2 and read_at is null",
+
+    // Yalnızca okunmamış mesaj varsa güncelle (veritabanı satır kilidini önler)
+    const unread = await sql.query<{ id: string }>(
+      "select id from messages where conversation_id=$1 and sender_id<>$2 and read_at is null",
       [data.conversationId, context.userId],
     );
+    if (unread.length > 0) {
+      await sql.query(
+        "update messages set read_at=now() where conversation_id=$1 and sender_id<>$2 and read_at is null",
+        [data.conversationId, context.userId],
+      );
+      const nowIso = new Date().toISOString();
+      broadcastChatRead(data.conversationId, unread.map((u) => ({ id: u.id, read_at: nowIso })));
+    }
+
     const after = data.after ? new Date(data.after) : null;
     const afterIso = after && !Number.isNaN(after.getTime()) ? after.toISOString() : null;
     const messages = afterIso
@@ -428,3 +467,13 @@ export const blockUser = createServerFn({ method: "POST" })
     );
     return { ok: true };
   });
+
+export const unblockUser = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ userId: z.string() }))
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    await sql.query("delete from user_blocks where blocker_id=$1 and blocked_id=$2", [context.userId, data.userId]);
+    return { ok: true };
+  });
+
