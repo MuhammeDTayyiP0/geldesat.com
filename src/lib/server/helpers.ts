@@ -145,26 +145,60 @@ export async function ensureProfile(
   seed?: { name?: string | null; email?: string | null; image?: string | null },
 ) {
   const sql = await getSql();
-  const existing = await sql.query<{ user_id: string; role: string }>(
-    "select user_id, role from profiles where user_id = $1",
+
+  // If seed info is missing, try to resolve from the Better Auth "user" table
+  let resolvedName = seed?.name?.trim();
+  let resolvedEmail = seed?.email?.trim();
+  let resolvedImage = seed?.image ?? null;
+
+  if (!resolvedName || !resolvedEmail) {
+    try {
+      const uRows = await sql.query<{ name?: string | null; email?: string | null; image?: string | null }>(
+        'select name, email, image from "user" where id = $1 limit 1',
+        [userId],
+      );
+      if (uRows[0]) {
+        if (!resolvedName && uRows[0].name) resolvedName = uRows[0].name.trim();
+        if (!resolvedEmail && uRows[0].email) resolvedEmail = uRows[0].email.trim();
+        if (!resolvedImage && uRows[0].image) resolvedImage = uRows[0].image;
+      }
+    } catch {
+      // "user" table might not exist in un-migrated dev environments
+    }
+  }
+
+  const existing = await sql.query<{ user_id: string; role: string; display_name?: string | null }>(
+    "select user_id, role, display_name from profiles where user_id = $1",
     [userId],
   );
-  if (existing[0]) return existing[0];
+  if (existing[0]) {
+    // If the profile exists but display_name is the generic fallback "Üye" (or empty),
+    // and we now have a real registered name, automatically update the profile!
+    if (
+      (!existing[0].display_name || existing[0].display_name === "Üye") &&
+      resolvedName &&
+      resolvedName !== "Üye"
+    ) {
+      await sql.query("update profiles set display_name = $1 where user_id = $2", [resolvedName, userId]);
+      existing[0].display_name = resolvedName;
+    }
+    return existing[0];
+  }
 
   const admins = await sql.query<{ n: number }>("select count(*)::int as n from profiles where role = 'ADMIN'");
   const role = (admins[0]?.n ?? 0) === 0 ? "ADMIN" : "USER";
-  const name = seed?.name?.trim() || seed?.email?.split("@")[0] || "Üye";
+  const name = resolvedName || resolvedEmail?.split("@")[0] || "Üye";
   await sql.query(
     `insert into profiles (user_id, display_name, avatar_url, role)
      values ($1, $2, $3, $4)
      on conflict (user_id) do nothing`,
-    [userId, name, seed?.image ?? null, role],
+    [userId, name, resolvedImage, role],
   );
-  const row = await sql.query<{ user_id: string; role: string }>(
-    "select user_id, role from profiles where user_id = $1",
+  const row = await sql.query<{ user_id: string; role: string; display_name: string }>(
+    "select user_id, role, display_name from profiles where user_id = $1",
     [userId],
   );
-  return row[0] ?? { user_id: userId, role };
+  return row[0] ?? { user_id: userId, role, display_name: name };
 }
 
 export async function requireAdmin(userId: string) {

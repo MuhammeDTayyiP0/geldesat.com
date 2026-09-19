@@ -87,8 +87,16 @@ function Login() {
         <form onSubmit={onEmail} className="space-y-3">
           {mode === "up" ? (
             <div>
-              <Label htmlFor="signup-name">Ad</Label>
-              <Input id="signup-name" value={name} onChange={(e) => setName(e.target.value)} required minLength={2} autoComplete="name" />
+              <Label htmlFor="signup-name">Ad Soyad</Label>
+              <Input
+                id="signup-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Adınız ve soyadınız"
+                required
+                minLength={2}
+                autoComplete="name"
+              />
             </div>
           ) : null}
           <div>

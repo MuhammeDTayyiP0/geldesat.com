@@ -1,12 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getMe, updateProfile, upsertStore } from "@/lib/server/account";
 import { deleteSavedSearch, mySavedSearches } from "@/lib/server/social";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { authClient, signOut } from "@/lib/auth/client";
 import { TURKEY_CITIES } from "@/lib/data/locations";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select, Textarea } from "@/components/ui/input";
+import { CheckCircle2, Lock, LogOut, Mail, Shield, Store, User as UserIcon } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/profil")({ component: Profil });
@@ -22,106 +24,309 @@ function Profil() {
   const [storeDesc, setStoreDesc] = useState("");
   const [saved, setSaved] = useState<Awaited<ReturnType<typeof mySavedSearches>>>([]);
 
+  // Password change state
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [pwdBusy, setPwdBusy] = useState(false);
+  const [profileBusy, setProfileBusy] = useState(false);
+
+  const initializedRef = useRef(false);
+  const userId = user?.id;
+
   useEffect(() => {
-    if (!user) return;
+    if (!userId) return;
     void getMe().then((m) => {
       setMe(m);
-      setName(m.profile?.display_name ?? "");
-      setPhone(m.profile?.phone ?? "");
-      setBio(m.profile?.bio ?? "");
-      setCity(m.profile?.city ?? "");
-      setStoreName(m.store?.name ?? "");
+      if (!initializedRef.current) {
+        setName(m.profile?.display_name ?? "");
+        setPhone(m.profile?.phone ?? "");
+        setBio(m.profile?.bio ?? "");
+        setCity(m.profile?.city ?? "");
+        setStoreName(m.store?.name ?? "");
+        initializedRef.current = true;
+      }
     });
     void mySavedSearches().then(setSaved).catch(() => setSaved([]));
-  }, [user]);
+  }, [userId]);
 
   if (isPending) return <p className="p-10 text-center text-muted">Yükleniyor…</p>;
   if (!user) return <RedirectToSignIn />;
 
+  async function handleSaveProfile(e: React.FormEvent) {
+    e.preventDefault();
+    setProfileBusy(true);
+    try {
+      await updateProfile({ data: { display_name: name, phone, bio, city } });
+      toast.success("Profil bilgileri kaydedildi");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Profil kaydedilemedi");
+    } finally {
+      setProfileBusy(false);
+    }
+  }
+
+  async function handleChangePassword(e: React.FormEvent) {
+    e.preventDefault();
+    if (newPassword.length < 8) {
+      toast.error("Yeni şifre en az 8 karakter olmalıdır.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error("Yeni şifreler eşleşmiyor.");
+      return;
+    }
+    setPwdBusy(true);
+    try {
+      const { error } = await authClient.changePassword({
+        currentPassword,
+        newPassword,
+        revokeOtherSessions: false,
+      });
+      if (error) throw new Error(error.message || "Şifre değiştirilemedi");
+      toast.success("Şifreniz başarıyla güncellendi");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Şifre değiştirilemedi");
+    } finally {
+      setPwdBusy(false);
+    }
+  }
+
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
-      <h1 className="text-xl font-semibold tracking-tight">Profil</h1>
-      <p className="mt-1 text-sm text-muted">{user.primaryEmail}</p>
-      <div className="mt-6 grid grid-cols-2 gap-3 text-center">
-        <div className="rounded-xl border border-border bg-surface p-4">
-          <p className="text-2xl font-semibold">{me?.profile?.active_count ?? 0}</p>
-          <p className="text-xs text-muted">Aktif ilan</p>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Profil ve Hesap Ayarları</h1>
+          <p className="mt-1 text-sm text-muted">{user.primaryEmail}</p>
         </div>
-        <div className="rounded-xl border border-border bg-surface p-4">
-          <p className="text-2xl font-semibold">{me?.profile?.rating_avg?.toFixed(1) ?? "—"}</p>
-          <p className="text-xs text-muted">Puan</p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="gap-2 text-muted hover:text-danger hover:border-danger/30"
+          onClick={() => {
+            if (confirm("Çıkış yapmak istediğinize emin misiniz?")) {
+              void signOut("/");
+            }
+          }}
+        >
+          <LogOut className="size-4" /> Çıkış Yap
+        </Button>
+      </div>
+
+      <div className="mt-6 grid grid-cols-2 gap-3 text-center">
+        <div className="rounded-xl border border-border bg-surface p-4 shadow-sm">
+          <p className="text-2xl font-semibold text-fg">{me?.profile?.active_count ?? 0}</p>
+          <p className="text-xs text-muted">Aktif İlan</p>
+        </div>
+        <div className="rounded-xl border border-border bg-surface p-4 shadow-sm">
+          <p className="text-2xl font-semibold text-fg">{me?.profile?.rating_avg ? me.profile.rating_avg.toFixed(1) : "—"}</p>
+          <p className="text-xs text-muted">Satıcı Puanı</p>
         </div>
       </div>
+
+      {/* Profil Bilgileri Formu */}
       <form
-        className="mt-8 space-y-3 rounded-xl border border-border bg-surface p-5"
-        onSubmit={async (e) => {
-          e.preventDefault();
-          try {
-            await updateProfile({ data: { display_name: name, phone, bio, city } });
-            toast.success("Profil kaydedildi");
-          } catch (err) {
-            toast.error(err instanceof Error ? err.message : "Hata");
-          }
-        }}
+        className="mt-8 space-y-4 rounded-xl border border-border bg-surface p-6 shadow-sm"
+        onSubmit={handleSaveProfile}
       >
-        <div>
-          <Label>Ad</Label>
-          <Input value={name} onChange={(e) => setName(e.target.value)} required />
+        <div className="flex items-center gap-2 border-b border-border pb-3">
+          <UserIcon className="size-5 text-primary" />
+          <h2 className="font-semibold text-fg">Kişisel Bilgiler</h2>
         </div>
+
         <div>
-          <Label>Telefon</Label>
-          <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="05xx xxx xx xx" />
+          <Label htmlFor="profile-name">Ad Soyad</Label>
+          <Input
+            id="profile-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Adınız ve soyadınız"
+            required
+          />
         </div>
+
         <div>
-          <Label>İl</Label>
-          <Select value={city} onChange={(e) => setCity(e.target.value)}>
-            <option value="">Seçin</option>
+          <Label htmlFor="profile-phone">Telefon Numarası</Label>
+          <Input
+            id="profile-phone"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="05xx xxx xx xx"
+          />
+          <p className="mt-1 text-xs text-muted">İlanlarınızda ve alıcılarla iletişimde kullanılır.</p>
+        </div>
+
+        <div>
+          <Label htmlFor="profile-city">Şehir</Label>
+          <Select id="profile-city" value={city} onChange={(e) => setCity(e.target.value)}>
+            <option value="">Şehir Seçin</option>
             {TURKEY_CITIES.map((c) => (
-              <option key={c.name}>{c.name}</option>
+              <option key={c.name} value={c.name}>{c.name}</option>
             ))}
           </Select>
         </div>
+
         <div>
-          <Label>Hakkında</Label>
-          <Textarea value={bio} onChange={(e) => setBio(e.target.value)} />
+          <Label htmlFor="profile-bio">Hakkında</Label>
+          <Textarea
+            id="profile-bio"
+            value={bio}
+            onChange={(e) => setBio(e.target.value)}
+            placeholder="Satıcı profilinizde görünecek kısa bir tanıtım yazın..."
+            rows={3}
+          />
         </div>
-        <Button type="submit">Kaydet</Button>
+
+        <Button type="submit" disabled={profileBusy}>
+          {profileBusy ? "Kaydediliyor…" : "Bilgileri Kaydet"}
+        </Button>
       </form>
+
+      {/* Hesap & Güvenlik Ayarları */}
+      <div className="mt-8 space-y-6 rounded-xl border border-border bg-surface p-6 shadow-sm">
+        <div className="flex items-center gap-2 border-b border-border pb-3">
+          <Shield className="size-5 text-primary" />
+          <h2 className="font-semibold text-fg">E-posta ve Güvenlik Ayarları</h2>
+        </div>
+
+        {/* E-posta Bilgisi */}
+        <div className="rounded-lg border border-border bg-bg/50 p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Mail className="size-5 text-muted" />
+              <div>
+                <p className="text-xs text-muted">Kayıtlı Giriş E-postası</p>
+                <p className="text-sm font-medium text-fg">{user.primaryEmail}</p>
+              </div>
+            </div>
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+              <CheckCircle2 className="size-3.5" /> Doğrulanmış Hesap
+            </span>
+          </div>
+        </div>
+
+        {/* Şifre Değiştirme */}
+        <form onSubmit={handleChangePassword} className="space-y-3 pt-2">
+          <div className="flex items-center gap-2">
+            <Lock className="size-4 text-muted" />
+            <h3 className="text-sm font-medium text-fg">Şifre Değiştir</h3>
+          </div>
+
+          <div>
+            <Label htmlFor="curr-pwd">Mevcut Şifre</Label>
+            <Input
+              id="curr-pwd"
+              type="password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              placeholder="Mevcut şifreniz"
+              required
+            />
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <Label htmlFor="new-pwd">Yeni Şifre</Label>
+              <Input
+                id="new-pwd"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="En az 8 karakter"
+                required
+                minLength={8}
+              />
+            </div>
+            <div>
+              <Label htmlFor="confirm-pwd">Yeni Şifre (Tekrar)</Label>
+              <Input
+                id="confirm-pwd"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Yeni şifrenizi doğrulayın"
+                required
+                minLength={8}
+              />
+            </div>
+          </div>
+
+          <Button type="submit" variant="outline" disabled={pwdBusy || !currentPassword || !newPassword}>
+            {pwdBusy ? "Değiştiriliyor…" : "Şifreyi Güncelle"}
+          </Button>
+        </form>
+      </div>
+
+      {/* Mağaza Ayarları */}
       <form
-        className="mt-6 space-y-3 rounded-xl border border-border bg-surface p-5"
+        className="mt-8 space-y-4 rounded-xl border border-border bg-surface p-6 shadow-sm"
         onSubmit={async (e) => {
           e.preventDefault();
           try {
             const s = await upsertStore({ data: { name: storeName, description: storeDesc, city, phone } });
-            toast.success("Mağaza hazır");
+            toast.success("Mağaza bilgileri güncellendi");
             setMe((m) =>
               m ? { ...m, store: { id: s.id, name: storeName, slug: s.slug, plan: m.store?.plan ?? "BASIC", city } } : m,
             );
           } catch (err) {
-            toast.error(err instanceof Error ? err.message : "Hata");
+            toast.error(err instanceof Error ? err.message : "Hata oluştu");
           }
         }}
       >
-        <h2 className="font-semibold">Mağaza</h2>
-        <p className="text-sm text-muted">Kurumsal vitrin. İlanlarınız mağaza sayfasında toplanır.</p>
-        <Input value={storeName} onChange={(e) => setStoreName(e.target.value)} placeholder="Mağaza adı" required />
-        <Textarea value={storeDesc} onChange={(e) => setStoreDesc(e.target.value)} placeholder="Kısa açıklama" />
-        <Button type="submit" variant="outline">
-          {me?.store ? "Mağazayı güncelle" : "Mağaza aç"}
-        </Button>
-        {me?.store ? (
-          <Link to="/magaza/$slug" params={{ slug: me.store.slug }} className="ml-3 text-sm text-primary">
-            Mağazayı gör
-          </Link>
-        ) : null}
+        <div className="flex items-center gap-2 border-b border-border pb-3">
+          <Store className="size-5 text-primary" />
+          <h2 className="font-semibold text-fg">Kurumsal Mağaza</h2>
+        </div>
+        <p className="text-sm text-muted">İlanlarınız mağaza sayfanızda özel bir vitrinde toplanır.</p>
+
+        <div>
+          <Label htmlFor="store-name">Mağaza Adı</Label>
+          <Input
+            id="store-name"
+            value={storeName}
+            onChange={(e) => setStoreName(e.target.value)}
+            placeholder="Mağaza adı"
+            required
+          />
+        </div>
+
+        <div>
+          <Label htmlFor="store-desc">Mağaza Açıklaması</Label>
+          <Textarea
+            id="store-desc"
+            value={storeDesc}
+            onChange={(e) => setStoreDesc(e.target.value)}
+            placeholder="Müşterilerinize işletmeniz hakkında bilgi verin..."
+            rows={2}
+          />
+        </div>
+
+        <div className="flex items-center gap-3 pt-1">
+          <Button type="submit" variant="outline">
+            {me?.store ? "Mağazayı Güncelle" : "Mağaza Aç"}
+          </Button>
+          {me?.store ? (
+            <Link to="/magaza/$slug" params={{ slug: me.store.slug }} className="text-sm text-primary hover:underline">
+              Mağazayı Gör →
+            </Link>
+          ) : null}
+        </div>
       </form>
-      <div className="mt-6 rounded-xl border border-border bg-surface p-5">
-        <h2 className="font-semibold">Kayıtlı aramalar</h2>
-        <p className="mt-1 text-sm text-muted">Uyan yeni ilan olunca bildirim gelir.</p>
+
+      {/* Kayıtlı Aramalar */}
+      <div className="mt-8 rounded-xl border border-border bg-surface p-6 shadow-sm">
+        <h2 className="font-semibold text-fg">Kayıtlı Aramalar</h2>
+        <p className="mt-1 text-sm text-muted">Kriterlerinize uyan yeni bir ilan eklendiğinde bildirim alırsınız.</p>
         {saved.length === 0 ? (
-          <p className="mt-3 text-sm text-muted">Henüz kayıtlı arama yok. Arama sayfasından “Kaydet” deyin.</p>
+          <p className="mt-4 rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted">
+            Henüz kayıtlı aramanız bulunmuyor. Arama sayfasından “Aramayı Kaydet” diyebilirsiniz.
+          </p>
         ) : (
-          <ul className="mt-3 divide-y divide-border">
+          <ul className="mt-4 divide-y divide-border">
             {saved.map((s) => {
               let href = `/search?q=${encodeURIComponent(s.query)}`;
               try {
@@ -136,13 +341,13 @@ function Profil() {
                 /* keep href */
               }
               return (
-                <li key={s.id} className="flex items-center justify-between gap-3 py-2">
-                  <a href={href} className="min-w-0 truncate text-sm hover:text-primary">
-                    {s.label || s.query || "Kayıtlı arama"}
+                <li key={s.id} className="flex items-center justify-between gap-3 py-2.5">
+                  <a href={href} className="min-w-0 truncate text-sm font-medium hover:text-primary">
+                    {s.label || s.query || "Kayıtlı Arama"}
                   </a>
                   <button
                     type="button"
-                    className="shrink-0 text-xs text-danger"
+                    className="shrink-0 text-xs font-medium text-danger hover:underline"
                     onClick={() =>
                       void deleteSavedSearch({ data: { id: s.id } }).then(() =>
                         setSaved((prev) => prev.filter((x) => x.id !== s.id)),
@@ -157,9 +362,11 @@ function Profil() {
           </ul>
         )}
       </div>
-      <div className="mt-6 flex gap-3 text-sm">
-        <Link to="/ilanlarim">İlanlarım</Link>
-        <Link to="/favoriler">Favoriler</Link>
+
+      <div className="mt-8 flex gap-4 text-sm font-medium text-primary">
+        <Link to="/ilanlarim" className="hover:underline">İlanlarım →</Link>
+        <Link to="/favoriler" className="hover:underline">Favorilerim →</Link>
+        <Link to="/bildirimler" className="hover:underline">Bildirimlerim →</Link>
       </div>
     </div>
   );

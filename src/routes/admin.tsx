@@ -72,12 +72,13 @@ function Admin() {
       setErr("Yönetici değilsiniz veya giriş yapmadınız.");
     }
   }
+  const userId = user?.id;
   useEffect(() => {
-    if (user) void load();
-  }, [user]);
+    if (userId) void load();
+  }, [userId]);
 
   useEffect(() => {
-    if (!user || err) return;
+    if (!userId || err) return;
     if (tab === "ilan") void adminListings({ data: {} }).then(setListings);
     if (tab === "sikayet") void adminReports().then(setReports);
     if (tab === "uye") void adminUsers().then(setUsers);
@@ -91,7 +92,7 @@ function Admin() {
         setSupportPhone(s.support_phone);
       });
     }
-  }, [tab, user, err]);
+  }, [tab, userId, err]);
 
   if (isPending) return <p className="p-10 text-center text-muted">Yükleniyor…</p>;
   if (!user) return <RedirectToSignIn />;

@@ -51,8 +51,10 @@ function Thread() {
   const lastRef = useRef<string | undefined>(undefined);
   const stickRef = useRef(true);
 
+  const userId = user?.id;
+
   useEffect(() => {
-    if (!user) return;
+    if (!userId) return;
     let stop = false;
     setMessages([]);
     setError("");
@@ -68,7 +70,7 @@ function Thread() {
         setPrice(t.conversation.listing_price);
         setOther(t.conversation.other_name);
         setListingId(t.conversation.listing_id);
-        setOtherId(t.conversation.buyer_id === user.id ? t.conversation.seller_id : t.conversation.buyer_id);
+        setOtherId(t.conversation.buyer_id === userId ? t.conversation.seller_id : t.conversation.buyer_id);
         setBlockedByMe(Boolean(t.blockedByMe));
         setBlockedByOther(Boolean(t.blockedByOther));
         setMessages(t.messages);
@@ -159,7 +161,7 @@ function Thread() {
       }
       window.clearInterval(timer);
     };
-  }, [id, user]);
+  }, [id, userId]);
 
   useEffect(() => {
     const el = scroller.current;
@@ -258,7 +260,15 @@ function Thread() {
         >
           <ChevronLeft className="size-5" />
         </Link>
-        {slug ? (
+        {loading ? (
+          <div className="flex min-w-0 flex-1 items-center gap-3 px-1 py-1">
+            <div className="size-11 shrink-0 animate-pulse rounded-md bg-elevated" />
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <div className="h-3.5 w-24 animate-pulse rounded bg-elevated" />
+              <div className="h-3 w-40 animate-pulse rounded bg-elevated" />
+            </div>
+          </div>
+        ) : slug ? (
           <Link to="/ilan/$slug" params={{ slug }} className="flex min-w-0 flex-1 items-center gap-3 rounded-md px-1 py-1 hover:bg-elevated">
             {image ? (
               <img src={image} alt="" className="size-11 shrink-0 rounded-md object-cover" />
@@ -278,7 +288,7 @@ function Thread() {
             <div className="grid size-11 shrink-0 place-items-center rounded-md bg-elevated text-sm font-semibold">{other.slice(0, 1)}</div>
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold">{other}</p>
-              <p className="truncate text-xs text-muted">{title || "İlan yayından kaldırıldı"}</p>
+              <p className="truncate text-xs text-muted">{listingId ? (title || "İlan yayından kaldırıldı") : "Sohbet"}</p>
             </div>
           </div>
         )}
