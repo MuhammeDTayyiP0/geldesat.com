@@ -675,15 +675,20 @@ export const adminUsers = createServerFn({ method: "GET" })
     await requireAdmin(context.userId);
     const sql = await getSql();
     const rows = await sql.query<Record<string, unknown>>(
-      `select p.*, (select count(*)::int from listings where user_id=p.user_id) as listing_count
-       from profiles p order by p.created_at desc limit 100`,
+      `select p.*, u.email as user_email, (select count(*)::int from listings where user_id=p.user_id) as listing_count
+       from profiles p
+       left join "user" u on u.id = p.user_id
+       order by p.created_at desc limit 250`,
     );
     return rows.map((p) => ({
       user_id: String(p.user_id),
       display_name: String(p.display_name ?? ""),
+      email: p.user_email ? String(p.user_email) : null,
+      phone: p.phone ? String(p.phone) : null,
       role: String(p.role),
       city: p.city ? String(p.city) : null,
       listing_count: num(p.listing_count),
+      last_seen_at: p.last_seen_at ? String(p.last_seen_at) : null,
       created_at: String(p.created_at),
     }));
   });
@@ -698,6 +703,61 @@ export const setUserRole = createServerFn({ method: "POST" })
     }
     const sql = await getSql();
     await sql.query("update profiles set role=$2 where user_id=$1", [data.userId, data.role]);
+    return { ok: true };
+  });
+
+export const adminDeleteUser = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(
+    z.object({
+      userId: z.string(),
+      deleteListings: z.boolean().optional().default(true),
+    }),
+  )
+  .handler(async ({ context, data }) => {
+    await requireAdmin(context.userId);
+    if (data.userId === context.userId) {
+      throw new Error("Kendi hesabınızı silemezsiniz.");
+    }
+    const sql = await getSql();
+    const target = await sql.query<{ role: string; display_name: string }>(
+      "select role, display_name from profiles where user_id=$1",
+      [data.userId],
+    );
+    if (target[0]?.role === "ADMIN") {
+      throw new Error("Yönetici rolündeki bir kullanıcıyı silemezsiniz. Lütfen önce rolünü 'USER' olarak değiştirin.");
+    }
+
+    // Safely delete all related data
+    await sql.query("delete from notifications where user_id=$1", [data.userId]);
+    await sql.query("delete from saved_searches where user_id=$1", [data.userId]);
+    await sql.query("delete from credit_ledger where user_id=$1", [data.userId]);
+    await sql.query("delete from credit_orders where user_id=$1", [data.userId]);
+    await sql.query("delete from boosts where user_id=$1", [data.userId]);
+    await sql.query("delete from phone_reveals where viewer_id=$1", [data.userId]);
+    await sql.query("delete from favorites where user_id=$1", [data.userId]);
+    await sql.query("delete from reviews where seller_id=$1 or reviewer_id=$1", [data.userId]);
+    await sql.query("delete from reports where reporter_id=$1", [data.userId]);
+    await sql.query(
+      `delete from messages where sender_id=$1 or conversation_id in (
+         select id from conversations where buyer_id=$1 or seller_id=$1
+       )`,
+      [data.userId],
+    );
+    await sql.query("delete from conversations where buyer_id=$1 or seller_id=$1", [data.userId]);
+
+    if (data.deleteListings) {
+      await sql.query("delete from listings where user_id=$1", [data.userId]);
+    } else {
+      await sql.query("update listings set status='INACTIVE' where user_id=$1", [data.userId]);
+    }
+
+    await sql.query("delete from stores where user_id=$1", [data.userId]);
+    await sql.query("delete from profiles where user_id=$1", [data.userId]);
+    await sql.query('delete from "session" where "userId"=$1', [data.userId]);
+    await sql.query('delete from "account" where "userId"=$1', [data.userId]);
+    await sql.query('delete from "user" where id=$1', [data.userId]);
+
     return { ok: true };
   });
 
