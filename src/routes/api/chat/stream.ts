@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { auth, authConfigured } from "@/lib/auth/server";
 import { getSessionUser } from "@/lib/auth/verify.server";
-import { chatBus, type ChatEvent } from "@/lib/server/chat-bus";
+import { chatBus, type ChatEvent, type UserInboxEvent } from "@/lib/server/chat-bus";
 import { getSql } from "@/lib/db";
 
 export const Route = createFileRoute("/api/chat/stream")({
@@ -10,9 +10,6 @@ export const Route = createFileRoute("/api/chat/stream")({
       GET: async ({ request }) => {
         const url = new URL(request.url);
         const conversationId = url.searchParams.get("conversationId");
-        if (!conversationId) {
-          return new Response("Missing conversationId", { status: 400 });
-        }
 
         let user: { id: string; email?: string | null } | null = null;
         try {
@@ -32,13 +29,15 @@ export const Route = createFileRoute("/api/chat/stream")({
           return new Response("Unauthorized", { status: 401 });
         }
 
-        const sql = await getSql();
-        const conv = await sql.query<{ buyer_id: string; seller_id: string }>(
-          "select buyer_id, seller_id from conversations where id=$1",
-          [conversationId],
-        );
-        if (!conv[0] || (conv[0].buyer_id !== user.id && conv[0].seller_id !== user.id)) {
-          return new Response("Forbidden", { status: 403 });
+        if (conversationId) {
+          const sql = await getSql();
+          const conv = await sql.query<{ buyer_id: string; seller_id: string }>(
+            "select buyer_id, seller_id from conversations where id=$1",
+            [conversationId],
+          );
+          if (!conv[0] || (conv[0].buyer_id !== user.id && conv[0].seller_id !== user.id)) {
+            return new Response("Forbidden", { status: 403 });
+          }
         }
 
         let cleanup: (() => void) | null = null;
@@ -49,16 +48,25 @@ export const Route = createFileRoute("/api/chat/stream")({
             // Send initial ping to confirm SSE connection
             controller.enqueue(encoder.encode(": connected\n\n"));
 
-            const handler = (event: ChatEvent) => {
+            const sendData = (data: unknown) => {
               try {
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
               } catch {
                 cleanup?.();
               }
             };
 
-            const eventName = `chat:${conversationId}`;
-            chatBus.on(eventName, handler);
+            const chatHandler = (event: ChatEvent) => sendData(event);
+            const userHandler = (event: UserInboxEvent) => sendData(event);
+
+            const userEventName = `user:${user.id}`;
+            chatBus.on(userEventName, userHandler);
+
+            let chatEventName: string | null = null;
+            if (conversationId) {
+              chatEventName = `chat:${conversationId}`;
+              chatBus.on(chatEventName, chatHandler);
+            }
 
             // Heartbeat every 20 seconds to keep connection alive through proxies
             const heartbeat = setInterval(() => {
@@ -70,7 +78,10 @@ export const Route = createFileRoute("/api/chat/stream")({
             }, 20000);
 
             cleanup = () => {
-              chatBus.off(eventName, handler);
+              chatBus.off(userEventName, userHandler);
+              if (chatEventName) {
+                chatBus.off(chatEventName, chatHandler);
+              }
               clearInterval(heartbeat);
               try {
                 controller.close();

@@ -5,7 +5,7 @@ import { getSql } from "@/lib/db";
 import { newId, num, asJson, asIso, LISTING_PHOTO_MSG } from "@/lib/utils";
 import { ensureProfile, mapListing, notify, rateLimit } from "./helpers";
 import { sweepExpiryReminders } from "./ops";
-import { broadcastChatMessage, broadcastChatRead } from "./chat-bus";
+import { broadcastChatMessage, broadcastChatRead, broadcastUserInbox } from "./chat-bus";
 
 function mapMsg(m: Record<string, unknown>) {
   return {
@@ -122,6 +122,12 @@ export const startConversation = createServerFn({ method: "POST" })
     await sql.query("update conversations set updated_at=now() where id=$1", [convId]);
     const msg = mapMsg(inserted[0] ?? { id: msgId, sender_id: context.userId, content: data.content.trim(), created_at: new Date().toISOString(), read_at: null });
     broadcastChatMessage(convId, msg);
+    broadcastUserInbox(listing[0].user_id, {
+      type: "new_message",
+      conversationId: convId,
+      message: msg,
+    });
+    broadcastUserInbox(context.userId, { type: "inbox_ping", conversationId: convId });
     await notify(
       listing[0].user_id,
       "message",
@@ -158,6 +164,12 @@ export const sendMessage = createServerFn({ method: "POST" })
     await sql.query("update conversations set updated_at=now() where id=$1", [data.conversationId]);
     const msg = mapMsg(inserted[0] ?? { id, sender_id: context.userId, content: data.content.trim(), created_at: new Date().toISOString(), read_at: null });
     broadcastChatMessage(data.conversationId, msg);
+    broadcastUserInbox(receiver, {
+      type: "new_message",
+      conversationId: data.conversationId,
+      message: msg,
+    });
+    broadcastUserInbox(context.userId, { type: "inbox_ping", conversationId: data.conversationId });
     await notify(
       receiver,
       "message",
@@ -255,6 +267,7 @@ export const getThread = createServerFn({ method: "POST" })
       );
       const nowIso = new Date().toISOString();
       broadcastChatRead(data.conversationId, unread.map((u) => ({ id: u.id, read_at: nowIso })));
+      broadcastUserInbox(context.userId, { type: "read_update", conversationId: data.conversationId });
     }
 
     const messages = await sql.query<Record<string, unknown>>(
@@ -309,6 +322,7 @@ export const pollThread = createServerFn({ method: "POST" })
       );
       const nowIso = new Date().toISOString();
       broadcastChatRead(data.conversationId, unread.map((u) => ({ id: u.id, read_at: nowIso })));
+      broadcastUserInbox(context.userId, { type: "read_update", conversationId: data.conversationId });
     }
 
     const after = data.after ? new Date(data.after) : null;
@@ -357,6 +371,7 @@ export const markThreadRead = createServerFn({ method: "POST" })
       );
       const nowIso = new Date().toISOString();
       broadcastChatRead(data.conversationId, ids.map((id) => ({ id, read_at: nowIso })));
+      broadcastUserInbox(context.userId, { type: "read_update", conversationId: data.conversationId });
       return { ok: true, readCount: unread.length, read_at: nowIso };
     }
     return { ok: true, readCount: 0 };

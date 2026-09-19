@@ -40,13 +40,61 @@ function MessagesLayout() {
       }
     }
     void load();
-    const on = () => void load();
+
+    const on = (e: Event) => {
+      const custom = e as CustomEvent<{
+        type?: string;
+        message?: { sender_id: string; content: string; created_at: string };
+        conversationId?: string;
+      }>;
+      if (custom?.detail?.type === "new_message" && custom.detail.message && custom.detail.conversationId) {
+        const { conversationId, message } = custom.detail;
+        setRows((prev) => {
+          const idx = prev.findIndex((c) => c.id === conversationId);
+          if (idx !== -1) {
+            const item = prev[idx];
+            const updated: Conv = {
+              ...item,
+              last_content: message.content,
+              last_sender_id: message.sender_id,
+              updated_at: message.created_at,
+              unread: item.id === activeId ? 0 : item.unread + 1,
+            };
+            return [updated, ...prev.filter((_, i) => i !== idx)];
+          }
+          return prev;
+        });
+      }
+      void load();
+    };
+
     window.addEventListener("geldesat:inbox", on);
+
+    let es: EventSource | null = null;
+    try {
+      es = new EventSource("/api/chat/stream");
+      es.onmessage = (e) => {
+        if (stop) return;
+        try {
+          const data = JSON.parse(e.data);
+          if (data.type === "new_message" || data.type === "read_update" || data.type === "inbox_ping") {
+            on(new CustomEvent("geldesat:inbox", { detail: data }));
+          }
+        } catch {
+          // ignore non-json
+        }
+      };
+    } catch {
+      // SSE fallback to polling
+    }
+
     const tick = window.setInterval(() => {
       if (document.visibilityState === "visible") void load();
-    }, 8000);
+    }, 12000);
+
     return () => {
       stop = true;
+      es?.close();
       window.removeEventListener("geldesat:inbox", on);
       window.clearInterval(tick);
     };

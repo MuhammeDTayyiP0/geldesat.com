@@ -410,11 +410,51 @@ export function Header({ className }: { className?: string } = {}) {
     getMe()
       .then((m) => setAdmin(m.profile?.role === "ADMIN"))
       .catch(() => undefined);
+
+    let es: EventSource | null = null;
+    let stop = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+    function connectSSE() {
+      if (stop) return;
+      try {
+        es = new EventSource("/api/chat/stream");
+        es.onmessage = (e) => {
+          if (stop) return;
+          try {
+            const data = JSON.parse(e.data);
+            if (data.type === "new_message") {
+              setMsgUnread((prev) => prev + 1);
+              window.dispatchEvent(new CustomEvent("geldesat:inbox", { detail: data }));
+            } else if (data.type === "read_update" || data.type === "inbox_ping") {
+              load();
+              window.dispatchEvent(new CustomEvent("geldesat:inbox", { detail: data }));
+            }
+          } catch {
+            // keepalive or non-JSON
+          }
+        };
+        es.onerror = () => {
+          es?.close();
+          if (!stop) {
+            retryTimer = setTimeout(connectSSE, 5000);
+          }
+        };
+      } catch {
+        // SSE fallback
+      }
+    }
+
+    connectSSE();
+
     window.addEventListener("geldesat:inbox", load);
     const tick = window.setInterval(() => {
       if (document.visibilityState === "visible") load();
     }, 20000);
     return () => {
+      stop = true;
+      if (retryTimer) clearTimeout(retryTimer);
+      es?.close();
       window.removeEventListener("geldesat:inbox", load);
       window.clearInterval(tick);
     };
@@ -460,9 +500,20 @@ export function Header({ className }: { className?: string } = {}) {
             <Link to="/favoriler" className="grid size-11 place-items-center rounded-lg hover:bg-elevated" aria-label="Favoriler">
               <Heart className="size-5" />
             </Link>
-            <Link to="/mesajlar" className="relative grid size-11 place-items-center rounded-lg hover:bg-elevated" aria-label="Mesajlar">
-              <MessageCircle className="size-5" />
-              <UnreadDot n={msgUnread} tone="primary" />
+            <Link
+              to="/mesajlar"
+              className="relative grid size-11 place-items-center rounded-lg hover:bg-elevated transition-colors"
+              aria-label={msgUnread > 0 ? `Mesajlar, ${msgUnread} okunmamış` : "Mesajlar"}
+            >
+              <MessageCircle className={cn("size-5 transition-colors", msgUnread > 0 && "text-primary")} />
+              {msgUnread > 0 ? (
+                <span className="absolute right-1 top-1">
+                  <span className="absolute -inset-0.5 animate-ping rounded-full bg-primary opacity-35" />
+                  <span className="relative flex min-w-4.5 h-4.5 items-center justify-center rounded-full bg-primary px-1 text-[11px] font-bold leading-none text-primary-fg tabular-nums shadow-xs">
+                    {msgUnread > 99 ? "99+" : msgUnread}
+                  </span>
+                </span>
+              ) : null}
             </Link>
             <AccountMenu admin={admin} />
           </SignedIn>

@@ -20,13 +20,29 @@ export type ChatEvent =
       reads: { id: string; read_at: string }[];
     };
 
+export type UserInboxEvent =
+  | {
+      type: "new_message";
+      conversationId: string;
+      message: ChatMessagePayload;
+    }
+  | {
+      type: "read_update";
+      conversationId?: string;
+      reads?: { id: string; read_at: string }[];
+    }
+  | {
+      type: "inbox_ping";
+      conversationId?: string;
+    };
+
 // Global event bus surviving HMR in development
 const globalRef = globalThis as typeof globalThis & {
   __geldesatChatBus__?: EventEmitter;
 };
 
 export const chatBus = (globalRef.__geldesatChatBus__ ??= new EventEmitter());
-chatBus.setMaxListeners(500);
+chatBus.setMaxListeners(1000);
 
 export function broadcastChatMessage(conversationId: string, message: ChatMessagePayload) {
   chatBus.emit(`chat:${conversationId}`, {
@@ -42,4 +58,8 @@ export function broadcastChatRead(conversationId: string, reads: { id: string; r
     conversationId,
     reads,
   });
+}
+
+export function broadcastUserInbox(userId: string, event: UserInboxEvent) {
+  chatBus.emit(`user:${userId}`, event);
 }
