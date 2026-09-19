@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Ban, Check, CheckCheck, ChevronLeft, Flag, ImageIcon, Send, ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { blockUser, unblockUser, getThread, pollThread, reportListing, sendMessage } from "@/lib/server/social";
+import { blockUser, unblockUser, getThread, markThreadRead, pollThread, reportListing, sendMessage } from "@/lib/server/social";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { Button } from "@/components/ui/button";
@@ -109,6 +109,11 @@ function Thread() {
             });
             lastRef.current = m.created_at;
             pingInbox();
+
+            // Karşı taraftan gelen yeni mesaj ekrana düştüğünde ve sekme görünür durumdaysa ANINDA okundu onayı ilet!
+            if (m.sender_id !== userId && document.visibilityState === "visible") {
+              void markThreadRead({ data: { conversationId: id, messageIds: [m.id] } }).catch(() => undefined);
+            }
           } else if (data.type === "read" && Array.isArray(data.reads)) {
             const reads = data.reads as { id: string; read_at: string }[];
             if (reads.length > 0) {
@@ -123,6 +128,15 @@ function Thread() {
     } catch {
       // EventSource failed to create
     }
+
+    // Sekmeye geri dönüldüğünde veya pencereye odaklanıldığında okunmamış mesajları hemen okundu yap
+    const onVisibilityOrFocus = () => {
+      if (document.visibilityState === "visible") {
+        void markThreadRead({ data: { conversationId: id } }).catch(() => undefined);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityOrFocus);
+    window.addEventListener("focus", onVisibilityOrFocus);
 
     // Relaxed background fallback poll (every 15s) in case SSE is interrupted by client network
     const timer = window.setInterval(() => {
@@ -160,6 +174,8 @@ function Thread() {
         es.close();
       }
       window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibilityOrFocus);
+      window.removeEventListener("focus", onVisibilityOrFocus);
     };
   }, [id, userId]);
 
@@ -366,9 +382,13 @@ function Thread() {
                       <span>{clock(m.created_at)}</span>
                       {mine ? (
                         m.read_at ? (
-                          <CheckCheck className="size-3.5" aria-label="Görüldü" />
+                          <span className="flex items-center text-sky-300 font-semibold drop-shadow-[0_0_2px_rgba(56,189,248,0.6)]" title={`Okundu: ${clock(m.read_at)}`}>
+                            <CheckCheck className="size-3.5" aria-label="Görüldü" />
+                          </span>
                         ) : (
-                          <Check className="size-3.5" aria-label={pending ? "Gönderiliyor" : "İletildi"} />
+                          <span className="flex items-center text-primary-fg/60" title={pending ? "Gönderiliyor" : "İletildi"}>
+                            <Check className="size-3.5" aria-label={pending ? "Gönderiliyor" : "İletildi"} />
+                          </span>
                         )
                       ) : null}
                     </p>

@@ -324,6 +324,37 @@ export const pollThread = createServerFn({ method: "POST" })
     };
   });
 
+export const markThreadRead = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ conversationId: z.string(), messageIds: z.array(z.string()).optional() }))
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    let unread: { id: string }[] = [];
+    if (data.messageIds && data.messageIds.length > 0) {
+      unread = await sql.query<{ id: string }>(
+        "select id from messages where conversation_id=$1 and sender_id<>$2 and read_at is null and id = any($3)",
+        [data.conversationId, context.userId, data.messageIds],
+      );
+    } else {
+      unread = await sql.query<{ id: string }>(
+        "select id from messages where conversation_id=$1 and sender_id<>$2 and read_at is null",
+        [data.conversationId, context.userId],
+      );
+    }
+    if (unread.length > 0) {
+      const ids = unread.map((u) => u.id);
+      await sql.query(
+        "update messages set read_at=now() where conversation_id=$1 and sender_id<>$2 and id = any($3)",
+        [data.conversationId, context.userId, ids],
+      );
+      const nowIso = new Date().toISOString();
+      broadcastChatRead(data.conversationId, ids.map((id) => ({ id, read_at: nowIso })));
+      return { ok: true, readCount: unread.length, read_at: nowIso };
+    }
+    return { ok: true, readCount: 0 };
+  });
+
+
 export const reportListing = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ listingId: z.string(), reason: z.string().min(3).max(80), details: z.string().max(500).optional() }))
