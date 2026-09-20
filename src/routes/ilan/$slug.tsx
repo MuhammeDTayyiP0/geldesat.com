@@ -77,47 +77,109 @@ export const Route = createFileRoute("/ilan/$slug")({
     if (!loaderData) {
       return { meta: [{ title: "İlan Bulunamadı | GeldeSat" }] };
     }
-    const { listing } = loaderData;
+    const { listing, path, seller } = loaderData;
     const desc = listing.description
       ? listing.description.replace(/\s+/g, " ").slice(0, 160)
       : `${listing.title} ilanı GeldeSat'ta. Fiyat ve tüm teknik özellikler için hemen tıklayın.`;
-    const coverImage = listing.images && listing.images.length > 0 ? listing.images[0] : "/favicon.svg";
+
+    const BASE = "https://geldesat.com";
+    const pageUrl = `${BASE}/ilan/${listing.slug}`;
+
+    // OG image — her zaman tam URL (göreceli yolu mutlak URL'e çevir)
+    const rawImage = listing.images && listing.images.length > 0 ? listing.images[0] : null;
+    const coverImage = rawImage
+      ? rawImage.startsWith("http")
+        ? rawImage
+        : `${BASE}${rawImage.startsWith("/") ? "" : "/"}${rawImage}`
+      : `${BASE}/og.jpg`;
+
+    // JSON-LD: tüm görselleri tam URL'e çevir
+    const absoluteImages = (listing.images ?? []).map((img: string) =>
+      img.startsWith("http") ? img : `${BASE}${img.startsWith("/") ? "" : "/"}${img}`,
+    );
+
+    // BreadcrumbList
+    const breadcrumbItems = [
+      { "@type": "ListItem", position: 1, name: "Anasayfa", item: BASE },
+      ...(path ?? []).map((p: { name: string; slug: string }, i: number) => ({
+        "@type": "ListItem",
+        position: i + 2,
+        name: p.name,
+        item: `${BASE}/category/${p.slug}`,
+      })),
+      { "@type": "ListItem", position: (path?.length ?? 0) + 2, name: listing.title, item: pageUrl },
+    ];
+
+    // Product + Offer schema
+    const productSchema: Record<string, unknown> = {
+      "@context": "https://schema.org/",
+      "@type": "Product",
+      name: listing.title,
+      description: desc,
+      url: pageUrl,
+      ...(absoluteImages.length > 0 ? { image: absoluteImages } : {}),
+      offers: {
+        "@type": "Offer",
+        priceCurrency: listing.currency || "TRY",
+        price: listing.price,
+        availability:
+          listing.status === "ACTIVE"
+            ? "https://schema.org/InStock"
+            : "https://schema.org/OutOfStock",
+        url: pageUrl,
+        ...(listing.city ? { availableAtOrFrom: { "@type": "Place", name: listing.city } } : {}),
+      },
+    };
+
+    if (seller && seller.name) {
+      productSchema.seller = {
+        "@type": "Person",
+        name: seller.name,
+        ...(seller.rating_count > 0
+          ? {
+              aggregateRating: {
+                "@type": "AggregateRating",
+                ratingValue: seller.rating_avg.toFixed(1),
+                reviewCount: seller.rating_count,
+              },
+            }
+          : {}),
+      };
+    }
 
     return {
       meta: [
         { title: `${listing.title} - ${formatPrice(listing.price)} | GeldeSat` },
         { name: "description", content: desc },
+        { name: "robots", content: listing.status === "ACTIVE" ? "index,follow" : "noindex,nofollow" },
+        // Open Graph
+        { property: "og:site_name", content: "GeldeSat" },
+        { property: "og:locale", content: "tr_TR" },
+        { property: "og:type", content: "website" },
+        { property: "og:url", content: pageUrl },
         { property: "og:title", content: `${listing.title} - ${formatPrice(listing.price)}` },
         { property: "og:description", content: desc },
         { property: "og:image", content: coverImage },
-        { property: "og:type", content: "website" },
+        { property: "og:image:width", content: "1200" },
+        { property: "og:image:height", content: "630" },
+        // Twitter / X
         { name: "twitter:card", content: "summary_large_image" },
-        { name: "twitter:title", content: listing.title },
+        { name: "twitter:title", content: `${listing.title} - ${formatPrice(listing.price)}` },
         { name: "twitter:description", content: desc },
         { name: "twitter:image", content: coverImage },
       ],
+      links: [{ rel: "canonical", href: pageUrl }],
       scripts: [
+        {
+          type: "application/ld+json",
+          children: JSON.stringify(productSchema),
+        },
         {
           type: "application/ld+json",
           children: JSON.stringify({
             "@context": "https://schema.org/",
-            "@type": "Product",
-            name: listing.title,
-            image: listing.images,
-            description: desc,
-            offers: {
-              "@type": "Offer",
-              priceCurrency: listing.currency || "TRY",
-              price: listing.price,
-              availability:
-                listing.status === "ACTIVE"
-                  ? "https://schema.org/InStock"
-                  : "https://schema.org/OutOfStock",
-              url:
-                typeof window !== "undefined"
-                  ? window.location.href
-                  : `https://geldesat.com/ilan/${listing.slug}`,
-            },
+            "@type": "BreadcrumbList",
+            itemListElement: breadcrumbItems,
           }),
         },
       ],

@@ -20,6 +20,14 @@ export const Route = createFileRoute("/search")({
     const result = await searchCatalog({ data: toFilters(deps) });
     return { result, attributes: cat?.attributes ?? [] };
   },
+  head: () => ({
+    meta: [
+      { title: "İlan Ara | GeldeSat" },
+      { name: "description", content: "GeldeSat'ta emlak, vasıta ve ikinci el ilanları arasında arayın ve filtreleyin." },
+      // Arama + filtreleme sonuçları indekslenmemeli — duplicate content önlemi
+      { name: "robots", content: "noindex,follow" },
+    ],
+  }),
   pendingComponent: ListingGridSkeleton,
   component: SearchPage,
 });

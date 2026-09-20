@@ -29,6 +29,58 @@ export const Route = createFileRoute("/category/$slug")({
       message="Ulaşmaya çalıştığınız ilan kategorisi sistemimizde bulunamadı veya adı değiştirilmiş olabilir."
     />
   ),
+  head: ({ loaderData }) => {
+    if (!loaderData?.cat?.category) return { meta: [] };
+    const category = loaderData.cat.category;
+    const cat = loaderData.cat;
+    const BASE = "https://geldesat.com";
+    const pageUrl = `${BASE}/category/${category.slug}`;
+    const title = `${category.name} İlanları | GeldeSat`;
+    const desc = `GeldeSat'ta ${category.name} kategorisindeki güncel ilanları inceleyin. Fiyat ve özelliklere göre filtreleyin.`;
+
+    // BreadcrumbList
+    const breadcrumbItems = [
+      { "@type": "ListItem", position: 1, name: "Anasayfa", item: BASE },
+      ...(cat.path ?? []).map((p: { name: string; slug: string }, i: number) => ({
+        "@type": "ListItem",
+        position: i + 2,
+        name: p.name,
+        item: `${BASE}/category/${p.slug}`,
+      })),
+    ];
+
+    return {
+      meta: [
+        { title },
+        { name: "description", content: desc },
+        { name: "robots", content: "index,follow" },
+        // Open Graph
+        { property: "og:site_name", content: "GeldeSat" },
+        { property: "og:locale", content: "tr_TR" },
+        { property: "og:type", content: "website" },
+        { property: "og:url", content: pageUrl },
+        { property: "og:title", content: title },
+        { property: "og:description", content: desc },
+        { property: "og:image", content: `${BASE}/og.jpg` },
+        // Twitter / X
+        { name: "twitter:card", content: "summary_large_image" },
+        { name: "twitter:title", content: title },
+        { name: "twitter:description", content: desc },
+        { name: "twitter:image", content: `${BASE}/og.jpg` },
+      ],
+      links: [{ rel: "canonical", href: pageUrl }],
+      scripts: [
+        {
+          type: "application/ld+json",
+          children: JSON.stringify({
+            "@context": "https://schema.org/",
+            "@type": "BreadcrumbList",
+            itemListElement: breadcrumbItems,
+          }),
+        },
+      ],
+    };
+  },
   pendingComponent: ListingGridSkeleton,
   component: CategoryPage,
 });

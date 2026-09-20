@@ -15,6 +15,35 @@ export const Route = createFileRoute("/satici/$id")({
     const listings = await searchCatalog({ data: { userId: params.id, limit: 24, page: 1 } });
     return { seller, listings: listings.listings };
   },
+  head: ({ loaderData }) => {
+    if (!loaderData?.seller) return { meta: [] };
+    const { seller } = loaderData;
+    const BASE = "https://geldesat.com";
+    const pageUrl = `${BASE}/satici/${seller.id}`;
+    const title = `${seller.name} | GeldeSat Satıcı Profili`;
+    const desc = seller.bio
+      ? seller.bio.slice(0, 160)
+      : `${seller.name} satıcısının tüm ilanlarını GeldeSat'ta inceleyin.${seller.rating_count > 0 ? ` Puan: ${seller.rating_avg.toFixed(1)}/5 (${seller.rating_count} değerlendirme).` : ""}`;
+    return {
+      meta: [
+        { title },
+        { name: "description", content: desc },
+        { name: "robots", content: "index,follow" },
+        { property: "og:site_name", content: "GeldeSat" },
+        { property: "og:locale", content: "tr_TR" },
+        { property: "og:type", content: "profile" },
+        { property: "og:url", content: pageUrl },
+        { property: "og:title", content: title },
+        { property: "og:description", content: desc },
+        { property: "og:image", content: `${BASE}/og.jpg` },
+        { name: "twitter:card", content: "summary" },
+        { name: "twitter:title", content: title },
+        { name: "twitter:description", content: desc },
+        { name: "twitter:image", content: `${BASE}/og.jpg` },
+      ],
+      links: [{ rel: "canonical", href: pageUrl }],
+    };
+  },
   pendingComponent: () => <BrandSpinner fullPage text="Satıcı profili yükleniyor…" />,
   notFoundComponent: () => (
     <NotFound

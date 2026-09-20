@@ -15,6 +15,35 @@ export const Route = createFileRoute("/magaza/$slug")({
     const listings = await searchCatalog({ data: { storeId: store.id, limit: 24, page: 1 } });
     return { store, listings: listings.listings };
   },
+  head: ({ loaderData }) => {
+    if (!loaderData?.store) return { meta: [] };
+    const { store } = loaderData;
+    const BASE = "https://geldesat.com";
+    const pageUrl = `${BASE}/magaza/${store.slug}`;
+    const title = `${store.name} | GeldeSat Mağaza`;
+    const desc = store.description
+      ? store.description.slice(0, 160)
+      : `${store.name} mağazasının tüm ilanlarını GeldeSat'ta inceleyin.`;
+    return {
+      meta: [
+        { title },
+        { name: "description", content: desc },
+        { name: "robots", content: "index,follow" },
+        { property: "og:site_name", content: "GeldeSat" },
+        { property: "og:locale", content: "tr_TR" },
+        { property: "og:type", content: "website" },
+        { property: "og:url", content: pageUrl },
+        { property: "og:title", content: title },
+        { property: "og:description", content: desc },
+        { property: "og:image", content: `${BASE}/og.jpg` },
+        { name: "twitter:card", content: "summary_large_image" },
+        { name: "twitter:title", content: title },
+        { name: "twitter:description", content: desc },
+        { name: "twitter:image", content: `${BASE}/og.jpg` },
+      ],
+      links: [{ rel: "canonical", href: pageUrl }],
+    };
+  },
   pendingComponent: () => <BrandSpinner fullPage text="Mağaza bilgileri yükleniyor…" />,
   notFoundComponent: () => (
     <NotFound

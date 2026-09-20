@@ -18,6 +18,34 @@ export const Route = createFileRoute("/sayfa/$slug")({
       message="Ulaşmaya çalıştığınız kurumsal bilgi veya yasal metin sayfası bulunamadı."
     />
   ),
+  head: ({ loaderData }) => {
+    if (!loaderData) return { meta: [] };
+    const BASE = "https://geldesat.com";
+    const pageUrl = `${BASE}/sayfa/${loaderData.slug}`;
+    const title = `${loaderData.title} | GeldeSat`;
+    const desc = loaderData.body
+      ? loaderData.body.replace(/#+\s/g, "").replace(/\n/g, " ").slice(0, 160)
+      : `${loaderData.title} — GeldeSat kurumsal sayfası.`;
+    return {
+      meta: [
+        { title },
+        { name: "description", content: desc },
+        { name: "robots", content: "index,follow" },
+        { property: "og:site_name", content: "GeldeSat" },
+        { property: "og:locale", content: "tr_TR" },
+        { property: "og:type", content: "website" },
+        { property: "og:url", content: pageUrl },
+        { property: "og:title", content: title },
+        { property: "og:description", content: desc },
+        { property: "og:image", content: `${BASE}/og.jpg` },
+        { name: "twitter:card", content: "summary_large_image" },
+        { name: "twitter:title", content: title },
+        { name: "twitter:description", content: desc },
+        { name: "twitter:image", content: `${BASE}/og.jpg` },
+      ],
+      links: [{ rel: "canonical", href: pageUrl }],
+    };
+  },
   component: LegalPage,
 });
 

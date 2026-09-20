@@ -11,6 +11,51 @@ export const Route = createFileRoute("/")({
     const [cats, featured, stats] = await Promise.all([listCategories(), featuredListings(), statsHome()]);
     return { cats, featured, stats };
   },
+  head: () => {
+    const BASE = "https://geldesat.com";
+    return {
+      meta: [
+        { title: "GeldeSat — Türkiye İlan Platformu" },
+        { name: "description", content: "Emlak, vasıta ve ikinci el ilanlar. Ücretsiz ilan verin, güvenli alın satın." },
+        { name: "robots", content: "index,follow" },
+        // Open Graph
+        { property: "og:site_name", content: "GeldeSat" },
+        { property: "og:locale", content: "tr_TR" },
+        { property: "og:type", content: "website" },
+        { property: "og:url", content: BASE },
+        { property: "og:title", content: "GeldeSat — Türkiye İlan Platformu" },
+        { property: "og:description", content: "Emlak, vasıta ve ikinci el ilanlar. Ücretsiz ilan verin, güvenli alın satın." },
+        { property: "og:image", content: `${BASE}/og.jpg` },
+        { property: "og:image:width", content: "1200" },
+        { property: "og:image:height", content: "630" },
+        // Twitter / X
+        { name: "twitter:card", content: "summary_large_image" },
+        { name: "twitter:title", content: "GeldeSat — Türkiye İlan Platformu" },
+        { name: "twitter:description", content: "Emlak, vasıta ve ikinci el ilanlar. Ücretsiz ilan verin, güvenli alın satın." },
+        { name: "twitter:image", content: `${BASE}/og.jpg` },
+      ],
+      links: [{ rel: "canonical", href: BASE }],
+      scripts: [
+        {
+          type: "application/ld+json",
+          children: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "WebSite",
+            name: "GeldeSat",
+            url: BASE,
+            potentialAction: {
+              "@type": "SearchAction",
+              target: {
+                "@type": "EntryPoint",
+                urlTemplate: `${BASE}/search?q={search_term_string}`,
+              },
+              "query-input": "required name=search_term_string",
+            },
+          }),
+        },
+      ],
+    };
+  },
   component: Home,
 });
 

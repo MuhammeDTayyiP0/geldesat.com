@@ -22,6 +22,22 @@ export const Route = createRootRoute({
       { title: `${APP_NAME} — Türkiye ilan platformu` },
       { name: "description", content: "Emlak, vasıta ve ikinci el ilanlar. Güvenli alım satım." },
       { name: "theme-color", content: "#1A4FD8" },
+      { name: "robots", content: "index,follow" },
+      // Open Graph
+      { property: "og:site_name", content: APP_NAME },
+      { property: "og:locale", content: "tr_TR" },
+      { property: "og:type", content: "website" },
+      { property: "og:title", content: `${APP_NAME} — Türkiye ilan platformu` },
+      { property: "og:description", content: "Emlak, vasıta ve ikinci el ilanlar. Güvenli alım satım." },
+      { property: "og:image", content: "https://geldesat.com/og.jpg" },
+      { property: "og:image:width", content: "1200" },
+      { property: "og:image:height", content: "630" },
+      { property: "og:url", content: "https://geldesat.com" },
+      // Twitter / X
+      { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: `${APP_NAME} — Türkiye ilan platformu` },
+      { name: "twitter:description", content: "Emlak, vasıta ve ikinci el ilanlar. Güvenli alım satım." },
+      { name: "twitter:image", content: "https://geldesat.com/og.jpg" },
     ],
     links: [
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
