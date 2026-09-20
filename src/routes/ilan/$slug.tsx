@@ -1,4 +1,5 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate, notFound } from "@tanstack/react-router";
+import { NotFound } from "@/components/common/NotFound";
 import {
   AlertCircle,
   Check,
@@ -58,7 +59,20 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/ilan/$slug")({
-  loader: async ({ params }) => getListing({ data: { slug: params.slug } }),
+  loader: async ({ params }) => {
+    const data = await getListing({ data: { slug: params.slug } });
+    if (!data || !data.listing) {
+      throw notFound();
+    }
+    return data;
+  },
+  notFoundComponent: () => (
+    <NotFound
+      type="listing"
+      title="İlan Bulunamadı veya Yayından Kaldırıldı"
+      message="Aradığınız ilan satılmış, süresi dolmuş veya sahibi tarafından yayından kaldırılmış olabilir. Benzer ilanları arayabilir veya yeni bir arama yapabilirsiniz."
+    />
+  ),
   head: ({ loaderData }) => {
     if (!loaderData) {
       return { meta: [{ title: "İlan Bulunamadı | GeldeSat" }] };
@@ -439,7 +453,7 @@ function ListingPage() {
         <Link to="/" className="hover:text-fg hover:underline transition-colors">
           Anasayfa
         </Link>
-        {path.map((p) => (
+        {path.map((p: any) => (
           <span key={p.id} className="flex items-center gap-1.5">
             <ChevronRight className="size-3.5 text-subtle" />
             <Link
@@ -652,7 +666,7 @@ function ListingPage() {
                 Bu ilanın fiyatındaki geçmiş değişimler ve kayıt tarihleri:
               </p>
               <ul className="space-y-2 text-sm">
-                {history.map((h, i) => {
+                {history.map((h: any, i: number) => {
                   const isLatest = i === history.length - 1;
                   return (
                     <li
@@ -1141,7 +1155,7 @@ function ListingPage() {
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {similar.map((l) => (
+            {similar.map((l: any) => (
               <ListingCard key={l.id} listing={l} />
             ))}
           </div>

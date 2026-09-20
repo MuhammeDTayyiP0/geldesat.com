@@ -1,23 +1,32 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { Star } from "lucide-react";
 import { getSeller } from "@/lib/server/account";
 import { searchCatalog } from "@/lib/server/catalog";
 import { ListingCard } from "@/components/listing/ListingCard";
+import { NotFound } from "@/components/common/NotFound";
 
 export const Route = createFileRoute("/satici/$id")({
   loader: async ({ params }) => {
     const seller = await getSeller({ data: { id: params.id } });
-    const listings = seller
-      ? await searchCatalog({ data: { userId: params.id, limit: 24, page: 1 } })
-      : { listings: [] };
+    if (!seller) {
+      throw notFound();
+    }
+    const listings = await searchCatalog({ data: { userId: params.id, limit: 24, page: 1 } });
     return { seller, listings: listings.listings };
   },
+  notFoundComponent: () => (
+    <NotFound
+      type="seller"
+      title="Satıcı Profili Bulunamadı"
+      message="Aradığınız satıcı hesabı bulunamadı, silinmiş veya kapatılmış olabilir."
+    />
+  ),
   component: SellerPage,
 });
 
 function SellerPage() {
   const { seller, listings } = Route.useLoaderData();
-  if (!seller) return <p className="p-12 text-center">Satıcı bulunamadı.</p>;
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-10">
       <div className="rounded-xl border border-border bg-surface p-6">
@@ -35,7 +44,7 @@ function SellerPage() {
       </div>
       <h2 className="mt-10 font-display text-xl font-semibold">İlanları</h2>
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {listings.map((l) => (
+        {listings.map((l: any) => (
           <ListingCard key={l.id} listing={l} />
         ))}
       </div>
@@ -43,7 +52,7 @@ function SellerPage() {
         <section className="mt-10">
           <h2 className="font-display text-xl font-semibold">Yorumlar</h2>
           <ul className="mt-4 space-y-3">
-            {seller.reviews.map((r) => (
+            {seller.reviews.map((r: any) => (
               <li key={r.id} className="rounded-xl border border-border bg-surface p-4">
                 <p className="text-sm font-medium">
                   {r.reviewer} · {r.rating}/5

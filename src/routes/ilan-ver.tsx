@@ -97,10 +97,10 @@ function PostForm() {
   const userId = user?.id;
 
   const selected = path[path.length - 1];
-  const children = cats.categories.filter((c) => c.parent_id === (selected ?? null));
+  const children = cats.categories.filter((c: any) => c.parent_id === (selected ?? null));
   const currentCats = path.length === 0 ? cats.roots : children;
   const leaf = path.length > 0 && children.length === 0;
-  const pathRows = path.map((id) => cats.categories.find((c) => c.id === id)).filter(Boolean) as CategoryRow[];
+  const pathRows = path.map((id) => cats.categories.find((c: any) => c.id === id)).filter(Boolean) as CategoryRow[];
   const cityData = TURKEY_CITIES.find((c) => c.name === city);
   const hoods = (city && district && NEIGHBORHOODS[city]?.[district]) || [];
   const needsPhoto = path[0] === "emlak" || path[0] === "vasita";
@@ -265,7 +265,7 @@ function PostForm() {
             onPick={(c) => {
               const next = [...path, c.id];
               setPath(next);
-              const more = cats.categories.some((x) => x.parent_id === c.id);
+              const more = cats.categories.some((x: any) => x.parent_id === c.id);
               if (!more) setStep(1);
             }}
           />

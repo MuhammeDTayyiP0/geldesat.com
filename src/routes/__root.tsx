@@ -5,6 +5,7 @@ import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { CookieBanner } from "@/components/layout/CookieBanner";
 import { TopProgressBar } from "@/components/layout/TopProgressBar";
+import { NotFound } from "@/components/common/NotFound";
 import { Toaster } from "sonner";
 import appCss from "../styles.css?url";
 
@@ -38,7 +39,9 @@ export const Route = createRootRoute({
     styles: [{ children: CRITICAL_CSS }],
   }),
   component: Root,
+  notFoundComponent: () => <NotFound />,
 });
+
 
 function Shell() {
   const isChat = useRouterState({

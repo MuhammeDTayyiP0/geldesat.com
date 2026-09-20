@@ -1,9 +1,23 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { getLegal } from "@/lib/server/catalog";
 import { slugify } from "@/lib/utils";
+import { NotFound } from "@/components/common/NotFound";
 
 export const Route = createFileRoute("/sayfa/$slug")({
-  loader: ({ params }) => getLegal({ data: { slug: params.slug } }),
+  loader: async ({ params }) => {
+    const page = await getLegal({ data: { slug: params.slug } });
+    if (!page) {
+      throw notFound();
+    }
+    return page;
+  },
+  notFoundComponent: () => (
+    <NotFound
+      type="page"
+      title="Kurumsal Sayfa Bulunamadı"
+      message="Ulaşmaya çalıştığınız kurumsal bilgi veya yasal metin sayfası bulunamadı."
+    />
+  ),
   component: LegalPage,
 });
 

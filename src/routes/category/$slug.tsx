@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate, notFound } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { getCategory, searchCatalog } from "@/lib/server/catalog";
@@ -8,15 +8,26 @@ import { Filters, type FilterState } from "@/components/listing/Filters";
 import { SubcategoryGrid } from "@/components/listing/CategoryPicker";
 import { ListingGridSkeleton } from "@/components/listing/ListingGridSkeleton";
 import { Button } from "@/components/ui/button";
+import { NotFound } from "@/components/common/NotFound";
 
 export const Route = createFileRoute("/category/$slug")({
   validateSearch: (s: Record<string, unknown>) => parseSearch(s),
   loaderDeps: ({ search }) => search,
   loader: async ({ deps, params }) => {
     const cat = await getCategory({ data: { slug: params.slug } });
+    if (!cat || !cat.category) {
+      throw notFound();
+    }
     const result = await searchCatalog({ data: { ...toFilters(deps), category: params.slug } });
     return { cat, result };
   },
+  notFoundComponent: () => (
+    <NotFound
+      type="category"
+      title="Kategori Bulunamadı"
+      message="Ulaşmaya çalıştığınız ilan kategorisi sistemimizde bulunamadı veya adı değiştirilmiş olabilir."
+    />
+  ),
   pendingComponent: ListingGridSkeleton,
   component: CategoryPage,
 });
@@ -87,7 +98,7 @@ function CategoryPage() {
     <div className="mx-auto max-w-6xl px-4 py-8">
       <nav className="mb-4 flex flex-wrap items-center gap-1 text-sm text-muted">
         <Link to="/">Anasayfa</Link>
-        {cat.path.map((p) => (
+        {cat.path.map((p: { id: string; name: string; slug: string }) => (
           <span key={p.id} className="flex items-center gap-1">
             <ChevronRight className="size-3.5" />
             <Link to="/category/$slug" params={{ slug: p.slug }} className="hover:text-fg">
@@ -116,7 +127,7 @@ function CategoryPage() {
             </div>
           ) : (
             <div className="grid gap-3">
-              {result.listings.map((l) => (
+              {result.listings.map((l: any) => (
                 <ListingCard key={l.id} listing={l} variant="list" />
               ))}
             </div>

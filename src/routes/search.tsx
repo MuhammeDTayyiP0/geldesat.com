@@ -147,7 +147,7 @@ function SearchPage() {
             </div>
           ) : (
             <div className={view === "grid" ? "grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3" : "grid gap-3"}>
-              {result.listings.map((l) => (
+              {result.listings.map((l: any) => (
                 <ListingCard key={l.id} listing={l} variant={view} />
               ))}
             </div>

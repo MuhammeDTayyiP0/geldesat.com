@@ -102,7 +102,7 @@ function Home() {
       <section className="mx-auto max-w-6xl px-4 py-10">
         <h2 className="text-xl font-semibold tracking-tight">Kategoriler</h2>
         <div className="mt-5 grid grid-cols-2 gap-2 md:grid-cols-5">
-          {cats.roots.map((c) => {
+          {cats.roots.map((c: any) => {
             const Icon = ICONS[c.icon ?? ""] ?? Building2;
             return (
               <Link
@@ -140,7 +140,7 @@ function Home() {
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {featured.map((l) => (
+              {featured.map((l: any) => (
                 <ListingCard key={l.id} listing={l} />
               ))}
             </div>

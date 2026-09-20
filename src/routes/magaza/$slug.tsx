@@ -1,21 +1,31 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { getStore } from "@/lib/server/account";
 import { searchCatalog } from "@/lib/server/catalog";
 import { ListingCard } from "@/components/listing/ListingCard";
 import { Badge } from "@/components/ui/badge";
+import { NotFound } from "@/components/common/NotFound";
 
 export const Route = createFileRoute("/magaza/$slug")({
   loader: async ({ params }) => {
     const store = await getStore({ data: { slug: params.slug } });
-    const listings = store ? await searchCatalog({ data: { storeId: store.id, limit: 24, page: 1 } }) : { listings: [] };
+    if (!store) {
+      throw notFound();
+    }
+    const listings = await searchCatalog({ data: { storeId: store.id, limit: 24, page: 1 } });
     return { store, listings: listings.listings };
   },
+  notFoundComponent: () => (
+    <NotFound
+      type="store"
+      title="Mağaza Bulunamadı"
+      message="Aradığınız kurumsal mağaza bulunamadı veya bağlantı geçersiz."
+    />
+  ),
   component: StorePage,
 });
 
 function StorePage() {
   const { store, listings } = Route.useLoaderData();
-  if (!store) return <p className="p-12 text-center">Mağaza bulunamadı.</p>;
   return (
     <div className="mx-auto max-w-6xl px-4 py-10">
       <div className="rounded-xl border border-border bg-surface p-6">
@@ -30,7 +40,7 @@ function StorePage() {
         </Link>
       </div>
       <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {listings.map((l) => (
+        {listings.map((l: any) => (
           <ListingCard key={l.id} listing={l} />
         ))}
       </div>
