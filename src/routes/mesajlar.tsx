@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { listConversations } from "@/lib/server/social";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { BrandSpinner } from "@/components/brand/BrandSpinner";
 import { formatPrice, timeAgo } from "@/lib/utils";
 
 export const Route = createFileRoute("/mesajlar")({ component: MessagesLayout });
@@ -117,7 +118,7 @@ function MessagesLayout() {
     );
   }, [rows, q, filter]);
 
-  if (isPending) return <p className="p-10 text-center text-muted">Yükleniyor…</p>;
+  if (isPending) return <BrandSpinner fullPage text="Mesajlarınız yükleniyor…" />;
   if (!user) return <RedirectToSignIn />;
 
   return (
@@ -185,16 +186,8 @@ function MessagesLayout() {
         </div>
 
         {!loaded ? (
-          <div className="space-y-3 p-3">
-            {[0, 1, 2, 3].map((i) => (
-              <div key={i} className="flex gap-3">
-                <div className="size-12 shrink-0 animate-pulse rounded-xl bg-elevated" />
-                <div className="flex-1 space-y-2 py-1">
-                  <div className="h-3.5 w-1/2 animate-pulse rounded bg-elevated" />
-                  <div className="h-3 w-3/4 animate-pulse rounded bg-elevated" />
-                </div>
-              </div>
-            ))}
+          <div className="flex flex-col items-center justify-center py-16 px-4">
+            <BrandSpinner size="sm" text="Sohbetler yükleniyor…" />
           </div>
         ) : err ? (
           <p className="p-6 text-center text-sm text-danger">{err}</p>

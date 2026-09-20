@@ -2,9 +2,11 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { searchCatalog } from "@/lib/server/catalog";
 import { CITY_COORDS } from "@/lib/data/geo";
 import { formatPrice } from "@/lib/utils";
+import { BrandSpinner } from "@/components/brand/BrandSpinner";
 
 export const Route = createFileRoute("/harita")({
   loader: () => searchCatalog({ data: { limit: 48, page: 1 } }),
+  pendingComponent: () => <BrandSpinner fullPage text="Harita ve ilanlar yükleniyor…" />,
   component: MapPage,
 });
 

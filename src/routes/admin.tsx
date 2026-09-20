@@ -376,7 +376,7 @@ function Admin() {
     return reports.filter((r) => r.status === reportFilter);
   }, [reports, reportFilter]);
 
-  if (isPending) {
+  if (isPending || (!stats && !err)) {
     return <BrandSpinner fullPage text="Yönetim konsolu yükleniyor…" />;
   }
 

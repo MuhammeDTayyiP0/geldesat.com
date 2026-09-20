@@ -4,6 +4,7 @@ import { getSeller } from "@/lib/server/account";
 import { searchCatalog } from "@/lib/server/catalog";
 import { ListingCard } from "@/components/listing/ListingCard";
 import { NotFound } from "@/components/common/NotFound";
+import { BrandSpinner } from "@/components/brand/BrandSpinner";
 
 export const Route = createFileRoute("/satici/$id")({
   loader: async ({ params }) => {
@@ -14,6 +15,7 @@ export const Route = createFileRoute("/satici/$id")({
     const listings = await searchCatalog({ data: { userId: params.id, limit: 24, page: 1 } });
     return { seller, listings: listings.listings };
   },
+  pendingComponent: () => <BrandSpinner fullPage text="Satıcı profili yükleniyor…" />,
   notFoundComponent: () => (
     <NotFound
       type="seller"

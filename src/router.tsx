@@ -14,7 +14,7 @@ export function getRouter() {
     defaultErrorComponent: AppErrorComponent,
     defaultNotFoundComponent: () => <NotFound />,
     defaultPendingComponent: GlobalPending,
-    defaultPendingMs: 200,
+    defaultPendingMs: 60,
   });
 }
 

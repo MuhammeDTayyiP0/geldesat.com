@@ -21,11 +21,14 @@ function Mine() {
   const { user, isPending } = useCurrentUserState();
   const [rows, setRows] = useState<Listing[]>([]);
   const [pendingDel, setPendingDel] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   function reload() {
+    setLoading(true);
     myListings()
       .then(setRows)
-      .catch(() => setRows([]));
+      .catch(() => setRows([]))
+      .finally(() => setLoading(false));
   }
   useEffect(() => {
     if (user) reload();
@@ -42,7 +45,11 @@ function Mine() {
           <Button>Yeni ilan</Button>
         </Link>
       </div>
-      {rows.length === 0 ? (
+      {loading ? (
+        <div className="flex min-h-[320px] items-center justify-center rounded-xl border border-border bg-surface p-12">
+          <BrandSpinner size="lg" text="İlanlarınız getiriliyor…" />
+        </div>
+      ) : rows.length === 0 ? (
         <p className="rounded-xl border border-dashed border-border bg-surface p-12 text-center text-muted">Henüz ilanınız yok.</p>
       ) : (
         <div className="space-y-4">

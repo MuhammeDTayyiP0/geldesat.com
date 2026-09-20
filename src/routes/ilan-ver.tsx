@@ -15,6 +15,7 @@ import { cleanPhone, formatPhone, formatPrice, maskPhone10 } from "@/lib/utils";
 import { toast } from "sonner";
 import type { AttrDef, CategoryRow } from "@/lib/server/helpers";
 import { CategoryButtons } from "@/components/listing/CategoryPicker";
+import { BrandSpinner } from "@/components/brand/BrandSpinner";
 
 const evetHayir = ["Evet", "Hayır"];
 
@@ -158,9 +159,9 @@ function PostForm() {
     };
   }, [editId, userId, nav]);
 
-  if (isPending) return <div className="p-12 text-center text-muted">Yükleniyor…</div>;
+  if (isPending) return <BrandSpinner fullPage text="Hesap bilgileri doğrulanıyor…" />;
   if (!user) return <RedirectToSignIn />;
-  if (!loaded) return <div className="p-12 text-center text-muted">İlan yükleniyor…</div>;
+  if (!loaded) return <BrandSpinner fullPage text="İlan bilgileri yükleniyor…" />;
 
   async function onFiles(files: FileList | null) {
     if (!files) return;

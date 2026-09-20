@@ -1,4 +1,5 @@
 import { Skeleton } from "@/components/ui/skeleton";
+import { BrandSpinner } from "@/components/brand/BrandSpinner";
 
 export function ListingDetailSkeleton() {
   return (
@@ -24,9 +25,12 @@ export function ListingDetailSkeleton() {
       <div className="grid gap-8 lg:grid-cols-[1.4fr_0.8fr]">
         {/* Left Column: Media & Details */}
         <div className="space-y-6">
-          {/* Main Photo Skeleton */}
-          <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-card">
-            <Skeleton className="aspect-[16/10] w-full bg-border/50" />
+          {/* Main Photo Skeleton with BrandSpinner */}
+          <div className="relative flex aspect-[16/10] w-full items-center justify-center overflow-hidden rounded-2xl border border-border bg-surface shadow-card">
+            <Skeleton className="absolute inset-0 size-full bg-border/40" />
+            <div className="relative z-10">
+              <BrandSpinner size="md" text="İlan detayları yükleniyor…" />
+            </div>
           </div>
 
           {/* Thumbnails row */}

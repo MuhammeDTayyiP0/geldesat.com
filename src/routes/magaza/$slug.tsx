@@ -4,6 +4,7 @@ import { searchCatalog } from "@/lib/server/catalog";
 import { ListingCard } from "@/components/listing/ListingCard";
 import { Badge } from "@/components/ui/badge";
 import { NotFound } from "@/components/common/NotFound";
+import { BrandSpinner } from "@/components/brand/BrandSpinner";
 
 export const Route = createFileRoute("/magaza/$slug")({
   loader: async ({ params }) => {
@@ -14,6 +15,7 @@ export const Route = createFileRoute("/magaza/$slug")({
     const listings = await searchCatalog({ data: { storeId: store.id, limit: 24, page: 1 } });
     return { store, listings: listings.listings };
   },
+  pendingComponent: () => <BrandSpinner fullPage text="Mağaza bilgileri yükleniyor…" />,
   notFoundComponent: () => (
     <NotFound
       type="store"

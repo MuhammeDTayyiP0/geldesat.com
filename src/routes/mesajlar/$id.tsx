@@ -25,6 +25,7 @@ import {
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { Button } from "@/components/ui/button";
+import { BrandSpinner } from "@/components/brand/BrandSpinner";
 import { formatPrice, LISTING_PHOTO_MSG, pingInbox, timeAgo } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -300,7 +301,7 @@ function Thread() {
     }
   }
 
-  if (isPending) return <p className="p-10 text-center text-muted">Yükleniyor…</p>;
+  if (isPending) return <BrandSpinner fullPage text="Sohbet yükleniyor…" />;
   if (!user) return <RedirectToSignIn />;
 
   let lastDay = "";
@@ -452,10 +453,8 @@ function Thread() {
         aria-live="polite"
       >
         {loading ? (
-          <div className="space-y-4 py-8">
-            <div className="flex justify-start"><div className="h-10 w-48 animate-pulse rounded-2xl bg-elevated" /></div>
-            <div className="flex justify-end"><div className="h-14 w-60 animate-pulse rounded-2xl bg-elevated" /></div>
-            <div className="flex justify-start"><div className="h-8 w-40 animate-pulse rounded-2xl bg-elevated" /></div>
+          <div className="flex min-h-[220px] items-center justify-center py-12">
+            <BrandSpinner size="md" text="Mesajlar yükleniyor…" />
           </div>
         ) : error ? (
           <p className="py-12 text-center text-sm text-danger">{error}</p>

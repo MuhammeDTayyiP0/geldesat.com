@@ -53,7 +53,7 @@ function Profil() {
     void mySavedSearches().then(setSaved).catch(() => setSaved([]));
   }, [userId]);
 
-  if (isPending) return <BrandSpinner fullPage text="Profiliniz yükleniyor…" />;
+  if (isPending || (!me && user)) return <BrandSpinner fullPage text="Profiliniz yükleniyor…" />;
   if (!user) return <RedirectToSignIn />;
 
   async function handleSaveProfile(e: React.FormEvent) {

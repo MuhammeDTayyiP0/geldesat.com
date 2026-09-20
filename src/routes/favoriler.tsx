@@ -13,15 +13,29 @@ export const Route = createFileRoute("/favoriler")({ component: Favs });
 function Favs() {
   const { user, isPending } = useCurrentUserState();
   const [rows, setRows] = useState<Listing[]>([]);
+  const [loading, setLoading] = useState(true);
+
   useEffect(() => {
-    if (user) void myFavorites().then(setRows).catch(() => setRows([]));
+    if (user) {
+      setLoading(true);
+      void myFavorites()
+        .then(setRows)
+        .catch(() => setRows([]))
+        .finally(() => setLoading(false));
+    }
   }, [user]);
+
   if (isPending) return <BrandSpinner fullPage text="Favorileriniz yükleniyor…" />;
   if (!user) return <RedirectToSignIn />;
+
   return (
     <div className="mx-auto max-w-4xl px-4 py-10">
       <h1 className="text-xl font-semibold tracking-tight">Favoriler</h1>
-      {rows.length === 0 ? (
+      {loading ? (
+        <div className="mt-8 flex min-h-[320px] items-center justify-center rounded-xl border border-border bg-surface p-12">
+          <BrandSpinner size="lg" text="Favorileriniz getiriliyor…" />
+        </div>
+      ) : rows.length === 0 ? (
         <div className="mt-8 rounded-xl border border-dashed border-border bg-surface p-12 text-center">
           <Heart className="mx-auto size-8 text-subtle" />
           <p className="mt-3 text-muted">Henüz favori yok.</p>
