@@ -52,6 +52,100 @@ function pgliteBootstrapPlugin(): Plugin {
 }
 
 /**
+ * Dev-only Vite middleware for /sitemap.xml and /robots.txt.
+ * Production: Nitro middleware in server/middleware/seo.ts handles these.
+ */
+function seoPlugin(): Plugin {
+  return {
+    name: "app-builder:seo",
+    apply: "serve",
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        const path = (req.url ?? "").split("?", 1)[0] ?? "";
+
+        if (path === "/sitemap.xml") {
+          try {
+            const { getSql } = (await server.ssrLoadModule("/src/lib/db.ts")) as {
+              getSql: () => Promise<{ query: <T>(sql: string, params?: unknown[]) => Promise<T[]> }>;
+            };
+            const today = new Date().toISOString().slice(0, 10);
+            const BASE = "https://geldesat.com";
+            const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+            const entry = (loc: string, lm: string, cf: string, p: string) =>
+              `  <url>\n    <loc>${esc(loc)}</loc>\n    <lastmod>${lm}</lastmod>\n    <changefreq>${cf}</changefreq>\n    <priority>${p}</priority>\n  </url>`;
+
+            const staticUrls = [
+              entry(`${BASE}/`, today, "daily", "1.0"),
+              entry(`${BASE}/ilan-ver`, today, "weekly", "0.7"),
+              entry(`${BASE}/sayfa/hakkimizda`, today, "monthly", "0.4"),
+              entry(`${BASE}/sayfa/iletisim`, today, "monthly", "0.4"),
+              entry(`${BASE}/sayfa/kvkk`, today, "monthly", "0.3"),
+              entry(`${BASE}/sayfa/gizlilik`, today, "monthly", "0.3"),
+              entry(`${BASE}/sayfa/kullanim`, today, "monthly", "0.3"),
+              entry(`${BASE}/sayfa/uyelik`, today, "monthly", "0.3"),
+            ];
+            let extra: string[] = [];
+            try {
+              const sql = await getSql();
+              const cats = await sql.query<{ slug: string; updated_at: string | null }>(
+                "SELECT slug, updated_at FROM categories ORDER BY sort_order, name",
+              );
+              const listings = await sql.query<{ slug: string; updated_at: string }>(
+                `SELECT slug, updated_at FROM listings WHERE status='ACTIVE' AND (expires_at IS NULL OR expires_at>now()) ORDER BY created_at DESC LIMIT 50000`,
+              );
+              extra = [
+                ...cats.map((c) => entry(`${BASE}/category/${c.slug}`, c.updated_at ? String(c.updated_at).slice(0,10) : today, "weekly", "0.7")),
+                ...listings.map((l) => entry(`${BASE}/ilan/${l.slug}`, String(l.updated_at).slice(0,10) || today, "daily", "0.6")),
+              ];
+            } catch { /* DB hatası */ }
+
+            const xml =
+              `<?xml version="1.0" encoding="UTF-8"?>\n` +
+              `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
+              [...staticUrls, ...extra].join("\n") +
+              `\n</urlset>`;
+            res.statusCode = 200;
+            res.setHeader("Content-Type", "application/xml; charset=utf-8");
+            res.end(xml);
+          } catch (err) {
+            console.error("[app-builder] /sitemap.xml failed:", err);
+            res.statusCode = 500;
+            res.end("sitemap error");
+          }
+          return;
+        }
+
+        if (path === "/robots.txt") {
+          const BASE = "https://geldesat.com";
+          const txt = [
+            "User-agent: *",
+            "Allow: /",
+            "",
+            "Disallow: /admin",
+            "Disallow: /profil",
+            "Disallow: /ilanlarim",
+            "Disallow: /mesajlar",
+            "Disallow: /favoriler",
+            "Disallow: /bildirimler",
+            "Disallow: /doping",
+            "Disallow: /arsiv",
+            "Disallow: /search",
+            "",
+            `Sitemap: ${BASE}/sitemap.xml`,
+          ].join("\n");
+          res.statusCode = 200;
+          res.setHeader("Content-Type", "text/plain; charset=utf-8");
+          res.end(txt);
+          return;
+        }
+
+        next();
+      });
+    },
+  };
+}
+
+/**
  * Live-preview OAuth popup — handled HERE so the agent never has to create a
  * `/auth/popup` route (and cannot break it by scaffolding a React page that
  * paints the full app shell in the popup).
@@ -159,6 +253,8 @@ export default defineConfig(({ command, isPreview }) => ({
   resolve: { tsconfigPaths: true },
   plugins: [
     pgliteBootstrapPlugin(),
+    // SEO: /sitemap.xml ve /robots.txt (dev modda Vite middleware)
+    seoPlugin(),
     // Before tanstackStart so /auth/popup never falls through to the SPA.
     authPopupPlugin(),
     // Dev-only /__app-env, read by scripts/check-auth-invariant.mjs.
