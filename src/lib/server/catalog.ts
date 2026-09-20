@@ -62,7 +62,9 @@ async function searchListings(f: SearchFilters): Promise<{
   }
 
   if (f.q?.trim()) {
-    const q = `%${f.q.trim()}%`;
+    // Escape LIKE wildcards so user-typed % and _ are literal characters
+    const escaped = f.q.trim().replace(/%/g, "\\%").replace(/_/g, "\\_");
+    const q = `%${escaped}%`;
     params.push(q);
     const i = params.length;
     params.push(q);
@@ -131,35 +133,40 @@ async function searchListings(f: SearchFilters): Promise<{
             ? "l.view_count desc, l.created_at desc"
             : `(l.featured_until is not null and l.featured_until > now()) desc, l.created_at desc`;
 
-  const countRows = await sql.query<{ n: number }>(
-    `select count(*)::int as n
-     from listings l
-     left join stores s on s.id = l.store_id
-     ${where}`,
-    params,
-  );
-  const total = countRows[0]?.n ?? 0;
+  // Snapshot params before appending limit/offset so COUNT uses the right set
+  const countParams = [...params];
 
   params.push(limit);
   const lim = params.length;
   params.push(offset);
   const off = params.length;
 
-  const rows = await sql.query<Record<string, unknown>>(
-    `select ${listingSelect("", true)},
-       coalesce((
-         select json_agg(b.kind) from boosts b
-         where b.listing_id = l.id and b.ends_at > now()
-       ), '[]'::json) as boosts
-     from listings l
-     join categories c on c.id = l.category_id
-     left join profiles p on p.user_id = l.user_id
-     left join stores s on s.id = l.store_id
-     ${where}
-     order by ${order}
-     limit $${lim} offset $${off}`,
-    params,
-  );
+  // Run COUNT and data fetch in parallel — cuts latency roughly in half
+  const [countRows, rows] = await Promise.all([
+    sql.query<{ n: number }>(
+      `select count(*)::int as n
+       from listings l
+       left join stores s on s.id = l.store_id
+       ${where}`,
+      countParams,
+    ),
+    sql.query<Record<string, unknown>>(
+      `select ${listingSelect("", true)},
+         coalesce((
+           select json_agg(b.kind) from boosts b
+           where b.listing_id = l.id and b.ends_at > now()
+         ), '[]'::json) as boosts
+       from listings l
+       join categories c on c.id = l.category_id
+       left join profiles p on p.user_id = l.user_id
+       left join stores s on s.id = l.store_id
+       ${where}
+       order by ${order}
+       limit $${lim} offset $${off}`,
+      params,
+    ),
+  ]);
+  const total = countRows[0]?.n ?? 0;
 
   return {
     listings: rows.map(mapListing),
@@ -235,16 +242,9 @@ export const searchCatalog = createServerFn({ method: "POST" })
   .handler(async ({ data }) => searchListings(data));
 
 export const featuredListings = createServerFn({ method: "GET" }).handler(async () => {
-  const featured = await searchListings({ featured: true, limit: 8, page: 1, sort: "date_desc" });
-  if (featured.listings.length >= 4) return featured.listings;
-  const latest = await searchListings({ limit: 8, page: 1, sort: "date_desc" });
-  const seen = new Set(featured.listings.map((l) => l.id));
-  const merged = [...featured.listings];
-  for (const l of latest.listings) {
-    if (!seen.has(l.id)) merged.push(l);
-    if (merged.length >= 8) break;
-  }
-  return merged;
+  // date_desc already sorts featured_until items first, so one call is enough
+  const result = await searchListings({ limit: 8, page: 1, sort: "date_desc" });
+  return result.listings;
 });
 
 export const getListing = createServerFn({ method: "POST" })
@@ -404,7 +404,14 @@ const SETTING_DEFAULTS: SiteSettings = {
   support_phone: "",
 };
 
+// In-memory cache — site settings rarely change; refresh every 60 s
+let _settingsCache: { data: SiteSettings; expiresAt: number } | null = null;
+const SETTINGS_TTL_MS = 60_000;
+
 export const getSiteSettings = createServerFn({ method: "GET" }).handler(async () => {
+  if (_settingsCache && Date.now() < _settingsCache.expiresAt) {
+    return _settingsCache.data;
+  }
   const sql = await getSql();
   try {
     const rows = await sql.query<{ key: string; value: string }>("select key, value from site_settings");
@@ -417,6 +424,7 @@ export const getSiteSettings = createServerFn({ method: "GET" }).handler(async (
       support_email: map.support_email || SETTING_DEFAULTS.support_email,
       support_phone: map.support_phone || "",
     };
+    _settingsCache = { data: settings, expiresAt: Date.now() + SETTINGS_TTL_MS };
     return settings;
   } catch {
     return SETTING_DEFAULTS;

@@ -39,7 +39,7 @@ export function parseSearch(s: Record<string, unknown>): CatalogSearch {
   };
 }
 
-function parseAttrs(raw?: string): Record<string, string[]> | undefined {
+export function parseAttrs(raw?: string): Record<string, string[]> | undefined {
   if (!raw) return undefined;
   try {
     const parsed = JSON.parse(raw) as unknown;

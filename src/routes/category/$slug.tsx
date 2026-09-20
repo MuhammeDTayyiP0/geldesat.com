@@ -1,8 +1,9 @@
 import { createFileRoute, Link, useNavigate, notFound } from "@tanstack/react-router";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, LayoutGrid, List as ListIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { getCategory, searchCatalog } from "@/lib/server/catalog";
-import { attrsToSearch, parseSearch, toFilters } from "@/lib/search-params";
+import { attrsToSearch, parseAttrs, parseSearch, toFilters } from "@/lib/search-params";
+
 import { ListingCard } from "@/components/listing/ListingCard";
 import { Filters, type FilterState } from "@/components/listing/Filters";
 import { SubcategoryGrid } from "@/components/listing/CategoryPicker";
@@ -32,22 +33,41 @@ export const Route = createFileRoute("/category/$slug")({
   component: CategoryPage,
 });
 
+/** Akıllı sayfalama: 1-2, current±1, son-2 + ... aralarında */
+function buildPageRange(page: number, pages: number): (number | "...")[] {
+  if (pages <= 10) return Array.from({ length: pages }, (_, i) => i + 1);
+  const near = new Set(
+    [1, 2, page - 1, page, page + 1, pages - 1, pages].filter((p) => p >= 1 && p <= pages),
+  );
+  const sorted = Array.from(near).sort((a, b) => a - b);
+  const out: (number | "...")[] = [];
+  for (let i = 0; i < sorted.length; i++) {
+    if (i > 0 && sorted[i] - sorted[i - 1] > 1) out.push("...");
+    out.push(sorted[i]);
+  }
+  return out;
+}
+
 function CategoryPage() {
   const { slug } = Route.useParams();
   const search = Route.useSearch();
   const { cat, result } = Route.useLoaderData();
   const nav = useNavigate();
+  const [view, setView] = useState<"list" | "grid">("list");
   const [mobile, setMobile] = useState(false);
+  const [mobileVisible, setMobileVisible] = useState(false);
+
+  function openMobile() {
+    setMobile(true);
+    requestAnimationFrame(() => requestAnimationFrame(() => setMobileVisible(true)));
+  }
+
+  function closeMobile() {
+    setMobileVisible(false);
+    setTimeout(() => setMobile(false), 300);
+  }
   const initial = useMemo<FilterState>(() => {
-    let attrs: Record<string, string[]> = {};
-    if (search.attrs) {
-      try {
-        const parsed = JSON.parse(search.attrs) as Record<string, string[]>;
-        if (parsed && typeof parsed === "object") attrs = parsed;
-      } catch {
-        attrs = {};
-      }
-    }
+    const attrs = parseAttrs(search.attrs) ?? {};
     return {
       city: search.city,
       district: search.district,
@@ -71,7 +91,7 @@ function CategoryPage() {
     return <p className="p-10 text-center text-muted">Kategori bulunamadı.</p>;
   }
 
-  function apply() {
+  function apply(extra?: { page?: string }) {
     void nav({
       to: "/category/$slug",
       params: { slug },
@@ -89,9 +109,10 @@ function CategoryPage() {
         minM2: filters.minM2,
         maxM2: filters.maxM2,
         attrs: attrsToSearch(filters.attrs),
+        page: extra?.page ?? "1",
       },
     });
-    setMobile(false);
+    closeMobile();
   }
 
   return (
@@ -108,16 +129,42 @@ function CategoryPage() {
         ))}
       </nav>
       <h1 className="text-2xl font-semibold tracking-tight">{cat.category.name}</h1>
-      <p className="mt-1 text-sm text-muted">{result.total} ilan</p>
+      <div className="mt-2 mb-4 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-muted">{result.total} ilan</p>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-sm lg:hidden"
+            onClick={openMobile}
+          >
+            Filtre
+          </button>
+          <div className="flex rounded-md border border-border">
+            <button
+              type="button"
+              className={`grid size-11 place-items-center ${view === "list" ? "bg-elevated" : ""}`}
+              onClick={() => setView("list")}
+              aria-label="Liste"
+            >
+              <ListIcon className="size-4" />
+            </button>
+            <button
+              type="button"
+              className={`grid size-11 place-items-center ${view === "grid" ? "bg-elevated" : ""}`}
+              onClick={() => setView("grid")}
+              aria-label="Izgara"
+            >
+              <LayoutGrid className="size-4" />
+            </button>
+          </div>
+        </div>
+      </div>
       <SubcategoryGrid items={cat.children} />
       <div className="mt-8 grid gap-6 lg:grid-cols-[280px_1fr]">
         <div className="hidden lg:block">
-          <Filters value={filters} onChange={setFilters} onApply={apply} attributes={cat.attributes} />
+          <Filters value={filters} onChange={setFilters} onApply={() => apply()} attributes={cat.attributes} />
         </div>
         <div>
-          <Button variant="outline" className="mb-4 lg:hidden" onClick={() => setMobile(true)}>
-            Filtre
-          </Button>
           {result.listings.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border bg-surface p-16 text-center">
               <p className="text-muted">Bu kategoride ilan yok.</p>
@@ -126,21 +173,74 @@ function CategoryPage() {
               </Link>
             </div>
           ) : (
-            <div className="grid gap-3">
+            <div className={view === "grid" ? "grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3" : "grid gap-3"}>
               {result.listings.map((l: any) => (
-                <ListingCard key={l.id} listing={l} variant="list" />
+                <ListingCard key={l.id} listing={l} variant={view} />
               ))}
             </div>
           )}
+          {/* Sayfalama — sınırsız sayfa, Önceki/Sonraki butonları dahil */}
+          {result.pages > 1 ? (
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-1">
+              <button
+                type="button"
+                disabled={result.page <= 1}
+                onClick={() => apply({ page: String(result.page - 1) })}
+                className="rounded-md border border-border px-3 py-2 text-sm transition-colors hover:bg-elevated disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                ← Önceki
+              </button>
+              {buildPageRange(result.page, result.pages).map((p, i) =>
+                p === "..." ? (
+                  <span key={`e${i}`} className="grid size-10 select-none place-items-center text-muted">
+                    …
+                  </span>
+                ) : (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => apply({ page: String(p) })}
+                    className={`size-10 rounded-md transition-colors ${
+                      p === result.page
+                        ? "bg-ink text-primary-fg"
+                        : "border border-border hover:bg-elevated"
+                    }`}
+                  >
+                    {p}
+                  </button>
+                ),
+              )}
+              <button
+                type="button"
+                disabled={result.page >= result.pages}
+                onClick={() => apply({ page: String(result.page + 1) })}
+                className="rounded-md border border-border px-3 py-2 text-sm transition-colors hover:bg-elevated disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Sonraki →
+              </button>
+            </div>
+          ) : null}
         </div>
       </div>
+      {/* Mobile filtre — açılma/kapanma animasyonlu */}
       {mobile ? (
-        <div className="fixed inset-0 z-50 bg-ink/40 lg:hidden" onClick={() => setMobile(false)}>
-          <div className="absolute inset-x-0 bottom-0 max-h-[85dvh] overflow-auto rounded-t-xl bg-bg p-4" onClick={(e) => e.stopPropagation()}>
-            <Filters value={filters} onChange={setFilters} onApply={apply} attributes={cat.attributes} />
+        <div
+          className={`fixed inset-0 z-50 lg:hidden transition-colors duration-300 ${
+            mobileVisible ? "bg-ink/40" : "bg-transparent"
+          }`}
+          onClick={closeMobile}
+        >
+          <div
+            className={`absolute inset-x-0 bottom-0 max-h-[85dvh] overflow-auto rounded-t-xl bg-bg p-4 transition-transform duration-300 ${
+              mobileVisible ? "translate-y-0" : "translate-y-full"
+            }`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Filters value={filters} onChange={setFilters} onApply={() => apply()} attributes={cat.attributes} />
           </div>
         </div>
       ) : null}
+
     </div>
   );
 }

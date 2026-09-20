@@ -2,7 +2,8 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { LayoutGrid, List as ListIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { getCategory, searchCatalog } from "@/lib/server/catalog";
-import { attrsToSearch, parseSearch, toFilters, type CatalogSearch } from "@/lib/search-params";
+import { attrsToSearch, parseAttrs, parseSearch, toFilters, type CatalogSearch } from "@/lib/search-params";
+
 import { ListingCard } from "@/components/listing/ListingCard";
 import { Filters, type FilterState } from "@/components/listing/Filters";
 import { ListingGridSkeleton } from "@/components/listing/ListingGridSkeleton";
@@ -23,6 +24,21 @@ export const Route = createFileRoute("/search")({
   component: SearchPage,
 });
 
+/** Akıllı sayfalama: 1-2, current±1, son-2 + ... aralarında */
+function buildPageRange(page: number, pages: number): (number | "...")[] {
+  if (pages <= 10) return Array.from({ length: pages }, (_, i) => i + 1);
+  const near = new Set(
+    [1, 2, page - 1, page, page + 1, pages - 1, pages].filter((p) => p >= 1 && p <= pages),
+  );
+  const sorted = Array.from(near).sort((a, b) => a - b);
+  const out: (number | "...")[] = [];
+  for (let i = 0; i < sorted.length; i++) {
+    if (i > 0 && sorted[i] - sorted[i - 1] > 1) out.push("...");
+    out.push(sorted[i]);
+  }
+  return out;
+}
+
 function SearchPage() {
   const search = Route.useSearch();
   const { result, attributes } = Route.useLoaderData();
@@ -30,16 +46,22 @@ function SearchPage() {
   const user = useCurrentUser();
   const [view, setView] = useState<"list" | "grid">("list");
   const [mobile, setMobile] = useState(false);
+  const [mobileVisible, setMobileVisible] = useState(false);
+
+  function openMobile() {
+    setMobile(true);
+    // Double rAF: ensure element is in DOM before triggering CSS transition
+    requestAnimationFrame(() => requestAnimationFrame(() => setMobileVisible(true)));
+  }
+
+  function closeMobile() {
+    setMobileVisible(false);
+    // Wait for CSS transition (300ms) before removing from DOM
+    setTimeout(() => setMobile(false), 300);
+  }
   const initial = useMemo<FilterState>(() => {
-    let attrs: Record<string, string[]> = {};
-    if (search.attrs) {
-      try {
-        const parsed = JSON.parse(search.attrs) as Record<string, string[]>;
-        if (parsed && typeof parsed === "object") attrs = parsed;
-      } catch {
-        attrs = {};
-      }
-    }
+    // Use the shared parseAttrs helper — no duplicate JSON parse logic
+    const attrs = parseAttrs(search.attrs) ?? {};
     return {
       city: search.city,
       district: search.district,
@@ -79,7 +101,7 @@ function SearchPage() {
       ...extra,
     };
     void nav({ to: "/search", search: next });
-    setMobile(false);
+    closeMobile();
   }
 
   return (
@@ -90,7 +112,7 @@ function SearchPage() {
           <p className="text-sm text-muted">{result.total} ilan</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="lg:hidden" onClick={() => setMobile(true)}>
+          <Button variant="outline" className="lg:hidden" onClick={openMobile}>
             Filtre
           </Button>
           {user ? (
@@ -152,25 +174,63 @@ function SearchPage() {
               ))}
             </div>
           )}
+          {/* Sayfalama — sınırsız sayfa, Önceki/Sonraki butonları dahil */}
           {result.pages > 1 ? (
-            <div className="mt-6 flex justify-center gap-2">
-              {Array.from({ length: Math.min(result.pages, 12) }, (_, i) => i + 1).map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => apply({ page: String(p) })}
-                  className={`size-10 rounded-md ${p === result.page ? "bg-ink text-primary-fg" : "border border-border"}`}
-                >
-                  {p}
-                </button>
-              ))}
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-1">
+              <button
+                type="button"
+                disabled={result.page <= 1}
+                onClick={() => apply({ page: String(result.page - 1) })}
+                className="rounded-md border border-border px-3 py-2 text-sm transition-colors hover:bg-elevated disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                ← Önceki
+              </button>
+              {buildPageRange(result.page, result.pages).map((p, i) =>
+                p === "..." ? (
+                  <span key={`e${i}`} className="grid size-10 select-none place-items-center text-muted">
+                    …
+                  </span>
+                ) : (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => apply({ page: String(p) })}
+                    className={`size-10 rounded-md transition-colors ${
+                      p === result.page
+                        ? "bg-ink text-primary-fg"
+                        : "border border-border hover:bg-elevated"
+                    }`}
+                  >
+                    {p}
+                  </button>
+                ),
+              )}
+              <button
+                type="button"
+                disabled={result.page >= result.pages}
+                onClick={() => apply({ page: String(result.page + 1) })}
+                className="rounded-md border border-border px-3 py-2 text-sm transition-colors hover:bg-elevated disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Sonraki →
+              </button>
             </div>
           ) : null}
         </div>
       </div>
+      {/* Mobile filtre — açılma/kapanma animasyonlu */}
       {mobile ? (
-        <div className="fixed inset-0 z-50 bg-ink/40 lg:hidden" onClick={() => setMobile(false)}>
-          <div className="absolute inset-x-0 bottom-0 max-h-[85dvh] overflow-auto rounded-t-xl bg-bg p-4" onClick={(e) => e.stopPropagation()}>
+        <div
+          className={`fixed inset-0 z-50 lg:hidden transition-colors duration-300 ${
+            mobileVisible ? "bg-ink/40" : "bg-transparent"
+          }`}
+          onClick={closeMobile}
+        >
+          <div
+            className={`absolute inset-x-0 bottom-0 max-h-[85dvh] overflow-auto rounded-t-xl bg-bg p-4 transition-transform duration-300 ${
+              mobileVisible ? "translate-y-0" : "translate-y-full"
+            }`}
+            onClick={(e) => e.stopPropagation()}
+          >
             <Filters value={filters} onChange={setFilters} onApply={() => apply()} attributes={attributes} />
           </div>
         </div>
