@@ -88,7 +88,7 @@ function Mine() {
                       Yayından kaldır
                     </Button>
                   ) : null}
-                  {l.status === "INACTIVE" && !expired ? (
+                  {(l.status === "INACTIVE" || l.status === "SOLD") && !expired ? (
                     <Button size="sm" variant="outline" onClick={() => setListingStatus({ data: { id: l.id, status: "ACTIVE" } }).then(reload)}>
                       Yayına al
                     </Button>

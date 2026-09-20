@@ -11,6 +11,7 @@ import {
   type ListingCard,
 } from "./helpers";
 import { CITY_COORDS } from "@/lib/data/geo";
+import { getSessionUser } from "@/lib/auth/verify.server";
 
 const Filters = z.object({
   q: z.string().optional(),
@@ -264,6 +265,21 @@ export const getListing = createServerFn({ method: "POST" })
     );
     if (!rows[0]) return null;
     const listing = mapListing(rows[0]);
+
+    // Yayında olmayan ilanlar sadece sahibine veya admin'e görünür
+    const isPubliclyVisible = listing.status === "ACTIVE";
+    if (!isPubliclyVisible) {
+      const sessionUser = await getSessionUser();
+      if (!sessionUser) return null;
+      // Sahibi mi veya admin mi kontrol et
+      const profile = await sql.query<{ role: string }>(
+        "select role from profiles where user_id=$1",
+        [sessionUser.id],
+      );
+      const isOwner = listing.user_id === sessionUser.id;
+      const isAdmin = profile[0]?.role === "ADMIN";
+      if (!isOwner && !isAdmin) return null;
+    }
     if ((listing.lat == null || listing.lng == null) && listing.city && CITY_COORDS[listing.city]) {
       listing.lat = CITY_COORDS[listing.city].lat;
       listing.lng = CITY_COORDS[listing.city].lng;
