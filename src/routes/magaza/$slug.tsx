@@ -18,7 +18,7 @@ export const Route = createFileRoute("/magaza/$slug")({
   head: ({ loaderData }) => {
     if (!loaderData?.store) return { meta: [] };
     const { store } = loaderData;
-    const BASE = "https://geldesat.com";
+    const BASE = "https://www.geldesat.com";
     const pageUrl = `${BASE}/magaza/${store.slug}`;
     const title = `${store.name} | GeldeSat Mağaza`;
     const desc = store.description

@@ -20,7 +20,7 @@ export const Route = createFileRoute("/sayfa/$slug")({
   ),
   head: ({ loaderData }) => {
     if (!loaderData) return { meta: [] };
-    const BASE = "https://geldesat.com";
+    const BASE = "https://www.geldesat.com";
     const pageUrl = `${BASE}/sayfa/${loaderData.slug}`;
     const title = `${loaderData.title} | GeldeSat`;
     const desc = loaderData.body

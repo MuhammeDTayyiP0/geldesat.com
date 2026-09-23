@@ -14,7 +14,7 @@ const APP_NAME = "GeldeSat";
 /** Inline, render-blocking paint so the first frame is never unstyled HTML. */
 const CRITICAL_CSS = `html,body{background:#f3f5f8;color:#12151c}body{margin:0;min-height:100dvh;visibility:hidden;font-family:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased}`;
 
-const BASE = "https://geldesat.com";
+const BASE = "https://www.geldesat.com";
 
 export const Route = createRootRoute({
   head: () => ({

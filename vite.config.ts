@@ -64,7 +64,7 @@ function seoPlugin(): Plugin {
         const rawUrl = req.url ?? "";
         const [path, qs = ""] = rawUrl.split("?");
         const params = new URLSearchParams(qs);
-        const BASE = "https://geldesat.com";
+        const BASE = "https://www.geldesat.com";
         const today = new Date().toISOString().slice(0, 10);
 
         const esc = (s: string) =>
@@ -151,12 +151,12 @@ function seoPlugin(): Plugin {
         if (path === "/sitemap-categories.xml") {
           try {
             const sql = await getSql();
-            const cats = await sql.query<{ slug: string; updated_at: string | null }>(
-              "SELECT slug, updated_at FROM categories ORDER BY sort_order, name",
+            const cats = await sql.query<{ slug: string }>(
+              "SELECT slug FROM categories ORDER BY sort_order, name",
             );
             sendXml(wrapUrlset(
               cats.map((c) =>
-                entry(`${BASE}/category/${c.slug}`, c.updated_at ? String(c.updated_at).slice(0, 10) : today, "weekly", "0.7"),
+                entry(`${BASE}/category/${c.slug}`, today, "weekly", "0.7"),
               ),
             ));
           } catch { sendXml(wrapUrlset([])); }
@@ -186,12 +186,12 @@ function seoPlugin(): Plugin {
         if (path === "/sitemap-stores.xml") {
           try {
             const sql = await getSql();
-            const stores = await sql.query<{ slug: string; updated_at: string | null }>(
-              "SELECT slug, updated_at FROM stores ORDER BY created_at DESC LIMIT 10000",
+            const stores = await sql.query<{ slug: string; created_at: string }>(
+              "SELECT slug, created_at FROM stores ORDER BY created_at DESC LIMIT 10000",
             );
             sendXml(wrapUrlset(
               stores.map((s) =>
-                entry(`${BASE}/magaza/${s.slug}`, s.updated_at ? String(s.updated_at).slice(0, 10) : today, "weekly", "0.5"),
+                entry(`${BASE}/magaza/${s.slug}`, s.created_at ? String(s.created_at).slice(0, 10) : today, "weekly", "0.5"),
               ),
             ));
           } catch { sendXml(wrapUrlset([])); }
@@ -202,12 +202,12 @@ function seoPlugin(): Plugin {
         if (path === "/sitemap-sellers.xml") {
           try {
             const sql = await getSql();
-            const sellers = await sql.query<{ user_id: string; updated_at: string | null }>(
-              "SELECT user_id, updated_at FROM profiles ORDER BY created_at DESC LIMIT 10000",
+            const sellers = await sql.query<{ user_id: string; created_at: string }>(
+              "SELECT user_id, created_at FROM profiles ORDER BY created_at DESC LIMIT 10000",
             );
             sendXml(wrapUrlset(
               sellers.map((p) =>
-                entry(`${BASE}/satici/${p.user_id}`, p.updated_at ? String(p.updated_at).slice(0, 10) : today, "weekly", "0.4"),
+                entry(`${BASE}/satici/${p.user_id}`, p.created_at ? String(p.created_at).slice(0, 10) : today, "weekly", "0.4"),
               ),
             ));
           } catch { sendXml(wrapUrlset([])); }

@@ -12,7 +12,7 @@ export const Route = createFileRoute("/")({
     return { cats, featured, stats };
   },
   head: () => {
-    const BASE = "https://geldesat.com";
+    const BASE = "https://www.geldesat.com";
     return {
       meta: [
         { title: "GeldeSat — Türkiye İlan Platformu | Ücretsiz İlan Ver" },

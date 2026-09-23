@@ -118,14 +118,14 @@ async function buildCategoriesSitemap(): Promise<string> {
   try {
     const { getSql } = await import("../../src/lib/db");
     const sql = await getSql();
-    const cats = await sql.query<{ slug: string; updated_at: string | null }>(
-      "SELECT slug, updated_at FROM categories ORDER BY sort_order, name",
+    const cats = await sql.query<{ slug: string }>(
+      "SELECT slug FROM categories ORDER BY sort_order, name",
     );
     return wrapUrlset(
       cats.map((c) =>
         urlEntry(
           `${BASE_URL}/category/${c.slug}`,
-          c.updated_at ? String(c.updated_at).slice(0, 10) : today,
+          today,
           "weekly",
           "0.7",
         ),
@@ -171,14 +171,14 @@ async function buildStoresSitemap(): Promise<string> {
   try {
     const { getSql } = await import("../../src/lib/db");
     const sql = await getSql();
-    const stores = await sql.query<{ slug: string; updated_at: string | null }>(
-      "SELECT slug, updated_at FROM stores ORDER BY created_at DESC LIMIT 10000",
+    const stores = await sql.query<{ slug: string; created_at: string }>(
+      "SELECT slug, created_at FROM stores ORDER BY created_at DESC LIMIT 10000",
     );
     return wrapUrlset(
       stores.map((s) =>
         urlEntry(
           `${BASE_URL}/magaza/${s.slug}`,
-          s.updated_at ? String(s.updated_at).slice(0, 10) : today,
+          s.created_at ? String(s.created_at).slice(0, 10) : today,
           "weekly",
           "0.5",
         ),
@@ -196,14 +196,14 @@ async function buildSellersSitemap(): Promise<string> {
   try {
     const { getSql } = await import("../../src/lib/db");
     const sql = await getSql();
-    const sellers = await sql.query<{ user_id: string; updated_at: string | null }>(
-      `SELECT user_id, updated_at FROM profiles ORDER BY created_at DESC LIMIT 10000`,
+    const sellers = await sql.query<{ user_id: string; created_at: string }>(
+      `SELECT user_id, created_at FROM profiles ORDER BY created_at DESC LIMIT 10000`,
     );
     return wrapUrlset(
       sellers.map((p) =>
         urlEntry(
           `${BASE_URL}/satici/${p.user_id}`,
-          p.updated_at ? String(p.updated_at).slice(0, 10) : today,
+          p.created_at ? String(p.created_at).slice(0, 10) : today,
           "weekly",
           "0.4",
         ),

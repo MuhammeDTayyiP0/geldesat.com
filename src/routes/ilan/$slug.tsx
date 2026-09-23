@@ -82,7 +82,7 @@ export const Route = createFileRoute("/ilan/$slug")({
       ? listing.description.replace(/\s+/g, " ").slice(0, 160)
       : `${listing.title} ilanı GeldeSat'ta. Fiyat ve tüm teknik özellikler için hemen tıklayın.`;
 
-    const BASE = "https://geldesat.com";
+    const BASE = "https://www.geldesat.com";
     const pageUrl = `${BASE}/ilan/${listing.slug}`;
 
     // OG image — her zaman tam URL (göreceli yolu mutlak URL'e çevir)
