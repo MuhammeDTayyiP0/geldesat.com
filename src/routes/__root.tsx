@@ -14,30 +14,39 @@ const APP_NAME = "GeldeSat";
 /** Inline, render-blocking paint so the first frame is never unstyled HTML. */
 const CRITICAL_CSS = `html,body{background:#f3f5f8;color:#12151c}body{margin:0;min-height:100dvh;visibility:hidden;font-family:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased}`;
 
+const BASE = "https://geldesat.com";
+
 export const Route = createRootRoute({
   head: () => ({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1, interactive-widget=resizes-content" },
-      { title: `${APP_NAME} — Türkiye ilan platformu` },
+      // Fallback title — her route kendi title'ını override eder
+      { title: `${APP_NAME} — Türkiye İlan Platformu` },
       { name: "description", content: "GeldeSat — Türkiye'nin ilan platformu. Emlak, vasıta, ikinci el eşya ve hizmet ilanlarını ücretsiz verin, kolayca alın-satın. Güvenli iletişim, anlık mesajlaşma." },
       { name: "theme-color", content: "#1A4FD8" },
       { name: "robots", content: "index,follow" },
+      // Coğrafi meta etiketler — Türkiye aramaları için
+      { name: "geo.region", content: "TR" },
+      { name: "geo.country", content: "Turkey" },
+      { name: "geo.placename", content: "Türkiye" },
+      { name: "language", content: "Turkish" },
       // Open Graph
       { property: "og:site_name", content: APP_NAME },
       { property: "og:locale", content: "tr_TR" },
       { property: "og:type", content: "website" },
-      { property: "og:title", content: `${APP_NAME} — Türkiye ilan platformu` },
+      { property: "og:title", content: `${APP_NAME} — Türkiye İlan Platformu` },
       { property: "og:description", content: "Emlak, vasıta ve ikinci el ilanlar. Güvenli alım satım." },
-      { property: "og:image", content: "https://geldesat.com/og.jpg" },
+      { property: "og:image", content: `${BASE}/og.jpg` },
       { property: "og:image:width", content: "1200" },
       { property: "og:image:height", content: "630" },
-      { property: "og:url", content: "https://geldesat.com" },
+      { property: "og:url", content: BASE },
       // Twitter / X
       { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:title", content: `${APP_NAME} — Türkiye ilan platformu` },
+      { name: "twitter:site", content: "@geldesat" },
+      { name: "twitter:title", content: `${APP_NAME} — Türkiye İlan Platformu` },
       { name: "twitter:description", content: "Emlak, vasıta ve ikinci el ilanlar. Güvenli alım satım." },
-      { name: "twitter:image", content: "https://geldesat.com/og.jpg" },
+      { name: "twitter:image", content: `${BASE}/og.jpg` },
     ],
     links: [
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
@@ -45,6 +54,9 @@ export const Route = createRootRoute({
       { rel: "stylesheet", href: appCss },
       { rel: "manifest", href: "/__grok/manifest.webmanifest" },
       { rel: "apple-touch-icon", href: "/__grok/icon-180.png" },
+      // hreflang — Google Türkiye aramaları için kritik
+      { rel: "alternate", hrefLang: "tr", href: BASE },
+      { rel: "alternate", hrefLang: "x-default", href: BASE },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
@@ -53,6 +65,27 @@ export const Route = createRootRoute({
       },
     ],
     styles: [{ children: CRITICAL_CSS }],
+    scripts: [
+      {
+        type: "application/ld+json",
+        children: JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "Organization",
+          name: APP_NAME,
+          url: BASE,
+          logo: `${BASE}/favicon.svg`,
+          sameAs: [],
+          contactPoint: [
+            {
+              "@type": "ContactPoint",
+              contactType: "customer support",
+              availableLanguage: "Turkish",
+              url: `${BASE}/sayfa/iletisim`,
+            },
+          ],
+        }),
+      },
+    ],
   }),
   component: Root,
   notFoundComponent: () => <NotFound />,

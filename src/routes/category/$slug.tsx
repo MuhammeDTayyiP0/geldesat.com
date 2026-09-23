@@ -36,8 +36,9 @@ export const Route = createFileRoute("/category/$slug")({
     const result = loaderData.result;
     const BASE = "https://geldesat.com";
     const pageUrl = `${BASE}/category/${category.slug}`;
-    const title = `${category.name} İlanları | GeldeSat`;
-    const desc = `GeldeSat'ta ${category.name} kategorisindeki güncel ilanları inceleyin. Fiyat ve özelliklere göre filtreleyin.`;
+    const totalCount = result?.total ?? 0;
+    const title = `${category.name} İlanları${totalCount > 0 ? ` (${totalCount.toLocaleString("tr-TR")} ilan)` : ""} | GeldeSat`;
+    const desc = `GeldeSat'ta ${category.name} kategorisinde ${totalCount > 0 ? `${totalCount.toLocaleString("tr-TR")} güncel` : "güncel"} ilan. Fiyat ve özelliklere göre filtreleyin, satıcıyla doğrudan iletişime geçin.`;
 
     // BreadcrumbList
     const breadcrumbItems = [
@@ -69,6 +70,16 @@ export const Route = createFileRoute("/category/$slug")({
       });
     }
 
+    // ItemList — kategorideki ilanlar (Google'a liste sinyali verir)
+    const itemListElements = (result?.listings ?? []).slice(0, 10).map(
+      (l: { slug: string; title: string }, i: number) => ({
+        "@type": "ListItem",
+        position: i + 1,
+        name: l.title,
+        url: `${BASE}/ilan/${l.slug}`,
+      }),
+    );
+
     return {
       meta: [
         { title },
@@ -82,6 +93,8 @@ export const Route = createFileRoute("/category/$slug")({
         { property: "og:title", content: title },
         { property: "og:description", content: desc },
         { property: "og:image", content: `${BASE}/og.jpg` },
+        { property: "og:image:width", content: "1200" },
+        { property: "og:image:height", content: "630" },
         // Twitter / X
         { name: "twitter:card", content: "summary_large_image" },
         { name: "twitter:title", content: title },
@@ -98,9 +111,26 @@ export const Route = createFileRoute("/category/$slug")({
             itemListElement: breadcrumbItems,
           }),
         },
+        ...(itemListElements.length > 0
+          ? [
+              {
+                type: "application/ld+json",
+                children: JSON.stringify({
+                  "@context": "https://schema.org/",
+                  "@type": "ItemList",
+                  name: `${category.name} İlanları`,
+                  description: desc,
+                  url: pageUrl,
+                  numberOfItems: totalCount,
+                  itemListElement: itemListElements,
+                }),
+              },
+            ]
+          : []),
       ],
     };
   },
+
   pendingComponent: ListingGridSkeleton,
   component: CategoryPage,
 });

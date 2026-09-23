@@ -111,23 +111,34 @@ export const Route = createFileRoute("/ilan/$slug")({
     ];
 
     // Product + Offer schema
+    const datePublished = listing.created_at
+      ? new Date(listing.created_at).toISOString()
+      : undefined;
+    const dateModified = listing.updated_at
+      ? new Date(listing.updated_at).toISOString()
+      : datePublished;
+
     const productSchema: Record<string, unknown> = {
       "@context": "https://schema.org/",
       "@type": "Product",
       name: listing.title,
       description: desc,
       url: pageUrl,
+      sku: listing.id?.substring(0, 8),
+      ...(datePublished ? { datePublished } : {}),
+      ...(dateModified ? { dateModified } : {}),
       ...(absoluteImages.length > 0 ? { image: absoluteImages } : {}),
       offers: {
         "@type": "Offer",
         priceCurrency: listing.currency || "TRY",
         price: listing.price,
+        priceValidUntil: new Date(Date.now() + 30 * 86400_000).toISOString().slice(0, 10),
         availability:
           listing.status === "ACTIVE"
             ? "https://schema.org/InStock"
             : "https://schema.org/OutOfStock",
         url: pageUrl,
-        ...(listing.city ? { availableAtOrFrom: { "@type": "Place", name: listing.city } } : {}),
+        ...(listing.city ? { availableAtOrFrom: { "@type": "Place", name: listing.city, address: { "@type": "PostalAddress", addressLocality: listing.city, addressCountry: "TR" } } } : {}),
       },
     };
 
@@ -135,12 +146,15 @@ export const Route = createFileRoute("/ilan/$slug")({
       productSchema.seller = {
         "@type": "Person",
         name: seller.name,
+        url: `${BASE}/satici/${seller.id ?? ""}`,
         ...(seller.rating_count > 0
           ? {
               aggregateRating: {
                 "@type": "AggregateRating",
                 ratingValue: seller.rating_avg.toFixed(1),
                 reviewCount: seller.rating_count,
+                bestRating: 5,
+                worstRating: 1,
               },
             }
           : {}),
@@ -152,6 +166,7 @@ export const Route = createFileRoute("/ilan/$slug")({
         { title: `${listing.title} - ${formatPrice(listing.price)} | GeldeSat` },
         { name: "description", content: desc },
         { name: "robots", content: listing.status === "ACTIVE" ? "index,follow" : "noindex,nofollow" },
+        ...(seller?.name ? [{ name: "author", content: seller.name }] : []),
         // Open Graph
         { property: "og:site_name", content: "GeldeSat" },
         { property: "og:locale", content: "tr_TR" },
@@ -162,6 +177,9 @@ export const Route = createFileRoute("/ilan/$slug")({
         { property: "og:image", content: coverImage },
         { property: "og:image:width", content: "1200" },
         { property: "og:image:height", content: "630" },
+        ...(dateModified ? [{ property: "og:updated_time", content: dateModified }] : []),
+        ...(datePublished ? [{ property: "article:published_time", content: datePublished }] : []),
+        ...(dateModified ? [{ property: "article:modified_time", content: dateModified }] : []),
         // Twitter / X
         { name: "twitter:card", content: "summary_large_image" },
         { name: "twitter:title", content: `${listing.title} - ${formatPrice(listing.price)}` },

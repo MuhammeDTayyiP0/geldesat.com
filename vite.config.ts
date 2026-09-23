@@ -6,9 +6,9 @@ import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { nitro } from "nitro/vite";
-// @ts-expect-error JS plugin alongside the TS vite config
+// @ts-ignore JS plugin alongside the TS vite config
 import { grokPwaPlugin } from "./scripts/grok-pwa-plugin.mjs";
-// @ts-expect-error JS plugin alongside the TS vite config
+// @ts-ignore JS plugin alongside the TS vite config
 import { appEnvPlugin } from "./scripts/app-env-plugin.mjs";
 import { isMigrationFile } from "./scripts/migration-plan.mjs";
 
@@ -52,7 +52,7 @@ function pgliteBootstrapPlugin(): Plugin {
 }
 
 /**
- * Dev-only Vite middleware for /sitemap.xml and /robots.txt.
+ * Dev-only Vite middleware for sitemap index + sub-sitemaps + robots.txt.
  * Production: Nitro middleware in server/middleware/seo.ts handles these.
  */
 function seoPlugin(): Plugin {
@@ -61,70 +61,67 @@ function seoPlugin(): Plugin {
     apply: "serve",
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
-        const path = (req.url ?? "").split("?", 1)[0] ?? "";
+        const rawUrl = req.url ?? "";
+        const [path, qs = ""] = rawUrl.split("?");
+        const params = new URLSearchParams(qs);
+        const BASE = "https://geldesat.com";
+        const today = new Date().toISOString().slice(0, 10);
 
+        const esc = (s: string) =>
+          s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const entry = (loc: string, lm: string, cf: string, p: string) =>
+          `  <url>\n    <loc>${esc(loc)}</loc>\n    <lastmod>${lm}</lastmod>\n    <changefreq>${cf}</changefreq>\n    <priority>${p}</priority>\n  </url>`;
+        const wrapUrlset = (entries: string[]) =>
+          `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${entries.join("\n")}\n</urlset>`;
+
+        const sendXml = (body: string) => {
+          res.statusCode = 200;
+          res.setHeader("Content-Type", "application/xml; charset=utf-8");
+          res.end(body);
+        };
+
+        // Helper to get SQL connection
+        async function getSql() {
+          const { getSql: _getSql } = (await server.ssrLoadModule("/src/lib/db.ts")) as {
+            getSql: () => Promise<{ query: <T>(sql: string, params?: unknown[]) => Promise<T[]> }>;
+          };
+          return _getSql();
+        }
+
+        // ── /sitemap.xml — index ──
         if (path === "/sitemap.xml") {
           try {
-            const { getSql } = (await server.ssrLoadModule("/src/lib/db.ts")) as {
-              getSql: () => Promise<{ query: <T>(sql: string, params?: unknown[]) => Promise<T[]> }>;
-            };
-            const today = new Date().toISOString().slice(0, 10);
-            const BASE = "https://geldesat.com";
-            const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-            const entry = (loc: string, lm: string, cf: string, p: string) =>
-              `  <url>\n    <loc>${esc(loc)}</loc>\n    <lastmod>${lm}</lastmod>\n    <changefreq>${cf}</changefreq>\n    <priority>${p}</priority>\n  </url>`;
-
-            const staticUrls = [
-              entry(`${BASE}/`, today, "daily", "1.0"),
-              entry(`${BASE}/ilan-ver`, today, "weekly", "0.7"),
-              // Kurumsal / yasal sayfalar
-              entry(`${BASE}/sayfa/hakkimizda`, today, "monthly", "0.4"),
-              entry(`${BASE}/sayfa/iletisim`, today, "monthly", "0.4"),
-              entry(`${BASE}/sayfa/kvkk`, today, "monthly", "0.3"),
-              entry(`${BASE}/sayfa/gizlilik`, today, "monthly", "0.3"),
-              entry(`${BASE}/sayfa/cerez`, today, "monthly", "0.3"),
-              entry(`${BASE}/sayfa/kullanim`, today, "monthly", "0.3"),
-              entry(`${BASE}/sayfa/uyelik`, today, "monthly", "0.3"),
-            ];
-            let extra: string[] = [];
+            let listingPages = 1;
             try {
               const sql = await getSql();
-              const cats = await sql.query<{ slug: string; updated_at: string | null }>(
-                "SELECT slug, updated_at FROM categories ORDER BY sort_order, name",
+              const res2 = await sql.query<{ cnt: string }>(
+                `SELECT COUNT(*) AS cnt FROM listings WHERE status='ACTIVE' AND (expires_at IS NULL OR expires_at>now())`,
               );
-              const listings = await sql.query<{ slug: string; updated_at: string }>(
-                `SELECT slug, updated_at FROM listings WHERE status='ACTIVE' AND (expires_at IS NULL OR expires_at>now()) ORDER BY created_at DESC LIMIT 50000`,
-              );
-              let storeEntries: string[] = [];
-              let sellerEntries: string[] = [];
-              try {
-                const stores = await sql.query<{ slug: string; updated_at: string | null }>(
-                  "SELECT slug, updated_at FROM stores ORDER BY created_at DESC LIMIT 10000",
-                );
-                storeEntries = stores.map((s) => entry(`${BASE}/magaza/${s.slug}`, s.updated_at ? String(s.updated_at).slice(0,10) : today, "weekly", "0.5"));
-              } catch { /* stores tablosu yoksa atla */ }
-              try {
-                const sellers = await sql.query<{ user_id: string; updated_at: string | null }>(
-                  "SELECT user_id, updated_at FROM profiles ORDER BY created_at DESC LIMIT 10000",
-                );
-                sellerEntries = sellers.map((p) => entry(`${BASE}/satici/${p.user_id}`, p.updated_at ? String(p.updated_at).slice(0,10) : today, "weekly", "0.4"));
-              } catch { /* profiles tablosu yoksa atla */ }
-              extra = [
-                ...cats.map((c) => entry(`${BASE}/category/${c.slug}`, c.updated_at ? String(c.updated_at).slice(0,10) : today, "weekly", "0.7")),
-                ...listings.map((l) => entry(`${BASE}/ilan/${l.slug}`, String(l.updated_at).slice(0,10) || today, "daily", "0.6")),
-                ...storeEntries,
-                ...sellerEntries,
-              ];
-            } catch { /* DB hatası */ }
+              const total = parseInt(res2[0]?.cnt ?? "0", 10);
+              listingPages = Math.max(1, Math.ceil(total / 10000));
+            } catch { /* DB bağlantısı yoksa 1 sayfa */ }
 
+            const sitemaps = [
+              { loc: `${BASE}/sitemap-static.xml`, lastmod: today },
+              { loc: `${BASE}/sitemap-categories.xml`, lastmod: today },
+              ...Array.from({ length: listingPages }, (_, i) => ({
+                loc: `${BASE}/sitemap-listings.xml?page=${i + 1}`,
+                lastmod: today,
+              })),
+              { loc: `${BASE}/sitemap-stores.xml`, lastmod: today },
+              { loc: `${BASE}/sitemap-sellers.xml`, lastmod: today },
+            ];
             const xml =
               `<?xml version="1.0" encoding="UTF-8"?>\n` +
-              `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
-              [...staticUrls, ...extra].join("\n") +
-              `\n</urlset>`;
-            res.statusCode = 200;
-            res.setHeader("Content-Type", "application/xml; charset=utf-8");
-            res.end(xml);
+              `<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
+              sitemaps
+                .map(
+                  (s) =>
+                    `  <sitemap>\n    <loc>${esc(s.loc)}</loc>\n    <lastmod>${s.lastmod}</lastmod>\n  </sitemap>`,
+                )
+                .join("\n") +
+              `\n</sitemapindex>`;
+            sendXml(xml);
           } catch (err) {
             console.error("[app-builder] /sitemap.xml failed:", err);
             res.statusCode = 500;
@@ -133,12 +130,97 @@ function seoPlugin(): Plugin {
           return;
         }
 
+        // ── /sitemap-static.xml ──
+        if (path === "/sitemap-static.xml") {
+          sendXml(wrapUrlset([
+            entry(`${BASE}/`, today, "daily", "1.0"),
+            entry(`${BASE}/ilan-ver`, today, "weekly", "0.8"),
+            entry(`${BASE}/categories`, today, "weekly", "0.7"),
+            entry(`${BASE}/sayfa/hakkimizda`, today, "monthly", "0.4"),
+            entry(`${BASE}/sayfa/iletisim`, today, "monthly", "0.4"),
+            entry(`${BASE}/sayfa/kvkk`, today, "monthly", "0.3"),
+            entry(`${BASE}/sayfa/gizlilik`, today, "monthly", "0.3"),
+            entry(`${BASE}/sayfa/cerez`, today, "monthly", "0.3"),
+            entry(`${BASE}/sayfa/kullanim`, today, "monthly", "0.3"),
+            entry(`${BASE}/sayfa/uyelik`, today, "monthly", "0.3"),
+          ]));
+          return;
+        }
+
+        // ── /sitemap-categories.xml ──
+        if (path === "/sitemap-categories.xml") {
+          try {
+            const sql = await getSql();
+            const cats = await sql.query<{ slug: string; updated_at: string | null }>(
+              "SELECT slug, updated_at FROM categories ORDER BY sort_order, name",
+            );
+            sendXml(wrapUrlset(
+              cats.map((c) =>
+                entry(`${BASE}/category/${c.slug}`, c.updated_at ? String(c.updated_at).slice(0, 10) : today, "weekly", "0.7"),
+              ),
+            ));
+          } catch { sendXml(wrapUrlset([])); }
+          return;
+        }
+
+        // ── /sitemap-listings.xml?page=N ──
+        if (path === "/sitemap-listings.xml") {
+          const page = Math.max(1, parseInt(params.get("page") ?? "1", 10));
+          const offset = (page - 1) * 10000;
+          try {
+            const sql = await getSql();
+            const listings = await sql.query<{ slug: string; updated_at: string }>(
+              `SELECT slug, updated_at FROM listings WHERE status='ACTIVE' AND (expires_at IS NULL OR expires_at>now()) ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
+              [10000, offset],
+            );
+            sendXml(wrapUrlset(
+              listings.map((l) =>
+                entry(`${BASE}/ilan/${l.slug}`, String(l.updated_at).slice(0, 10) || today, "daily", "0.6"),
+              ),
+            ));
+          } catch { sendXml(wrapUrlset([])); }
+          return;
+        }
+
+        // ── /sitemap-stores.xml ──
+        if (path === "/sitemap-stores.xml") {
+          try {
+            const sql = await getSql();
+            const stores = await sql.query<{ slug: string; updated_at: string | null }>(
+              "SELECT slug, updated_at FROM stores ORDER BY created_at DESC LIMIT 10000",
+            );
+            sendXml(wrapUrlset(
+              stores.map((s) =>
+                entry(`${BASE}/magaza/${s.slug}`, s.updated_at ? String(s.updated_at).slice(0, 10) : today, "weekly", "0.5"),
+              ),
+            ));
+          } catch { sendXml(wrapUrlset([])); }
+          return;
+        }
+
+        // ── /sitemap-sellers.xml ──
+        if (path === "/sitemap-sellers.xml") {
+          try {
+            const sql = await getSql();
+            const sellers = await sql.query<{ user_id: string; updated_at: string | null }>(
+              "SELECT user_id, updated_at FROM profiles ORDER BY created_at DESC LIMIT 10000",
+            );
+            sendXml(wrapUrlset(
+              sellers.map((p) =>
+                entry(`${BASE}/satici/${p.user_id}`, p.updated_at ? String(p.updated_at).slice(0, 10) : today, "weekly", "0.4"),
+              ),
+            ));
+          } catch { sendXml(wrapUrlset([])); }
+          return;
+        }
+
+        // ── /robots.txt ──
         if (path === "/robots.txt") {
-          const BASE = "https://geldesat.com";
           const txt = [
             "User-agent: *",
             "Allow: /",
             "",
+            "# Özel / kişisel sayfalar — indekslenmemeli",
             "Disallow: /admin",
             "Disallow: /profil",
             "Disallow: /ilanlarim",
@@ -155,6 +237,7 @@ function seoPlugin(): Plugin {
             "# Arama/filtreleme sayfaları — duplicate content önlemi",
             "Disallow: /search",
             "",
+            "# Sitemap index",
             `Sitemap: ${BASE}/sitemap.xml`,
           ].join("\n");
           res.statusCode = 200;
@@ -168,6 +251,7 @@ function seoPlugin(): Plugin {
     },
   };
 }
+
 
 /**
  * Live-preview OAuth popup — handled HERE so the agent never has to create a

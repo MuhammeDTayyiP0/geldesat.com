@@ -15,9 +15,10 @@ export const Route = createFileRoute("/")({
     const BASE = "https://geldesat.com";
     return {
       meta: [
-        { title: "GeldeSat — Türkiye İlan Platformu" },
-        { name: "description", content: "GeldeSat — Türkiye'nin ilan platformu. Emlak, vasıta, ikinci el eşya ve hizmet ilanlarını ücretsiz verin, kolayca alın-satın. Milyonlarca ilan, güvenli iletişim, anlık mesajlaşma." },
+        { title: "GeldeSat — Türkiye İlan Platformu | Ücretsiz İlan Ver" },
+        { name: "description", content: "GeldeSat — Türkiye'nin ücretsiz ilan platformu. Emlak, vasıta, ikinci el eşya ve hizmet ilanlarını saniyeler içinde verin. Güvenli iletişim, anlık mesajlaşma." },
         { name: "robots", content: "index,follow" },
+        { name: "keywords", content: "ücretsiz ilan, ikinci el, emlak ilanları, vasıta ilanları, sahibinden satılık, kiralık, GeldeSat" },
         // Open Graph
         { property: "og:site_name", content: "GeldeSat" },
         { property: "og:locale", content: "tr_TR" },
@@ -42,7 +43,10 @@ export const Route = createFileRoute("/")({
             "@context": "https://schema.org",
             "@type": "WebSite",
             name: "GeldeSat",
+            alternateName: "geldesat.com",
             url: BASE,
+            inLanguage: "tr-TR",
+            publisher: { "@type": "Organization", name: "GeldeSat", url: BASE },
             potentialAction: {
               "@type": "SearchAction",
               target: {
@@ -53,9 +57,26 @@ export const Route = createFileRoute("/")({
             },
           }),
         },
+        {
+          // HowTo — "İlan nasıl verilir?" zengin sonuçlara çıkar
+          type: "application/ld+json",
+          children: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "HowTo",
+            name: "GeldeSat'ta Ücretsiz İlan Nasıl Verilir?",
+            description: "GeldeSat'ta birkaç adımda ücretsiz ilan verin, milyonlarca alıcıya ulaşın.",
+            step: [
+              { "@type": "HowToStep", position: 1, name: "Üye Olun", text: "Ücretsiz hesap oluşturun veya Google ile giriş yapın." },
+              { "@type": "HowToStep", position: 2, name: "İlan Verin", text: "'İlan Ver' butonuna tıklayın ve kategori seçin." },
+              { "@type": "HowToStep", position: 3, name: "Fotoğraf Ekleyin", text: "Ürününüzün net fotoğraflarını yükleyin." },
+              { "@type": "HowToStep", position: 4, name: "Yayınlayın", text: "Fiyatı ve açıklamayı girdikten sonra ilanınızı ücretsiz yayınlayın." },
+            ],
+          }),
+        },
       ],
     };
   },
+
   component: Home,
 });
 
