@@ -11,7 +11,7 @@
  *   GET /robots.txt              → Robots direktifleri
  */
 
-const BASE_URL = "https://geldesat.com";
+const BASE_URL = "https://www.geldesat.com";
 const LISTINGS_PER_PAGE = 10_000;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
