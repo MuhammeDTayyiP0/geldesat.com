@@ -42,6 +42,30 @@ export const Route = createFileRoute("/satici/$id")({
         { name: "twitter:image", content: `${BASE}/og.jpg` },
       ],
       links: [{ rel: "canonical", href: pageUrl }],
+      scripts: [
+        {
+          type: "application/ld+json",
+          children: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "Person",
+            name: seller.name,
+            description: seller.bio ?? desc,
+            url: pageUrl,
+            ...(seller.city ? { address: { "@type": "PostalAddress", addressLocality: seller.city, addressCountry: "TR" } } : {}),
+            ...(seller.rating_count > 0
+              ? {
+                  aggregateRating: {
+                    "@type": "AggregateRating",
+                    ratingValue: seller.rating_avg.toFixed(1),
+                    reviewCount: seller.rating_count,
+                    bestRating: "5",
+                    worstRating: "1",
+                  },
+                }
+              : {}),
+          }),
+        },
+      ],
     };
   },
   pendingComponent: () => <BrandSpinner fullPage text="Satıcı profili yükleniyor…" />,

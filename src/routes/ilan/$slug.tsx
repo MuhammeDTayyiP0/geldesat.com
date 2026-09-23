@@ -155,7 +155,7 @@ export const Route = createFileRoute("/ilan/$slug")({
         // Open Graph
         { property: "og:site_name", content: "GeldeSat" },
         { property: "og:locale", content: "tr_TR" },
-        { property: "og:type", content: "website" },
+        { property: "og:type", content: "product" },
         { property: "og:url", content: pageUrl },
         { property: "og:title", content: `${listing.title} - ${formatPrice(listing.price)}` },
         { property: "og:description", content: desc },
@@ -912,9 +912,9 @@ function ListingPage() {
                 {listing.boosts?.includes("ACIL") ? <Badge tone="danger">Acil</Badge> : null}
                 {listing.status === "SOLD" ? <Badge tone="warn">Satıldı</Badge> : null}
               </div>
-              <h1 className="mt-2.5 font-display text-xl font-bold leading-snug text-fg">
+              <h2 className="mt-2.5 font-display text-xl font-bold leading-snug text-fg">
                 {listing.title}
-              </h1>
+              </h2>
               <p className="mt-2 flex items-center gap-1.5 text-xs text-muted">
                 <MapPin className="size-3.5 text-subtle shrink-0" />
                 <span>{locationString || "Türkiye"}</span>

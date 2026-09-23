@@ -77,10 +77,12 @@ function seoPlugin(): Plugin {
             const staticUrls = [
               entry(`${BASE}/`, today, "daily", "1.0"),
               entry(`${BASE}/ilan-ver`, today, "weekly", "0.7"),
+              // Kurumsal / yasal sayfalar
               entry(`${BASE}/sayfa/hakkimizda`, today, "monthly", "0.4"),
               entry(`${BASE}/sayfa/iletisim`, today, "monthly", "0.4"),
               entry(`${BASE}/sayfa/kvkk`, today, "monthly", "0.3"),
               entry(`${BASE}/sayfa/gizlilik`, today, "monthly", "0.3"),
+              entry(`${BASE}/sayfa/cerez`, today, "monthly", "0.3"),
               entry(`${BASE}/sayfa/kullanim`, today, "monthly", "0.3"),
               entry(`${BASE}/sayfa/uyelik`, today, "monthly", "0.3"),
             ];
@@ -93,9 +95,25 @@ function seoPlugin(): Plugin {
               const listings = await sql.query<{ slug: string; updated_at: string }>(
                 `SELECT slug, updated_at FROM listings WHERE status='ACTIVE' AND (expires_at IS NULL OR expires_at>now()) ORDER BY created_at DESC LIMIT 50000`,
               );
+              let storeEntries: string[] = [];
+              let sellerEntries: string[] = [];
+              try {
+                const stores = await sql.query<{ slug: string; updated_at: string | null }>(
+                  "SELECT slug, updated_at FROM stores ORDER BY created_at DESC LIMIT 10000",
+                );
+                storeEntries = stores.map((s) => entry(`${BASE}/magaza/${s.slug}`, s.updated_at ? String(s.updated_at).slice(0,10) : today, "weekly", "0.5"));
+              } catch { /* stores tablosu yoksa atla */ }
+              try {
+                const sellers = await sql.query<{ user_id: string; updated_at: string | null }>(
+                  "SELECT user_id, updated_at FROM profiles ORDER BY created_at DESC LIMIT 10000",
+                );
+                sellerEntries = sellers.map((p) => entry(`${BASE}/satici/${p.user_id}`, p.updated_at ? String(p.updated_at).slice(0,10) : today, "weekly", "0.4"));
+              } catch { /* profiles tablosu yoksa atla */ }
               extra = [
                 ...cats.map((c) => entry(`${BASE}/category/${c.slug}`, c.updated_at ? String(c.updated_at).slice(0,10) : today, "weekly", "0.7")),
                 ...listings.map((l) => entry(`${BASE}/ilan/${l.slug}`, String(l.updated_at).slice(0,10) || today, "daily", "0.6")),
+                ...storeEntries,
+                ...sellerEntries,
               ];
             } catch { /* DB hatası */ }
 
@@ -129,6 +147,12 @@ function seoPlugin(): Plugin {
             "Disallow: /bildirimler",
             "Disallow: /doping",
             "Disallow: /arsiv",
+            "Disallow: /login",
+            "",
+            "# API rotaları",
+            "Disallow: /api/",
+            "",
+            "# Arama/filtreleme sayfaları — duplicate content önlemi",
             "Disallow: /search",
             "",
             `Sitemap: ${BASE}/sitemap.xml`,

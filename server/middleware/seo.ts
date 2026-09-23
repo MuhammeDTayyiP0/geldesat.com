@@ -38,21 +38,26 @@ async function buildSitemap(): Promise<string> {
   const staticUrls = [
     urlEntry(`${BASE_URL}/`, today, "daily", "1.0"),
     urlEntry(`${BASE_URL}/ilan-ver`, today, "weekly", "0.7"),
+    // Kurumsal / yasal sayfalar
     urlEntry(`${BASE_URL}/sayfa/hakkimizda`, today, "monthly", "0.4"),
     urlEntry(`${BASE_URL}/sayfa/iletisim`, today, "monthly", "0.4"),
     urlEntry(`${BASE_URL}/sayfa/kvkk`, today, "monthly", "0.3"),
     urlEntry(`${BASE_URL}/sayfa/gizlilik`, today, "monthly", "0.3"),
+    urlEntry(`${BASE_URL}/sayfa/cerez`, today, "monthly", "0.3"),
     urlEntry(`${BASE_URL}/sayfa/kullanim`, today, "monthly", "0.3"),
     urlEntry(`${BASE_URL}/sayfa/uyelik`, today, "monthly", "0.3"),
   ];
 
   let categoryUrls: string[] = [];
   let listingUrls: string[] = [];
+  let storeUrls: string[] = [];
+  let sellerUrls: string[] = [];
 
   try {
     const { getSql } = await import("../../src/lib/db");
     const sql = await getSql();
 
+    // Kategoriler
     const cats = await sql.query<{ slug: string; updated_at: string | null }>(
       "SELECT slug, updated_at FROM categories ORDER BY sort_order, name",
     );
@@ -65,6 +70,7 @@ async function buildSitemap(): Promise<string> {
       ),
     );
 
+    // Aktif ilanlar (slug tabanlı — /ilan/$slug TanStack route ile eşleşir)
     const listings = await sql.query<{ slug: string; updated_at: string }>(
       `SELECT slug, updated_at FROM listings
        WHERE status = 'ACTIVE' AND (expires_at IS NULL OR expires_at > now())
@@ -79,6 +85,38 @@ async function buildSitemap(): Promise<string> {
         "0.6",
       ),
     );
+
+    // Mağazalar (/magaza/$slug)
+    try {
+      const stores = await sql.query<{ slug: string; updated_at: string | null }>(
+        "SELECT slug, updated_at FROM stores ORDER BY created_at DESC LIMIT 10000",
+      );
+      storeUrls = stores.map((s) =>
+        urlEntry(
+          `${BASE_URL}/magaza/${s.slug}`,
+          s.updated_at ? String(s.updated_at).slice(0, 10) : today,
+          "weekly",
+          "0.5",
+        ),
+      );
+    } catch { /* stores tablosu yoksa atla */ }
+
+    // Satıcı profilleri (/satici/$id)
+    try {
+      const sellers = await sql.query<{ user_id: string; updated_at: string | null }>(
+        `SELECT user_id, updated_at FROM profiles
+         ORDER BY created_at DESC LIMIT 10000`,
+      );
+      sellerUrls = sellers.map((p) =>
+        urlEntry(
+          `${BASE_URL}/satici/${p.user_id}`,
+          p.updated_at ? String(p.updated_at).slice(0, 10) : today,
+          "weekly",
+          "0.4",
+        ),
+      );
+    } catch { /* profiles tablosu yoksa atla */ }
+
   } catch {
     // DB hatası — sadece statik sayfalar döndür
   }
@@ -86,7 +124,7 @@ async function buildSitemap(): Promise<string> {
   return (
     `<?xml version="1.0" encoding="UTF-8"?>\n` +
     `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
-    [...staticUrls, ...categoryUrls, ...listingUrls].join("\n") +
+    [...staticUrls, ...categoryUrls, ...listingUrls, ...storeUrls, ...sellerUrls].join("\n") +
     `\n</urlset>`
   );
 }
@@ -105,6 +143,10 @@ function buildRobots(): string {
     "Disallow: /bildirimler",
     "Disallow: /doping",
     "Disallow: /arsiv",
+    "Disallow: /login",
+    "",
+    "# API rotaları",
+    "Disallow: /api/",
     "",
     "# Arama/filtreleme sayfaları — duplicate content önlemi",
     "Disallow: /search",

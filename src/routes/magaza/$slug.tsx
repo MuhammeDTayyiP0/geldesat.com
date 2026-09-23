@@ -36,12 +36,25 @@ export const Route = createFileRoute("/magaza/$slug")({
         { property: "og:title", content: title },
         { property: "og:description", content: desc },
         { property: "og:image", content: `${BASE}/og.jpg` },
-        { name: "twitter:card", content: "summary_large_image" },
+        { name: "twitter:card", content: "summary" },
         { name: "twitter:title", content: title },
         { name: "twitter:description", content: desc },
         { name: "twitter:image", content: `${BASE}/og.jpg` },
       ],
       links: [{ rel: "canonical", href: pageUrl }],
+      scripts: [
+        {
+          type: "application/ld+json",
+          children: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "LocalBusiness",
+            name: store.name,
+            description: desc,
+            url: pageUrl,
+            ...(store.city ? { address: { "@type": "PostalAddress", addressLocality: store.city, addressCountry: "TR" } } : {}),
+          }),
+        },
+      ],
     };
   },
   pendingComponent: () => <BrandSpinner fullPage text="Mağaza bilgileri yükleniyor…" />,

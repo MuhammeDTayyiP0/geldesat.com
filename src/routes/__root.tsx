@@ -20,7 +20,7 @@ export const Route = createRootRoute({
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1, interactive-widget=resizes-content" },
       { title: `${APP_NAME} — Türkiye ilan platformu` },
-      { name: "description", content: "Emlak, vasıta ve ikinci el ilanlar. Güvenli alım satım." },
+      { name: "description", content: "GeldeSat — Türkiye'nin ilan platformu. Emlak, vasıta, ikinci el eşya ve hizmet ilanlarını ücretsiz verin, kolayca alın-satın. Güvenli iletişim, anlık mesajlaşma." },
       { name: "theme-color", content: "#1A4FD8" },
       { name: "robots", content: "index,follow" },
       // Open Graph

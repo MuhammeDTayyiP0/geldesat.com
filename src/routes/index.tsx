@@ -16,7 +16,7 @@ export const Route = createFileRoute("/")({
     return {
       meta: [
         { title: "GeldeSat — Türkiye İlan Platformu" },
-        { name: "description", content: "Emlak, vasıta ve ikinci el ilanlar. Ücretsiz ilan verin, güvenli alın satın." },
+        { name: "description", content: "GeldeSat — Türkiye'nin ilan platformu. Emlak, vasıta, ikinci el eşya ve hizmet ilanlarını ücretsiz verin, kolayca alın-satın. Milyonlarca ilan, güvenli iletişim, anlık mesajlaşma." },
         { name: "robots", content: "index,follow" },
         // Open Graph
         { property: "og:site_name", content: "GeldeSat" },

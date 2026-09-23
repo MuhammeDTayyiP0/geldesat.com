@@ -33,6 +33,7 @@ export const Route = createFileRoute("/category/$slug")({
     if (!loaderData?.cat?.category) return { meta: [] };
     const category = loaderData.cat.category;
     const cat = loaderData.cat;
+    const result = loaderData.result;
     const BASE = "https://geldesat.com";
     const pageUrl = `${BASE}/category/${category.slug}`;
     const title = `${category.name} İlanları | GeldeSat`;
@@ -48,6 +49,25 @@ export const Route = createFileRoute("/category/$slug")({
         item: `${BASE}/category/${p.slug}`,
       })),
     ];
+
+    // Sayfalama için rel prev/next canonical linkleri
+    const currentPage = result?.page ?? 1;
+    const totalPages = result?.pages ?? 1;
+    const paginationLinks: { rel: string; href: string }[] = [
+      { rel: "canonical", href: currentPage === 1 ? pageUrl : `${pageUrl}?page=${currentPage}` },
+    ];
+    if (currentPage > 1) {
+      paginationLinks.push({
+        rel: "prev",
+        href: currentPage === 2 ? pageUrl : `${pageUrl}?page=${currentPage - 1}`,
+      });
+    }
+    if (currentPage < totalPages) {
+      paginationLinks.push({
+        rel: "next",
+        href: `${pageUrl}?page=${currentPage + 1}`,
+      });
+    }
 
     return {
       meta: [
@@ -68,7 +88,7 @@ export const Route = createFileRoute("/category/$slug")({
         { name: "twitter:description", content: desc },
         { name: "twitter:image", content: `${BASE}/og.jpg` },
       ],
-      links: [{ rel: "canonical", href: pageUrl }],
+      links: paginationLinks,
       scripts: [
         {
           type: "application/ld+json",
