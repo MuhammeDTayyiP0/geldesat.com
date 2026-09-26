@@ -579,7 +579,7 @@ export const getStore = createServerFn({ method: "POST" })
   .validator(z.object({ slug: z.string() }))
   .handler(async ({ data }) => {
     const sql = await getSql();
-    const rows = await sql.query<Record<string, unknown>>("select * from stores where slug=$1", [data.slug]);
+    const rows = await sql.query<Record<string, unknown>>("select * from stores where lower(slug)=lower($1)", [data.slug]);
     if (!rows[0]) return null;
     return {
       id: String(rows[0].id),

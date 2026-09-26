@@ -213,7 +213,7 @@ export const getCategory = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const sql = await getSql();
     const rows = await sql.query<CategoryRow>(
-      "select id, name, slug, parent_id, icon, sort_order from categories where slug = $1",
+      "select id, name, slug, parent_id, icon, sort_order from categories where lower(slug) = lower($1)",
       [data.slug],
     );
     const cat = rows[0];
@@ -260,7 +260,7 @@ export const getListing = createServerFn({ method: "POST" })
        join categories c on c.id = l.category_id
        left join profiles p on p.user_id = l.user_id
        left join stores s on s.id = l.store_id
-       where l.slug = $1 or l.id = $1`,
+       where lower(l.slug) = lower($1) or l.id = $1`,
       [data.slug],
     );
     if (!rows[0]) return null;

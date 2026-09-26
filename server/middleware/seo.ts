@@ -310,6 +310,17 @@ export default async function seoMiddleware(
   }
   const params = new URLSearchParams(search);
 
+  // ── 301 Canonical host redirect (geldesat.com → www.geldesat.com) ──
+  const reqHost =
+    event.req?.headers?.get?.("x-forwarded-host") ??
+    event.req?.headers?.get?.("host") ??
+    event.url?.host ??
+    "";
+  const cleanHost = String(reqHost).split(":")[0].toLowerCase();
+  if (cleanHost === "geldesat.com") {
+    return Response.redirect(`${BASE_URL}${path}${search}`, 301);
+  }
+
   // ── Sitemap Index ──
   if (path === "/sitemap.xml") {
     return xmlResponse(await buildSitemapIndex(), 3600);

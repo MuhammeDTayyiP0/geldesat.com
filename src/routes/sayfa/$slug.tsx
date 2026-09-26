@@ -51,6 +51,19 @@ export const Route = createFileRoute("/sayfa/$slug")({
         { name: "twitter:image", content: `${BASE}/og.jpg` },
       ],
       links: [{ rel: "canonical", href: pageUrl }],
+      scripts: [
+        {
+          type: "application/ld+json",
+          children: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "BreadcrumbList",
+            itemListElement: [
+              { "@type": "ListItem", position: 1, name: "Anasayfa", item: BASE },
+              { "@type": "ListItem", position: 2, name: loaderData.title, item: pageUrl },
+            ],
+          }),
+        },
+      ],
     };
   },
   component: LegalPage,

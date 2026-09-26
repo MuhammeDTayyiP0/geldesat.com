@@ -61,6 +61,17 @@ export const Route = createFileRoute("/magaza/$slug")({
             ...(store.city ? { address: { "@type": "PostalAddress", addressLocality: store.city, addressCountry: "TR" } } : {}),
           }),
         },
+        {
+          type: "application/ld+json",
+          children: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "BreadcrumbList",
+            itemListElement: [
+              { "@type": "ListItem", position: 1, name: "Anasayfa", item: BASE },
+              { "@type": "ListItem", position: 2, name: store.name, item: pageUrl },
+            ],
+          }),
+        },
       ],
     };
   },
