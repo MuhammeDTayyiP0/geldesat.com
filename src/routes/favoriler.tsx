@@ -8,7 +8,15 @@ import { BrandSpinner } from "@/components/brand/BrandSpinner";
 import { ListingCard } from "@/components/listing/ListingCard";
 import type { ListingCard as Listing } from "@/lib/server/helpers";
 
-export const Route = createFileRoute("/favoriler")({ component: Favs });
+export const Route = createFileRoute("/favoriler")({
+  head: () => ({
+    meta: [
+      { title: "Favorilerim | GeldeSat" },
+      { name: "robots", content: "noindex,nofollow" },
+    ],
+  }),
+  component: Favs,
+});
 
 function Favs() {
   const { user, isPending } = useCurrentUserState();

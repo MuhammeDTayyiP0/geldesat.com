@@ -7,7 +7,15 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { BrandSpinner } from "@/components/brand/BrandSpinner";
 import { formatPrice, timeAgo } from "@/lib/utils";
 
-export const Route = createFileRoute("/mesajlar")({ component: MessagesLayout });
+export const Route = createFileRoute("/mesajlar")({
+  head: () => ({
+    meta: [
+      { title: "Mesajlarım | GeldeSat" },
+      { name: "robots", content: "noindex,nofollow" },
+    ],
+  }),
+  component: MessagesLayout,
+});
 
 type Conv = Awaited<ReturnType<typeof listConversations>>[number];
 

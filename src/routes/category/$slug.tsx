@@ -30,7 +30,14 @@ export const Route = createFileRoute("/category/$slug")({
     />
   ),
   head: ({ loaderData }) => {
-    if (!loaderData?.cat?.category) return { meta: [] };
+    if (!loaderData?.cat?.category) {
+      return {
+        meta: [
+          { title: "Kategori Bulunamadı | GeldeSat" },
+          { name: "robots", content: "noindex,nofollow" },
+        ],
+      };
+    }
     const category = loaderData.cat.category;
     const cat = loaderData.cat;
     const result = loaderData.result;

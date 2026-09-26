@@ -1,6 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 
-export const Route = createFileRoute("/arsiv")({ component: Arsiv });
+export const Route = createFileRoute("/arsiv")({
+  head: () => ({
+    meta: [
+      { title: "Arşiv | GeldeSat" },
+      { name: "robots", content: "noindex,nofollow" },
+    ],
+  }),
+  component: Arsiv,
+});
 
 function Arsiv() {
   return (

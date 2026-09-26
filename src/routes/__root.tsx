@@ -54,9 +54,6 @@ export const Route = createRootRoute({
       { rel: "stylesheet", href: appCss },
       { rel: "manifest", href: "/__grok/manifest.webmanifest" },
       { rel: "apple-touch-icon", href: "/__grok/icon-180.png" },
-      // hreflang — Google Türkiye aramaları için kritik
-      { rel: "alternate", hrefLang: "tr", href: BASE },
-      { rel: "alternate", hrefLang: "x-default", href: BASE },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
@@ -73,7 +70,8 @@ export const Route = createRootRoute({
           "@type": "Organization",
           name: APP_NAME,
           url: BASE,
-          logo: `${BASE}/favicon.svg`,
+          logo: `${BASE}/og.jpg`,
+          image: `${BASE}/og.jpg`,
           sameAs: [],
           contactPoint: [
             {

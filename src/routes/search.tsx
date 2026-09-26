@@ -27,6 +27,7 @@ export const Route = createFileRoute("/search")({
       // Arama + filtreleme sonuçları indekslenmemeli — duplicate content önlemi
       { name: "robots", content: "noindex,follow" },
     ],
+    links: [{ rel: "canonical", href: "https://www.geldesat.com/search" }],
   }),
   pendingComponent: ListingGridSkeleton,
   component: SearchPage,

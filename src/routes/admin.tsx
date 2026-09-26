@@ -74,7 +74,15 @@ import {
   Info,
 } from "lucide-react";
 
-export const Route = createFileRoute("/admin")({ component: Admin });
+export const Route = createFileRoute("/admin")({
+  head: () => ({
+    meta: [
+      { title: "Yönetici Paneli | GeldeSat" },
+      { name: "robots", content: "noindex,nofollow" },
+    ],
+  }),
+  component: Admin,
+});
 
 const TABS = [
   { id: "ozet", label: "Genel Bakış", icon: LayoutDashboard },

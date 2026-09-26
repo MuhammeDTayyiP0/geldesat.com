@@ -19,7 +19,14 @@ export const Route = createFileRoute("/sayfa/$slug")({
     />
   ),
   head: ({ loaderData }) => {
-    if (!loaderData) return { meta: [] };
+    if (!loaderData) {
+      return {
+        meta: [
+          { title: "Sayfa Bulunamadı | GeldeSat" },
+          { name: "robots", content: "noindex,nofollow" },
+        ],
+      };
+    }
     const BASE = "https://www.geldesat.com";
     const pageUrl = `${BASE}/sayfa/${loaderData.slug}`;
     const title = `${loaderData.title} | GeldeSat`;

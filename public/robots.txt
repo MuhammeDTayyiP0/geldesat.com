@@ -1,0 +1,23 @@
+User-agent: *
+Allow: /
+
+# Ozel ve kullanici sayfalari
+Disallow: /admin
+Disallow: /profil
+Disallow: /ilanlarim
+Disallow: /mesajlar
+Disallow: /favoriler
+Disallow: /bildirimler
+Disallow: /doping
+Disallow: /arsiv
+Disallow: /login
+Disallow: /ilan-ver
+
+# API rotalari
+Disallow: /api/
+
+# Arama ve filtreleme sayfalari (duplicate content onlemi)
+Disallow: /search
+
+# Sitemap index
+Sitemap: https://www.geldesat.com/sitemap.xml

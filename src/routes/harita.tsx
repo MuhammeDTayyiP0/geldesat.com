@@ -6,6 +6,14 @@ import { BrandSpinner } from "@/components/brand/BrandSpinner";
 
 export const Route = createFileRoute("/harita")({
   loader: () => searchCatalog({ data: { limit: 48, page: 1 } }),
+  head: () => ({
+    meta: [
+      { title: "Harita İlanları | GeldeSat" },
+      { name: "description", content: "GeldeSat Türkiye haritası üzerinde satılık ve kiralık ilanları inceleyin." },
+      { name: "robots", content: "index,follow" },
+    ],
+    links: [{ rel: "canonical", href: "https://www.geldesat.com/harita" }],
+  }),
   pendingComponent: () => <BrandSpinner fullPage text="Harita ve ilanlar yükleniyor…" />,
   component: MapPage,
 });

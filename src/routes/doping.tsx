@@ -2,7 +2,15 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Ban } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-export const Route = createFileRoute("/doping")({ component: Doping });
+export const Route = createFileRoute("/doping")({
+  head: () => ({
+    meta: [
+      { title: "Doping | GeldeSat" },
+      { name: "robots", content: "noindex,nofollow" },
+    ],
+  }),
+  component: Doping,
+});
 
 function Doping() {
   return (

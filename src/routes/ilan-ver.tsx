@@ -66,6 +66,12 @@ export const Route = createFileRoute("/ilan-ver")({
   validateSearch: (s: Record<string, unknown>): { id?: string } =>
     typeof s.id === "string" && s.id ? { id: s.id } : {},
   loader: () => listCategories(),
+  head: () => ({
+    meta: [
+      { title: "Ücretsiz İlan Ver | GeldeSat" },
+      { name: "robots", content: "noindex,nofollow" },
+    ],
+  }),
   component: PostPage,
 });
 

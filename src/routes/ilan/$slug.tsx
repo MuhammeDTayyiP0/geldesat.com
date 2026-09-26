@@ -11,7 +11,6 @@ import {
   ExternalLink,
   Eye,
   Heart,
-  ImageIcon,
   MapPin,
   MessageCircle,
   Pencil,
@@ -74,8 +73,13 @@ export const Route = createFileRoute("/ilan/$slug")({
     />
   ),
   head: ({ loaderData }) => {
-    if (!loaderData) {
-      return { meta: [{ title: "İlan Bulunamadı | GeldeSat" }] };
+    if (!loaderData || !loaderData.listing) {
+      return {
+        meta: [
+          { title: "İlan Bulunamadı | GeldeSat" },
+          { name: "robots", content: "noindex,nofollow" },
+        ],
+      };
     }
     const { listing, path, seller } = loaderData;
     const desc = listing.description
@@ -125,9 +129,20 @@ export const Route = createFileRoute("/ilan/$slug")({
       description: desc,
       url: pageUrl,
       sku: listing.id?.substring(0, 8),
+      image: absoluteImages.length > 0 ? absoluteImages : [coverImage],
       ...(datePublished ? { datePublished } : {}),
       ...(dateModified ? { dateModified } : {}),
-      ...(absoluteImages.length > 0 ? { image: absoluteImages } : {}),
+      ...(seller && seller.rating_count > 0
+        ? {
+            aggregateRating: {
+              "@type": "AggregateRating",
+              ratingValue: seller.rating_avg.toFixed(1),
+              reviewCount: seller.rating_count,
+              bestRating: 5,
+              worstRating: 1,
+            },
+          }
+        : {}),
       offers: {
         "@type": "Offer",
         priceCurrency: listing.currency || "TRY",
@@ -138,28 +153,30 @@ export const Route = createFileRoute("/ilan/$slug")({
             ? "https://schema.org/InStock"
             : "https://schema.org/OutOfStock",
         url: pageUrl,
-        ...(listing.city ? { availableAtOrFrom: { "@type": "Place", name: listing.city, address: { "@type": "PostalAddress", addressLocality: listing.city, addressCountry: "TR" } } } : {}),
-      },
-    };
-
-    if (seller && seller.name) {
-      productSchema.seller = {
-        "@type": "Person",
-        name: seller.name,
-        url: `${BASE}/satici/${seller.id ?? ""}`,
-        ...(seller.rating_count > 0
+        ...(seller && seller.name
           ? {
-              aggregateRating: {
-                "@type": "AggregateRating",
-                ratingValue: seller.rating_avg.toFixed(1),
-                reviewCount: seller.rating_count,
-                bestRating: 5,
-                worstRating: 1,
+              seller: {
+                "@type": "Person",
+                name: seller.name,
+                url: `${BASE}/satici/${seller.id ?? ""}`,
               },
             }
           : {}),
-      };
-    }
+        ...(listing.city
+          ? {
+              availableAtOrFrom: {
+                "@type": "Place",
+                name: listing.city,
+                address: {
+                  "@type": "PostalAddress",
+                  addressLocality: listing.city,
+                  addressCountry: "TR",
+                },
+              },
+            }
+          : {}),
+      },
+    };
 
     return {
       meta: [

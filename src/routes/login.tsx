@@ -6,7 +6,15 @@ import { Input, Label } from "@/components/ui/input";
 import { toast } from "sonner";
 import { LogoMark } from "@/components/brand/LogoMark";
 
-export const Route = createFileRoute("/login")({ component: Login });
+export const Route = createFileRoute("/login")({
+  head: () => ({
+    meta: [
+      { title: "Giriş Yap / Kayıt Ol | GeldeSat" },
+      { name: "robots", content: "noindex,nofollow" },
+    ],
+  }),
+  component: Login,
+});
 
 function Login() {
   const [mode, setMode] = useState<"in" | "up">("in");

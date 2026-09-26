@@ -11,7 +11,15 @@ import { BrandSpinner } from "@/components/brand/BrandSpinner";
 import { toast } from "sonner";
 import type { ListingCard as Listing } from "@/lib/server/helpers";
 
-export const Route = createFileRoute("/ilanlarim")({ component: Mine });
+export const Route = createFileRoute("/ilanlarim")({
+  head: () => ({
+    meta: [
+      { title: "İlanlarım | GeldeSat" },
+      { name: "robots", content: "noindex,nofollow" },
+    ],
+  }),
+  component: Mine,
+});
 
 function isExpired(expiresAt: string | null) {
   return Boolean(expiresAt && new Date(expiresAt).getTime() <= Date.now());

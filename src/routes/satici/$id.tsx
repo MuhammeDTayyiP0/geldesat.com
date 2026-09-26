@@ -16,7 +16,14 @@ export const Route = createFileRoute("/satici/$id")({
     return { seller, listings: listings.listings };
   },
   head: ({ loaderData }) => {
-    if (!loaderData?.seller) return { meta: [] };
+    if (!loaderData?.seller) {
+      return {
+        meta: [
+          { title: "Satıcı Bulunamadı | GeldeSat" },
+          { name: "robots", content: "noindex,nofollow" },
+        ],
+      };
+    }
     const { seller } = loaderData;
     const BASE = "https://www.geldesat.com";
     const pageUrl = `${BASE}/satici/${seller.id}`;

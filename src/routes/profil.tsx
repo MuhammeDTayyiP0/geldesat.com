@@ -14,7 +14,15 @@ import { CheckCircle2, Lock, LogOut, Mail, Shield, Store, User as UserIcon } fro
 import { BrandSpinner } from "@/components/brand/BrandSpinner";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/profil")({ component: Profil });
+export const Route = createFileRoute("/profil")({
+  head: () => ({
+    meta: [
+      { title: "Profilim | GeldeSat" },
+      { name: "robots", content: "noindex,nofollow" },
+    ],
+  }),
+  component: Profil,
+});
 
 function Profil() {
   const { user, isPending } = useCurrentUserState();

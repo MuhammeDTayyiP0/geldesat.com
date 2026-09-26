@@ -7,7 +7,15 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { BrandSpinner } from "@/components/brand/BrandSpinner";
 import { timeAgo } from "@/lib/utils";
 
-export const Route = createFileRoute("/bildirimler")({ component: Notes });
+export const Route = createFileRoute("/bildirimler")({
+  head: () => ({
+    meta: [
+      { title: "Bildirimler | GeldeSat" },
+      { name: "robots", content: "noindex,nofollow" },
+    ],
+  }),
+  component: Notes,
+});
 
 function Notes() {
   const { user, isPending } = useCurrentUserState();

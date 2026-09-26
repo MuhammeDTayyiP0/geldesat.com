@@ -6,9 +6,7 @@ import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { nitro } from "nitro/vite";
-// @ts-ignore JS plugin alongside the TS vite config
 import { grokPwaPlugin } from "./scripts/grok-pwa-plugin.mjs";
-// @ts-ignore JS plugin alongside the TS vite config
 import { appEnvPlugin } from "./scripts/app-env-plugin.mjs";
 import { isMigrationFile } from "./scripts/migration-plan.mjs";
 
@@ -68,15 +66,24 @@ function seoPlugin(): Plugin {
         const today = new Date().toISOString().slice(0, 10);
 
         const esc = (s: string) =>
-          s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        const entry = (loc: string, lm: string, cf: string, p: string) =>
-          `  <url>\n    <loc>${esc(loc)}</loc>\n    <lastmod>${lm}</lastmod>\n    <changefreq>${cf}</changefreq>\n    <priority>${p}</priority>\n  </url>`;
+          s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+        const entry = (loc: string, lm: string, cf: string, p: string, image?: { loc: string; title?: string } | null) => {
+          let xml = `  <url>\n    <loc>${esc(loc)}</loc>\n    <lastmod>${lm}</lastmod>\n    <changefreq>${cf}</changefreq>\n    <priority>${p}</priority>`;
+          if (image && image.loc) {
+            xml += `\n    <image:image>\n      <image:loc>${esc(image.loc)}</image:loc>`;
+            if (image.title) xml += `\n      <image:title>${esc(image.title)}</image:title>`;
+            xml += `\n    </image:image>`;
+          }
+          xml += `\n  </url>`;
+          return xml;
+        };
         const wrapUrlset = (entries: string[]) =>
-          `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${entries.join("\n")}\n</urlset>`;
+          `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n${entries.join("\n")}\n</urlset>`;
 
         const sendXml = (body: string) => {
           res.statusCode = 200;
           res.setHeader("Content-Type", "application/xml; charset=utf-8");
+          res.setHeader("X-Content-Type-Options", "nosniff");
           res.end(body);
         };
 
@@ -105,7 +112,7 @@ function seoPlugin(): Plugin {
               { loc: `${BASE}/sitemap-static.xml`, lastmod: today },
               { loc: `${BASE}/sitemap-categories.xml`, lastmod: today },
               ...Array.from({ length: listingPages }, (_, i) => ({
-                loc: `${BASE}/sitemap-listings.xml?page=${i + 1}`,
+                loc: `${BASE}/sitemap-listings-${i + 1}.xml`,
                 lastmod: today,
               })),
               { loc: `${BASE}/sitemap-stores.xml`, lastmod: today },
@@ -134,10 +141,8 @@ function seoPlugin(): Plugin {
         if (path === "/sitemap-static.xml") {
           sendXml(wrapUrlset([
             entry(`${BASE}/`, today, "daily", "1.0"),
-            entry(`${BASE}/ilan-ver`, today, "weekly", "0.8"),
-            entry(`${BASE}/categories`, today, "weekly", "0.7"),
-            entry(`${BASE}/sayfa/hakkimizda`, today, "monthly", "0.4"),
-            entry(`${BASE}/sayfa/iletisim`, today, "monthly", "0.4"),
+            entry(`${BASE}/sayfa/hakkimizda`, today, "monthly", "0.5"),
+            entry(`${BASE}/sayfa/iletisim`, today, "monthly", "0.5"),
             entry(`${BASE}/sayfa/kvkk`, today, "monthly", "0.3"),
             entry(`${BASE}/sayfa/gizlilik`, today, "monthly", "0.3"),
             entry(`${BASE}/sayfa/cerez`, today, "monthly", "0.3"),
@@ -163,20 +168,54 @@ function seoPlugin(): Plugin {
           return;
         }
 
-        // ── /sitemap-listings.xml?page=N ──
-        if (path === "/sitemap-listings.xml") {
-          const page = Math.max(1, parseInt(params.get("page") ?? "1", 10));
+        // ── /sitemap-listings-N.xml veya ?page=N ──
+        const listingsMatch = path.match(/^\/sitemap-listings(?:-(\d+))?\.xml$/);
+        if (listingsMatch) {
+          const pageFromPath = listingsMatch[1] ? parseInt(listingsMatch[1], 10) : NaN;
+          const pageFromQuery = parseInt(params.get("page") ?? "1", 10);
+          const pageNum = !isNaN(pageFromPath) ? pageFromPath : pageFromQuery;
+          const page = Math.max(1, isNaN(pageNum) ? 1 : pageNum);
           const offset = (page - 1) * 10000;
           try {
             const sql = await getSql();
-            const listings = await sql.query<{ slug: string; updated_at: string }>(
-              `SELECT slug, updated_at FROM listings WHERE status='ACTIVE' AND (expires_at IS NULL OR expires_at>now()) ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
+            const listings = await sql.query<{
+              slug: string;
+              title: string;
+              images: string[] | string | null;
+              updated_at: string;
+            }>(
+              `SELECT slug, title, images, updated_at FROM listings WHERE status='ACTIVE' AND (expires_at IS NULL OR expires_at>now()) ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
               [10000, offset],
             );
             sendXml(wrapUrlset(
-              listings.map((l) =>
-                entry(`${BASE}/ilan/${l.slug}`, String(l.updated_at).slice(0, 10) || today, "daily", "0.6"),
-              ),
+              listings.map((l) => {
+                let firstImg: string | null = null;
+                if (l.images) {
+                  const imgs = Array.isArray(l.images)
+                    ? l.images
+                    : typeof l.images === "string"
+                      ? (() => {
+                          try {
+                            return JSON.parse(l.images);
+                          } catch {
+                            return [];
+                          }
+                        })()
+                      : [];
+                  if (imgs.length > 0 && typeof imgs[0] === "string") {
+                    firstImg = imgs[0].startsWith("http")
+                      ? imgs[0]
+                      : `${BASE}${imgs[0].startsWith("/") ? "" : "/"}${imgs[0]}`;
+                  }
+                }
+                return entry(
+                  `${BASE}/ilan/${l.slug}`,
+                  String(l.updated_at).slice(0, 10) || today,
+                  "daily",
+                  "0.6",
+                  firstImg ? { loc: firstImg, title: l.title } : null,
+                );
+              }),
             ));
           } catch { sendXml(wrapUrlset([])); }
           return;
@@ -230,6 +269,7 @@ function seoPlugin(): Plugin {
             "Disallow: /doping",
             "Disallow: /arsiv",
             "Disallow: /login",
+            "Disallow: /ilan-ver",
             "",
             "# API rotaları",
             "Disallow: /api/",
