@@ -27,10 +27,10 @@ export const Route = createFileRoute("/satici/$id")({
     const { seller } = loaderData;
     const BASE = "https://www.geldesat.com";
     const pageUrl = `${BASE}/satici/${seller.id}`;
-    const title = `${seller.name} | GeldeSat Satıcı Profili`;
+    const title = `${seller.name} Satıcı Profili ve Güncel İlanları | GeldeSat`;
     const desc = seller.bio
       ? seller.bio.slice(0, 160)
-      : `${seller.name} satıcısının tüm ilanlarını GeldeSat'ta inceleyin.${seller.rating_count > 0 ? ` Puan: ${seller.rating_avg.toFixed(1)}/5 (${seller.rating_count} değerlendirme).` : ""}`;
+      : `${seller.name} kullanıcısının GeldeSat üzerindeki tüm aktif ilanlarını inceleyin.${seller.rating_count > 0 ? ` Değerlendirme Puanı: ${seller.rating_avg.toFixed(1)}/5 (${seller.rating_count} yorum).` : ""} Güvenli alışveriş ve hızlı iletişim.`;
     return {
       meta: [
         { title },

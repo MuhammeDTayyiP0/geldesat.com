@@ -3,6 +3,7 @@ import { ChevronRight, LayoutGrid, List as ListIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { getCategory, searchCatalog } from "@/lib/server/catalog";
 import { attrsToSearch, parseAttrs, parseSearch, toFilters } from "@/lib/search-params";
+import { buildCategorySeo, getCategoryHierarchicalName, BASE_URL, DEFAULT_OG_IMAGE } from "@/lib/seo";
 
 import { ListingCard } from "@/components/listing/ListingCard";
 import { Filters, type FilterState } from "@/components/listing/Filters";
@@ -29,7 +30,7 @@ export const Route = createFileRoute("/category/$slug")({
       message="Ulaşmaya çalıştığınız ilan kategorisi sistemimizde bulunamadı veya adı değiştirilmiş olabilir."
     />
   ),
-  head: ({ loaderData }) => {
+  head: ({ loaderData, match }) => {
     if (!loaderData?.cat?.category) {
       return {
         meta: [
@@ -38,84 +39,59 @@ export const Route = createFileRoute("/category/$slug")({
         ],
       };
     }
-    const category = loaderData.cat.category;
-    const cat = loaderData.cat;
+    const { category, path } = loaderData.cat;
     const result = loaderData.result;
-    const BASE = "https://www.geldesat.com";
-    const pageUrl = `${BASE}/category/${category.slug}`;
-    const totalCount = result?.total ?? 0;
-    const title = `${category.name} İlanları${totalCount > 0 ? ` (${totalCount.toLocaleString("tr-TR")} ilan)` : ""} | GeldeSat`;
-    const desc = `GeldeSat'ta ${category.name} kategorisinde ${totalCount > 0 ? `${totalCount.toLocaleString("tr-TR")} güncel` : "güncel"} ilan. Fiyat ve özelliklere göre filtreleyin, satıcıyla doğrudan iletişime geçin.`;
+    const search = match.search as Record<string, unknown> | undefined;
 
-    // BreadcrumbList
-    const breadcrumbItems = [
-      { "@type": "ListItem", position: 1, name: "Anasayfa", item: BASE },
-      ...(cat.path ?? []).map((p: { name: string; slug: string }, i: number) => ({
-        "@type": "ListItem",
-        position: i + 2,
-        name: p.name,
-        item: `${BASE}/category/${p.slug}`,
-      })),
-    ];
+    const seo = buildCategorySeo({
+      category,
+      path,
+      result,
+      search: {
+        city: typeof search?.city === "string" ? search.city : undefined,
+        district: typeof search?.district === "string" ? search.district : undefined,
+      },
+    });
 
-    // Sayfalama için rel prev/next canonical linkleri
-    const currentPage = result?.page ?? 1;
-    const totalPages = result?.pages ?? 1;
-    const paginationLinks: { rel: string; href: string }[] = [
-      { rel: "canonical", href: currentPage === 1 ? pageUrl : `${pageUrl}?page=${currentPage}` },
-    ];
-    if (currentPage > 1) {
-      paginationLinks.push({
-        rel: "prev",
-        href: currentPage === 2 ? pageUrl : `${pageUrl}?page=${currentPage - 1}`,
-      });
-    }
-    if (currentPage < totalPages) {
-      paginationLinks.push({
-        rel: "next",
-        href: `${pageUrl}?page=${currentPage + 1}`,
-      });
-    }
-
-    // ItemList — kategorideki ilanlar (Google'a liste sinyali verir)
+    // ItemList — kategorideki ilk 10 ilan
     const itemListElements = (result?.listings ?? []).slice(0, 10).map(
       (l: { slug: string; title: string }, i: number) => ({
         "@type": "ListItem",
         position: i + 1,
         name: l.title,
-        url: `${BASE}/ilan/${l.slug}`,
+        url: `${BASE_URL}/ilan/${l.slug}`,
       }),
     );
 
     return {
       meta: [
-        { title },
-        { name: "description", content: desc },
+        { title: seo.title },
+        { name: "description", content: seo.description },
         { name: "robots", content: "index,follow" },
         // Open Graph
         { property: "og:site_name", content: "GeldeSat" },
         { property: "og:locale", content: "tr_TR" },
         { property: "og:type", content: "website" },
-        { property: "og:url", content: pageUrl },
-        { property: "og:title", content: title },
-        { property: "og:description", content: desc },
-        { property: "og:image", content: `${BASE}/og.jpg` },
+        { property: "og:url", content: seo.pageUrl },
+        { property: "og:title", content: seo.title },
+        { property: "og:description", content: seo.description },
+        { property: "og:image", content: DEFAULT_OG_IMAGE },
         { property: "og:image:width", content: "1200" },
         { property: "og:image:height", content: "630" },
         // Twitter / X
         { name: "twitter:card", content: "summary_large_image" },
-        { name: "twitter:title", content: title },
-        { name: "twitter:description", content: desc },
-        { name: "twitter:image", content: `${BASE}/og.jpg` },
+        { name: "twitter:title", content: seo.title },
+        { name: "twitter:description", content: seo.description },
+        { name: "twitter:image", content: DEFAULT_OG_IMAGE },
       ],
-      links: paginationLinks,
+      links: seo.paginationLinks,
       scripts: [
         {
           type: "application/ld+json",
           children: JSON.stringify({
             "@context": "https://schema.org/",
             "@type": "BreadcrumbList",
-            itemListElement: breadcrumbItems,
+            itemListElement: seo.breadcrumbItems,
           }),
         },
         ...(itemListElements.length > 0
@@ -125,10 +101,10 @@ export const Route = createFileRoute("/category/$slug")({
                 children: JSON.stringify({
                   "@context": "https://schema.org/",
                   "@type": "ItemList",
-                  name: `${category.name} İlanları`,
-                  description: desc,
-                  url: pageUrl,
-                  numberOfItems: totalCount,
+                  name: seo.h1,
+                  description: seo.description,
+                  url: seo.pageUrl,
+                  numberOfItems: result?.total ?? 0,
                   itemListElement: itemListElements,
                 }),
               },
@@ -224,6 +200,12 @@ function CategoryPage() {
     closeMobile();
   }
 
+  const hierarchicalName = getCategoryHierarchicalName(cat.path, cat.category.name);
+  const locationPrefix = [search.district, search.city].filter(Boolean).join(" ");
+  const pageHeading = locationPrefix
+    ? `${locationPrefix} ${hierarchicalName} İlanları`
+    : `${hierarchicalName} İlanları`;
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
       <nav className="mb-4 flex flex-wrap items-center gap-1 text-sm text-muted">
@@ -237,7 +219,7 @@ function CategoryPage() {
           </span>
         ))}
       </nav>
-      <h1 className="text-2xl font-semibold tracking-tight">{cat.category.name}</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">{pageHeading}</h1>
       <div className="mt-2 mb-4 flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted">{result.total} ilan</p>
         <div className="flex items-center gap-2">

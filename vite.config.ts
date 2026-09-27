@@ -141,6 +141,7 @@ function seoPlugin(): Plugin {
         if (path === "/sitemap-static.xml") {
           sendXml(wrapUrlset([
             entry(`${BASE}/`, today, "daily", "1.0"),
+            entry(`${BASE}/harita`, today, "daily", "0.8"),
             entry(`${BASE}/sayfa/hakkimizda`, today, "monthly", "0.5"),
             entry(`${BASE}/sayfa/iletisim`, today, "monthly", "0.5"),
             entry(`${BASE}/sayfa/kvkk`, today, "monthly", "0.3"),
@@ -156,12 +157,33 @@ function seoPlugin(): Plugin {
         if (path === "/sitemap-categories.xml") {
           try {
             const sql = await getSql();
-            const cats = await sql.query<{ slug: string }>(
-              "SELECT slug FROM categories ORDER BY sort_order, name",
+            const cats = await sql.query<{ slug: string; lastmod: string }>(
+              `WITH active_cats AS (
+                 SELECT DISTINCT category_id FROM listings
+                 WHERE status = 'ACTIVE' AND (expires_at IS NULL OR expires_at > now())
+               ),
+               cat_dates AS (
+                 SELECT category_id, MAX(COALESCE(updated_at, created_at)) as max_date
+                 FROM listings
+                 WHERE status = 'ACTIVE' AND (expires_at IS NULL OR expires_at > now())
+                 GROUP BY category_id
+               )
+               SELECT c.slug,
+                      COALESCE(TO_CHAR(cd.max_date, 'YYYY-MM-DD'), $1) as lastmod
+               FROM categories c
+               LEFT JOIN cat_dates cd ON cd.category_id = c.id
+               WHERE c.parent_id IS NULL
+                  OR c.id IN (SELECT category_id FROM active_cats)
+                  OR EXISTS (
+                    SELECT 1 FROM categories ch
+                    WHERE ch.parent_id = c.id AND ch.id IN (SELECT category_id FROM active_cats)
+                  )
+               ORDER BY c.sort_order, c.name`,
+              [today],
             );
             sendXml(wrapUrlset(
               cats.map((c) =>
-                entry(`${BASE}/category/${c.slug}`, today, "weekly", "0.7"),
+                entry(`${BASE}/category/${c.slug}`, c.lastmod || today, "daily", "0.8"),
               ),
             ));
           } catch { sendXml(wrapUrlset([])); }
@@ -225,12 +247,19 @@ function seoPlugin(): Plugin {
         if (path === "/sitemap-stores.xml") {
           try {
             const sql = await getSql();
-            const stores = await sql.query<{ slug: string; created_at: string }>(
-              "SELECT slug, created_at FROM stores ORDER BY created_at DESC LIMIT 10000",
+            const stores = await sql.query<{ slug: string; lastmod: string }>(
+              `SELECT s.slug,
+                      COALESCE(TO_CHAR(MAX(l.updated_at), 'YYYY-MM-DD'), TO_CHAR(s.created_at, 'YYYY-MM-DD'), $1) as lastmod
+               FROM stores s
+               LEFT JOIN listings l ON l.store_id = s.id AND l.status = 'ACTIVE' AND (l.expires_at IS NULL OR l.expires_at > now())
+               GROUP BY s.slug, s.created_at
+               ORDER BY s.created_at DESC
+               LIMIT 10000`,
+              [today],
             );
             sendXml(wrapUrlset(
               stores.map((s) =>
-                entry(`${BASE}/magaza/${s.slug}`, s.created_at ? String(s.created_at).slice(0, 10) : today, "weekly", "0.5"),
+                entry(`${BASE}/magaza/${s.slug}`, s.lastmod || today, "weekly", "0.6"),
               ),
             ));
           } catch { sendXml(wrapUrlset([])); }
@@ -241,12 +270,19 @@ function seoPlugin(): Plugin {
         if (path === "/sitemap-sellers.xml") {
           try {
             const sql = await getSql();
-            const sellers = await sql.query<{ user_id: string; created_at: string }>(
-              "SELECT user_id, created_at FROM profiles ORDER BY created_at DESC LIMIT 10000",
+            const sellers = await sql.query<{ user_id: string; lastmod: string }>(
+              `SELECT p.user_id,
+                      COALESCE(TO_CHAR(MAX(l.updated_at), 'YYYY-MM-DD'), TO_CHAR(p.created_at, 'YYYY-MM-DD'), $1) as lastmod
+               FROM profiles p
+               JOIN listings l ON l.user_id = p.user_id AND l.status = 'ACTIVE' AND (l.expires_at IS NULL OR l.expires_at > now())
+               GROUP BY p.user_id, p.created_at
+               ORDER BY p.created_at DESC
+               LIMIT 10000`,
+              [today],
             );
             sendXml(wrapUrlset(
               sellers.map((p) =>
-                entry(`${BASE}/satici/${p.user_id}`, p.created_at ? String(p.created_at).slice(0, 10) : today, "weekly", "0.4"),
+                entry(`${BASE}/satici/${p.user_id}`, p.lastmod || today, "weekly", "0.5"),
               ),
             ));
           } catch { sendXml(wrapUrlset([])); }

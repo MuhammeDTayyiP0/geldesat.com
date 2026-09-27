@@ -27,10 +27,10 @@ export const Route = createFileRoute("/magaza/$slug")({
     const { store } = loaderData;
     const BASE = "https://www.geldesat.com";
     const pageUrl = `${BASE}/magaza/${store.slug}`;
-    const title = `${store.name} | GeldeSat Mağaza`;
+    const title = `${store.name} Mağazası İlanları ve Fiyatları | GeldeSat`;
     const desc = store.description
       ? store.description.slice(0, 160)
-      : `${store.name} mağazasının tüm ilanlarını GeldeSat'ta inceleyin.`;
+      : `${store.name} mağazasının tüm güncel satılık ve kiralık ilanlarını GeldeSat'ta inceleyin, uygun fiyatlarla doğrudan satıcıyla iletişime geçin.`;
     return {
       meta: [
         { title },

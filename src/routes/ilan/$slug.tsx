@@ -1,5 +1,6 @@
 import { createFileRoute, Link, useNavigate, notFound } from "@tanstack/react-router";
 import { NotFound } from "@/components/common/NotFound";
+import { buildListingSeo } from "@/lib/seo";
 import {
   AlertCircle,
   Check,
@@ -82,39 +83,8 @@ export const Route = createFileRoute("/ilan/$slug")({
       };
     }
     const { listing, path, seller } = loaderData;
-    const desc = listing.description
-      ? listing.description.replace(/\s+/g, " ").slice(0, 160)
-      : `${listing.title} ilanı GeldeSat'ta. Fiyat ve tüm teknik özellikler için hemen tıklayın.`;
+    const seo = buildListingSeo({ listing, path, seller });
 
-    const BASE = "https://www.geldesat.com";
-    const pageUrl = `${BASE}/ilan/${listing.slug}`;
-
-    // OG image — her zaman tam URL (göreceli yolu mutlak URL'e çevir)
-    const rawImage = listing.images && listing.images.length > 0 ? listing.images[0] : null;
-    const coverImage = rawImage
-      ? rawImage.startsWith("http")
-        ? rawImage
-        : `${BASE}${rawImage.startsWith("/") ? "" : "/"}${rawImage}`
-      : `${BASE}/og.jpg`;
-
-    // JSON-LD: tüm görselleri tam URL'e çevir
-    const absoluteImages = (listing.images ?? []).map((img: string) =>
-      img.startsWith("http") ? img : `${BASE}${img.startsWith("/") ? "" : "/"}${img}`,
-    );
-
-    // BreadcrumbList
-    const breadcrumbItems = [
-      { "@type": "ListItem", position: 1, name: "Anasayfa", item: BASE },
-      ...(path ?? []).map((p: { name: string; slug: string }, i: number) => ({
-        "@type": "ListItem",
-        position: i + 2,
-        name: p.name,
-        item: `${BASE}/category/${p.slug}`,
-      })),
-      { "@type": "ListItem", position: (path?.length ?? 0) + 2, name: listing.title, item: pageUrl },
-    ];
-
-    // Product + Offer schema
     const datePublished = listing.created_at
       ? new Date(listing.created_at).toISOString()
       : undefined;
@@ -122,76 +92,20 @@ export const Route = createFileRoute("/ilan/$slug")({
       ? new Date(listing.updated_at).toISOString()
       : datePublished;
 
-    const productSchema: Record<string, unknown> = {
-      "@context": "https://schema.org/",
-      "@type": "Product",
-      name: listing.title,
-      description: desc,
-      url: pageUrl,
-      sku: listing.id?.substring(0, 8),
-      image: absoluteImages.length > 0 ? absoluteImages : [coverImage],
-      ...(datePublished ? { datePublished } : {}),
-      ...(dateModified ? { dateModified } : {}),
-      ...(seller && seller.rating_count > 0
-        ? {
-            aggregateRating: {
-              "@type": "AggregateRating",
-              ratingValue: seller.rating_avg.toFixed(1),
-              reviewCount: seller.rating_count,
-              bestRating: 5,
-              worstRating: 1,
-            },
-          }
-        : {}),
-      offers: {
-        "@type": "Offer",
-        priceCurrency: listing.currency || "TRY",
-        price: listing.price,
-        priceValidUntil: new Date(Date.now() + 30 * 86400_000).toISOString().slice(0, 10),
-        availability:
-          listing.status === "ACTIVE"
-            ? "https://schema.org/InStock"
-            : "https://schema.org/OutOfStock",
-        url: pageUrl,
-        ...(seller && seller.name
-          ? {
-              seller: {
-                "@type": "Person",
-                name: seller.name,
-                url: `${BASE}/satici/${seller.id ?? ""}`,
-              },
-            }
-          : {}),
-        ...(listing.city
-          ? {
-              availableAtOrFrom: {
-                "@type": "Place",
-                name: listing.city,
-                address: {
-                  "@type": "PostalAddress",
-                  addressLocality: listing.city,
-                  addressCountry: "TR",
-                },
-              },
-            }
-          : {}),
-      },
-    };
-
     return {
       meta: [
-        { title: `${listing.title} - ${formatPrice(listing.price)} | GeldeSat` },
-        { name: "description", content: desc },
+        { title: seo.title },
+        { name: "description", content: seo.description },
         { name: "robots", content: listing.status === "ACTIVE" ? "index,follow" : "noindex,nofollow" },
         ...(seller?.name ? [{ name: "author", content: seller.name }] : []),
         // Open Graph
         { property: "og:site_name", content: "GeldeSat" },
         { property: "og:locale", content: "tr_TR" },
         { property: "og:type", content: "product" },
-        { property: "og:url", content: pageUrl },
-        { property: "og:title", content: `${listing.title} - ${formatPrice(listing.price)}` },
-        { property: "og:description", content: desc },
-        { property: "og:image", content: coverImage },
+        { property: "og:url", content: seo.pageUrl },
+        { property: "og:title", content: seo.title },
+        { property: "og:description", content: seo.description },
+        { property: "og:image", content: seo.coverImage },
         { property: "og:image:width", content: "1200" },
         { property: "og:image:height", content: "630" },
         ...(dateModified ? [{ property: "og:updated_time", content: dateModified }] : []),
@@ -199,22 +113,22 @@ export const Route = createFileRoute("/ilan/$slug")({
         ...(dateModified ? [{ property: "article:modified_time", content: dateModified }] : []),
         // Twitter / X
         { name: "twitter:card", content: "summary_large_image" },
-        { name: "twitter:title", content: `${listing.title} - ${formatPrice(listing.price)}` },
-        { name: "twitter:description", content: desc },
-        { name: "twitter:image", content: coverImage },
+        { name: "twitter:title", content: seo.title },
+        { name: "twitter:description", content: seo.description },
+        { name: "twitter:image", content: seo.coverImage },
       ],
-      links: [{ rel: "canonical", href: pageUrl }],
+      links: [{ rel: "canonical", href: seo.canonicalUrl }],
       scripts: [
         {
           type: "application/ld+json",
-          children: JSON.stringify(productSchema),
+          children: JSON.stringify(seo.structuredData),
         },
         {
           type: "application/ld+json",
           children: JSON.stringify({
             "@context": "https://schema.org/",
             "@type": "BreadcrumbList",
-            itemListElement: breadcrumbItems,
+            itemListElement: seo.breadcrumbItems,
           }),
         },
       ],
@@ -947,9 +861,9 @@ function ListingPage() {
                 {listing.boosts?.includes("ACIL") ? <Badge tone="danger">Acil</Badge> : null}
                 {listing.status === "SOLD" ? <Badge tone="warn">Satıldı</Badge> : null}
               </div>
-              <h2 className="mt-2.5 font-display text-xl font-bold leading-snug text-fg">
+              <h1 className="mt-2.5 font-display text-xl font-bold leading-snug text-fg">
                 {listing.title}
-              </h2>
+              </h1>
               <p className="mt-2 flex items-center gap-1.5 text-xs text-muted">
                 <MapPin className="size-3.5 text-subtle shrink-0" />
                 <span>{locationString || "Türkiye"}</span>

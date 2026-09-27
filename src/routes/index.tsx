@@ -111,7 +111,7 @@ function Home() {
         <div className="mx-auto max-w-6xl px-4 py-10 md:py-14">
           <p className="text-xs font-semibold uppercase tracking-wide text-primary">Türkiye ilan platformu</p>
           <h1 className="mt-2 max-w-2xl text-3xl font-semibold leading-tight tracking-tight md:text-4xl">
-            Emlak, vasıta ve ikinci el ilanları
+            GeldeSat — Emlak, Vasıta ve İkinci El İlanları
           </h1>
           <p className="mt-3 max-w-xl text-sm text-muted">
             {stats.listings} yayındaki ilan
