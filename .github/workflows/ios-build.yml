@@ -9,10 +9,6 @@ jobs:
   build-ios:
     runs-on: macos-latest
 
-    defaults:
-      run:
-        working-directory: ./mobile
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -23,58 +19,62 @@ jobs:
           node-version: 20
 
       - name: Install dependencies
-        run: npm install
+        run: |
+          cd mobile
+          npm install
 
       - name: Generate iOS Native Project
-        run: npx expo prebuild --platform ios
+        run: |
+          cd mobile
+          npx expo prebuild --platform ios
 
       - name: Install Pods
         run: |
-          cd ios
+          cd mobile/ios
           pod install
 
       - name: Build iOS App (Unsigned)
         run: |
+          cd mobile
           WORKSPACE=$(ls -d ios/*.xcworkspace | head -n 1)
           SCHEME=$(xcodebuild -workspace "$WORKSPACE" -list | grep -A 1 "Schemes:" | tail -n 1 | xargs)
           
           echo "Bulunan Workspace: $WORKSPACE"
           echo "Bulunan Scheme: $SCHEME"
 
-          # Imzasiz Build Komutu
           xcodebuild -workspace "$WORKSPACE" \
                      -scheme "$SCHEME" \
                      -configuration Release \
                      -sdk iphoneos \
-                     -derivedDataPath "$PWD/build" \
+                     -derivedDataPath build \
                      CODE_SIGNING_ALLOWED=NO \
                      CODE_SIGNING_REQUIRED=NO \
                      CODE_SIGN_IDENTITY="" \
                      CODE_SIGN_ENTITLEMENTS="" \
                      COMPILER_INDEX_STORE_ENABLE=NO \
-                     ONLY_ACTIVE_ARCH=NO \
                      build
 
       - name: Package Unsigned IPA
         run: |
+          cd mobile
           mkdir -p Payload
           
-          # Build klasoru altindaki .app dosyasini bul
-          APP_PATH=$(find "$PWD/build" -name "*.app" -type d | grep "Release-iphoneos" | head -n 1)
+          # Build klasorunun icindeki tum .app klasorlerini bul
+          APP_PATH=$(find build/Build/Products/Release-iphoneos -name "*.app" -type d | head -n 1)
           
           if [ -z "$APP_PATH" ]; then
-            # Alternatif arama
-            APP_PATH=$(find "$PWD/build" -name "*.app" -type d | head -n 1)
+            # Alternatif derin arama
+            APP_PATH=$(find build -name "*.app" -type d | grep "Release-iphoneos" | head -n 1)
           fi
 
-          echo "Seçilen App Yolu: $APP_PATH"
+          echo "Secilen App Yolu: $APP_PATH"
           
           if [ -z "$APP_PATH" ]; then
-            echo "HATA: .app dosyasi derlenemedi! Lutfen yukaridaki Build adiminin loglarini kontrol edin."
+            echo "HATA: .app dosyasi bulunamadi!"
             exit 1
           fi
 
-          # .app dosyasini Payload klasorune kopyala ve .ipa olarak ziple
+          # .app dosyasini Payload/ icine koyup ziple
           cp -R "$APP_PATH" Payload/
           zip -r geldesat-unsigned.ipa Payload
 
