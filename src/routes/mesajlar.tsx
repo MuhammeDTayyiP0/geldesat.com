@@ -224,7 +224,7 @@ function MessagesLayout() {
             ) : null}
           </div>
         ) : (
-          <ul className="min-h-0 flex-1 divide-y divide-border/60 overflow-auto">
+          <ul className="min-h-0 flex-1 divide-y divide-border/60 overflow-auto pb-24 md:pb-0">
             {filtered.map((c) => {
               const on = c.id === activeId;
               const unread = on ? 0 : c.unread;

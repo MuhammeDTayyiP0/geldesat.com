@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate, notFound } from "@tanstack/react-router";
-import { ChevronRight, LayoutGrid, List as ListIcon } from "lucide-react";
+import { ChevronRight, LayoutGrid, List as ListIcon, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { getCategory, searchCatalog } from "@/lib/server/catalog";
 import { attrsToSearch, parseAttrs, parseSearch, toFilters } from "@/lib/search-params";
@@ -142,6 +142,14 @@ function CategoryPage() {
   const [mobile, setMobile] = useState(false);
   const [mobileVisible, setMobileVisible] = useState(false);
 
+  // Lock body scroll when mobile filter is open
+  useEffect(() => {
+    const root = document.documentElement;
+    if (mobile) root.classList.add("mobile-nav-lock");
+    else root.classList.remove("mobile-nav-lock");
+    return () => root.classList.remove("mobile-nav-lock");
+  }, [mobile]);
+
   function openMobile() {
     setMobile(true);
     requestAnimationFrame(() => requestAnimationFrame(() => setMobileVisible(true)));
@@ -150,6 +158,12 @@ function CategoryPage() {
   function closeMobile() {
     setMobileVisible(false);
     setTimeout(() => setMobile(false), 300);
+  }
+
+  function resetFilters() {
+    setFilters({ attrs: {} });
+    void nav({ to: "/category/$slug", params: { slug }, search: { page: "1" } });
+    closeMobile();
   }
   const initial = useMemo<FilterState>(() => {
     const attrs = parseAttrs(search.attrs) ?? {};
@@ -313,21 +327,64 @@ function CategoryPage() {
           ) : null}
         </div>
       </div>
-      {/* Mobile filtre — açılma/kapanma animasyonlu */}
+      {/* Mobile filtre — modern alt çekmece */}
       {mobile ? (
         <div
           className={`fixed inset-0 z-50 lg:hidden transition-colors duration-300 ${
-            mobileVisible ? "bg-ink/40" : "bg-transparent"
+            mobileVisible ? "bg-ink/50 backdrop-blur-xs" : "bg-transparent pointer-events-none"
           }`}
           onClick={closeMobile}
         >
           <div
-            className={`absolute inset-x-0 bottom-0 max-h-[85dvh] overflow-auto rounded-t-xl bg-bg p-4 transition-transform duration-300 ${
+            className={`absolute inset-x-0 bottom-0 flex max-h-[90dvh] flex-col rounded-t-2xl border-t border-border bg-surface shadow-2xl transition-transform duration-300 ${
               mobileVisible ? "translate-y-0" : "translate-y-full"
             }`}
             onClick={(e) => e.stopPropagation()}
           >
-            <Filters value={filters} onChange={setFilters} onApply={() => apply()} attributes={cat.attributes} />
+            {/* Header: Başlık, Temizle ve Kapat */}
+            <div className="flex items-center justify-between border-b border-border/80 px-4 py-3">
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-bold text-fg">Filtreler</h2>
+                <span className="rounded-full bg-elevated px-2 py-0.5 text-xs text-muted">
+                  {result.total} ilan
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={resetFilters}
+                  className="rounded-lg px-2.5 py-1 text-xs font-semibold text-muted hover:text-danger hover:bg-danger/10 transition-colors"
+                >
+                  Temizle
+                </button>
+                <button
+                  type="button"
+                  onClick={closeMobile}
+                  className="grid size-8 place-items-center rounded-lg hover:bg-elevated text-muted hover:text-fg"
+                  aria-label="Kapat"
+                >
+                  <X className="size-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Scrollable Filter Content */}
+            <div className="flex-1 overflow-y-auto overscroll-contain p-4 pb-2">
+              <Filters
+                value={filters}
+                onChange={setFilters}
+                onApply={() => apply()}
+                attributes={cat.attributes}
+                hideApplyButton
+              />
+            </div>
+
+            {/* Sticky Bottom Actions */}
+            <div className="border-t border-border bg-surface p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-lift">
+              <Button className="h-11 w-full text-sm font-semibold rounded-xl" onClick={() => apply()}>
+                Filtreleri Uygula ({result.total} İlan)
+              </Button>
+            </div>
           </div>
         </div>
       ) : null}

@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useState } from "react";
 import { searchCatalog } from "@/lib/server/catalog";
 import { CITY_COORDS } from "@/lib/data/geo";
 import { formatPrice } from "@/lib/utils";
@@ -20,6 +21,7 @@ export const Route = createFileRoute("/harita")({
 
 function MapPage() {
   const { listings } = Route.useLoaderData();
+  const [mapActive, setMapActive] = useState(false);
   const byCity = new Map<string, number>();
   for (const l of listings) {
     if (!l.city) continue;
@@ -34,9 +36,27 @@ function MapPage() {
         <div className="relative h-[420px] bg-elevated">
           <iframe
             title="Türkiye haritası"
-            className="absolute inset-0 size-full border-0"
+            className={`absolute inset-0 size-full border-0 ${mapActive ? "" : "pointer-events-none md:pointer-events-auto"}`}
             src="https://www.openstreetmap.org/export/embed.html?bbox=25.6%2C35.8%2C45.0%2C42.4&layer=mapnik"
           />
+          {!mapActive ? (
+            <div
+              onClick={() => setMapActive(true)}
+              className="absolute inset-0 z-20 flex items-center justify-center bg-ink/15 backdrop-blur-[1px] md:hidden cursor-pointer"
+            >
+              <span className="rounded-full bg-ink/85 px-4 py-2 text-xs font-semibold text-primary-fg shadow-lg">
+                Haritada gezinmek için dokunun
+              </span>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setMapActive(false)}
+              className="absolute top-3 right-3 z-30 rounded-lg bg-surface/90 px-3 py-1.5 text-xs font-semibold text-fg shadow-md border border-border md:hidden"
+            >
+              Haritayı Kilitle
+            </button>
+          )}
           {pinned.slice(0, 24).map((l: any) => {
             const x = ((l.lng! - 26) / (45 - 26)) * 100;
             const y = ((42.5 - l.lat!) / (42.5 - 36)) * 100;

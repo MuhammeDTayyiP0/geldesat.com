@@ -14,7 +14,7 @@ export function ListingCard({ listing, variant = "grid" }: { listing: Listing; v
     <div
       className={
         variant === "list"
-          ? "relative h-full min-h-[132px] w-[140px] shrink-0 overflow-hidden bg-elevated sm:w-[220px]"
+          ? "relative h-full min-h-[115px] w-[115px] shrink-0 overflow-hidden bg-elevated sm:w-[180px] md:w-[220px]"
           : "relative aspect-[4/3] overflow-hidden bg-elevated"
       }
     >
@@ -42,7 +42,7 @@ export function ListingCard({ listing, variant = "grid" }: { listing: Listing; v
   );
 
   const body = (
-    <div className="flex flex-1 flex-col p-4">
+    <div className={variant === "list" ? "flex flex-1 min-w-0 flex-col p-3 sm:p-4" : "flex flex-1 flex-col p-4"}>
       <p className="text-lg font-semibold tracking-tight text-primary tabular-nums">{formatPrice(listing.price)}</p>
       <h3 className={`mt-1 line-clamp-2 text-sm leading-snug text-fg group-hover:text-primary ${kalin ? "font-bold" : "font-medium"}`}>
         {listing.title}

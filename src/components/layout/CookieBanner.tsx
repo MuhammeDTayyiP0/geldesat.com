@@ -21,7 +21,7 @@ export function CookieBanner() {
   return (
     <>
       <div className="h-28 sm:h-20" aria-hidden />
-      <div className="fixed inset-x-0 bottom-0 z-50 px-3 pb-3">
+      <div className="fixed inset-x-0 bottom-[calc(4.25rem+env(safe-area-inset-bottom,0px))] md:bottom-0 z-50 px-3 pb-2 md:pb-3">
         <div className="mx-auto flex max-w-6xl flex-col gap-3 rounded-xl border border-border bg-surface p-4 shadow-lift sm:flex-row sm:items-center">
           <p className="flex-1 text-sm leading-snug text-muted">
             Zorunlu çerezler oturum ve güvenlik içindir. Ayrıntı{" "}

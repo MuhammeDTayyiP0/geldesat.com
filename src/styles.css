@@ -103,9 +103,14 @@ html {
     background-repeat: no-repeat;
     background-position: right 0.75rem center;
     padding: 0 2.5rem 0 0.75rem;
-    font-size: 0.875rem;
+    font-size: 1rem;
     color: var(--color-fg);
     outline: none;
+  }
+  @media (min-width: 768px) {
+    .field-select {
+      font-size: 0.875rem;
+    }
   }
   .field-select:focus {
     border-color: var(--color-primary);

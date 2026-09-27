@@ -97,6 +97,11 @@ function Shell() {
   const isChatThread = useRouterState({
     select: (s) => s.matches.some((m) => m.routeId === "/mesajlar/$id"),
   });
+  const isListingDetail = useRouterState({
+    select: (s) => s.matches.some((m) => m.routeId === "/ilan/$slug"),
+  });
+  // BottomNav shows on inbox /mesajlar and general pages, but hides in individual chat thread and listing detail (which has StickyContactBar)
+  const hideBottomNav = isChatThread || isListingDetail;
 
   // Once client hydrates, smoothly remove initial splash overlay from DOM
   useEffect(() => {
@@ -119,8 +124,8 @@ function Shell() {
         <Outlet />
       </main>
       {isChat ? null : <Footer />}
-      {isChat ? null : <CookieBanner />}
-      {isChat ? null : <BottomNav />}
+      {isChatThread ? null : <CookieBanner />}
+      {hideBottomNav ? null : <BottomNav />}
       <Toaster position="top-center" richColors />
     </div>
   );

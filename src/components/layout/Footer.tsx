@@ -78,7 +78,7 @@ export function Footer() {
           <p className="text-sm text-primary-fg/80">Adana, Türkiye</p>
         </div>
       </div>
-      <div className="border-t border-primary-fg/10 px-4 py-4 text-center text-xs text-subtle">
+      <div className="border-t border-primary-fg/10 px-4 py-4 pb-20 md:pb-4 text-center text-xs text-subtle">
         © {new Date().getFullYear()} {company}. İlanlar kullanıcılar tarafından yayınlanır. GeldeSat alım satımın tarafı değildir.
       </div>
     </footer>

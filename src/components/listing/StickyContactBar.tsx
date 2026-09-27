@@ -52,7 +52,10 @@ export function StickyContactBar({
     : "";
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-40 flex items-center justify-between gap-3 border-t border-border bg-surface/95 px-4 py-3 shadow-lg backdrop-blur-md lg:hidden">
+    <div
+      className="fixed bottom-0 left-0 right-0 z-40 flex items-center justify-between gap-3 border-t border-border bg-surface/95 px-4 py-3 shadow-lg backdrop-blur-md lg:hidden"
+      style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom, 0px))" }}
+    >
       {/* Price section */}
       <div className="min-w-0">
         <p className="text-2xs font-medium text-muted uppercase tracking-wider">Fiyat</p>

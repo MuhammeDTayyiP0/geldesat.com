@@ -25,11 +25,13 @@ export function Filters({
   onChange,
   onApply,
   attributes = [],
+  hideApplyButton = false,
 }: {
   value: FilterState;
   onChange: (next: FilterState) => void;
   onApply: () => void;
   attributes?: AttrDef[];
+  hideApplyButton?: boolean;
 }) {
   const city = TURKEY_CITIES.find((c) => c.name === value.city);
   const districts = city?.districts ?? [];
@@ -216,9 +218,11 @@ export function Filters({
           <option value="views_desc">En çok görüntülenen</option>
         </Select>
       </div>
-      <Button className="w-full" onClick={onApply}>
-        Filtrele
-      </Button>
+      {!hideApplyButton ? (
+        <Button className="w-full" onClick={onApply}>
+          Filtrele
+        </Button>
+      ) : null}
     </aside>
   );
 }

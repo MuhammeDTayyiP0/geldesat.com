@@ -78,66 +78,72 @@ function Mine() {
                   ) : null}
                 </div>
                 <ListingCard listing={l} variant="list" />
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Link to="/ilan-ver" search={{ id: l.id }}>
-                    <Button size="sm" variant="outline">
-                      Düzenle
-                    </Button>
-                  </Link>
-                  {l.status === "ACTIVE" && !expired ? (
-                    <Button size="sm" variant="outline" onClick={() => setListingStatus({ data: { id: l.id, status: "SOLD" } }).then(reload)}>
-                      Satıldı
-                    </Button>
-                  ) : null}
-                  {l.status === "ACTIVE" && !expired ? (
-                    <Button size="sm" variant="outline" onClick={() => setListingStatus({ data: { id: l.id, status: "INACTIVE" } }).then(reload)}>
-                      Yayından kaldır
-                    </Button>
-                  ) : null}
-                  {(l.status === "INACTIVE" || l.status === "SOLD") && !expired ? (
-                    <Button size="sm" variant="outline" onClick={() => setListingStatus({ data: { id: l.id, status: "ACTIVE" } }).then(reload)}>
-                      Yayına al
-                    </Button>
-                  ) : null}
-                  {l.status !== "REJECTED" ? (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() =>
-                        renewListing({ data: { id: l.id } })
-                          .then(() => {
-                            toast.success("Süre 30 gün uzatıldı");
-                            reload();
-                          })
-                          .catch((e) => toast.error(e instanceof Error ? e.message : "Yenilenemedi"))
-                      }
-                    >
-                      {expired ? "Yenile ve yayına al" : "30 gün yenile"}
-                    </Button>
-                  ) : null}
-                  {pendingDel === l.id ? (
-                    <>
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-border/60">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Link to="/ilan-ver" search={{ id: l.id }}>
+                      <Button size="sm" variant="outline" className="min-h-9 font-medium">
+                        Düzenle
+                      </Button>
+                    </Link>
+                    {l.status === "ACTIVE" && !expired ? (
+                      <Button size="sm" variant="outline" className="min-h-9 font-medium" onClick={() => setListingStatus({ data: { id: l.id, status: "SOLD" } }).then(reload)}>
+                        Satıldı
+                      </Button>
+                    ) : null}
+                    {l.status === "ACTIVE" && !expired ? (
+                      <Button size="sm" variant="outline" className="min-h-9 font-medium" onClick={() => setListingStatus({ data: { id: l.id, status: "INACTIVE" } }).then(reload)}>
+                        Yayından kaldır
+                      </Button>
+                    ) : null}
+                    {(l.status === "INACTIVE" || l.status === "SOLD") && !expired ? (
+                      <Button size="sm" variant="outline" className="min-h-9 font-medium" onClick={() => setListingStatus({ data: { id: l.id, status: "ACTIVE" } }).then(reload)}>
+                        Yayına al
+                      </Button>
+                    ) : null}
+                    {l.status !== "REJECTED" ? (
                       <Button
                         size="sm"
-                        variant="danger"
+                        variant="outline"
+                        className="min-h-9 font-medium"
                         onClick={() =>
-                          void deleteListing({ data: { id: l.id } }).then(() => {
-                            setPendingDel(null);
-                            reload();
-                          })
+                          renewListing({ data: { id: l.id } })
+                            .then(() => {
+                              toast.success("Süre 30 gün uzatıldı");
+                              reload();
+                            })
+                            .catch((e) => toast.error(e instanceof Error ? e.message : "Yenilenemedi"))
                         }
                       >
-                        Evet, sil
+                        {expired ? "Yenile ve yayına al" : "30 gün yenile"}
                       </Button>
-                      <Button size="sm" variant="ghost" onClick={() => setPendingDel(null)}>
-                        Vazgeç
+                    ) : null}
+                  </div>
+                  <div>
+                    {pendingDel === l.id ? (
+                      <div className="flex items-center gap-1.5">
+                        <Button
+                          size="sm"
+                          variant="danger"
+                          className="min-h-9"
+                          onClick={() =>
+                            void deleteListing({ data: { id: l.id } }).then(() => {
+                              setPendingDel(null);
+                              reload();
+                            })
+                          }
+                        >
+                          Evet, sil
+                        </Button>
+                        <Button size="sm" variant="ghost" className="min-h-9" onClick={() => setPendingDel(null)}>
+                          Vazgeç
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button size="sm" variant="danger" className="min-h-9" onClick={() => setPendingDel(l.id)}>
+                        Sil
                       </Button>
-                    </>
-                  ) : (
-                    <Button size="sm" variant="danger" onClick={() => setPendingDel(l.id)}>
-                      Sil
-                    </Button>
-                  )}
+                    )}
+                  </div>
                 </div>
               </div>
             );
