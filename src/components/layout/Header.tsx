@@ -73,14 +73,14 @@ function AccountMenu({ admin }: { admin: boolean }) {
         <div className="absolute right-0 z-50 mt-1 w-56 overflow-hidden rounded-xl border border-border bg-surface py-1 shadow-lift">
           <p className="truncate px-3 py-2 text-xs text-muted">{label}</p>
           <Link to="/ilanlarim" className={item} onClick={() => setOpen(false)}>
-            <LayoutGrid className="size-4 text-muted" /> İlanlarım
+            <LayoutGrid className="size-4 shrink-0 text-muted" /> İlanlarım
           </Link>
           <Link to="/profil" className={item} onClick={() => setOpen(false)}>
-            <User className="size-4 text-muted" /> Hesabım
+            <User className="size-4 shrink-0 text-muted" /> Hesabım
           </Link>
           {admin ? (
             <Link to="/admin" className={item} onClick={() => setOpen(false)}>
-              <Shield className="size-4 text-muted" /> Yönetim
+              <Shield className="size-4 shrink-0 text-muted" /> Yönetim
             </Link>
           ) : null}
           {canSignOut ? (
@@ -93,7 +93,7 @@ function AccountMenu({ admin }: { admin: boolean }) {
                 void signOut().catch(() => setSigningOut(false));
               }}
             >
-              <LogOut className="size-4 text-muted" /> {signingOut ? "Çıkılıyor…" : "Çıkış"}
+              <LogOut className="size-4 shrink-0 text-muted" /> {signingOut ? "Çıkılıyor…" : "Çıkış"}
             </button>
           ) : null}
         </div>
@@ -157,7 +157,7 @@ function MenuRow({
       className="flex min-h-12 items-center gap-3 rounded-xl px-2 pr-3 text-sm font-medium text-fg transition-colors duration-150 hover:bg-elevated active:scale-[0.96]"
     >
       <span className="grid size-10 place-items-center rounded-lg bg-elevated text-primary">
-        <Icon className="size-5" />
+        <Icon className="size-5 shrink-0" />
       </span>
       <span className="flex-1">{label}</span>
       {badge && badge > 0 ? (
@@ -165,7 +165,7 @@ function MenuRow({
           {badge > 99 ? "99+" : badge}
         </span>
       ) : (
-        <ChevronRight className="size-4 text-subtle" />
+        <ChevronRight className="size-4 shrink-0 text-subtle" />
       )}
     </Link>
   );
@@ -191,7 +191,7 @@ function NavChip({
       className="relative flex min-h-16 flex-col items-center justify-center gap-1.5 rounded-xl bg-elevated px-1 text-center transition-colors duration-150 hover:bg-border/60 active:scale-[0.96]"
     >
       <span className="relative grid size-9 place-items-center rounded-lg bg-surface text-primary shadow-card">
-        <Icon className="size-5" />
+        <Icon className="size-5 shrink-0" />
         {badge && badge > 0 ? (
           <span className="absolute -right-1.5 -top-1.5 min-w-4 rounded-full bg-primary px-1 text-center text-xs font-medium leading-4 text-primary-fg tabular-nums">
             {badge > 99 ? "99+" : badge}
@@ -501,18 +501,18 @@ export function Header({ className }: { className?: string } = {}) {
           </SignedOut>
           <SignedIn>
             <Link to="/bildirimler" className="relative grid size-11 place-items-center rounded-lg hover:bg-elevated" aria-label="Bildirimler">
-              <Bell className="size-5" />
+              <Bell className="size-5 shrink-0" />
               <UnreadDot n={noteUnread} />
             </Link>
             <Link to="/favoriler" className="grid size-11 place-items-center rounded-lg hover:bg-elevated" aria-label="Favoriler">
-              <Heart className="size-5" />
+              <Heart className="size-5 shrink-0" />
             </Link>
             <Link
               to="/mesajlar"
               className="relative grid size-11 place-items-center rounded-lg hover:bg-elevated transition-colors"
               aria-label={msgUnread > 0 ? `Mesajlar, ${msgUnread} okunmamış` : "Mesajlar"}
             >
-              <MessageCircle className={cn("size-5 transition-colors", msgUnread > 0 && "text-primary")} />
+              <MessageCircle className={cn("size-5 shrink-0 transition-colors", msgUnread > 0 && "text-primary")} />
               {msgUnread > 0 ? (
                 <span className="absolute right-1 top-1">
                   <span className="absolute -inset-0.5 animate-ping rounded-full bg-primary opacity-35" />
@@ -526,7 +526,7 @@ export function Header({ className }: { className?: string } = {}) {
           </SignedIn>
           <Link to="/ilan-ver" className="ml-1">
             <Button>
-              <Plus className="size-4" /> İlan ver
+              <Plus className="size-4 shrink-0" /> İlan ver
             </Button>
           </Link>
         </nav>
@@ -540,7 +540,7 @@ export function Header({ className }: { className?: string } = {}) {
             )}
             aria-label={msgUnread > 0 ? `Mesajlar, ${msgUnread} okunmamış` : "Mesajlar"}
           >
-            <MessageCircle className="size-5" />
+            <MessageCircle className="size-5 shrink-0" />
             {msgUnread > 0 ? (
               <span className="absolute right-0 top-0 grid place-items-center">
                 <span className="absolute size-5 animate-ping rounded-full bg-primary opacity-40" />
