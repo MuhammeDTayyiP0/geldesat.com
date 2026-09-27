@@ -28,7 +28,7 @@ jobs:
       - name: Generate iOS Native Project
         run: npx expo prebuild --platform ios
 
-      - name: Build iOS App (Unsigned IPA)
+      - name: Build iOS App Archive
         run: |
           cd ios
           WORKSPACE=$(ls -d *.xcworkspace | head -n 1)
@@ -41,20 +41,20 @@ jobs:
                      -scheme "$SCHEME" \
                      -configuration Release \
                      -sdk iphoneos \
-                     -derivedDataPath build \
+                     -archivePath build/App.xcarchive \
                      CODE_SIGNING_ALLOWED=NO \
                      CODE_SIGNING_REQUIRED=NO \
-                     clean build
+                     archive
 
       - name: Create IPA Package
         run: |
           mkdir -p Payload
-          # ios/build klasorunun tamamı icinde .app dosyasını arıyoruz
-          APP_PATH=$(find ios/build -name "*.app" | head -n 1)
+          # Archive icindeki .app dosyasini Payload'a kopyala
+          APP_PATH=$(find ios/build/App.xcarchive/Products/Applications -name "*.app" | head -n 1)
           echo "Bulunan App Yolu: $APP_PATH"
           
           if [ -z "$APP_PATH" ]; then
-            echo "HATA: .app dosyası bulunamadı!"
+            echo "HATA: .app dosyasi archive icinde bulunamadi!"
             exit 1
           fi
 
