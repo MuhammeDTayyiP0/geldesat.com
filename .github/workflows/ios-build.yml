@@ -33,45 +33,28 @@ jobs:
           cd ios
           pod install
 
-      - name: Build iOS App Archive
+      - name: Build Unsigned IPA with Fastlane
         run: |
           cd ios
           WORKSPACE=$(ls -d *.xcworkspace | head -n 1)
           SCHEME=$(xcodebuild -workspace "$WORKSPACE" -list | grep -A 1 "Schemes:" | tail -n 1 | xargs)
           
-          echo "Bulunan Workspace: $WORKSPACE"
-          echo "Bulunan Scheme: $SCHEME"
+          echo "Workspace: $WORKSPACE"
+          echo "Scheme: $SCHEME"
 
-          xcodebuild -workspace "$WORKSPACE" \
-                     -scheme "$SCHEME" \
-                     -configuration Release \
-                     -sdk iphoneos \
-                     -archivePath ./build/App.xcarchive \
-                     CODE_SIGNING_ALLOWED=NO \
-                     CODE_SIGNING_REQUIRED=NO \
-                     CODE_SIGNING_IDENTITY="" \
-                     CODE_SIGN_ENTITLEMENTS="" \
-                     CODE_SIGNING_INJECT_BASE_ENTITLEMENTS=NO \
-                     archive
-
-      - name: Create IPA Package
-        run: |
-          mkdir -p Payload
-          
-          # Tum ios klasorunde .app dosyasini ara
-          APP_PATH=$(find ios -name "*.app" | head -n 1)
-          echo "Bulunan App Yolu: $APP_PATH"
-          
-          if [ -z "$APP_PATH" ]; then
-            echo "HATA: .app dosyasi bulunamadi!"
-            exit 1
-          fi
-
-          cp -R "$APP_PATH" Payload/
-          zip -r geldesat-unsigned.ipa Payload
+          fastlane run build_app \
+            workspace:"$WORKSPACE" \
+            scheme:"$SCHEME" \
+            skip_build_archive:false \
+            skip_package_ipa:false \
+            skip_profile_detection:true \
+            export_method:"development" \
+            skip_codesigning:true \
+            output_directory:"../build" \
+            output_name:"geldesat-unsigned.ipa"
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
           name: geldesat-ios-app
-          path: mobile/geldesat-unsigned.ipa
+          path: mobile/build/geldesat-unsigned.ipa
