@@ -10,6 +10,7 @@ jobs:
     runs-on: macos-latest
 
     steps:
+
       # ==========================================
       # 1. Checkout
       # ==========================================
@@ -35,7 +36,7 @@ jobs:
           npm ci
 
       # ==========================================
-      # 4. Expo CLI
+      # 4. Setup Expo CLI
       # ==========================================
       - name: Setup Expo CLI
         run: |
@@ -44,15 +45,15 @@ jobs:
       # ==========================================
       # 5. Generate iOS Native Project
       # ==========================================
-      - name: Generate iOS Native Project (Prebuild)
+      - name: Generate iOS Native Project
         working-directory: mobile
         run: |
           npx expo prebuild --platform ios --clean
 
       # ==========================================
-      # 6. Build iOS App (Unsigned)
+      # 6. Build iOS App
       # ==========================================
-      - name: Build iOS App (Unsigned)
+      - name: Build iOS App
         shell: bash
         run: |
           set -e
@@ -66,14 +67,12 @@ jobs:
           WORKSPACE=$(find ios -maxdepth 1 -name "*.xcworkspace" -type d -print -quit)
 
           if [ -z "$WORKSPACE" ]; then
-            echo "HATA: ios klasoru icinde .xcworkspace bulunamadi!"
-            echo ""
-            echo "IOS KLASORU:"
+            echo "HATA: .xcworkspace bulunamadi!"
             find ios -maxdepth 2 -print
             exit 1
           fi
 
-          echo "Bulunan Workspace: $WORKSPACE"
+          echo "Workspace: $WORKSPACE"
 
           echo "========================================="
           echo "SCHEME ARANIYOR"
@@ -83,29 +82,44 @@ jobs:
             xcodebuild \
               -workspace "$WORKSPACE" \
               -list \
-              | awk '/Schemes:/ {getline; print; exit}' \
+              | awk '
+                /Schemes:/ {
+                  found=1
+                  next
+                }
+                found && NF {
+                  print
+                  exit
+                }
+              ' \
               | xargs
           )
 
           if [ -z "$SCHEME" ]; then
             echo "HATA: Scheme bulunamadi!"
-            echo ""
             xcodebuild -workspace "$WORKSPACE" -list
             exit 1
           fi
 
-          echo "Bulunan Scheme: $SCHEME"
+          echo "Scheme: $SCHEME"
 
           echo "========================================="
-          echo "BUILD HAZIRLANIYOR"
+          echo "BUILD KLASORLERI HAZIRLANIYOR"
           echo "========================================="
 
           BUILD_DIR="$GITHUB_WORKSPACE/mobile/build"
+          PRODUCTS_DIR="$BUILD_DIR/Products"
 
           rm -rf "$BUILD_DIR"
-          mkdir -p "$BUILD_DIR"
 
-          echo "Build Directory: $BUILD_DIR"
+          mkdir -p "$PRODUCTS_DIR"
+
+          echo "Build Directory:"
+          echo "$BUILD_DIR"
+
+          echo ""
+          echo "Products Directory:"
+          echo "$PRODUCTS_DIR"
 
           echo "========================================="
           echo "XCODE BUILD BASLIYOR"
@@ -116,34 +130,63 @@ jobs:
             -scheme "$SCHEME" \
             -configuration Release \
             -sdk iphoneos \
-            -derivedDataPath "$BUILD_DIR" \
+            -destination "generic/platform=iOS" \
+            -derivedDataPath "$BUILD_DIR/DerivedData" \
+            CONFIGURATION_BUILD_DIR="$PRODUCTS_DIR" \
+            SYMROOT="$BUILD_DIR/SymRoot" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             COMPILER_INDEX_STORE_ENABLE=NO \
             build
 
+          echo ""
           echo "========================================="
-          echo "XCODE BUILD TAMAMLANDI"
+          echo "XCODE BUILD BASARILI"
           echo "========================================="
 
           echo ""
-          echo "Build klasoru:"
-          find "$BUILD_DIR" -maxdepth 6 -print | sed -n '1,300p'
+          echo "========================================="
+          echo "PRODUCTS KLASORU"
+          echo "========================================="
+
+          if [ -d "$PRODUCTS_DIR" ]; then
+            find "$PRODUCTS_DIR" -maxdepth 3 -print
+          else
+            echo "HATA: Products klasoru olusmadi!"
+            exit 1
+          fi
 
           echo ""
           echo "========================================="
-          echo "APP DOSYALARI"
+          echo "APP DOSYASI ARANIYOR"
           echo "========================================="
 
-          find "$BUILD_DIR" \
-            -type d \
-            -name "*.app" \
-            -print
+          APP_PATH=$(find "$PRODUCTS_DIR" -type d -name "*.app" -print -quit)
+
+          if [ -z "$APP_PATH" ]; then
+            echo ""
+            echo "HATA: Xcode BUILD SUCCEEDED dedi fakat .app bulunamadi!"
+            echo ""
+            echo "Products:"
+            find "$PRODUCTS_DIR" -maxdepth 5 -print
+            echo ""
+            echo "DerivedData:"
+            find "$BUILD_DIR/DerivedData" -maxdepth 8 -type d -name "*.app" -print 2>/dev/null || true
+            exit 1
+          fi
+
+          echo ""
+          echo "APP BULUNDU:"
+          echo "$APP_PATH"
+
+          echo ""
+          echo "APP BOYUTU:"
+          du -sh "$APP_PATH"
 
           echo ""
           echo "========================================="
-          echo "BUILD BITTI"
+          echo "BUILD TAMAMLANDI"
           echo "========================================="
 
       # ==========================================
@@ -157,69 +200,33 @@ jobs:
           cd "$GITHUB_WORKSPACE/mobile"
 
           BUILD_DIR="$GITHUB_WORKSPACE/mobile/build"
+          PRODUCTS_DIR="$BUILD_DIR/Products"
           PAYLOAD_DIR="$GITHUB_WORKSPACE/mobile/Payload"
           IPA_PATH="$GITHUB_WORKSPACE/mobile/geldesat-unsigned.ipa"
 
           echo "========================================="
-          echo "IPA PACKAGE HAZIRLANIYOR"
+          echo "APP DOSYASI BULUNUYOR"
           echo "========================================="
 
-          echo "Build Directory:"
-          echo "$BUILD_DIR"
-
-          if [ ! -d "$BUILD_DIR" ]; then
-            echo "HATA: Build klasoru bulunamadi!"
-            exit 1
-          fi
-
-          echo ""
-          echo "========================================="
-          echo "BUILD ICERIGI"
-          echo "========================================="
-
-          find "$BUILD_DIR" -maxdepth 6 -print | sed -n '1,300p'
-
-          echo ""
-          echo "========================================="
-          echo "APP DOSYASI ARANIYOR"
-          echo "========================================="
-
-          APP_PATH=""
-
-          while IFS= read -r app; do
-            if [ -z "$APP_PATH" ]; then
-              APP_PATH="$app"
-            fi
-          done < <(
-            find "$BUILD_DIR" \
-              -type d \
-              -name "*.app" \
-              -print
-          )
-
-          echo ""
-          echo "Secilen App Yolu:"
-          echo "$APP_PATH"
+          APP_PATH=$(find "$PRODUCTS_DIR" -type d -name "*.app" -print -quit)
 
           if [ -z "$APP_PATH" ]; then
+            echo "HATA: .app bulunamadi!"
             echo ""
-            echo "========================================="
-            echo "HATA: .app DOSYASI BULUNAMADI!"
-            echo "========================================="
-
-            echo ""
-            echo "Build klasorundeki dosyalar:"
-            find "$BUILD_DIR" -type f | sed -n '1,300p'
-
-            echo ""
-            echo "Tum .app aramalari:"
-            find "$BUILD_DIR" \
-              -type d \
-              -name "*.app" \
-              -print
-
+            echo "Products klasoru:"
+            find "$PRODUCTS_DIR" -maxdepth 5 -print
             exit 1
           fi
+
+          echo "App:"
+          echo "$APP_PATH"
+
+          echo ""
+          echo "========================================="
+          echo "APP KONTROL"
+          echo "========================================="
+
+          ls -lah "$APP_PATH"
 
           echo ""
           echo "========================================="
@@ -243,23 +250,19 @@ jobs:
 
           cd "$GITHUB_WORKSPACE/mobile"
 
-          zip -r "$IPA_PATH" Payload
+          zip -qry "$IPA_PATH" Payload
 
           echo ""
           echo "========================================="
-          echo "IPA BASARIYLA OLUSTURULDU"
+          echo "IPA OLUSTURULDU"
           echo "========================================="
 
           if [ ! -f "$IPA_PATH" ]; then
-            echo "HATA: IPA dosyasi olusturulamadi!"
+            echo "HATA: IPA olusturulamadi!"
             exit 1
           fi
 
           ls -lh "$IPA_PATH"
-
-          echo ""
-          echo "IPA:"
-          echo "$IPA_PATH"
 
       # ==========================================
       # 8. Verify IPA
@@ -280,18 +283,18 @@ jobs:
             exit 1
           fi
 
-          echo "IPA bulundu:"
+          echo "IPA:"
           ls -lh "$IPA_PATH"
 
           echo ""
           echo "IPA ICERIGI:"
-          unzip -l "$IPA_PATH" | sed -n '1,80p'
+          unzip -l "$IPA_PATH" | sed -n '1,100p'
 
           echo ""
           echo "IPA KONTROL BASARILI"
 
       # ==========================================
-      # 9. Upload IPA Artifact
+      # 9. Upload IPA
       # ==========================================
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
