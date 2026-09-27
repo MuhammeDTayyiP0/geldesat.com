@@ -41,11 +41,15 @@ jobs:
           echo "Bulunan Workspace: $WORKSPACE"
           echo "Bulunan Scheme: $SCHEME"
 
+          mkdir -p build
+
           xcodebuild -workspace "$WORKSPACE" \
                      -scheme "$SCHEME" \
                      -configuration Release \
                      -sdk iphoneos \
                      -archivePath "$PWD/build/geldesat.xcarchive" \
+                     SKIP_INSTALL=NO \
+                     BUILD_DIR="$PWD/build" \
                      CODE_SIGNING_ALLOWED=NO \
                      CODE_SIGNING_REQUIRED=NO \
                      CODE_SIGNING_IDENTITY="" \
@@ -56,18 +60,32 @@ jobs:
         run: |
           mkdir -p Payload
           
-          # Olusan .app dosyasini arastir ve tam yolunu bul
-          APP_PATH=$(find "$PWD" -name "*.app" | grep "Products/Applications" | head -n 1)
+          echo "=== Taranan .app Dosyalari ==="
+          find /Users/runner/Library/Developer/Xcode/DerivedData "$PWD" -name "*.app" -type d 2>/dev/null || true
+          echo "=============================="
+
+          # 1. Öncelik: xcarchive icindeki .app
+          APP_PATH=$(find "$PWD/build/geldesat.xcarchive" -name "*.app" -type d 2>/dev/null | head -n 1)
           
-          # Eger ulasilamazsa build altindaki ilk .app dosyasini yakala
+          # 2. Öncelik: build klasorundeki Release-iphoneos icindeki .app
           if [ -z "$APP_PATH" ]; then
-            APP_PATH=$(find "$PWD/build" -name "*.app" | head -n 1)
+            APP_PATH=$(find "$PWD/build" -name "*.app" -type d | grep "Release-iphoneos" | head -n 1)
           fi
 
-          echo "Bulunan App Yolu: $APP_PATH"
+          # 3. Öncelik: DerivedData icindeki .app
+          if [ -z "$APP_PATH" ]; then
+            APP_PATH=$(find /Users/runner/Library/Developer/Xcode/DerivedData -name "*.app" -type d | grep "Release-iphoneos" | head -n 1)
+          fi
+
+          # 4. Son Çare: Herhangi bir .app
+          if [ -z "$APP_PATH" ]; then
+            APP_PATH=$(find "$PWD" -name "*.app" -type d | head -n 1)
+          fi
+
+          echo "Seçilen App Yolu: $APP_PATH"
           
           if [ -z "$APP_PATH" ]; then
-            echo "HATA: .app dosyasi bulunamadi!"
+            echo "HATA: Sistemde hicbir .app dosyasi bulunamadi!"
             exit 1
           fi
 
