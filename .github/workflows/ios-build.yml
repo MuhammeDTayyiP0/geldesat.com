@@ -3,13 +3,12 @@ name: Build iOS IPA
 on:
   push:
     branches: [ main, master ]
-  workflow_dispatch: # GitHub arayüzünden manuel tetikleme butonu ekler
+  workflow_dispatch:
 
 jobs:
   build-ios:
     runs-on: macos-latest
 
-    # Tüm adımların 'mobile' alt klasörü içinde çalışmasını sağlar
     defaults:
       run:
         working-directory: ./mobile
@@ -32,8 +31,15 @@ jobs:
       - name: Build iOS App (Unsigned IPA)
         run: |
           cd ios
-          xcodebuild -workspace *.xcworkspace \
-                     -scheme geldesat \
+          # Workspace ve Scheme isimlerini otomatik tespit et
+          WORKSPACE=$(ls -d *.xcworkspace | head -n 1)
+          SCHEME=$(xcodebuild -workspace "$WORKSPACE" -list | grep -A 1 "Schemes:" | tail -n 1 | xargs)
+          
+          echo "Bulunan Workspace: $WORKSPACE"
+          echo "Bulunan Scheme: $SCHEME"
+
+          xcodebuild -workspace "$WORKSPACE" \
+                     -scheme "$SCHEME" \
                      -configuration Release \
                      -sdk iphoneos \
                      CODE_SIGNING_ALLOWED=NO \
@@ -43,11 +49,13 @@ jobs:
       - name: Create IPA Package
         run: |
           mkdir -p Payload
-          mv ios/build/Build/Products/Release-iphoneos/*.app Payload/
+          # Derlenen .app dosyasını dinamik olarak bulup Payload içine taşı
+          APP_PATH=$(find mobile/ios/build/Build/Products/Release-iphoneos -name "*.app" | head -n 1)
+          cp -R "$APP_PATH" Payload/
           zip -r geldesat-unsigned.ipa Payload
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
           name: geldesat-ios-app
-          path: mobile/geldesat-unsigned.ipa
+          path: geldesat-unsigned.ipa
