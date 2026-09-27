@@ -49,11 +49,14 @@ jobs:
           echo "Bulunan Workspace: $WORKSPACE"
           echo "Bulunan Scheme: $SCHEME"
 
+          # Output yolunu GH Workspace bazli mutlak yol yapıyoruz
+          BUILD_DIR="$GITHUB_WORKSPACE/mobile/build"
+
           xcodebuild -workspace "$WORKSPACE" \
                      -scheme "$SCHEME" \
                      -configuration Release \
                      -sdk iphoneos \
-                     -derivedDataPath build \
+                     -derivedDataPath "$BUILD_DIR" \
                      CODE_SIGNING_ALLOWED=NO \
                      CODE_SIGNING_REQUIRED=NO \
                      CODE_SIGN_IDENTITY="" \
@@ -66,16 +69,22 @@ jobs:
           cd mobile
           mkdir -p Payload
           
-          APP_PATH=$(find build/Build/Products/Release-iphoneos -name "*.app" -type d | head -n 1)
+          BUILD_DIR="$GITHUB_WORKSPACE/mobile/build"
           
+          # Derlenen .app dosyasini arama
+          APP_PATH=$(find "$BUILD_DIR" -name "*.app" -type d | grep "Release-iphoneos" | head -n 1)
+          
+          # Alternatif olarak tum sistem DerivedData icinde arama (fallback)
           if [ -z "$APP_PATH" ]; then
-            APP_PATH=$(find build -name "*.app" -type d | grep "Release-iphoneos" | head -n 1)
+            APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData -name "*.app" -type d | grep "Release-iphoneos" | head -n 1)
           fi
 
           echo "Secilen App Yolu: $APP_PATH"
           
           if [ -z "$APP_PATH" ]; then
             echo "HATA: .app dosyasi bulunamadi!"
+            echo "Mevcut build klasoru icerigi:"
+            ls -R "$BUILD_DIR" 2>/dev/null || echo "Build klasoru yok"
             exit 1
           fi
 
