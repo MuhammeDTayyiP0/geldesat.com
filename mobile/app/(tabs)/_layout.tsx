@@ -5,7 +5,10 @@ import { Home, Search, Plus, MessageCircle, User, Bell } from 'lucide-react-nati
 import { BrandColors } from '@/constants/Colors';
 import { LogoMark } from '@/src/components/brand/LogoMark';
 
+import { useRouter } from 'expo-router';
+
 export default function TabLayout() {
+  const router = useRouter();
   return (
     <Tabs
       screenOptions={{
@@ -47,7 +50,9 @@ export default function TabLayout() {
             </View>
           ),
           headerRight: () => (
-            <TouchableOpacity style={{ marginRight: 16 }}>
+            <TouchableOpacity
+              style={{ marginRight: 16 }}
+              onPress={() => router.push('/bildirimler' as any)}>
               <Bell size={20} color="#0d1117" />
             </TouchableOpacity>
           ),

@@ -1,72 +1,174 @@
-import React, { useState } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Share } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import {
+  StyleSheet,
+  Text,
+  View,
+  ScrollView,
+  TouchableOpacity,
+  Share,
+  Linking,
+  ActivityIndicator,
+} from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { MapPin, Calendar, Eye, Share2, ShieldCheck, ChevronRight } from 'lucide-react-native';
+import {
+  MapPin,
+  Calendar,
+  Eye,
+  Share2,
+  ShieldCheck,
+  ChevronRight,
+  AlertCircle,
+  Heart,
+  Phone,
+  MessageCircle,
+} from 'lucide-react-native';
 import { BrandColors } from '@/constants/Colors';
 import { ListingImageGallery } from '@/src/components/listing/ListingImageGallery';
 import { StickyContactBar } from '@/src/components/listing/StickyContactBar';
+import {
+  getLocalFavorites,
+  getMyLocalListings,
+  isFavorite,
+  toggleLocalFavorite,
+  createLocalConversation,
+  LocalListing,
+} from '@/src/store/localStore';
+import { API_BASE_URL } from '@/src/api/client';
 
 export default function IlanDetayScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+
+  const [listing, setListing] = useState<LocalListing | null>(null);
+  const [loading, setLoading] = useState(true);
   const [isFav, setIsFav] = useState(false);
 
-  // Örnek ilan detayı (Backend verisine tam uyumlu)
-  const listing = {
-    id: id || '1',
-    title: '2021 BMW 320i M Sport Hatasız Boyasız Yetkili Servis Bakımlı',
-    price: 2450000,
-    currency: 'TL',
-    description: `Araç 2021 model olup ilk sahibindendir. Tüm bakımları zamanında Borusan Oto yetkili servisinde yapılmıştır.
-Hata, boya, tramer kaydı kesinlikle yoktur.
-Kapalı garajda muhafaza edilmektedir.
-Yedek anahtarı ve kitapçıkları mevcuttur.
-Alıcısına şimdiden hayırlı olsun.`,
-    city: 'İstanbul',
-    district: 'Kadıköy',
-    neighborhood: 'Caddebostan Mah.',
-    created_at: '27 Eylül 2026',
-    view_count: 842,
-    is_urgent: true,
-    is_featured: true,
-    seller: {
-      name: 'Ahmet Yılmaz',
-      member_since: 'Ekim 2022',
-      phone: '05321112233',
-    },
-    images: [
-      'https://images.unsplash.com/photo-1555215695-3004980ad54e?w=1000&q=85',
-      'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=1000&q=85',
-      'https://images.unsplash.com/photo-1541899481282-d53bffe3c35d?w=1000&q=85',
-    ],
-    attributes: [
-      { label: 'İlan No', value: `GS-${id || '10842'}` },
-      { label: 'İlan Tarihi', value: '27 Eylül 2026' },
-      { label: 'Marka', value: 'BMW' },
-      { label: 'Seri', value: '3 Serisi' },
-      { label: 'Model', value: '320i M Sport' },
-      { label: 'Yıl', value: '2021' },
-      { label: 'Yakıt', value: 'Benzin' },
-      { label: 'Vites', value: 'Otomatik' },
-      { label: 'Kilometre', value: '42.000 km' },
-      { label: 'Kasa Tipi', value: 'Sedan' },
-      { label: 'Motor Gücü', value: '170 hp' },
-      { label: 'Renk', value: 'Füme / Antrasit' },
-      { label: 'Kimden', value: 'Sahibinden' },
-      { label: 'Takas', value: 'Evet (Araç ile)' },
-      { label: 'Durumu', value: 'İkinci El' },
-    ],
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchListing() {
+      setLoading(true);
+      try {
+        // 1. Önce cihazdaki yerel ilanlarımda ve favorilerde ara
+        const myList = await getMyLocalListings();
+        const foundLocal = myList.find((l) => l.id === id);
+        if (foundLocal && isMounted) {
+          setListing(foundLocal);
+          const favStatus = await isFavorite(foundLocal.id);
+          setIsFav(favStatus);
+          setLoading(false);
+          return;
+        }
+
+        const favList = await getLocalFavorites();
+        const foundFav = favList.find((l) => l.id === id);
+        if (foundFav && isMounted) {
+          setListing(foundFav);
+          setIsFav(true);
+          setLoading(false);
+          return;
+        }
+
+        // 2. Canlı API'den çekmeyi dene
+        const res = await fetch(`${API_BASE_URL}/api/mobile/listings?limit=50`);
+        if (res.ok) {
+          const data = await res.json();
+          const match = (data?.listings || []).find((l: any) => l.id === id || l.slug === id);
+          if (match && isMounted) {
+            const mapped: LocalListing = {
+              id: match.id,
+              title: match.title,
+              price: match.price,
+              currency: match.currency || 'TL',
+              description: match.description,
+              city: match.city,
+              district: match.district,
+              images: match.images?.length > 0 ? match.images : ['https://images.unsplash.com/photo-1555215695-3004980ad54e?w=800'],
+              attrs: match.attrs || {},
+              created_at: match.created_at,
+              category_name: match.category_name,
+              seller_name: match.seller_name || 'GeldeSat Satıcısı',
+              is_urgent: match.boosts?.includes('ACIL'),
+              is_featured: match.boosts?.includes('KALIN'),
+            };
+            setListing(mapped);
+            const favStatus = await isFavorite(mapped.id);
+            setIsFav(favStatus);
+            setLoading(false);
+            return;
+          }
+        }
+      } catch {
+        // Hata durumunda sessiz kal
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+
+    if (id) fetchListing();
+    return () => {
+      isMounted = false;
+    };
+  }, [id]);
+
+  const handleToggleFavorite = async () => {
+    if (!listing) return;
+    const newStatus = await toggleLocalFavorite(listing);
+    setIsFav(newStatus);
+  };
+
+  const handleCall = () => {
+    const phone = listing?.phone || '08500000000';
+    Linking.openURL(`tel:${phone}`);
+  };
+
+  const handleMessage = async () => {
+    if (!listing) return;
+    const convId = await createLocalConversation(listing, `Merhaba, "${listing.title}" ilanınız için yazıyorum. Hâlâ satılık mı?`);
+    router.push(`/mesaj/${convId}` as any);
   };
 
   const handleShare = async () => {
+    if (!listing) return;
     try {
       await Share.share({
-        message: `${listing.title} - geldesat.com/ilan/${listing.id}`,
+        message: `${listing.title} - https://www.geldesat.com/ilan/${listing.id}`,
       });
-    } catch {
-      // Paylaşım iptal
-    }
+    } catch {}
   };
+
+  if (loading) {
+    return (
+      <View style={styles.centerContainer}>
+        <ActivityIndicator size="large" color="#1a4fd8" />
+        <Text style={styles.loadingText}>İlan yükleniyor...</Text>
+      </View>
+    );
+  }
+
+  // Web ile birebir İlan Bulunamadı Görünümü
+  if (!listing) {
+    return (
+      <View style={styles.notFoundContainer}>
+        <Stack.Screen options={{ headerTitle: 'İlan Bulunamadı' }} />
+        <View style={styles.notFoundCard}>
+          <AlertCircle size={48} color="#b42318" style={{ marginBottom: 12 }} />
+          <Text style={styles.notFoundTitle}>İlan Bulunamadı veya Yayından Kaldırıldı</Text>
+          <Text style={styles.notFoundDesc}>
+            Aradığınız ilan satılmış, süresi dolmuş veya sahibi tarafından yayından kaldırılmış olabilir.
+          </Text>
+          <TouchableOpacity
+            style={styles.notFoundBtn}
+            onPress={() => router.replace('/(tabs)/kategoriler')}>
+            <Text style={styles.notFoundBtnText}>İlanlara Göz At</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  const formattedPrice = new Intl.NumberFormat('tr-TR').format(listing.price) + ' ' + (listing.currency || 'TL');
+
+  const attrEntries = Object.entries(listing.attrs || {});
 
   return (
     <View style={styles.screenWrapper}>
@@ -75,7 +177,7 @@ Alıcısına şimdiden hayırlı olsun.`,
           headerTitle: 'İlan Detayı',
           headerRight: () => (
             <TouchableOpacity onPress={handleShare} style={{ marginRight: 8 }}>
-              <Share2 size={20} color={BrandColors.text} />
+              <Share2 size={20} color="#12151c" />
             </TouchableOpacity>
           ),
         }}
@@ -100,81 +202,88 @@ Alıcısına şimdiden hayırlı olsun.`,
             )}
           </View>
 
-          <Text style={styles.priceText}>
-            {new Intl.NumberFormat('tr-TR').format(listing.price)} {listing.currency}
-          </Text>
-
           <Text style={styles.titleText}>{listing.title}</Text>
+          <Text style={styles.priceText}>{formattedPrice}</Text>
 
+          {/* Konum & Tarih Meta Bilgileri */}
           <View style={styles.metaRow}>
             <View style={styles.metaItem}>
-              <MapPin size={13} color={BrandColors.textMuted} style={{ marginRight: 4 }} />
+              <MapPin size={14} color="#8a929e" />
               <Text style={styles.metaText}>
-                {listing.city}, {listing.district}
+                {listing.city || 'Türkiye'}
+                {listing.district ? ` / ${listing.district}` : ''}
               </Text>
             </View>
             <View style={styles.metaItem}>
-              <Calendar size={13} color={BrandColors.textMuted} style={{ marginRight: 4 }} />
-              <Text style={styles.metaText}>{listing.created_at}</Text>
-            </View>
-            <View style={styles.metaItem}>
-              <Eye size={13} color={BrandColors.textMuted} style={{ marginRight: 4 }} />
-              <Text style={styles.metaText}>{listing.view_count}</Text>
+              <Calendar size={14} color="#8a929e" />
+              <Text style={styles.metaText}>
+                {new Date(listing.created_at).toLocaleDateString('tr-TR')}
+              </Text>
             </View>
           </View>
         </View>
 
-        {/* 3. Sahibinden Tarzı Detaylı Özellikler Tablosu */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Teknik Özellikler</Text>
-          <View style={styles.attrTable}>
-            {listing.attributes.map((attr, idx) => {
-              const isEven = idx % 2 === 0;
-              return (
-                <View key={attr.label} style={[styles.attrRow, isEven && styles.attrRowEven]}>
-                  <Text style={styles.attrLabel}>{attr.label}</Text>
-                  <Text style={styles.attrValue}>{attr.value}</Text>
-                </View>
-              );
-            })}
+        {/* 3. Satıcı Kartı */}
+        <View style={styles.sellerCard}>
+          <View style={styles.sellerAvatar}>
+            <Text style={styles.sellerAvatarLetter}>
+              {listing.seller_name ? listing.seller_name.charAt(0).toUpperCase() : 'S'}
+            </Text>
           </View>
-        </View>
-
-        {/* 4. İlan Açıklaması */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Açıklama</Text>
-          <Text style={styles.descText}>{listing.description}</Text>
-        </View>
-
-        {/* 5. Satıcı Bilgi Kartı */}
-        <View style={styles.card}>
-          <View style={styles.sellerHeader}>
-            <View style={styles.sellerAvatar}>
-              <Text style={styles.sellerInitial}>{listing.seller.name[0]}</Text>
-            </View>
-            <View style={styles.sellerInfo}>
-              <Text style={styles.sellerName}>{listing.seller.name}</Text>
-              <Text style={styles.sellerSince}>Üyelik: {listing.seller.member_since}</Text>
-            </View>
-            <ShieldCheck size={24} color={BrandColors.success} />
+          <View style={styles.sellerInfo}>
+            <Text style={styles.sellerName}>{listing.seller_name || 'GeldeSat Satıcısı'}</Text>
+            <Text style={styles.sellerBadge}>Doğrulanmış Üye</Text>
           </View>
-
-          <TouchableOpacity style={styles.otherAdsBtn} activeOpacity={0.7}>
-            <Text style={styles.otherAdsText}>Satıcının Diğer İlanları</Text>
-            <ChevronRight size={16} color={BrandColors.primary} />
+          <TouchableOpacity style={styles.sellerMsgBtn} onPress={handleMessage}>
+            <MessageCircle size={16} color="#1a4fd8" />
+            <Text style={styles.sellerMsgBtnText}>Mesaj</Text>
           </TouchableOpacity>
+        </View>
+
+        {/* 4. Teknik Detay Tablosu (Attributes) */}
+        {attrEntries.length > 0 && (
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionHeaderTitle}>İlan Özellikleri</Text>
+            <View style={styles.attributesTable}>
+              {attrEntries.map(([key, val], index) => (
+                <View
+                  key={key}
+                  style={[
+                    styles.attrRow,
+                    index % 2 === 0 ? styles.attrRowEven : styles.attrRowOdd,
+                  ]}>
+                  <Text style={styles.attrLabel}>{key}</Text>
+                  <Text style={styles.attrValue}>{String(val)}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* 5. Açıklama */}
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionHeaderTitle}>Açıklama</Text>
+          <Text style={styles.descriptionText}>{listing.description}</Text>
+        </View>
+
+        {/* 6. Güvenli Alışveriş İpuçları */}
+        <View style={styles.safetyCard}>
+          <ShieldCheck size={20} color="#1f7a4d" style={{ marginRight: 10 }} />
+          <Text style={styles.safetyText}>
+            Tanımadığınız kişilere kapora yatırmayın. Ürünü görmeden para göndermeyin.
+          </Text>
         </View>
       </ScrollView>
 
-      {/* 6. Sabit Alt İletişim Barı (Sticky Contact Bar) */}
+      {/* 7. Alt Sabit İletişim Barı */}
       <StickyContactBar
         price={listing.price}
         currency={listing.currency}
-        phone={listing.seller.phone}
+        phone={listing.phone}
         listingTitle={listing.title}
         isFavorite={isFav}
-        onFavoriteToggle={() => setIsFav(!isFav)}
-        onChatPress={() => router.push('/(tabs)/mesajlar')}
+        onFavoriteToggle={handleToggleFavorite}
+        onChatPress={handleMessage}
       />
     </View>
   );
@@ -183,16 +292,72 @@ Alıcısına şimdiden hayırlı olsun.`,
 const styles = StyleSheet.create({
   screenWrapper: {
     flex: 1,
-    backgroundColor: BrandColors.background,
+    backgroundColor: '#f3f5f8', // Web: --color-bg
   },
   scrollContent: {
-    paddingBottom: 90, // Alt iletişim barının altında kalmaması için
+    paddingBottom: 90,
   },
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f3f5f8',
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 13,
+    color: '#5a6270',
+  },
+  notFoundContainer: {
+    flex: 1,
+    backgroundColor: '#f3f5f8',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  notFoundCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#d8dee6',
+    padding: 24,
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: 400,
+  },
+  notFoundTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#12151c',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  notFoundDesc: {
+    fontSize: 12,
+    color: '#5a6270',
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 18,
+  },
+  notFoundBtn: {
+    backgroundColor: '#1a4fd8',
+    borderRadius: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+  },
+  notFoundBtnText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+
+  // Başlık Kartı
   headerCard: {
     backgroundColor: '#ffffff',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: BrandColors.border,
+    borderBottomColor: '#d8dee6',
+    marginBottom: 10,
   },
   badgeRow: {
     flexDirection: 'row',
@@ -200,143 +365,172 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   urgentBadge: {
-    backgroundColor: BrandColors.danger,
+    backgroundColor: '#b42318',
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 5,
+    borderRadius: 4,
   },
   featuredBadge: {
-    backgroundColor: BrandColors.warning,
+    backgroundColor: '#1a4fd8',
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 5,
+    borderRadius: 4,
   },
   badgeText: {
     color: '#ffffff',
     fontSize: 10,
-    fontWeight: '800',
+    fontWeight: '700',
+  },
+  titleText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#12151c',
+    lineHeight: 24,
+    marginBottom: 8,
   },
   priceText: {
     fontSize: 22,
-    fontWeight: '900',
-    color: BrandColors.primary,
-    marginBottom: 8,
-  },
-  titleText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: BrandColors.text,
-    lineHeight: 22,
+    fontWeight: '800',
+    color: '#1a4fd8',
     marginBottom: 12,
   },
   metaRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 14,
+    gap: 16,
     borderTopWidth: 1,
-    borderTopColor: BrandColors.borderLight,
+    borderTopColor: '#f3f5f8',
     paddingTop: 10,
   },
   metaItem: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 4,
   },
   metaText: {
     fontSize: 12,
-    color: BrandColors.textSecondary,
+    color: '#5a6270',
   },
-  card: {
-    backgroundColor: '#ffffff',
-    borderRadius: 14,
-    padding: 16,
-    marginHorizontal: 14,
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: BrandColors.border,
-  },
-  cardTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: BrandColors.text,
-    marginBottom: 12,
-  },
-  // Özellikler Tablosu
-  attrTable: {
-    borderRadius: 8,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: BrandColors.borderLight,
-  },
-  attrRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 9,
-    paddingHorizontal: 12,
-    backgroundColor: '#ffffff',
-  },
-  attrRowEven: {
-    backgroundColor: '#f8fafc',
-  },
-  attrLabel: {
-    fontSize: 12,
-    color: BrandColors.textSecondary,
-    fontWeight: '500',
-  },
-  attrValue: {
-    fontSize: 12,
-    color: BrandColors.text,
-    fontWeight: '700',
-  },
-  descText: {
-    fontSize: 13,
-    color: BrandColors.text,
-    lineHeight: 20,
-  },
+
   // Satıcı Kartı
-  sellerHeader: {
+  sellerCard: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#ffffff',
+    padding: 14,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#d8dee6',
+    marginBottom: 10,
   },
   sellerAvatar: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: BrandColors.elevated,
+    backgroundColor: '#eef2ff',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
   },
-  sellerInitial: {
+  sellerAvatarLetter: {
+    color: '#1a4fd8',
     fontSize: 18,
-    fontWeight: '800',
-    color: BrandColors.primary,
+    fontWeight: '700',
   },
   sellerInfo: {
     flex: 1,
   },
   sellerName: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
-    color: BrandColors.text,
-    marginBottom: 2,
+    color: '#12151c',
   },
-  sellerSince: {
+  sellerBadge: {
     fontSize: 11,
-    color: BrandColors.textSecondary,
+    color: '#1f7a4d',
+    fontWeight: '500',
+    marginTop: 2,
   },
-  otherAdsBtn: {
+  sellerMsgBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 14,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: BrandColors.borderLight,
+    gap: 4,
+    backgroundColor: '#f3f5f8',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#d8dee6',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
-  otherAdsText: {
-    fontSize: 13,
+  sellerMsgBtnText: {
+    fontSize: 12,
     fontWeight: '600',
-    color: BrandColors.primary,
+    color: '#1a4fd8',
+  },
+
+  // Bölüm Kartları
+  sectionCard: {
+    backgroundColor: '#ffffff',
+    padding: 16,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#d8dee6',
+    marginBottom: 10,
+  },
+  sectionHeaderTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#12151c',
+    marginBottom: 12,
+  },
+  attributesTable: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d8dee6',
+    overflow: 'hidden',
+  },
+  attrRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  attrRowEven: {
+    backgroundColor: '#f8fafc',
+  },
+  attrRowOdd: {
+    backgroundColor: '#ffffff',
+  },
+  attrLabel: {
+    fontSize: 12,
+    color: '#5a6270',
+    fontWeight: '500',
+  },
+  attrValue: {
+    fontSize: 12,
+    color: '#12151c',
+    fontWeight: '600',
+  },
+  descriptionText: {
+    fontSize: 13,
+    color: '#12151c',
+    lineHeight: 20,
+  },
+
+  safetyCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ecfdf5',
+    marginHorizontal: 14,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
+    marginBottom: 16,
+  },
+  safetyText: {
+    flex: 1,
+    fontSize: 11,
+    color: '#065f46',
+    lineHeight: 16,
   },
 });

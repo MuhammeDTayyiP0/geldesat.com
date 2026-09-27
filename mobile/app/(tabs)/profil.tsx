@@ -4,6 +4,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { User, LayoutGrid, Heart, Store, Bookmark, Shield, LogOut, ChevronRight, LogIn } from 'lucide-react-native';
 import { BrandColors } from '@/constants/Colors';
 import { getStoredUser, mobileSignOut, MobileUser } from '@/src/api/auth';
+import { AuthGate } from '@/src/components/auth/AuthGate';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -46,7 +47,10 @@ export default function ProfileScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+    <AuthGate
+      title="Hesabım"
+      subtitle="Hesabınızı, ilanlarınızı ve favorilerinizi yönetmek için lütfen giriş yapın veya kayıt olun.">
+      <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       {/* 1. Web Sitesindeki Birebir Profil Başlık Kartı */}
       <View style={styles.profileHeaderCard}>
         <View style={styles.avatarCircle}>
@@ -81,7 +85,7 @@ export default function ProfileScreen() {
       <View style={styles.menuGroup}>
         <TouchableOpacity
           style={styles.menuRow}
-          onPress={() => handleRequireAuth('İlanlarım')}
+          onPress={() => router.push('/ilanlarim' as any)}
           activeOpacity={0.7}>
           <View style={styles.menuIconBox}>
             <LayoutGrid size={18} color="#1a4fd8" />
@@ -94,7 +98,7 @@ export default function ProfileScreen() {
 
         <TouchableOpacity
           style={styles.menuRow}
-          onPress={() => handleRequireAuth('Favori İlanlarım')}
+          onPress={() => router.push('/favoriler' as any)}
           activeOpacity={0.7}>
           <View style={styles.menuIconBox}>
             <Heart size={18} color="#b42318" />
@@ -107,12 +111,12 @@ export default function ProfileScreen() {
 
         <TouchableOpacity
           style={styles.menuRow}
-          onPress={() => handleRequireAuth('Mağazam')}
+          onPress={() => router.push('/(tabs)/ilan-ver' as any)}
           activeOpacity={0.7}>
           <View style={styles.menuIconBox}>
             <Store size={18} color="#1f7a4d" />
           </View>
-          <Text style={styles.menuText}>Mağazam</Text>
+          <Text style={styles.menuText}>Yeni İlan Ver</Text>
           <ChevronRight size={16} color="#8a929e" />
         </TouchableOpacity>
       </View>
@@ -122,12 +126,12 @@ export default function ProfileScreen() {
       <View style={styles.menuGroup}>
         <TouchableOpacity
           style={styles.menuRow}
-          onPress={() => handleRequireAuth('Kaydedilen Aramalar')}
+          onPress={() => router.push('/(tabs)/kategoriler' as any)}
           activeOpacity={0.7}>
           <View style={styles.menuIconBox}>
             <Bookmark size={18} color="#5a6270" />
           </View>
-          <Text style={styles.menuText}>Kaydedilen Aramalar</Text>
+          <Text style={styles.menuText}>Kategorilere Göz At</Text>
           <ChevronRight size={16} color="#8a929e" />
         </TouchableOpacity>
 
@@ -135,12 +139,12 @@ export default function ProfileScreen() {
 
         <TouchableOpacity
           style={styles.menuRow}
-          onPress={() => handleRequireAuth('Şifre ve Güvenlik')}
+          onPress={() => router.push('/bildirimler' as any)}
           activeOpacity={0.7}>
           <View style={styles.menuIconBox}>
             <Shield size={18} color="#5a6270" />
           </View>
-          <Text style={styles.menuText}>Şifre & Güvenlik</Text>
+          <Text style={styles.menuText}>Bildirimler</Text>
           <ChevronRight size={16} color="#8a929e" />
         </TouchableOpacity>
 
@@ -158,7 +162,8 @@ export default function ProfileScreen() {
         )}
       </View>
     </ScrollView>
-  );
+  </AuthGate>
+);
 }
 
 const styles = StyleSheet.create({
