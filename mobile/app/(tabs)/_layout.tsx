@@ -27,6 +27,7 @@ export default function TabLayout() {
           shadowOpacity: 0.05,
           shadowRadius: 6,
         },
+        tabBarBackground: () => <View style={styles.opaqueTabBar} />,
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: '500',
@@ -36,6 +37,7 @@ export default function TabLayout() {
           borderBottomWidth: 1,
           borderBottomColor: '#d8dee6',
         },
+        headerBackground: () => <View style={styles.opaqueHeader} />,
         headerShadowVisible: false,
       }}>
       {/* 1. Ana Sayfa */}
@@ -127,6 +129,14 @@ export default function TabLayout() {
 }
 
 const styles = StyleSheet.create({
+  opaqueTabBar: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: '#ffffff',
+  },
+  opaqueHeader: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: '#ffffff',
+  },
   headerWordmark: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -139,20 +149,13 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
   },
   centerButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: BrandColors.primary,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: Platform.OS === 'ios' ? 14 : 16,
-    shadowColor: BrandColors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    elevation: 6,
-    borderWidth: 3,
-    borderColor: '#ffffff',
+    marginBottom: Platform.OS === 'ios' ? 8 : 4,
   },
   centerButtonLabel: {
     fontSize: 10,

@@ -32,6 +32,7 @@ const Filters = z.object({
   minM2: z.number().optional(),
   maxM2: z.number().optional(),
   featured: z.boolean().optional(),
+  urgent: z.boolean().optional(),
   userId: z.string().optional(),
   storeId: z.string().optional(),
   status: z.string().optional(),
@@ -39,7 +40,7 @@ const Filters = z.object({
 
 export type SearchFilters = z.infer<typeof Filters>;
 
-async function searchListings(f: SearchFilters): Promise<{
+export async function searchListings(f: SearchFilters): Promise<{
   listings: ListingCard[];
   total: number;
   page: number;
@@ -90,6 +91,11 @@ async function searchListings(f: SearchFilters): Promise<{
   if (f.userId) add("l.user_id = ?", f.userId);
   if (f.storeId) add("l.store_id = ?", f.storeId);
   if (f.featured) conds.push("l.featured_until is not null and l.featured_until > now()");
+  if (f.urgent) {
+    conds.push(
+      "exists (select 1 from boosts b where b.listing_id = l.id and b.kind = 'ACIL' and b.ends_at > now())",
+    );
+  }
 
   const jsonNum = (keys: string | string[], op: string, value: number) => {
     params.push(value);

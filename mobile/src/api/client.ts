@@ -8,6 +8,7 @@ export const API_BASE_URL = 'https://www.geldesat.com';
 
 export interface ApiListingResponse {
   success: boolean;
+  error?: string;
   total: number;
   limit: number;
   offset: number;
@@ -27,6 +28,7 @@ export interface ApiListingResponse {
     category_slug?: string;
     seller_name?: string;
     boosts?: string[];
+    featured_until?: string | null;
   }>;
 }
 
@@ -54,6 +56,87 @@ export interface ApiConfigResponse {
   abTests: {
     listing_card_layout: 'grid' | 'list';
   };
+}
+
+export interface MobileProfile {
+  display_name: string;
+  phone: string;
+  bio: string;
+  city: string;
+  district: string;
+  listing_count: number;
+  active_count: number;
+  favorite_count: number;
+  rating_avg: number;
+  rating_count: number;
+}
+
+export interface MobileProfileResponse {
+  success: boolean;
+  error?: string;
+  profile?: MobileProfile;
+  store?: { id: string; name: string; slug: string; plan: string; city: string; description: string } | null;
+  savedSearches?: Array<{ id: string; label: string; query: string; filters: string }>;
+}
+
+export async function getMobileProfile(token: string): Promise<MobileProfileResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/mobile/profile`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data?.error || 'Profil bilgileri alınamadı.');
+  return data;
+}
+
+export async function updateMobileProfile(
+  token: string,
+  profile: Pick<MobileProfile, 'display_name' | 'phone' | 'bio' | 'city' | 'district'>,
+): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/mobile/profile`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(profile),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data?.success === false) throw new Error(data?.error || 'Profil kaydedilemedi.');
+}
+
+export async function updateMobileStore(
+  token: string,
+  store: { name: string; description: string; city: string; phone: string },
+): Promise<{ id: string; slug: string }> {
+  const response = await fetch(`${API_BASE_URL}/api/mobile/profile`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'store', ...store }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data?.success === false || !data?.store) throw new Error(data?.error || 'Mağaza bilgileri kaydedilemedi.');
+  return data.store;
+}
+
+export async function deleteMobileSavedSearch(token: string, id: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/mobile/profile?id=${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data?.success === false) throw new Error(data?.error || 'Kayıtlı arama silinemedi.');
+}
+
+export async function mobileChangePassword(token: string, currentPassword: string, newPassword: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/auth/change-password`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      Origin: API_BASE_URL,
+      Referer: `${API_BASE_URL}/`,
+    },
+    body: JSON.stringify({ currentPassword, newPassword, revokeOtherSessions: false }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data?.error) throw new Error(data?.message || data?.error?.message || 'Şifre değiştirilemedi.');
 }
 
 /**
@@ -90,7 +173,14 @@ export async function getMobileListings(params: {
       const localRes = await fetch(`${localUrl}/api/mobile/listings?${query.toString()}`);
       if (localRes.ok) return await localRes.json();
     } catch {}
-    return { success: true, total: 0, limit: 20, offset: 0, listings: [] };
+    return {
+      success: false,
+      error: 'İlanlara şu anda ulaşılamıyor. İnternet bağlantınızı kontrol edip yeniden deneyin.',
+      total: 0,
+      limit: params.limit ?? 20,
+      offset: params.offset ?? 0,
+      listings: [],
+    };
   }
 }
 

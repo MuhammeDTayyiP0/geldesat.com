@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "geldesat.com",
+    "name": "GeldeSat",
     "slug": "muhammed-tayyip",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -17,6 +17,7 @@
       "bundleIdentifier": "com.geldesat.app",
       "associatedDomains": ["applinks:www.geldesat.com"],
       "infoPlist": {
+        "UIDesignRequiresCompatibility": true,
         "NSCameraUsageDescription": "İlan verirken fotoğraf çekebilmek için kamera izni gereklidir.",
         "NSPhotoLibraryUsageDescription": "İlan fotoğraflarınızı seçebilmek için galeri izni gereklidir."
       }

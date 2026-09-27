@@ -52,6 +52,7 @@ export default function HomeScreen() {
       getMobileListings({
         category: activeTab === 'all' ? undefined : activeTab,
         q: q.trim() || undefined,
+        limit: 8,
       }),
   });
 
@@ -72,7 +73,7 @@ export default function HomeScreen() {
     district: l.district,
     created_at: l.created_at,
     is_urgent: l.boosts?.includes('ACIL'),
-    is_featured: l.boosts?.includes('KALIN'),
+    is_featured: Boolean(l.featured_until && new Date(l.featured_until).getTime() > Date.now()),
     attrs: l.attrs,
     category_name: l.category_name,
   }));
@@ -181,7 +182,7 @@ export default function HomeScreen() {
                   activeOpacity={0.75}>
                   <IconComponent size={22} color={BrandColors.primary} strokeWidth={2} />
                   <Text style={styles.categoryCardName}>{c.name}</Text>
-                  <Text style={styles.categoryCardCount}>İlanları Gör</Text>
+                  <Text style={styles.categoryCardCount}>Kategoriyi keşfet</Text>
                 </TouchableOpacity>
               );
             })}
@@ -205,6 +206,13 @@ export default function HomeScreen() {
           <View style={{ paddingVertical: 30, alignItems: 'center' }}>
             <ActivityIndicator size="small" color={BrandColors.primary} />
           </View>
+        ) : apiData?.success === false ? (
+          <View style={styles.emptyVitrinBox}>
+            <Text style={styles.emptyVitrinText}>{apiData.error || 'İlanlar yüklenemedi.'}</Text>
+            <TouchableOpacity onPress={() => refetch()}>
+              <Text style={styles.emptyVitrinLink}>Yeniden dene</Text>
+            </TouchableOpacity>
+          </View>
         ) : listings.length === 0 ? (
           /* Web Sitesindeki Birebir Boş Vitrin Durumu */
           <View style={styles.emptyVitrinBox}>
@@ -219,7 +227,7 @@ export default function HomeScreen() {
               <ListingCard
                 key={item.id}
                 listing={item}
-                variant="grid"
+                variant="feed"
                 onPress={() => router.push(`/ilan/${item.id}` as any)}
               />
             ))}
@@ -242,8 +250,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#d8dee6', // Web: border-border
     paddingHorizontal: 16,
-    paddingTop: 18,
-    paddingBottom: 20,
+    paddingTop: 40,
+    paddingBottom: 40,
   },
   heroPreTitle: {
     fontSize: 11,
@@ -253,10 +261,10 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   heroMainTitle: {
-    fontSize: 22,
+    fontSize: 30,
     fontWeight: '700',
     color: '#12151c', // Web: text-fg
-    lineHeight: 28,
+    lineHeight: 36,
     marginTop: 6,
     letterSpacing: -0.4,
   },
@@ -360,7 +368,7 @@ const styles = StyleSheet.create({
   // 2. Kategoriler Bölümü
   sectionContainer: {
     paddingHorizontal: 16,
-    paddingVertical: 20,
+    paddingVertical: 40,
   },
   sectionHeader: {
     marginBottom: 12,
@@ -375,7 +383,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    gap: 10,
+    gap: 8,
   },
   categoryCard: {
     width: '48%',
@@ -383,16 +391,16 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#d8dee6',
-    padding: 14,
+    padding: 16,
   },
   categoryCardName: {
     fontSize: 13,
     fontWeight: '600',
     color: '#12151c',
-    marginTop: 8,
+    marginTop: 12,
   },
   categoryCardCount: {
-    fontSize: 11,
+    fontSize: 12,
     color: '#5a6270',
     marginTop: 2,
   },
@@ -403,8 +411,8 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#d8dee6',
     paddingHorizontal: 16,
-    paddingVertical: 20,
-    paddingBottom: 40,
+    paddingVertical: 40,
+    paddingBottom: 56,
   },
   vitrinHeaderRow: {
     flexDirection: 'row',
@@ -443,8 +451,7 @@ const styles = StyleSheet.create({
     color: '#1a4fd8',
   },
   listingGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    flexDirection: 'column',
+    gap: 16,
   },
 });

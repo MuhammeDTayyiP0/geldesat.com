@@ -24,7 +24,7 @@ export interface MobileListing {
 
 interface ListingCardProps {
   listing: MobileListing;
-  variant?: 'grid' | 'list';
+  variant?: 'grid' | 'list' | 'feed';
   onPress?: () => void;
   onFavoritePress?: (id: string, isFav: boolean) => void;
 }
@@ -61,7 +61,7 @@ export function ListingCard({
   };
 
   const media = (
-    <View style={variant === 'list' ? styles.listMedia : styles.gridMedia}>
+    <View style={variant === 'list' ? styles.listMedia : variant === 'feed' ? styles.feedMedia : styles.gridMedia}>
       {img ? (
         <Image source={{ uri: img }} style={styles.image} resizeMode="cover" />
       ) : (
@@ -138,7 +138,7 @@ export function ListingCard({
 
   return (
     <TouchableOpacity
-      style={variant === 'list' ? styles.listCard : styles.gridCard}
+      style={variant === 'list' ? styles.listCard : variant === 'feed' ? styles.feedCard : styles.gridCard}
       onPress={onPress}
       activeOpacity={0.88}>
       {media}
@@ -158,6 +158,20 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: 12,
   },
+  feedCard: {
+    width: '100%',
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#d8dee6',
+    overflow: 'hidden',
+    marginBottom: 0,
+    shadowColor: '#0d1117',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 1,
+  },
   listCard: {
     flexDirection: 'row',
     backgroundColor: '#ffffff',
@@ -172,6 +186,12 @@ const styles = StyleSheet.create({
   gridMedia: {
     width: '100%',
     height: (GRID_CARD_WIDTH * 3) / 4,
+    backgroundColor: '#eef1f5',
+    position: 'relative',
+  },
+  feedMedia: {
+    width: '100%',
+    aspectRatio: 4 / 3,
     backgroundColor: '#eef1f5',
     position: 'relative',
   },
