@@ -63,7 +63,7 @@ jobs:
           echo "iOS WORKSPACE ARANIYOR"
           echo "========================================="
 
-          WORKSPACE=$(find ios -maxdepth 1 -name "*.xcworkspace" -type d | head -n 1)
+          WORKSPACE=$(find ios -maxdepth 1 -name "*.xcworkspace" -type d -print -quit)
 
           if [ -z "$WORKSPACE" ]; then
             echo "HATA: ios klasoru icinde .xcworkspace bulunamadi!"
@@ -79,11 +79,13 @@ jobs:
           echo "SCHEME ARANIYOR"
           echo "========================================="
 
-          SCHEME=$(xcodebuild \
-            -workspace "$WORKSPACE" \
-            -list \
-            | awk '/Schemes:/ {getline; print; exit}' \
-            | xargs)
+          SCHEME=$(
+            xcodebuild \
+              -workspace "$WORKSPACE" \
+              -list \
+              | awk '/Schemes:/ {getline; print; exit}' \
+              | xargs
+          )
 
           if [ -z "$SCHEME" ]; then
             echo "HATA: Scheme bulunamadi!"
@@ -125,15 +127,19 @@ jobs:
           echo "XCODE BUILD TAMAMLANDI"
           echo "========================================="
 
+          echo ""
           echo "Build klasoru:"
-          find "$BUILD_DIR" -maxdepth 6 -print | head -n 300
+          find "$BUILD_DIR" -maxdepth 6 -print | sed -n '1,300p'
 
           echo ""
           echo "========================================="
           echo "APP DOSYALARI"
           echo "========================================="
 
-          find "$BUILD_DIR" -type d -name "*.app" -print
+          find "$BUILD_DIR" \
+            -type d \
+            -name "*.app" \
+            -print
 
           echo ""
           echo "========================================="
@@ -171,7 +177,7 @@ jobs:
           echo "BUILD ICERIGI"
           echo "========================================="
 
-          find "$BUILD_DIR" -maxdepth 6 -print | head -n 300
+          find "$BUILD_DIR" -maxdepth 6 -print | sed -n '1,300p'
 
           echo ""
           echo "========================================="
@@ -188,7 +194,7 @@ jobs:
             find "$BUILD_DIR" \
               -type d \
               -name "*.app" \
-              2>/dev/null
+              -print
           )
 
           echo ""
@@ -203,11 +209,14 @@ jobs:
 
             echo ""
             echo "Build klasorundeki dosyalar:"
-            find "$BUILD_DIR" -type f | head -n 300
+            find "$BUILD_DIR" -type f | sed -n '1,300p'
 
             echo ""
             echo "Tum .app aramalari:"
-            find "$BUILD_DIR" -type d -name "*.app" -print
+            find "$BUILD_DIR" \
+              -type d \
+              -name "*.app" \
+              -print
 
             exit 1
           fi
@@ -241,6 +250,11 @@ jobs:
           echo "IPA BASARIYLA OLUSTURULDU"
           echo "========================================="
 
+          if [ ! -f "$IPA_PATH" ]; then
+            echo "HATA: IPA dosyasi olusturulamadi!"
+            exit 1
+          fi
+
           ls -lh "$IPA_PATH"
 
           echo ""
@@ -248,7 +262,36 @@ jobs:
           echo "$IPA_PATH"
 
       # ==========================================
-      # 8. Upload IPA Artifact
+      # 8. Verify IPA
+      # ==========================================
+      - name: Verify IPA
+        shell: bash
+        run: |
+          set -e
+
+          IPA_PATH="$GITHUB_WORKSPACE/mobile/geldesat-unsigned.ipa"
+
+          echo "========================================="
+          echo "IPA KONTROL EDILIYOR"
+          echo "========================================="
+
+          if [ ! -f "$IPA_PATH" ]; then
+            echo "HATA: IPA bulunamadi!"
+            exit 1
+          fi
+
+          echo "IPA bulundu:"
+          ls -lh "$IPA_PATH"
+
+          echo ""
+          echo "IPA ICERIGI:"
+          unzip -l "$IPA_PATH" | sed -n '1,80p'
+
+          echo ""
+          echo "IPA KONTROL BASARILI"
+
+      # ==========================================
+      # 9. Upload IPA Artifact
       # ==========================================
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
