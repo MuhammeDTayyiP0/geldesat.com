@@ -20,13 +20,22 @@ const SIZE_MAP = {
   xl: "size-18",
 };
 
+const PIXEL_MAP = {
+  xs: 20,
+  sm: 28,
+  md: 40,
+  lg: 56,
+  xl: 72,
+};
+
 export function BrandSpinner({
   size = "md",
   text,
   className,
   fullPage = false,
 }: BrandSpinnerProps) {
-  const iconSize = SIZE_MAP[size];
+  const iconClass = SIZE_MAP[size];
+  const pixelSize = PIXEL_MAP[size];
 
   const content = (
     <div className={cn("inline-flex flex-col items-center justify-center gap-3 select-none", className)}>
@@ -36,7 +45,7 @@ export function BrandSpinner({
         
         {/* Hızlanıp yavaşlayan 360° döngülü GeldeSat amblemi */}
         <div className="animate-brand-spin text-primary">
-          <LogoMark className={iconSize} />
+          <LogoMark size={pixelSize} className={iconClass} />
         </div>
       </div>
 
