@@ -31,17 +31,18 @@ jobs:
       - name: Build iOS App (Unsigned IPA)
         run: |
           cd ios
-          # Workspace ve Scheme isimlerini otomatik tespit et
           WORKSPACE=$(ls -d *.xcworkspace | head -n 1)
           SCHEME=$(xcodebuild -workspace "$WORKSPACE" -list | grep -A 1 "Schemes:" | tail -n 1 | xargs)
           
           echo "Bulunan Workspace: $WORKSPACE"
           echo "Bulunan Scheme: $SCHEME"
 
+          # Output dizinini proje icindeki build klasorune zorluyoruz
           xcodebuild -workspace "$WORKSPACE" \
                      -scheme "$SCHEME" \
                      -configuration Release \
                      -sdk iphoneos \
+                     -derivedDataPath build \
                      CODE_SIGNING_ALLOWED=NO \
                      CODE_SIGNING_REQUIRED=NO \
                      clean build
@@ -49,8 +50,9 @@ jobs:
       - name: Create IPA Package
         run: |
           mkdir -p Payload
-          # Derlenen .app dosyasını dinamik olarak bulup Payload içine taşı
-          APP_PATH=$(find mobile/ios/build/Build/Products/Release-iphoneos -name "*.app" | head -n 1)
+          # DerivedDataPath ile cikti tam olarak burada olusur:
+          APP_PATH=$(find ios/build/Build/Products/Release-iphoneos -name "*.app" | head -n 1)
+          echo "Bulunan App Yolu: $APP_PATH"
           cp -R "$APP_PATH" Payload/
           zip -r geldesat-unsigned.ipa Payload
 
@@ -58,4 +60,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: geldesat-ios-app
-          path: geldesat-unsigned.ipa
+          path: mobile/geldesat-unsigned.ipa
