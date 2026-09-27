@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import type { AttrDef } from "@/lib/server/helpers";
 
 export type FilterState = {
+  category?: string;
   city?: string;
   district?: string;
   neighborhood?: string;
@@ -25,13 +26,19 @@ export function Filters({
   onChange,
   onApply,
   attributes = [],
+  categories = [],
   hideApplyButton = false,
+  hideSort = false,
+  onCategorySelect,
 }: {
   value: FilterState;
   onChange: (next: FilterState) => void;
   onApply: () => void;
   attributes?: AttrDef[];
+  categories?: { id: string; name: string; slug: string; parent_id: string | null }[];
   hideApplyButton?: boolean;
+  hideSort?: boolean;
+  onCategorySelect?: (slug?: string) => void;
 }) {
   const city = TURKEY_CITIES.find((c) => c.name === value.city);
   const districts = city?.districts ?? [];
@@ -51,8 +58,43 @@ export function Filters({
 
   return (
     <aside className="space-y-4 rounded-xl border border-border bg-surface p-4">
+      {categories.length > 0 ? (
+        <div>
+          <div className="flex items-center justify-between pb-1">
+            <Label className="text-xs font-semibold uppercase tracking-wider text-muted">Kategori</Label>
+            {value.category ? (
+              <button
+                type="button"
+                onClick={() => {
+                  onChange({ ...value, category: undefined, attrs: {} });
+                  if (onCategorySelect) onCategorySelect(undefined);
+                }}
+                className="text-xs font-medium text-primary hover:underline"
+              >
+                Temizle
+              </button>
+            ) : null}
+          </div>
+          <Select
+            value={value.category ?? ""}
+            onChange={(e) => {
+              const slug = e.target.value || undefined;
+              onChange({ ...value, category: slug, attrs: {} });
+              if (onCategorySelect) onCategorySelect(slug);
+            }}
+          >
+            <option value="">Tüm kategoriler</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.slug}>
+                {c.parent_id ? `— ${c.name}` : c.name}
+              </option>
+            ))}
+          </Select>
+        </div>
+      ) : null}
+
       <div>
-        <Label>İl</Label>
+        <Label className="text-xs font-semibold uppercase tracking-wider text-muted">İl</Label>
         <Select
           value={value.city ?? ""}
           onChange={(e) => onChange({ ...value, city: e.target.value || undefined, district: undefined, neighborhood: undefined })}
@@ -65,8 +107,9 @@ export function Filters({
           ))}
         </Select>
       </div>
+
       <div>
-        <Label>İlçe</Label>
+        <Label className="text-xs font-semibold uppercase tracking-wider text-muted">İlçe</Label>
         <Select
           value={value.district ?? ""}
           disabled={!value.city}
@@ -80,9 +123,10 @@ export function Filters({
           ))}
         </Select>
       </div>
+
       {hoods.length > 0 ? (
         <div>
-          <Label>Mahalle</Label>
+          <Label className="text-xs font-semibold uppercase tracking-wider text-muted">Mahalle</Label>
           <Select value={value.neighborhood ?? ""} onChange={(e) => set("neighborhood", e.target.value || undefined)}>
             <option value="">Tüm mahalleler</option>
             {hoods.map((h) => (
@@ -93,60 +137,121 @@ export function Filters({
           </Select>
         </div>
       ) : null}
+
       <div>
-        <Label>Fiyat (TL)</Label>
+        <Label className="text-xs font-semibold uppercase tracking-wider text-muted">Fiyat (TL)</Label>
         <div className="grid grid-cols-2 gap-2">
-          <Input type="number" placeholder="Min" value={value.minPrice ?? ""} onChange={(e) => set("minPrice", e.target.value)} />
-          <Input type="number" placeholder="Max" value={value.maxPrice ?? ""} onChange={(e) => set("maxPrice", e.target.value)} />
+          <Input
+            type="number"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            placeholder="En Az"
+            value={value.minPrice ?? ""}
+            onChange={(e) => set("minPrice", e.target.value)}
+          />
+          <Input
+            type="number"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            placeholder="En Çok"
+            value={value.maxPrice ?? ""}
+            onChange={(e) => set("maxPrice", e.target.value)}
+          />
         </div>
       </div>
+
       {hasVehicle ? (
         <>
           <div>
-            <Label>Yıl</Label>
+            <Label className="text-xs font-semibold uppercase tracking-wider text-muted">Yıl</Label>
             <div className="grid grid-cols-2 gap-2">
-              <Input type="number" placeholder="Min" value={value.minYear ?? ""} onChange={(e) => set("minYear", e.target.value)} />
-              <Input type="number" placeholder="Max" value={value.maxYear ?? ""} onChange={(e) => set("maxYear", e.target.value)} />
+              <Input
+                type="number"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                placeholder="Min Yıl"
+                value={value.minYear ?? ""}
+                onChange={(e) => set("minYear", e.target.value)}
+              />
+              <Input
+                type="number"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                placeholder="Max Yıl"
+                value={value.maxYear ?? ""}
+                onChange={(e) => set("maxYear", e.target.value)}
+              />
             </div>
           </div>
           <div>
-            <Label>KM</Label>
+            <Label className="text-xs font-semibold uppercase tracking-wider text-muted">Kilometre (KM)</Label>
             <div className="grid grid-cols-2 gap-2">
-              <Input type="number" placeholder="Min" value={value.minKm ?? ""} onChange={(e) => set("minKm", e.target.value)} />
-              <Input type="number" placeholder="Max" value={value.maxKm ?? ""} onChange={(e) => set("maxKm", e.target.value)} />
+              <Input
+                type="number"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                placeholder="Min KM"
+                value={value.minKm ?? ""}
+                onChange={(e) => set("minKm", e.target.value)}
+              />
+              <Input
+                type="number"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                placeholder="Max KM"
+                value={value.maxKm ?? ""}
+                onChange={(e) => set("maxKm", e.target.value)}
+              />
             </div>
           </div>
         </>
       ) : null}
+
       {hasM2 ? (
         <div>
-          <Label>m²</Label>
+          <Label className="text-xs font-semibold uppercase tracking-wider text-muted">Metrekare (m²)</Label>
           <div className="grid grid-cols-2 gap-2">
-            <Input type="number" placeholder="Min" value={value.minM2 ?? ""} onChange={(e) => set("minM2", e.target.value)} />
-            <Input type="number" placeholder="Max" value={value.maxM2 ?? ""} onChange={(e) => set("maxM2", e.target.value)} />
+            <Input
+              type="number"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              placeholder="Min m²"
+              value={value.minM2 ?? ""}
+              onChange={(e) => set("minM2", e.target.value)}
+            />
+            <Input
+              type="number"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              placeholder="Max m²"
+              value={value.maxM2 ?? ""}
+              onChange={(e) => set("maxM2", e.target.value)}
+            />
           </div>
         </div>
       ) : null}
+
       {attributes.filter((a) => a.type === "SELECT").length > 0 ? (
-        <details open className="rounded-lg border border-border p-3">
-          <summary className="cursor-pointer text-sm font-medium">Özellikler</summary>
-          <div className="mt-3 max-h-80 space-y-3 overflow-auto">
+        <details open className="group rounded-xl border border-border p-3 transition-all">
+          <summary className="cursor-pointer select-none text-sm font-semibold text-fg">Özellikler</summary>
+          <div className="mt-3 space-y-3">
             {attributes
               .filter((a) => a.type === "SELECT")
               .map((a) => (
-                <div key={a.id}>
-                  <Label>{a.name}</Label>
-                  <div className="max-h-32 space-y-1 overflow-auto text-sm">
+                <div key={a.id} className="border-t border-border/50 pt-2.5 first:border-none first:pt-0">
+                  <Label className="text-xs font-medium text-muted">{a.name}</Label>
+                  <div className="mt-1.5 space-y-1.5">
                     {(a.options ?? []).map((opt) => {
                       const checked = (value.attrs[a.name] ?? []).includes(opt);
                       return (
-                        <label key={opt} className="flex min-h-9 items-center gap-2">
+                        <label key={opt} className="flex min-h-8 cursor-pointer items-center gap-2 text-sm text-fg transition-colors hover:text-primary">
                           <input
                             type="checkbox"
+                            className="size-4 rounded border-border accent-primary"
                             checked={checked}
                             onChange={(e) => toggleAttr(a.name, opt, e.target.checked)}
                           />
-                          {opt}
+                          <span>{opt}</span>
                         </label>
                       );
                     })}
@@ -156,23 +261,28 @@ export function Filters({
           </div>
         </details>
       ) : null}
+
       {attributes.filter((a) => a.type === "MULTI").length > 0 ? (
-        <details className="rounded-lg border border-border p-3">
-          <summary className="cursor-pointer text-sm font-medium">Donanım / iç-dış özellik</summary>
-          <div className="mt-3 max-h-80 space-y-3 overflow-auto">
+        <details className="group rounded-xl border border-border p-3 transition-all">
+          <summary className="cursor-pointer select-none text-sm font-semibold text-fg">Donanım / Ek Özellikler</summary>
+          <div className="mt-3 space-y-3">
             {attributes
               .filter((a) => a.type === "MULTI")
               .map((a) => (
-                <div key={a.id}>
-                  <Label>{a.name}</Label>
-                  <div className="mt-1 flex flex-wrap gap-1">
+                <div key={a.id} className="border-t border-border/50 pt-2.5 first:border-none first:pt-0">
+                  <Label className="text-xs font-medium text-muted">{a.name}</Label>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
                     {(a.options ?? []).map((opt) => {
                       const checked = (value.attrs[a.name] ?? []).includes(opt);
                       return (
                         <button
                           key={opt}
                           type="button"
-                          className={`rounded-full border px-2 py-1 text-xs ${checked ? "border-primary bg-primary/10 text-primary" : "border-border"}`}
+                          className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+                            checked
+                              ? "border-primary bg-primary text-primary-fg"
+                              : "border-border bg-surface text-fg hover:border-primary/50"
+                          }`}
                           onClick={() => toggleAttr(a.name, opt, !checked)}
                         >
                           {opt}
@@ -185,42 +295,48 @@ export function Filters({
           </div>
         </details>
       ) : null}
+
       {attributes.filter((a) => a.type === "BOOLEAN").length > 0 ? (
-        <details className="rounded-lg border border-border p-3">
-          <summary className="cursor-pointer text-sm font-medium">Evet / Hayır</summary>
-          <div className="mt-3 space-y-1 text-sm">
+        <details className="group rounded-xl border border-border p-3 transition-all">
+          <summary className="cursor-pointer select-none text-sm font-semibold text-fg">Seçenekler</summary>
+          <div className="mt-3 space-y-2 text-sm">
             {attributes
               .filter((a) => a.type === "BOOLEAN")
               .map((a) => {
                 const opt = (a.options ?? ["Evet"])[0];
                 const checked = (value.attrs[a.name] ?? []).includes(opt);
                 return (
-                  <label key={a.id} className="flex min-h-9 items-center gap-2">
+                  <label key={a.id} className="flex min-h-8 cursor-pointer items-center gap-2 text-sm text-fg transition-colors hover:text-primary">
                     <input
                       type="checkbox"
+                      className="size-4 rounded border-border accent-primary"
                       checked={checked}
                       onChange={(e) => toggleAttr(a.name, opt, e.target.checked)}
                     />
-                    {a.name}
+                    <span>{a.name}</span>
                   </label>
                 );
               })}
           </div>
         </details>
       ) : null}
-      <div>
-        <Label>Sıralama</Label>
-        <Select value={value.sort ?? "date_desc"} onChange={(e) => set("sort", e.target.value)}>
-          <option value="date_desc">Yeniden eskiye</option>
-          <option value="date_asc">Eskiden yeniye</option>
-          <option value="price_asc">Fiyat artan</option>
-          <option value="price_desc">Fiyat azalan</option>
-          <option value="views_desc">En çok görüntülenen</option>
-        </Select>
-      </div>
+
+      {!hideSort ? (
+        <div>
+          <Label className="text-xs font-semibold uppercase tracking-wider text-muted">Sıralama</Label>
+          <Select value={value.sort ?? "date_desc"} onChange={(e) => set("sort", e.target.value)}>
+            <option value="date_desc">En Yeni İlanlar</option>
+            <option value="date_asc">En Eski İlanlar</option>
+            <option value="price_asc">Fiyat: Düşükten Yükseğe</option>
+            <option value="price_desc">Fiyat: Yüksekten Düşüğe</option>
+            <option value="views_desc">En Çok İncelenenler</option>
+          </Select>
+        </div>
+      ) : null}
+
       {!hideApplyButton ? (
-        <Button className="w-full" onClick={onApply}>
-          Filtrele
+        <Button className="h-11 w-full text-sm font-semibold" onClick={onApply}>
+          Filtreleri Uygula
         </Button>
       ) : null}
     </aside>
