@@ -43,74 +43,111 @@ export async function setStoredUser(user: MobileUser | null): Promise<void> {
 
 /**
  * E-posta ve şifre ile giriş yapar.
+ * Better Auth CSRF koruması için Origin ve Referer başlıkları eklenir.
  */
-export async function mobileSignIn(email: string, password: string): Promise<{ success: boolean; user?: MobileUser; error?: string }> {
+export async function mobileSignIn(
+  email: string,
+  password: string
+): Promise<{ success: boolean; user?: MobileUser; error?: string }> {
   try {
     const res = await fetch(`${API_BASE_URL}/api/auth/sign-in/email`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Origin': API_BASE_URL,
+        'Referer': `${API_BASE_URL}/`,
+      },
       body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
     });
 
-    if (res.ok) {
-      const data = await res.json();
+    const data = await res.json().catch(() => ({}));
+
+    if (res.ok && data?.user) {
       const user: MobileUser = {
-        id: data?.user?.id || 'user_' + Date.now(),
-        email: data?.user?.email || email,
-        name: data?.user?.name || email.split('@')[0],
-        token: data?.token || data?.session?.token,
+        id: data.user.id,
+        email: data.user.email,
+        name: data.user.name || email.split('@')[0],
+        token: data.token || data.session?.token,
       };
       await setStoredUser(user);
       return { success: true, user };
     } else {
-      const errData = await res.json().catch(() => ({}));
-      return { success: false, error: errData?.message || 'E-posta veya şifre hatalı.' };
+      let errorMsg = data?.message || 'Giriş yapılamadı.';
+      if (
+        errorMsg === 'Invalid email or password' ||
+        data?.code === 'INVALID_EMAIL_OR_PASSWORD'
+      ) {
+        errorMsg = 'E-posta adresi veya şifre hatalı.';
+      } else if (errorMsg.includes('Origin') || errorMsg.includes('origin')) {
+        errorMsg = 'Güvenlik doğrulaması başarısız oldu. Lütfen tekrar deneyin.';
+      }
+      return { success: false, error: errorMsg };
     }
-  } catch {
-    // Offline veya canlı sunucu bağlantı hatasında kullanıcı dostu mock oturum fallback
-    const fallbackUser: MobileUser = {
-      id: 'local_' + Date.now(),
-      email: email.trim().toLowerCase(),
-      name: email.split('@')[0],
+  } catch (err: any) {
+    return {
+      success: false,
+      error: 'Sunucuya bağlanılamadı. Lütfen internet bağlantınızı kontrol edin.',
     };
-    await setStoredUser(fallbackUser);
-    return { success: true, user: fallbackUser };
   }
 }
 
 /**
  * Yeni hesap oluşturur.
+ * Better Auth CSRF koruması için Origin ve Referer başlıkları eklenir.
  */
-export async function mobileSignUp(name: string, email: string, password: string): Promise<{ success: boolean; user?: MobileUser; error?: string }> {
+export async function mobileSignUp(
+  name: string,
+  email: string,
+  password: string
+): Promise<{ success: boolean; user?: MobileUser; error?: string }> {
   try {
     const res = await fetch(`${API_BASE_URL}/api/auth/sign-up/email`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: name.trim(), email: email.trim().toLowerCase(), password }),
+      headers: {
+        'Content-Type': 'application/json',
+        'Origin': API_BASE_URL,
+        'Referer': `${API_BASE_URL}/`,
+      },
+      body: JSON.stringify({
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+        password,
+      }),
     });
 
-    if (res.ok) {
-      const data = await res.json();
+    const data = await res.json().catch(() => ({}));
+
+    if (res.ok && data?.user) {
       const user: MobileUser = {
-        id: data?.user?.id || 'user_' + Date.now(),
-        email: data?.user?.email || email,
-        name: data?.user?.name || name,
-        token: data?.token,
+        id: data.user.id,
+        email: data.user.email,
+        name: data.user.name || name,
+        token: data.token,
       };
       await setStoredUser(user);
       return { success: true, user };
     } else {
-      const errData = await res.json().catch(() => ({}));
-      return { success: false, error: errData?.message || 'Kayıt işlemi tamamlanamadı.' };
+      let errorMsg = data?.message || 'Kayıt işlemi tamamlanamadı.';
+      if (
+        errorMsg.includes('already exists') ||
+        data?.code === 'USER_ALREADY_EXISTS'
+      ) {
+        errorMsg = 'Bu e-posta adresi ile zaten kayıtlı bir hesap bulunmaktadır.';
+      } else if (
+        errorMsg.includes('password') ||
+        data?.code === 'PASSWORD_TOO_SHORT'
+      ) {
+        errorMsg = 'Şifre en az 6 karakter olmalıdır.';
+      } else if (errorMsg.includes('Origin') || errorMsg.includes('origin')) {
+        errorMsg = 'Güvenlik doğrulaması başarısız oldu. Lütfen tekrar deneyin.';
+      }
+      return { success: false, error: errorMsg };
     }
-  } catch {
-    const fallbackUser: MobileUser = {
-      id: 'local_' + Date.now(),
-      email: email.trim().toLowerCase(),
-      name: name.trim() || email.split('@')[0],
+  } catch (err: any) {
+    return {
+      success: false,
+      error: 'Sunucuya bağlanılamadı. Lütfen internet bağlantınızı kontrol edin.',
     };
-    await setStoredUser(fallbackUser);
-    return { success: true, user: fallbackUser };
   }
 }
 
@@ -118,5 +155,18 @@ export async function mobileSignUp(name: string, email: string, password: string
  * Güvenli çıkış yapar.
  */
 export async function mobileSignOut(): Promise<void> {
+  try {
+    const user = await getStoredUser();
+    if (user?.token) {
+      await fetch(`${API_BASE_URL}/api/auth/sign-out`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Origin': API_BASE_URL,
+          'Authorization': `Bearer ${user.token}`,
+        },
+      }).catch(() => {});
+    }
+  } catch {}
   await setStoredUser(null);
 }
