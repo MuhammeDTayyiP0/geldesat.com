@@ -1,5 +1,4 @@
 import { Skeleton } from "@/components/ui/skeleton";
-import { BrandSpinner } from "@/components/brand/BrandSpinner";
 
 export function ListingGridSkeleton() {
   return (
@@ -53,11 +52,6 @@ export function ListingGridSkeleton() {
 
         {/* Right Area: Toolbar + Listing Cards Grid */}
         <div className="space-y-4">
-          {/* Brand Spinner Banner */}
-          <div className="flex flex-col items-center justify-center rounded-2xl border border-border/80 bg-surface/90 py-8 shadow-card backdrop-blur-xs">
-            <BrandSpinner size="md" text="İlanlar yükleniyor…" />
-          </div>
-
           {/* Top Sort / Filter Bar */}
           <div className="flex items-center justify-between rounded-xl border border-border bg-surface p-3 shadow-card">
             <Skeleton className="h-4 w-32 rounded bg-border/60" />

@@ -12,7 +12,7 @@ import appCss from "../styles.css?url";
 const APP_NAME = "GeldeSat";
 
 /** Inline, render-blocking paint so the first frame is never unstyled HTML. */
-const CRITICAL_CSS = `html,body{background:#f3f5f8;color:#12151c}body{margin:0;min-height:100dvh;font-family:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased}svg{display:inline-block;vertical-align:middle}header svg{width:2rem;height:2rem}`;
+const CRITICAL_CSS = `html,body{background:#f3f5f8;color:#12151c}body{margin:0;min-height:100dvh;visibility:hidden;opacity:0;transition:opacity .15s ease-out;font-family:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased}svg{display:inline-block;vertical-align:middle}header svg{width:2rem;height:2rem}`;
 
 const BASE = "https://www.geldesat.com";
 
@@ -116,7 +116,16 @@ function Root() {
     <html lang="tr" className="antialiased" suppressHydrationWarning>
       <head>
         <style dangerouslySetInnerHTML={{ __html: CRITICAL_CSS }} />
+        <noscript>
+          <style dangerouslySetInnerHTML={{ __html: "body{visibility:visible!important;opacity:1!important}" }} />
+        </noscript>
         <HeadContent />
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "setTimeout(function(){if(document.body){document.body.style.visibility='visible';document.body.style.opacity='1';}},3000);",
+          }}
+        />
       </head>
       <body className="flex min-h-dvh flex-col">
         <PreviewHostBridge />

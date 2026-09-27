@@ -68,6 +68,7 @@
 /* Unlayered + !important so it beats the inline anti-FOUC hide, regardless of tag order. */
 body {
   visibility: visible !important;
+  opacity: 1 !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -270,4 +271,25 @@ html.mobile-nav-lock body {
 .top-progress-bar-glow {
   box-shadow: 0 0 10px #1a4fd8, 0 0 4px #3b82f6;
   background: linear-gradient(90deg, #1a4fd8 0%, #3b82f6 50%, #60a5fa 100%);
+}
+
+/* Premium Skeleton Shimmer Wave */
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--color-border) 45%, transparent) 0%,
+    color-mix(in oklab, var(--color-surface) 95%, var(--color-border) 5%) 50%,
+    color-mix(in oklab, var(--color-border) 45%, transparent) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }

@@ -1,5 +1,5 @@
 import { Skeleton } from "@/components/ui/skeleton";
-import { BrandSpinner } from "@/components/brand/BrandSpinner";
+import { ImageIcon } from "lucide-react";
 
 export function ListingDetailSkeleton() {
   return (
@@ -25,11 +25,11 @@ export function ListingDetailSkeleton() {
       <div className="grid gap-8 lg:grid-cols-[1.4fr_0.8fr]">
         {/* Left Column: Media & Details */}
         <div className="space-y-6">
-          {/* Main Photo Skeleton with BrandSpinner */}
+          {/* Main Photo Skeleton */}
           <div className="relative flex aspect-[16/10] w-full items-center justify-center overflow-hidden rounded-2xl border border-border bg-surface shadow-card">
-            <Skeleton className="absolute inset-0 size-full bg-border/40" />
-            <div className="relative z-10">
-              <BrandSpinner size="md" text="İlan detayları yükleniyor…" />
+            <Skeleton className="absolute inset-0 size-full" />
+            <div className="relative z-10 flex flex-col items-center gap-2 text-muted/30">
+              <ImageIcon className="size-12 stroke-[1.5]" />
             </div>
           </div>
 
