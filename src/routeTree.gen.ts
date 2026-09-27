@@ -36,6 +36,7 @@ import { Route as ApiChatStreamRouteImport } from './routes/api/chat/stream'
 import { Route as ApiMobileCategoriesRouteImport } from './routes/api/mobile/categories'
 import { Route as ApiMobileConfigRouteImport } from './routes/api/mobile/config'
 import { Route as ApiMobileListingsRouteImport } from './routes/api/mobile/listings'
+import { Route as ApiMobileProfileRouteImport } from './routes/api/mobile/profile'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -172,6 +173,11 @@ const ApiMobileListingsRoute = ApiMobileListingsRouteImport.update({
   path: '/api/mobile/listings',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiMobileProfileRoute = ApiMobileProfileRouteImport.update({
+  id: '/api/mobile/profile',
+  path: '/api/mobile/profile',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -201,6 +207,7 @@ export interface FileRoutesByFullPath {
   '/api/mobile/categories': typeof ApiMobileCategoriesRoute
   '/api/mobile/config': typeof ApiMobileConfigRoute
   '/api/mobile/listings': typeof ApiMobileListingsRoute
+  '/api/mobile/profile': typeof ApiMobileProfileRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -229,6 +236,7 @@ export interface FileRoutesByTo {
   '/api/mobile/categories': typeof ApiMobileCategoriesRoute
   '/api/mobile/config': typeof ApiMobileConfigRoute
   '/api/mobile/listings': typeof ApiMobileListingsRoute
+  '/api/mobile/profile': typeof ApiMobileProfileRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -259,6 +267,7 @@ export interface FileRoutesById {
   '/api/mobile/categories': typeof ApiMobileCategoriesRoute
   '/api/mobile/config': typeof ApiMobileConfigRoute
   '/api/mobile/listings': typeof ApiMobileListingsRoute
+  '/api/mobile/profile': typeof ApiMobileProfileRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -290,6 +299,7 @@ export interface FileRouteTypes {
     | '/api/mobile/categories'
     | '/api/mobile/config'
     | '/api/mobile/listings'
+    | '/api/mobile/profile'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -318,6 +328,7 @@ export interface FileRouteTypes {
     | '/api/mobile/categories'
     | '/api/mobile/config'
     | '/api/mobile/listings'
+    | '/api/mobile/profile'
   id:
     | '__root__'
     | '/'
@@ -347,6 +358,7 @@ export interface FileRouteTypes {
     | '/api/mobile/categories'
     | '/api/mobile/config'
     | '/api/mobile/listings'
+    | '/api/mobile/profile'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -375,6 +387,7 @@ export interface RootRouteChildren {
   ApiMobileCategoriesRoute: typeof ApiMobileCategoriesRoute
   ApiMobileConfigRoute: typeof ApiMobileConfigRoute
   ApiMobileListingsRoute: typeof ApiMobileListingsRoute
+  ApiMobileProfileRoute: typeof ApiMobileProfileRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -568,6 +581,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiMobileListingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/mobile/profile': {
+      id: '/api/mobile/profile'
+      path: '/api/mobile/profile'
+      fullPath: '/api/mobile/profile'
+      preLoaderRoute: typeof ApiMobileProfileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -611,6 +631,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiMobileCategoriesRoute: ApiMobileCategoriesRoute,
   ApiMobileConfigRoute: ApiMobileConfigRoute,
   ApiMobileListingsRoute: ApiMobileListingsRoute,
+  ApiMobileProfileRoute: ApiMobileProfileRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
