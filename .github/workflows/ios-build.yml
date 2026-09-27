@@ -33,7 +33,7 @@ jobs:
           cd ios
           pod install
 
-      - name: Build iOS Archive (Unsigned)
+      - name: Build iOS App (Unsigned)
         run: |
           WORKSPACE=$(ls -d ios/*.xcworkspace | head -n 1)
           SCHEME=$(xcodebuild -workspace "$WORKSPACE" -list | grep -A 1 "Schemes:" | tail -n 1 | xargs)
@@ -41,51 +41,36 @@ jobs:
           echo "Bulunan Workspace: $WORKSPACE"
           echo "Bulunan Scheme: $SCHEME"
 
-          mkdir -p build
-
+          # Imzasiz Build Komutu
           xcodebuild -workspace "$WORKSPACE" \
                      -scheme "$SCHEME" \
                      -configuration Release \
                      -sdk iphoneos \
-                     -archivePath "$PWD/build/geldesat.xcarchive" \
-                     SKIP_INSTALL=NO \
-                     BUILD_DIR="$PWD/build" \
+                     -derivedDataPath "$PWD/build" \
                      CODE_SIGNING_ALLOWED=NO \
                      CODE_SIGNING_REQUIRED=NO \
-                     CODE_SIGNING_IDENTITY="" \
+                     CODE_SIGN_IDENTITY="" \
                      CODE_SIGN_ENTITLEMENTS="" \
-                     archive
+                     COMPILER_INDEX_STORE_ENABLE=NO \
+                     ONLY_ACTIVE_ARCH=NO \
+                     build
 
-      - name: Package Unsigned IPA from Archive
+      - name: Package Unsigned IPA
         run: |
           mkdir -p Payload
           
-          echo "=== Taranan .app Dosyalari ==="
-          find /Users/runner/Library/Developer/Xcode/DerivedData "$PWD" -name "*.app" -type d 2>/dev/null || true
-          echo "=============================="
-
-          # 1. Öncelik: xcarchive icindeki .app
-          APP_PATH=$(find "$PWD/build/geldesat.xcarchive" -name "*.app" -type d 2>/dev/null | head -n 1)
+          # Build klasoru altindaki .app dosyasini bul
+          APP_PATH=$(find "$PWD/build" -name "*.app" -type d | grep "Release-iphoneos" | head -n 1)
           
-          # 2. Öncelik: build klasorundeki Release-iphoneos icindeki .app
           if [ -z "$APP_PATH" ]; then
-            APP_PATH=$(find "$PWD/build" -name "*.app" -type d | grep "Release-iphoneos" | head -n 1)
-          fi
-
-          # 3. Öncelik: DerivedData icindeki .app
-          if [ -z "$APP_PATH" ]; then
-            APP_PATH=$(find /Users/runner/Library/Developer/Xcode/DerivedData -name "*.app" -type d | grep "Release-iphoneos" | head -n 1)
-          fi
-
-          # 4. Son Çare: Herhangi bir .app
-          if [ -z "$APP_PATH" ]; then
-            APP_PATH=$(find "$PWD" -name "*.app" -type d | head -n 1)
+            # Alternatif arama
+            APP_PATH=$(find "$PWD/build" -name "*.app" -type d | head -n 1)
           fi
 
           echo "Seçilen App Yolu: $APP_PATH"
           
           if [ -z "$APP_PATH" ]; then
-            echo "HATA: Sistemde hicbir .app dosyasi bulunamadi!"
+            echo "HATA: .app dosyasi derlenemedi! Lutfen yukaridaki Build adiminin loglarini kontrol edin."
             exit 1
           fi
 
