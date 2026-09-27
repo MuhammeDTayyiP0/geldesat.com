@@ -35,8 +35,7 @@ jobs:
 
       - name: Build iOS Archive (Unsigned)
         run: |
-          cd ios
-          WORKSPACE=$(ls -d *.xcworkspace | head -n 1)
+          WORKSPACE=$(ls -d ios/*.xcworkspace | head -n 1)
           SCHEME=$(xcodebuild -workspace "$WORKSPACE" -list | grep -A 1 "Schemes:" | tail -n 1 | xargs)
           
           echo "Bulunan Workspace: $WORKSPACE"
@@ -46,7 +45,7 @@ jobs:
                      -scheme "$SCHEME" \
                      -configuration Release \
                      -sdk iphoneos \
-                     -archivePath ./build/geldesat.xcarchive \
+                     -archivePath "$PWD/build/geldesat.xcarchive" \
                      CODE_SIGNING_ALLOWED=NO \
                      CODE_SIGNING_REQUIRED=NO \
                      CODE_SIGNING_IDENTITY="" \
@@ -57,12 +56,18 @@ jobs:
         run: |
           mkdir -p Payload
           
-          # Archive icinde olusan .app dosyasinin tam yolunu bul
-          APP_PATH=$(find ios/build/geldesat.xcarchive/Products/Applications -name "*.app" | head -n 1)
+          # Olusan .app dosyasini arastir ve tam yolunu bul
+          APP_PATH=$(find "$PWD" -name "*.app" | grep "Products/Applications" | head -n 1)
+          
+          # Eger ulasilamazsa build altindaki ilk .app dosyasini yakala
+          if [ -z "$APP_PATH" ]; then
+            APP_PATH=$(find "$PWD/build" -name "*.app" | head -n 1)
+          fi
+
           echo "Bulunan App Yolu: $APP_PATH"
           
           if [ -z "$APP_PATH" ]; then
-            echo "HATA: Archive icinde .app dosyasi bulunamadi!"
+            echo "HATA: .app dosyasi bulunamadi!"
             exit 1
           fi
 
