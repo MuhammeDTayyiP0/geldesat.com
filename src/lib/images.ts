@@ -90,14 +90,31 @@ export async function compressImage(file: File): Promise<string> {
   ctx.drawImage(bitmap, Math.round((cw - dw) / 2), Math.round((ch - dh) / 2), dw, dh);
   drawOverlayMark(ctx, cw, ch);
 
-  // Kademeli sıkıştırma: 420 KB sınırının altında kalacak şekilde kaliteyi ayarla
-  const qualities = [0.72, 0.58, 0.45, 0.35];
+let _webpSupported: boolean | null = null;
+function isWebpSupported(): boolean {
+  if (_webpSupported !== null) return _webpSupported;
+  try {
+    const c = document.createElement("canvas");
+    c.width = 1;
+    c.height = 1;
+    _webpSupported = c.toDataURL("image/webp").startsWith("data:image/webp");
+  } catch {
+    _webpSupported = false;
+  }
+  return _webpSupported;
+}
+
+  // Kademeli sıkıştırma: WebP öncelikli, JPEG fallback
+  const format = isWebpSupported() ? "image/webp" : "image/jpeg";
+  const targetBytes = format === "image/webp" ? 280_000 : 420_000;
+
+  const qualities = [0.82, 0.7, 0.58, 0.45];
   for (const q of qualities) {
-    const data = canvas.toDataURL("image/jpeg", q);
-    if (data.length <= 420_000) return data;
+    const data = canvas.toDataURL(format, q);
+    if (data.length <= targetBytes) return data;
   }
 
-  // Hâlâ büyükse son çare olarak 960px ölçeklendir
+  // Hâlâ büyükse son çare olarak ölçeklendir
   const smallCanvas = document.createElement("canvas");
   smallCanvas.width = Math.round(cw * 0.75);
   smallCanvas.height = Math.round(ch * 0.75);
@@ -105,8 +122,8 @@ export async function compressImage(file: File): Promise<string> {
   if (smallCtx) {
     smallCtx.imageSmoothingEnabled = true;
     smallCtx.drawImage(canvas, 0, 0, smallCanvas.width, smallCanvas.height);
-    return smallCanvas.toDataURL("image/jpeg", 0.5);
+    return smallCanvas.toDataURL(format, 0.55);
   }
 
-  return canvas.toDataURL("image/jpeg", 0.35);
+  return canvas.toDataURL(format, 0.4);
 }

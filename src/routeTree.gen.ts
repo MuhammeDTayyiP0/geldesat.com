@@ -22,6 +22,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as MesajlarRouteImport } from './routes/mesajlar'
 import { Route as ProfilRouteImport } from './routes/profil'
 import { Route as SearchRouteImport } from './routes/search'
+import { Route as ApiUploadRouteImport } from './routes/api/upload'
 import { Route as CategorySlugRouteImport } from './routes/category/$slug'
 import { Route as IlanSlugRouteImport } from './routes/ilan/$slug'
 import { Route as MagazaSlugRouteImport } from './routes/magaza/$slug'
@@ -29,6 +30,7 @@ import { Route as MesajlarIndexRouteImport } from './routes/mesajlar/index'
 import { Route as MesajlarIdRouteImport } from './routes/mesajlar/$id'
 import { Route as SaticiIdRouteImport } from './routes/satici/$id'
 import { Route as SayfaSlugRouteImport } from './routes/sayfa/$slug'
+import { Route as UploadsSplatRouteImport } from './routes/uploads/$'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiChatStreamRouteImport } from './routes/api/chat/stream'
 
@@ -97,6 +99,11 @@ const SearchRoute = SearchRouteImport.update({
   path: '/search',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiUploadRoute = ApiUploadRouteImport.update({
+  id: '/api/upload',
+  path: '/api/upload',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CategorySlugRoute = CategorySlugRouteImport.update({
   id: '/category/$slug',
   path: '/category/$slug',
@@ -132,6 +139,11 @@ const SayfaSlugRoute = SayfaSlugRouteImport.update({
   path: '/sayfa/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
+const UploadsSplatRoute = UploadsSplatRouteImport.update({
+  id: '/uploads/$',
+  path: '/uploads/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
@@ -157,12 +169,14 @@ export interface FileRoutesByFullPath {
   '/mesajlar': typeof MesajlarRouteWithChildren
   '/profil': typeof ProfilRoute
   '/search': typeof SearchRoute
+  '/api/upload': typeof ApiUploadRoute
   '/category/$slug': typeof CategorySlugRoute
   '/ilan/$slug': typeof IlanSlugRoute
   '/magaza/$slug': typeof MagazaSlugRoute
   '/mesajlar/$id': typeof MesajlarIdRoute
   '/satici/$id': typeof SaticiIdRoute
   '/sayfa/$slug': typeof SayfaSlugRoute
+  '/uploads/$': typeof UploadsSplatRoute
   '/mesajlar/': typeof MesajlarIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/chat/stream': typeof ApiChatStreamRoute
@@ -180,12 +194,14 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/profil': typeof ProfilRoute
   '/search': typeof SearchRoute
+  '/api/upload': typeof ApiUploadRoute
   '/category/$slug': typeof CategorySlugRoute
   '/ilan/$slug': typeof IlanSlugRoute
   '/magaza/$slug': typeof MagazaSlugRoute
   '/mesajlar/$id': typeof MesajlarIdRoute
   '/satici/$id': typeof SaticiIdRoute
   '/sayfa/$slug': typeof SayfaSlugRoute
+  '/uploads/$': typeof UploadsSplatRoute
   '/mesajlar': typeof MesajlarIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/chat/stream': typeof ApiChatStreamRoute
@@ -205,12 +221,14 @@ export interface FileRoutesById {
   '/mesajlar': typeof MesajlarRouteWithChildren
   '/profil': typeof ProfilRoute
   '/search': typeof SearchRoute
+  '/api/upload': typeof ApiUploadRoute
   '/category/$slug': typeof CategorySlugRoute
   '/ilan/$slug': typeof IlanSlugRoute
   '/magaza/$slug': typeof MagazaSlugRoute
   '/mesajlar/$id': typeof MesajlarIdRoute
   '/satici/$id': typeof SaticiIdRoute
   '/sayfa/$slug': typeof SayfaSlugRoute
+  '/uploads/$': typeof UploadsSplatRoute
   '/mesajlar/': typeof MesajlarIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/chat/stream': typeof ApiChatStreamRoute
@@ -231,12 +249,14 @@ export interface FileRouteTypes {
     | '/mesajlar'
     | '/profil'
     | '/search'
+    | '/api/upload'
     | '/category/$slug'
     | '/ilan/$slug'
     | '/magaza/$slug'
     | '/mesajlar/$id'
     | '/satici/$id'
     | '/sayfa/$slug'
+    | '/uploads/$'
     | '/mesajlar/'
     | '/api/auth/$'
     | '/api/chat/stream'
@@ -254,12 +274,14 @@ export interface FileRouteTypes {
     | '/login'
     | '/profil'
     | '/search'
+    | '/api/upload'
     | '/category/$slug'
     | '/ilan/$slug'
     | '/magaza/$slug'
     | '/mesajlar/$id'
     | '/satici/$id'
     | '/sayfa/$slug'
+    | '/uploads/$'
     | '/mesajlar'
     | '/api/auth/$'
     | '/api/chat/stream'
@@ -278,12 +300,14 @@ export interface FileRouteTypes {
     | '/mesajlar'
     | '/profil'
     | '/search'
+    | '/api/upload'
     | '/category/$slug'
     | '/ilan/$slug'
     | '/magaza/$slug'
     | '/mesajlar/$id'
     | '/satici/$id'
     | '/sayfa/$slug'
+    | '/uploads/$'
     | '/mesajlar/'
     | '/api/auth/$'
     | '/api/chat/stream'
@@ -303,11 +327,13 @@ export interface RootRouteChildren {
   MesajlarRoute: typeof MesajlarRouteWithChildren
   ProfilRoute: typeof ProfilRoute
   SearchRoute: typeof SearchRoute
+  ApiUploadRoute: typeof ApiUploadRoute
   CategorySlugRoute: typeof CategorySlugRoute
   IlanSlugRoute: typeof IlanSlugRoute
   MagazaSlugRoute: typeof MagazaSlugRoute
   SaticiIdRoute: typeof SaticiIdRoute
   SayfaSlugRoute: typeof SayfaSlugRoute
+  UploadsSplatRoute: typeof UploadsSplatRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiChatStreamRoute: typeof ApiChatStreamRoute
 }
@@ -405,6 +431,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SearchRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/upload': {
+      id: '/api/upload'
+      path: '/api/upload'
+      fullPath: '/api/upload'
+      preLoaderRoute: typeof ApiUploadRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/category/$slug': {
       id: '/category/$slug'
       path: '/category/$slug'
@@ -454,6 +487,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SayfaSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/uploads/$': {
+      id: '/uploads/$'
+      path: '/uploads/$'
+      fullPath: '/uploads/$'
+      preLoaderRoute: typeof UploadsSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
@@ -499,11 +539,13 @@ const rootRouteChildren: RootRouteChildren = {
   MesajlarRoute: MesajlarRouteWithChildren,
   ProfilRoute: ProfilRoute,
   SearchRoute: SearchRoute,
+  ApiUploadRoute: ApiUploadRoute,
   CategorySlugRoute: CategorySlugRoute,
   IlanSlugRoute: IlanSlugRoute,
   MagazaSlugRoute: MagazaSlugRoute,
   SaticiIdRoute: SaticiIdRoute,
   SayfaSlugRoute: SayfaSlugRoute,
+  UploadsSplatRoute: UploadsSplatRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiChatStreamRoute: ApiChatStreamRoute,
 }

@@ -65,10 +65,9 @@
   }
 }
 
-/* Unlayered + !important so it beats the inline anti-FOUC hide, regardless of tag order. */
-body {
-  visibility: visible !important;
-  opacity: 1 !important;
+/* Mobile touch & rendering ergonomics */
+html {
+  -webkit-tap-highlight-color: transparent;
 }
 
 @media (prefers-reduced-motion: reduce) {

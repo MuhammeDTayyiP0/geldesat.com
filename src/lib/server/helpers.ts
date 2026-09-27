@@ -226,6 +226,8 @@ export async function notify(userId: string, type: string, title: string, body: 
 }
 
 const ALLOWED_DATA = /^data:image\/(jpeg|png|webp);base64,/i;
+const ALLOWED_UPLOAD_PATH = /^\/uploads\/[a-zA-Z0-9_\-\.]+\.(webp|jpg|jpeg|png)$/i;
+const ALLOWED_HTTP_URL = /^https?:\/\/[^\s]+$/i;
 
 /** Normalize a TR mobile number to 05XXXXXXXXX. */
 export function normalizeTrPhone(raw: string): string {
@@ -242,8 +244,10 @@ export function normalizeTrPhone(raw: string): string {
 export function assertImages(images: string[]) {
   if (images.length > 10) throw new Error("En fazla 10 fotoğraf yükleyebilirsiniz.");
   for (const img of images) {
+    if (ALLOWED_UPLOAD_PATH.test(img)) continue;
+    if (ALLOWED_HTTP_URL.test(img) && img.length <= 2048) continue;
     if (ALLOWED_DATA.test(img) && img.length <= 450_000) continue;
-    throw new Error("Geçersiz görsel. Yalnızca JPEG/PNG/WebP (sıkıştırılmış) kabul edilir.");
+    throw new Error("Geçersiz görsel. Yalnızca JPEG/PNG/WebP formatı kabul edilir.");
   }
 }
 

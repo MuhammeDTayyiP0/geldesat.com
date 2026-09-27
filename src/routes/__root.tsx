@@ -3,6 +3,7 @@ import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
+import { BottomNav } from "@/components/layout/BottomNav";
 import { CookieBanner } from "@/components/layout/CookieBanner";
 import { TopProgressBar } from "@/components/layout/TopProgressBar";
 import { NotFound } from "@/components/common/NotFound";
@@ -11,8 +12,8 @@ import appCss from "../styles.css?url";
 
 const APP_NAME = "GeldeSat";
 
-/** Inline, render-blocking paint so the first frame is never unstyled HTML. */
-const CRITICAL_CSS = `html,body{background:#f3f5f8;color:#12151c}body{margin:0;min-height:100dvh;visibility:hidden;opacity:0;transition:opacity .15s ease-out;font-family:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased}`;
+/** Instant base styles so first frame paints immediately without flash of unstyled content. */
+const CRITICAL_CSS = `html,body{background-color:#f3f5f8;color:#12151c;margin:0;min-height:100dvh;font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}html{overflow-x:hidden;-webkit-tap-highlight-color:transparent;touch-action:manipulation}`;
 
 const BASE = "https://www.geldesat.com";
 
@@ -101,11 +102,12 @@ function Shell() {
     <div className={isChat ? "flex h-dvh flex-col overflow-hidden" : "flex min-h-dvh flex-1 flex-col"}>
       <TopProgressBar />
       <Header className={isChatThread ? "hidden md:block" : undefined} />
-      <main className={isChat ? "flex min-h-0 flex-1 flex-col overflow-hidden" : "flex-1 pb-24"}>
+      <main className={isChat ? "flex min-h-0 flex-1 flex-col overflow-hidden" : "flex-1 pb-24 md:pb-12"}>
         <Outlet />
       </main>
       {isChat ? null : <Footer />}
       {isChat ? null : <CookieBanner />}
+      {isChat ? null : <BottomNav />}
       <Toaster position="top-center" richColors />
     </div>
   );
@@ -116,16 +118,7 @@ function Root() {
     <html lang="tr" className="antialiased" suppressHydrationWarning>
       <head>
         <style dangerouslySetInnerHTML={{ __html: CRITICAL_CSS }} />
-        <noscript>
-          <style dangerouslySetInnerHTML={{ __html: "body{visibility:visible!important;opacity:1!important}" }} />
-        </noscript>
         <HeadContent />
-        <script
-          dangerouslySetInnerHTML={{
-            __html:
-              "setTimeout(function(){if(document.body){document.body.style.visibility='visible';document.body.style.opacity='1';}},3000);",
-          }}
-        />
       </head>
       <body className="flex min-h-dvh flex-col">
         <PreviewHostBridge />

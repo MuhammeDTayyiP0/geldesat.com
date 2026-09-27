@@ -19,7 +19,13 @@ export function ListingCard({ listing, variant = "grid" }: { listing: Listing; v
       }
     >
       {img ? (
-        <img src={img} alt="" className="size-full object-cover transition-transform duration-500 group-hover:scale-[1.03]" />
+        <img
+          src={img}
+          alt={listing.title}
+          loading="lazy"
+          decoding="async"
+          className="size-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+        />
       ) : (
         <div className="grid size-full place-items-center px-2 text-center">
           <div>

@@ -5,6 +5,7 @@ import { getCategoryAttrs, getListingForEdit, getMe, saveListing } from "@/lib/s
 import { TURKEY_CITIES } from "@/lib/data/locations";
 import { NEIGHBORHOODS } from "@/lib/data/geo";
 import { compressImage } from "@/lib/images";
+import { uploadImageFn } from "@/lib/server/upload";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { Button } from "@/components/ui/button";
@@ -169,15 +170,26 @@ function PostForm() {
   if (!user) return <RedirectToSignIn />;
   if (!loaded) return <BrandSpinner fullPage text="İlan bilgileri yükleniyor…" />;
 
+  const [uploading, setUploading] = useState(false);
+
   async function onFiles(files: FileList | null) {
     if (!files) return;
-    for (const file of Array.from(files).slice(0, 10 - images.length)) {
-      try {
-        const data = await compressImage(file);
-        setImages((prev) => [...prev, data]);
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Yükleme hatası");
+    setUploading(true);
+    const toastId = toast.loading("Fotoğraflar işleniyor ve sunucuya kaydediliyor…");
+    try {
+      const queue = Array.from(files).slice(0, 10 - images.length);
+      for (const file of queue) {
+        try {
+          const compressed = await compressImage(file);
+          const res = await uploadImageFn({ data: { image: compressed } });
+          setImages((prev) => [...prev, res.url]);
+        } catch (e) {
+          toast.error(e instanceof Error ? e.message : "Görsel yüklenemedi");
+        }
       }
+      toast.dismiss(toastId);
+    } finally {
+      setUploading(false);
     }
   }
 
@@ -429,7 +441,19 @@ function PostForm() {
           ) : (
             <p className="mt-1 text-sm text-muted">Fotoğraf önerilir; diğer kategorilerde isteğe bağlıdır.</p>
           )}
-          <input type="file" accept="image/jpeg,image/png,image/webp" multiple className="mt-2 text-sm" onChange={(e) => void onFiles(e.target.files)} />
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            multiple
+            disabled={uploading}
+            className="mt-2 text-sm disabled:opacity-50"
+            onChange={(e) => void onFiles(e.target.files)}
+          />
+          {uploading ? (
+            <p className="mt-1 text-xs font-medium text-primary animate-pulse">
+              Fotoğraflar sunucuya yükleniyor, lütfen bekleyin…
+            </p>
+          ) : null}
           <div className="mt-4 grid grid-cols-3 gap-2">
             {images.map((im, i) => (
               <div key={i} className="relative aspect-square overflow-hidden rounded-md bg-elevated">
