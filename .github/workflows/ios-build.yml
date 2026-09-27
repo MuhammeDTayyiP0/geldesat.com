@@ -37,7 +37,6 @@ jobs:
           echo "Bulunan Workspace: $WORKSPACE"
           echo "Bulunan Scheme: $SCHEME"
 
-          # Output dizinini proje icindeki build klasorune zorluyoruz
           xcodebuild -workspace "$WORKSPACE" \
                      -scheme "$SCHEME" \
                      -configuration Release \
@@ -50,9 +49,15 @@ jobs:
       - name: Create IPA Package
         run: |
           mkdir -p Payload
-          # DerivedDataPath ile cikti tam olarak burada olusur:
-          APP_PATH=$(find ios/build/Build/Products/Release-iphoneos -name "*.app" | head -n 1)
+          # ios/build klasorunun tamamı icinde .app dosyasını arıyoruz
+          APP_PATH=$(find ios/build -name "*.app" | head -n 1)
           echo "Bulunan App Yolu: $APP_PATH"
+          
+          if [ -z "$APP_PATH" ]; then
+            echo "HATA: .app dosyası bulunamadı!"
+            exit 1
+          fi
+
           cp -R "$APP_PATH" Payload/
           zip -r geldesat-unsigned.ipa Payload
 
