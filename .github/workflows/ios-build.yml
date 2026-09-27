@@ -10,89 +10,249 @@ jobs:
     runs-on: macos-latest
 
     steps:
+      # ==========================================
+      # 1. Checkout
+      # ==========================================
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      # ==========================================
+      # 2. Node.js
+      # ==========================================
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
+          cache: npm
           cache-dependency-path: mobile/package-lock.json
 
+      # ==========================================
+      # 3. Install Dependencies
+      # ==========================================
       - name: Install Dependencies
+        working-directory: mobile
         run: |
-          cd mobile
           npm ci
 
-      - name: Setup Expo / EAS CLI
+      # ==========================================
+      # 4. Expo CLI
+      # ==========================================
+      - name: Setup Expo CLI
         run: |
-          npm install -g expo-cli eas-cli
+          npm install -g expo-cli
 
+      # ==========================================
+      # 5. Generate iOS Native Project
+      # ==========================================
       - name: Generate iOS Native Project (Prebuild)
+        working-directory: mobile
         run: |
-          cd mobile
           npx expo prebuild --platform ios --clean
 
+      # ==========================================
+      # 6. Build iOS App (Unsigned)
+      # ==========================================
       - name: Build iOS App (Unsigned)
+        shell: bash
         run: |
-          cd mobile
-          WORKSPACE=$(ls -d ios/*.xcworkspace 2>/dev/null | head -n 1)
+          set -e
+
+          cd "$GITHUB_WORKSPACE/mobile"
+
+          echo "========================================="
+          echo "iOS WORKSPACE ARANIYOR"
+          echo "========================================="
+
+          WORKSPACE=$(find ios -maxdepth 1 -name "*.xcworkspace" -type d | head -n 1)
+
           if [ -z "$WORKSPACE" ]; then
             echo "HATA: ios klasoru icinde .xcworkspace bulunamadi!"
-            ls -la
+            echo ""
+            echo "IOS KLASORU:"
+            find ios -maxdepth 2 -print
             exit 1
           fi
-          
-          SCHEME=$(xcodebuild -workspace "$WORKSPACE" -list | grep -A 1 "Schemes:" | tail -n 1 | xargs)
-          
+
           echo "Bulunan Workspace: $WORKSPACE"
+
+          echo "========================================="
+          echo "SCHEME ARANIYOR"
+          echo "========================================="
+
+          SCHEME=$(xcodebuild \
+            -workspace "$WORKSPACE" \
+            -list \
+            | awk '/Schemes:/ {getline; print; exit}' \
+            | xargs)
+
+          if [ -z "$SCHEME" ]; then
+            echo "HATA: Scheme bulunamadi!"
+            echo ""
+            xcodebuild -workspace "$WORKSPACE" -list
+            exit 1
+          fi
+
           echo "Bulunan Scheme: $SCHEME"
 
-          # Output yolunu GH Workspace bazli mutlak yol yapıyoruz
+          echo "========================================="
+          echo "BUILD HAZIRLANIYOR"
+          echo "========================================="
+
           BUILD_DIR="$GITHUB_WORKSPACE/mobile/build"
 
-          xcodebuild -workspace "$WORKSPACE" \
-                     -scheme "$SCHEME" \
-                     -configuration Release \
-                     -sdk iphoneos \
-                     -derivedDataPath "$BUILD_DIR" \
-                     CODE_SIGNING_ALLOWED=NO \
-                     CODE_SIGNING_REQUIRED=NO \
-                     CODE_SIGN_IDENTITY="" \
-                     CODE_SIGN_ENTITLEMENTS="" \
-                     COMPILER_INDEX_STORE_ENABLE=NO \
-                     build
+          rm -rf "$BUILD_DIR"
+          mkdir -p "$BUILD_DIR"
 
+          echo "Build Directory: $BUILD_DIR"
+
+          echo "========================================="
+          echo "XCODE BUILD BASLIYOR"
+          echo "========================================="
+
+          xcodebuild \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath "$BUILD_DIR" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            build
+
+          echo "========================================="
+          echo "XCODE BUILD TAMAMLANDI"
+          echo "========================================="
+
+          echo "Build klasoru:"
+          find "$BUILD_DIR" -maxdepth 6 -print | head -n 300
+
+          echo ""
+          echo "========================================="
+          echo "APP DOSYALARI"
+          echo "========================================="
+
+          find "$BUILD_DIR" -type d -name "*.app" -print
+
+          echo ""
+          echo "========================================="
+          echo "BUILD BITTI"
+          echo "========================================="
+
+      # ==========================================
+      # 7. Package Unsigned IPA
+      # ==========================================
       - name: Package Unsigned IPA
+        shell: bash
         run: |
-          cd mobile
-          mkdir -p Payload
-          
-          BUILD_DIR="$GITHUB_WORKSPACE/mobile/build"
-          
-          # Derlenen .app dosyasini arama
-          APP_PATH=$(find "$BUILD_DIR" -name "*.app" -type d | grep "Release-iphoneos" | head -n 1)
-          
-          # Alternatif olarak tum sistem DerivedData icinde arama (fallback)
-          if [ -z "$APP_PATH" ]; then
-            APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData -name "*.app" -type d | grep "Release-iphoneos" | head -n 1)
-          fi
+          set -e
 
-          echo "Secilen App Yolu: $APP_PATH"
-          
-          if [ -z "$APP_PATH" ]; then
-            echo "HATA: .app dosyasi bulunamadi!"
-            echo "Mevcut build klasoru icerigi:"
-            ls -R "$BUILD_DIR" 2>/dev/null || echo "Build klasoru yok"
+          cd "$GITHUB_WORKSPACE/mobile"
+
+          BUILD_DIR="$GITHUB_WORKSPACE/mobile/build"
+          PAYLOAD_DIR="$GITHUB_WORKSPACE/mobile/Payload"
+          IPA_PATH="$GITHUB_WORKSPACE/mobile/geldesat-unsigned.ipa"
+
+          echo "========================================="
+          echo "IPA PACKAGE HAZIRLANIYOR"
+          echo "========================================="
+
+          echo "Build Directory:"
+          echo "$BUILD_DIR"
+
+          if [ ! -d "$BUILD_DIR" ]; then
+            echo "HATA: Build klasoru bulunamadi!"
             exit 1
           fi
 
-          cp -R "$APP_PATH" Payload/
-          zip -r geldesat-unsigned.ipa Payload
+          echo ""
+          echo "========================================="
+          echo "BUILD ICERIGI"
+          echo "========================================="
 
+          find "$BUILD_DIR" -maxdepth 6 -print | head -n 300
+
+          echo ""
+          echo "========================================="
+          echo "APP DOSYASI ARANIYOR"
+          echo "========================================="
+
+          APP_PATH=""
+
+          while IFS= read -r app; do
+            if [ -z "$APP_PATH" ]; then
+              APP_PATH="$app"
+            fi
+          done < <(
+            find "$BUILD_DIR" \
+              -type d \
+              -name "*.app" \
+              2>/dev/null
+          )
+
+          echo ""
+          echo "Secilen App Yolu:"
+          echo "$APP_PATH"
+
+          if [ -z "$APP_PATH" ]; then
+            echo ""
+            echo "========================================="
+            echo "HATA: .app DOSYASI BULUNAMADI!"
+            echo "========================================="
+
+            echo ""
+            echo "Build klasorundeki dosyalar:"
+            find "$BUILD_DIR" -type f | head -n 300
+
+            echo ""
+            echo "Tum .app aramalari:"
+            find "$BUILD_DIR" -type d -name "*.app" -print
+
+            exit 1
+          fi
+
+          echo ""
+          echo "========================================="
+          echo "PAYLOAD HAZIRLANIYOR"
+          echo "========================================="
+
+          rm -rf "$PAYLOAD_DIR"
+          mkdir -p "$PAYLOAD_DIR"
+
+          cp -R "$APP_PATH" "$PAYLOAD_DIR/"
+
+          echo "Payload:"
+          ls -lah "$PAYLOAD_DIR"
+
+          echo ""
+          echo "========================================="
+          echo "IPA OLUSTURULUYOR"
+          echo "========================================="
+
+          rm -f "$IPA_PATH"
+
+          cd "$GITHUB_WORKSPACE/mobile"
+
+          zip -r "$IPA_PATH" Payload
+
+          echo ""
+          echo "========================================="
+          echo "IPA BASARIYLA OLUSTURULDU"
+          echo "========================================="
+
+          ls -lh "$IPA_PATH"
+
+          echo ""
+          echo "IPA:"
+          echo "$IPA_PATH"
+
+      # ==========================================
+      # 8. Upload IPA Artifact
+      # ==========================================
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
           name: geldesat-ios-app
           path: mobile/geldesat-unsigned.ipa
+          if-no-files-found: error
