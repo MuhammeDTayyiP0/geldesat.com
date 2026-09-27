@@ -1,4 +1,4 @@
-name: Build iOS IPA
+name: Build Unsigned iOS IPA
 
 on:
   push:
@@ -6,37 +6,44 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-ios:
+  build:
     runs-on: macos-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout Code
         uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: 'npm'
+          cache-dependency-path: mobile/package-lock.json
 
-      - name: Install dependencies
+      - name: Install Dependencies
         run: |
           cd mobile
-          npm install
+          npm ci
 
-      - name: Generate iOS Native Project
+      - name: Setup Expo / EAS CLI
+        run: |
+          npm install -g expo-cli eas-cli
+
+      - name: Generate iOS Native Project (Prebuild)
         run: |
           cd mobile
-          npx expo prebuild --platform ios
-
-      - name: Install Pods
-        run: |
-          cd mobile/ios
-          pod install
+          npx expo prebuild --platform ios --clean
 
       - name: Build iOS App (Unsigned)
         run: |
           cd mobile
-          WORKSPACE=$(ls -d ios/*.xcworkspace | head -n 1)
+          WORKSPACE=$(ls -d ios/*.xcworkspace 2>/dev/null | head -n 1)
+          if [ -z "$WORKSPACE" ]; then
+            echo "HATA: ios klasoru icinde .xcworkspace bulunamadi!"
+            ls -la
+            exit 1
+          fi
+          
           SCHEME=$(xcodebuild -workspace "$WORKSPACE" -list | grep -A 1 "Schemes:" | tail -n 1 | xargs)
           
           echo "Bulunan Workspace: $WORKSPACE"
@@ -59,11 +66,9 @@ jobs:
           cd mobile
           mkdir -p Payload
           
-          # Build klasorunun icindeki tum .app klasorlerini bul
           APP_PATH=$(find build/Build/Products/Release-iphoneos -name "*.app" -type d | head -n 1)
           
           if [ -z "$APP_PATH" ]; then
-            # Alternatif derin arama
             APP_PATH=$(find build -name "*.app" -type d | grep "Release-iphoneos" | head -n 1)
           fi
 
@@ -74,7 +79,6 @@ jobs:
             exit 1
           fi
 
-          # .app dosyasini Payload/ icine koyup ziple
           cp -R "$APP_PATH" Payload/
           zip -r geldesat-unsigned.ipa Payload
 
