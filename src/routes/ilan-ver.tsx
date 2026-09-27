@@ -166,9 +166,8 @@ function PostForm() {
     };
   }, [editId, userId, nav]);
 
-  if (isPending) return <BrandSpinner fullPage text="Hesap bilgileri doğrulanıyor…" />;
+  if (isPending || (user && !loaded)) return <BrandSpinner fullPage text="İlan formu hazırlanıyor…" />;
   if (!user) return <RedirectToSignIn />;
-  if (!loaded) return <BrandSpinner fullPage text="İlan bilgileri yükleniyor…" />;
 
   const [uploading, setUploading] = useState(false);
 

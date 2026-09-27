@@ -1,4 +1,5 @@
 import { createRootRoute, HeadContent, Outlet, Scripts, useRouterState } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { Header } from "@/components/layout/Header";
@@ -12,8 +13,8 @@ import appCss from "../styles.css?url";
 
 const APP_NAME = "GeldeSat";
 
-/** Instant base styles so first frame paints immediately without flash of unstyled content or layout shifts. */
-const CRITICAL_CSS = `*,::before,::after{box-sizing:border-box}html{overflow-x:hidden;-webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent;touch-action:manipulation;scroll-behavior:smooth}body{background-color:#f3f5f8;color:#12151c;margin:0;min-height:100dvh;font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}svg{display:inline-block;vertical-align:middle;max-width:100%}header svg{width:1.5rem;height:1.5rem}img{max-width:100%;height:auto}.site-header,header{height:4rem;min-height:4rem}a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}button,[role="button"]{cursor:pointer}.max-w-6xl{max-width:72rem;margin-left:auto;margin-right:auto}`;
+/** Instant base styles + initial brand splash screen so first frame paints a clean branded spinner until styles load. */
+const CRITICAL_CSS = `*,::before,::after{box-sizing:border-box}html{overflow-x:hidden;-webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent;touch-action:manipulation;scroll-behavior:smooth}body{background-color:#f3f5f8;color:#12151c;margin:0;min-height:100dvh;font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}#app-splash-loader{position:fixed;inset:0;z-index:999999;background-color:#f3f5f8;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;user-select:none;transition:opacity .28s cubic-bezier(.4,0,.2,1),visibility .28s cubic-bezier(.4,0,.2,1);pointer-events:auto}.splash-spinner-wrap{position:relative;display:flex;align-items:center;justify-content:center}.splash-glow{position:absolute;inset:-8px;border-radius:9999px;background:rgba(26,79,216,.15);filter:blur(10px)}.splash-spin{animation:brand-spin-dynamic 1.35s cubic-bezier(.5,.05,.15,.95) infinite;transform-origin:center center;color:#1A4FD8}.splash-text{font-size:14px;font-weight:600;letter-spacing:.04em;color:#5a6270;margin:0;font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,sans-serif;animation:splash-pulse 1.5s ease-in-out infinite}@keyframes brand-spin-dynamic{0%{transform:rotate(0deg) scale(.94);filter:drop-shadow(0 0 0px rgba(26,79,216,0))}42%{transform:rotate(180deg) scale(1.08);filter:drop-shadow(0 4px 14px rgba(26,79,216,.45))}78%{transform:rotate(325deg) scale(1.02);filter:drop-shadow(0 2px 8px rgba(26,79,216,.25))}100%{transform:rotate(360deg) scale(.94);filter:drop-shadow(0 0 0px rgba(26,79,216,0))}}@keyframes splash-pulse{0%,100%{opacity:1}50%{opacity:.6}}`;
 
 const BASE = "https://www.geldesat.com";
 
@@ -96,6 +97,20 @@ function Shell() {
   const isChatThread = useRouterState({
     select: (s) => s.matches.some((m) => m.routeId === "/mesajlar/$id"),
   });
+
+  // Once client hydrates, smoothly remove initial splash overlay from DOM
+  useEffect(() => {
+    const el = document.getElementById("app-splash-loader");
+    if (el) {
+      el.style.opacity = "0";
+      el.style.pointerEvents = "none";
+      const t = setTimeout(() => {
+        if (el.parentNode) el.parentNode.removeChild(el);
+      }, 320);
+      return () => clearTimeout(t);
+    }
+  }, []);
+
   return (
     <div className={isChat ? "flex h-dvh flex-col overflow-hidden" : "flex min-h-dvh flex-1 flex-col"}>
       <TopProgressBar />
@@ -116,9 +131,36 @@ function Root() {
     <html lang="tr" className="antialiased" suppressHydrationWarning>
       <head>
         <style dangerouslySetInnerHTML={{ __html: CRITICAL_CSS }} />
+        <noscript>
+          <style dangerouslySetInnerHTML={{ __html: "#app-splash-loader{display:none!important}" }} />
+        </noscript>
         <HeadContent />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `setTimeout(function(){var e=document.getElementById("app-splash-loader");if(e){e.style.opacity="0";e.style.pointerEvents="none";setTimeout(function(){if(e.parentNode)e.parentNode.removeChild(e)},300)}},2500);`,
+          }}
+        />
       </head>
       <body className="flex min-h-dvh flex-col">
+        {/* Brand Splash Screen — visible until CSS and initial paint finish */}
+        <div id="app-splash-loader" aria-hidden="true">
+          <div className="splash-spinner-wrap">
+            <div className="splash-glow" />
+            <div className="splash-spin">
+              <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" width="56" height="56" fill="none">
+                <path
+                  d="M36 12 H 24 A 12 12 0 0 0 12 24 V 28 A 4 4 0 0 0 16 32 H 48 A 4 4 0 0 1 52 36 V 40 A 12 12 0 0 1 40 52 H 28"
+                  stroke="#1A4FD8"
+                  strokeWidth="8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <path d="M24 32 H 32" stroke="#1A4FD8" strokeWidth="8" strokeLinecap="round" />
+              </svg>
+            </div>
+          </div>
+          <p className="splash-text">GeldeSat</p>
+        </div>
         <PreviewHostBridge />
         <AuthProvider>
           <Shell />

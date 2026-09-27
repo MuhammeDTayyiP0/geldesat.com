@@ -42,7 +42,9 @@ function Mine() {
     if (user) reload();
   }, [user]);
 
-  if (isPending) return <BrandSpinner fullPage text="İlanlarınız yükleniyor…" />;
+  if (isPending || (loading && rows.length === 0 && user)) {
+    return <BrandSpinner fullPage text="İlanlarınız yükleniyor…" />;
+  }
   if (!user) return <RedirectToSignIn />;
 
   return (
@@ -53,11 +55,7 @@ function Mine() {
           <Button>Yeni ilan</Button>
         </Link>
       </div>
-      {loading ? (
-        <div className="flex min-h-[320px] items-center justify-center rounded-xl border border-border bg-surface p-12">
-          <BrandSpinner size="lg" text="İlanlarınız getiriliyor…" />
-        </div>
-      ) : rows.length === 0 ? (
+      {rows.length === 0 ? (
         <p className="rounded-xl border border-dashed border-border bg-surface p-12 text-center text-muted">Henüz ilanınız yok.</p>
       ) : (
         <div className="space-y-4">

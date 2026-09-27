@@ -292,3 +292,12 @@ html.mobile-nav-lock body {
   background-size: 200% 100%;
   animation: skeleton-shimmer 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
+
+/* Initial Splash Screen: Auto-dissolve smoothly the moment styles.css finishes evaluation */
+#app-splash-loader {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  transition: opacity 0.28s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.28s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+

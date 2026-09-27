@@ -32,17 +32,15 @@ function Notes() {
     void markNotificationsRead();
   }, [user]);
 
-  if (isPending) return <BrandSpinner fullPage text="Bildirimleriniz yükleniyor…" />;
+  if (isPending || (loading && rows.length === 0 && user)) {
+    return <BrandSpinner fullPage text="Bildirimleriniz yükleniyor…" />;
+  }
   if (!user) return <RedirectToSignIn />;
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-10">
       <h1 className="text-xl font-semibold tracking-tight">Bildirimler</h1>
-      {loading ? (
-        <div className="mt-8 flex min-h-[320px] items-center justify-center rounded-xl border border-border bg-surface p-12">
-          <BrandSpinner size="lg" text="Bildirimleriniz getiriliyor…" />
-        </div>
-      ) : rows.length === 0 ? (
+      {rows.length === 0 ? (
         <div className="mt-8 rounded-xl border border-dashed border-border bg-surface p-12 text-center">
           <Bell className="mx-auto size-8 text-subtle" />
           <p className="mt-3 text-muted">Bildirim yok.</p>
