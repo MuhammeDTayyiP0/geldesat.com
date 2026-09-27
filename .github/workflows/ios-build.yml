@@ -33,28 +33,45 @@ jobs:
           cd ios
           pod install
 
-      - name: Build Unsigned IPA with Fastlane
+      - name: Build iOS Archive (Unsigned)
         run: |
           cd ios
           WORKSPACE=$(ls -d *.xcworkspace | head -n 1)
           SCHEME=$(xcodebuild -workspace "$WORKSPACE" -list | grep -A 1 "Schemes:" | tail -n 1 | xargs)
           
-          echo "Workspace: $WORKSPACE"
-          echo "Scheme: $SCHEME"
+          echo "Bulunan Workspace: $WORKSPACE"
+          echo "Bulunan Scheme: $SCHEME"
 
-          fastlane run build_app \
-            workspace:"$WORKSPACE" \
-            scheme:"$SCHEME" \
-            skip_build_archive:false \
-            skip_package_ipa:false \
-            skip_profile_detection:true \
-            export_method:"development" \
-            skip_codesigning:true \
-            output_directory:"../build" \
-            output_name:"geldesat-unsigned.ipa"
+          xcodebuild -workspace "$WORKSPACE" \
+                     -scheme "$SCHEME" \
+                     -configuration Release \
+                     -sdk iphoneos \
+                     -archivePath ./build/geldesat.xcarchive \
+                     CODE_SIGNING_ALLOWED=NO \
+                     CODE_SIGNING_REQUIRED=NO \
+                     CODE_SIGNING_IDENTITY="" \
+                     CODE_SIGN_ENTITLEMENTS="" \
+                     archive
+
+      - name: Package Unsigned IPA from Archive
+        run: |
+          mkdir -p Payload
+          
+          # Archive icinde olusan .app dosyasinin tam yolunu bul
+          APP_PATH=$(find ios/build/geldesat.xcarchive/Products/Applications -name "*.app" | head -n 1)
+          echo "Bulunan App Yolu: $APP_PATH"
+          
+          if [ -z "$APP_PATH" ]; then
+            echo "HATA: Archive icinde .app dosyasi bulunamadi!"
+            exit 1
+          fi
+
+          # .app dosyasini Payload klasorune kopyala ve .ipa olarak ziple
+          cp -R "$APP_PATH" Payload/
+          zip -r geldesat-unsigned.ipa Payload
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
           name: geldesat-ios-app
-          path: mobile/build/geldesat-unsigned.ipa
+          path: mobile/geldesat-unsigned.ipa
