@@ -2,11 +2,17 @@ name: Build iOS IPA
 
 on:
   push:
-    branches: [ main, master ] # Hangi branşe push yapıyorsanız onu yazın
+    branches: [ main, master ]
+  workflow_dispatch: # GitHub arayüzünden manuel tetikleme butonu ekler
 
 jobs:
   build-ios:
     runs-on: macos-latest
+
+    # Tüm adımların 'mobile' alt klasörü içinde çalışmasını sağlar
+    defaults:
+      run:
+        working-directory: ./mobile
 
     steps:
       - name: Checkout repository
@@ -15,11 +21,10 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
-          cache: 'npm'
+          node-version: 20
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
       - name: Generate iOS Native Project
         run: npx expo prebuild --platform ios
@@ -45,4 +50,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: geldesat-ios-app
-          path: geldesat-unsigned.ipa
+          path: mobile/geldesat-unsigned.ipa
