@@ -33,6 +33,9 @@ import { Route as SayfaSlugRouteImport } from './routes/sayfa/$slug'
 import { Route as UploadsSplatRouteImport } from './routes/uploads/$'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiChatStreamRouteImport } from './routes/api/chat/stream'
+import { Route as ApiMobileCategoriesRouteImport } from './routes/api/mobile/categories'
+import { Route as ApiMobileConfigRouteImport } from './routes/api/mobile/config'
+import { Route as ApiMobileListingsRouteImport } from './routes/api/mobile/listings'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -154,6 +157,21 @@ const ApiChatStreamRoute = ApiChatStreamRouteImport.update({
   path: '/api/chat/stream',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiMobileCategoriesRoute = ApiMobileCategoriesRouteImport.update({
+  id: '/api/mobile/categories',
+  path: '/api/mobile/categories',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMobileConfigRoute = ApiMobileConfigRouteImport.update({
+  id: '/api/mobile/config',
+  path: '/api/mobile/config',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMobileListingsRoute = ApiMobileListingsRouteImport.update({
+  id: '/api/mobile/listings',
+  path: '/api/mobile/listings',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -180,6 +198,9 @@ export interface FileRoutesByFullPath {
   '/mesajlar/': typeof MesajlarIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/chat/stream': typeof ApiChatStreamRoute
+  '/api/mobile/categories': typeof ApiMobileCategoriesRoute
+  '/api/mobile/config': typeof ApiMobileConfigRoute
+  '/api/mobile/listings': typeof ApiMobileListingsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -205,6 +226,9 @@ export interface FileRoutesByTo {
   '/mesajlar': typeof MesajlarIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/chat/stream': typeof ApiChatStreamRoute
+  '/api/mobile/categories': typeof ApiMobileCategoriesRoute
+  '/api/mobile/config': typeof ApiMobileConfigRoute
+  '/api/mobile/listings': typeof ApiMobileListingsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -232,6 +256,9 @@ export interface FileRoutesById {
   '/mesajlar/': typeof MesajlarIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/chat/stream': typeof ApiChatStreamRoute
+  '/api/mobile/categories': typeof ApiMobileCategoriesRoute
+  '/api/mobile/config': typeof ApiMobileConfigRoute
+  '/api/mobile/listings': typeof ApiMobileListingsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -260,6 +287,9 @@ export interface FileRouteTypes {
     | '/mesajlar/'
     | '/api/auth/$'
     | '/api/chat/stream'
+    | '/api/mobile/categories'
+    | '/api/mobile/config'
+    | '/api/mobile/listings'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -285,6 +315,9 @@ export interface FileRouteTypes {
     | '/mesajlar'
     | '/api/auth/$'
     | '/api/chat/stream'
+    | '/api/mobile/categories'
+    | '/api/mobile/config'
+    | '/api/mobile/listings'
   id:
     | '__root__'
     | '/'
@@ -311,6 +344,9 @@ export interface FileRouteTypes {
     | '/mesajlar/'
     | '/api/auth/$'
     | '/api/chat/stream'
+    | '/api/mobile/categories'
+    | '/api/mobile/config'
+    | '/api/mobile/listings'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -336,6 +372,9 @@ export interface RootRouteChildren {
   UploadsSplatRoute: typeof UploadsSplatRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiChatStreamRoute: typeof ApiChatStreamRoute
+  ApiMobileCategoriesRoute: typeof ApiMobileCategoriesRoute
+  ApiMobileConfigRoute: typeof ApiMobileConfigRoute
+  ApiMobileListingsRoute: typeof ApiMobileListingsRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -508,6 +547,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiChatStreamRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/mobile/categories': {
+      id: '/api/mobile/categories'
+      path: '/api/mobile/categories'
+      fullPath: '/api/mobile/categories'
+      preLoaderRoute: typeof ApiMobileCategoriesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/mobile/config': {
+      id: '/api/mobile/config'
+      path: '/api/mobile/config'
+      fullPath: '/api/mobile/config'
+      preLoaderRoute: typeof ApiMobileConfigRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/mobile/listings': {
+      id: '/api/mobile/listings'
+      path: '/api/mobile/listings'
+      fullPath: '/api/mobile/listings'
+      preLoaderRoute: typeof ApiMobileListingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -548,16 +608,10 @@ const rootRouteChildren: RootRouteChildren = {
   UploadsSplatRoute: UploadsSplatRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiChatStreamRoute: ApiChatStreamRoute,
+  ApiMobileCategoriesRoute: ApiMobileCategoriesRoute,
+  ApiMobileConfigRoute: ApiMobileConfigRoute,
+  ApiMobileListingsRoute: ApiMobileListingsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-  }
-}

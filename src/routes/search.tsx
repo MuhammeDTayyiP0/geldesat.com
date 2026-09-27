@@ -365,7 +365,7 @@ function SearchPage() {
             >
               Tüm Kategoriler
             </button>
-            {categoryPath.map((c, i) => (
+            {categoryPath.map((c: any, i: number) => (
               <span key={c.id} className="flex items-center gap-1.5">
                 <ChevronRight className="size-3 text-subtle" />
                 {i === categoryPath.length - 1 ? (
@@ -386,7 +386,7 @@ function SearchPage() {
 
         {/* Alt Kategoriler veya Kök Kategoriler */}
         <div className="-mx-4 flex gap-2 overflow-x-auto px-4 py-1.5 no-scrollbar sm:mx-0 sm:px-0">
-          {(categoryChildren.length > 0 ? categoryChildren : categoriesData.roots).slice(0, 10).map((c) => {
+          {(categoryChildren.length > 0 ? categoryChildren : categoriesData.roots).slice(0, 10).map((c: any) => {
             const isSelected = search.category === c.slug;
             return (
               <button
