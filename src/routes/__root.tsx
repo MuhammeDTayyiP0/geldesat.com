@@ -12,8 +12,8 @@ import appCss from "../styles.css?url";
 
 const APP_NAME = "GeldeSat";
 
-/** Instant base styles so first frame paints immediately without flash of unstyled content. */
-const CRITICAL_CSS = `html,body{background-color:#f3f5f8;color:#12151c;margin:0;min-height:100dvh;font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}html{overflow-x:hidden;-webkit-tap-highlight-color:transparent;touch-action:manipulation}`;
+/** Instant base styles so first frame paints immediately without flash of unstyled content or layout shifts. */
+const CRITICAL_CSS = `*,::before,::after{box-sizing:border-box}html{overflow-x:hidden;-webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent;touch-action:manipulation;scroll-behavior:smooth}body{background-color:#f3f5f8;color:#12151c;margin:0;min-height:100dvh;font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}svg{display:inline-block;vertical-align:middle;max-width:100%}header svg{width:1.5rem;height:1.5rem}img{max-width:100%;height:auto}.site-header,header{height:4rem;min-height:4rem}a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}button,[role="button"]{cursor:pointer}.max-w-6xl{max-width:72rem;margin-left:auto;margin-right:auto}`;
 
 const BASE = "https://www.geldesat.com";
 
@@ -51,7 +51,6 @@ export const Route = createRootRoute({
     ],
     links: [
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
-      { rel: "preload", href: appCss, as: "style" },
       { rel: "stylesheet", href: appCss },
       { rel: "manifest", href: "/__grok/manifest.webmanifest" },
       { rel: "apple-touch-icon", href: "/__grok/icon-180.png" },
@@ -62,7 +61,6 @@ export const Route = createRootRoute({
         href: "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&subset=latin,latin-ext&display=optional",
       },
     ],
-    styles: [{ children: CRITICAL_CSS }],
     scripts: [
       {
         type: "application/ld+json",

@@ -15,7 +15,7 @@ export function getRouter() {
     defaultNotFoundComponent: () => <NotFound />,
     defaultPendingComponent: GlobalPending,
     defaultPendingMs: 1000,
-    defaultPendingMinMs: 500,
+    defaultPendingMinMs: 0,
   });
 }
 
