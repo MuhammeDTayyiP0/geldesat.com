@@ -34,7 +34,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { BrandColors } from '@/constants/Colors';
 import { ListingCard, MobileListing } from '@/src/components/listing/ListingCard';
 import { FilterModal, FilterState } from '@/src/components/listing/FilterModal';
-import { getMobileListings, getMobileCategories } from '@/src/api/client';
+import { getMobileListings, getMobileCategories, getMobileCategoryAttributes } from '@/src/api/client';
 import { EMBEDDED_CATEGORIES, CategoryItem } from '@/src/data/categoriesData';
 
 const SORT_OPTIONS = [
@@ -86,6 +86,16 @@ export default function SearchPage() {
     queryFn: () => getMobileCategories(),
     initialData: { success: true, categories: EMBEDDED_CATEGORIES.map((category) => ({ ...category, icon: category.icon ?? null })) },
   });
+
+  const { data: categoryAttributeData } = useQuery({
+    queryKey: ['mobileCategoryAttributes', selectedCatId],
+    queryFn: () => getMobileCategoryAttributes(selectedCatId!),
+    enabled: Boolean(selectedCatId),
+    staleTime: 5 * 60 * 1000,
+  });
+  const categoryAttributes = categoryAttributeData?.attributes || [];
+  const hasVehicleAttributes = categoryAttributes.some((attribute) => ['Yıl', 'KM'].includes(attribute.name));
+  const hasPropertyAttributes = categoryAttributes.some((attribute) => attribute.name.includes('m²'));
 
   const allCategories: CategoryItem[] = useMemo(() => {
     return catData?.categories?.length ? catData.categories : EMBEDDED_CATEGORIES;
@@ -168,10 +178,7 @@ export default function SearchPage() {
         maxKm: activeFilters.maxKm,
         minM2: activeFilters.minM2,
         maxM2: activeFilters.maxM2,
-        attrs: {
-          ...(activeFilters.fuel ? { Yakıt: activeFilters.fuel } : {}),
-          ...(activeFilters.gear ? { Vites: activeFilters.gear } : {}),
-        },
+        attrs: activeFilters.attrs,
         limit: 20,
         offset: pageParam,
       }),
@@ -220,8 +227,7 @@ export default function SearchPage() {
     activeFilters.minPrice,
     activeFilters.maxPrice,
     activeFilters.isUrgentOnly,
-    activeFilters.fuel,
-    activeFilters.gear,
+    ...Object.values(activeFilters.attrs || {}).flat(),
     activeFilters.minYear,
     activeFilters.maxYear,
     activeFilters.minKm,
@@ -463,8 +469,9 @@ export default function SearchPage() {
         visible={isFilterModalOpen}
         onClose={() => setIsFilterModalOpen(false)}
         initialFilters={activeFilters}
-        showVehicleFilters={categoryPath[0]?.id === 'vasita'}
-        showPropertyFilters={categoryPath[0]?.id === 'emlak'}
+        attributes={categoryAttributes}
+        showVehicleFilters={hasVehicleAttributes}
+        showPropertyFilters={hasPropertyAttributes}
         onApply={(newFilters) => setActiveFilters(newFilters)}
       />
     </View>

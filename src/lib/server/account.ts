@@ -2,7 +2,6 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
-import { CITY_COORDS } from "@/lib/data/geo";
 import { newId, num, slugify } from "@/lib/utils";
 import {
   inheritedAttributes,
@@ -12,11 +11,11 @@ import {
   requireAdmin,
   creditBalance,
   rateLimit,
-  assertImages,
   notify,
   normalizeTrPhone,
 } from "./helpers";
 import { listingFromRow, notifySearchHits } from "./ops";
+import { ListingInput, saveListingRecord } from "./listing-write";
 
 export const getMe = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
@@ -101,164 +100,7 @@ export const updateProfile = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-const ListingInput = z.object({
-  id: z.string().optional(),
-  categoryId: z.string(),
-  title: z.string().min(5).max(100),
-  description: z.string().min(10).max(5000),
-  price: z.number().min(1).max(1_000_000_000),
-  city: z.string().min(1),
-  district: z.string().min(1),
-  neighborhood: z.string().max(60).optional(),
-  phone: z.string().max(20).optional(),
-  images: z.array(z.string()).max(10),
-  attrs: z.record(z.string(), z.union([z.string(), z.number()])),
-  storeId: z.string().optional(),
-});
-
-export const saveListing = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
-  .validator(ListingInput)
-  .handler(async ({ context, data }) => {
-    rateLimit(`listing:${context.userId}`, 20, 60_000);
-    const sql = await getSql();
-    const me = await ensureProfile(context.userId);
-    if (!me) throw new Error("Profil yok");
-    const profile = await sql.query<{ phone: string | null; role: string }>(
-      "select phone, role from profiles where user_id = $1",
-      [context.userId],
-    );
-    if (!profile[0]?.phone && !data.phone) {
-      throw new Error("İlan vermek için profilinize telefon ekleyin.");
-    }
-    const phone = data.phone?.trim() ? normalizeTrPhone(data.phone) : profile[0]?.phone;
-    if (phone) {
-      try {
-        normalizeTrPhone(phone);
-      } catch (e) {
-        throw e instanceof Error ? e : new Error("Geçersiz telefon");
-      }
-    }
-    assertImages(data.images);
-    const photoNeed = await sql.query<{ id: string }>(
-      `with recursive chain as (
-         select id, parent_id from categories where id = $1
-         union all
-         select c.id, c.parent_id from categories c join chain ch on ch.parent_id = c.id
-       )
-       select id from chain where id in ('emlak','vasita')`,
-      [data.categoryId],
-    );
-    if (photoNeed.length > 0 && data.images.length < 1) {
-      throw new Error("Emlak ve vasıta ilanlarında en az 1 fotoğraf zorunludur.");
-    }
-    const cat = await sql.query<{ id: string }>("select id from categories where id = $1", [data.categoryId]);
-    if (!cat[0]) throw new Error("Kategori bulunamadı");
-    const required = await inheritedAttributes(data.categoryId);
-    for (const a of required.filter((x) => x.required)) {
-      const v = data.attrs[a.name];
-      if (v == null || v === "") throw new Error(`Zorunlu alan: ${a.name}`);
-    }
-    const coords = CITY_COORDS[data.city];
-    const slugBase = slugify(data.title) || "ilan";
-    if (data.id) {
-      const existing = await sql.query<{ user_id: string; slug: string; price: string | number; status: string }>(
-        "select user_id, slug, price, status from listings where id = $1",
-        [data.id],
-      );
-      if (!existing[0]) throw new Error("İlan bulunamadı");
-      if (existing[0].user_id !== context.userId && profile[0]?.role !== "ADMIN") {
-        throw new Error("Yetkisiz işlem");
-      }
-      const nextStatus = existing[0].status === "REJECTED" ? "PENDING" : existing[0].status;
-      await sql.query(
-        `update listings set category_id=$2, title=$3, description=$4, price=$5, city=$6, district=$7,
-          neighborhood=$8, lat=$9, lng=$10, images=$11::jsonb, attrs=$12::jsonb, phone_override=$13,
-          store_id=$14, status=$15, updated_at=now()
-         where id=$1`,
-        [
-          data.id,
-          data.categoryId,
-          data.title,
-          data.description,
-          data.price,
-          data.city,
-          data.district,
-          data.neighborhood || null,
-          coords?.lat ?? null,
-          coords?.lng ?? null,
-          JSON.stringify(data.images),
-          JSON.stringify(data.attrs),
-          data.phone?.trim() ? normalizeTrPhone(data.phone) : null,
-          data.storeId || null,
-          nextStatus,
-        ],
-      );
-      if (num(existing[0].price) !== data.price) {
-        await sql.query("insert into price_history (listing_id, price) values ($1,$2)", [data.id, data.price]);
-      }
-      if (existing[0].status === "REJECTED") {
-        await notify(
-          context.userId,
-          "listing",
-          "İlanınız tekrar incelemede",
-          "Düzenlenen ilan onay kuyruğuna alındı.",
-          `/ilan/${existing[0].slug}`,
-        );
-      }
-      return { id: data.id, slug: existing[0].slug, status: nextStatus };
-    }
-    const id = newId("lst");
-    const slug = `${slugBase}-${id.slice(-6)}`;
-    const prior = await sql.query<{ n: number }>(
-      "select count(*)::int as n from listings where user_id=$1",
-      [context.userId],
-    );
-    const firstListing = (prior[0]?.n ?? 0) === 0;
-    const status = profile[0]?.role === "ADMIN" || firstListing ? "ACTIVE" : "PENDING";
-    await sql.query(
-      `insert into listings (
-         id, slug, user_id, store_id, category_id, title, description, price, status,
-         city, district, neighborhood, lat, lng, images, attrs, phone_override, expires_at
-       ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::jsonb,$16::jsonb,$17, now() + interval '30 days')`,
-      [
-        id,
-        slug,
-        context.userId,
-        data.storeId || null,
-        data.categoryId,
-        data.title,
-        data.description,
-        data.price,
-        status,
-        data.city,
-        data.district,
-        data.neighborhood || null,
-        coords?.lat ?? null,
-        coords?.lng ?? null,
-        JSON.stringify(data.images),
-        JSON.stringify(data.attrs),
-        phone,
-      ],
-    );
-    await sql.query("insert into price_history (listing_id, price) values ($1,$2)", [id, data.price]);
-    if (status === "ACTIVE") {
-      void notifySearchHits({
-        id,
-        slug,
-        user_id: context.userId,
-        title: data.title,
-        description: data.description,
-        category_id: data.categoryId,
-        city: data.city,
-        district: data.district,
-        neighborhood: data.neighborhood || null,
-        price: data.price,
-        attrs: data.attrs,
-      }).catch(() => undefined);
-    }
-    return { id, slug, status };
-  });
+export const saveListing = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(ListingInput).handler(async ({ context, data }) => saveListingRecord(context.userId, data));
 
 export const setListingStatus = createServerFn({ method: "POST" })
   .middleware([authMiddleware])

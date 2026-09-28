@@ -66,11 +66,6 @@ const ICONS: Record<string, any> = {
   'hayvanlar-alemi': PawPrint,
 };
 
-const FUEL_TYPES = ['Benzin', 'Dizel', 'Hibrit', 'Elektrik', 'LPG'];
-const GEAR_TYPES = ['Otomatik', 'Manuel', 'Yarı Otomatik'];
-const DAMAGE_STATUSES = ['Hatasız / Boyasız', 'Lokal Boyalı', 'Boyalı / Değişenli', 'Hasar Kayıtlı'];
-const ROOM_TYPES = ['1+0 (Stüdyo)', '1+1', '2+1', '3+1', '4+1', '5+1', 'Dubleks'];
-const HEATING_TYPES = ['Doğalgaz (Kombi)', 'Merkezi', 'Yerden Isıtma', 'Klima', 'Soba', 'Yok'];
 const STEPS = ['Kategori', 'Detay', 'Fotoğraf', 'Önizleme'];
 
 export default function PostAdScreen() {
@@ -93,22 +88,6 @@ export default function PostAdScreen() {
   const [district, setDistrict] = useState('');
   const [neighborhood, setNeighborhood] = useState('');
   const [phone, setPhone] = useState('');
-
-  // Dinamik Vasıta & Emlak Özellikleri
-  const [year, setYear] = useState('');
-  const [km, setKm] = useState('');
-  const [fuel, setFuel] = useState('');
-  const [gear, setGear] = useState('');
-  const [damage, setDamage] = useState('');
-  const [trade, setTrade] = useState<'Evet' | 'Hayır' | ''>('');
-
-  const [m2Net, setM2Net] = useState('');
-  const [m2Brut, setM2Brut] = useState('');
-  const [rooms, setRooms] = useState('');
-  const [heating, setHeating] = useState('');
-  const [floor, setFloor] = useState('');
-  const [buildingAge, setBuildingAge] = useState('');
-  const [furnished, setFurnished] = useState<'Evet' | 'Hayır' | ''>('');
 
   // Fotoğraflar
   const [images, setImages] = useState<string[]>([]);
@@ -150,19 +129,6 @@ export default function PostAdScreen() {
         setImages(listing.images || []);
         setImagePayloads({});
         setAttributeValues(listing.attrs ?? {});
-        setYear(String(listing.attrs?.['Yıl'] || ''));
-        setKm(String(listing.attrs?.KM || ''));
-        setFuel(String(listing.attrs?.['Yakıt'] || ''));
-        setGear(String(listing.attrs?.['Vites'] || ''));
-        setDamage(String(listing.attrs?.['Hasar Durumu'] || ''));
-        setTrade((listing.attrs?.Takas === 'Evet' || listing.attrs?.Takas === 'Hayır') ? listing.attrs.Takas : '');
-        setM2Net(String(listing.attrs?.['m² (Net)'] || ''));
-        setM2Brut(String(listing.attrs?.['m² (Brüt)'] || ''));
-        setRooms(String(listing.attrs?.['Oda Sayısı'] || ''));
-        setFloor(String(listing.attrs?.['Bulunduğu Kat'] || ''));
-        setBuildingAge(String(listing.attrs?.['Bina Yaşı'] || ''));
-        setHeating(String(listing.attrs?.['Isıtma'] || ''));
-        setFurnished((listing.attrs?.Eşyalı === 'Evet' || listing.attrs?.Eşyalı === 'Hayır') ? listing.attrs.Eşyalı : '');
         setStep(1);
         setIsEditing(true);
       } catch (error) {
@@ -265,6 +231,7 @@ export default function PostAdScreen() {
   const handleBackCategory = () => {
     if (path.length > 0) {
       setPath(path.slice(0, -1));
+      setAttributeValues({});
       setCatSearch('');
     }
   };
@@ -379,14 +346,7 @@ export default function PostAdScreen() {
     try {
       const user = await getStoredUser();
       if (!user?.token) throw new Error('İlan vermek için yeniden giriş yapın.');
-      const attrs: Record<string, string | number> = {
-        ...attributeValues,
-        ...(year ? { 'Yıl': year } : {}), ...(km ? { 'KM': km } : {}), ...(fuel ? { 'Yakıt': fuel } : {}),
-        ...(gear ? { 'Vites': gear } : {}), ...(damage ? { 'Hasar Durumu': damage } : {}), ...(trade ? { 'Takas': trade } : {}),
-        ...(m2Net ? { 'm² (Net)': m2Net } : {}), ...(m2Brut ? { 'm² (Brüt)': m2Brut } : {}), ...(rooms ? { 'Oda Sayısı': rooms } : {}),
-        ...(floor ? { 'Bulunduğu Kat': floor } : {}), ...(buildingAge ? { 'Bina Yaşı': buildingAge } : {}),
-        ...(heating ? { 'Isıtma': heating } : {}), ...(furnished ? { 'Eşyalı': furnished } : {}),
-      };
+      const attrs = attributeValues;
       const response = await createMobileListing({
         id: editId || undefined,
         categoryId: selectedCatId,
@@ -420,19 +380,7 @@ export default function PostAdScreen() {
             setImages([]);
             setImagePayloads({});
             setIsEditing(false);
-            setYear('');
-            setKm('');
-            setFuel('');
-            setGear('');
-            setDamage('');
-            setTrade('');
-            setM2Net('');
-            setM2Brut('');
-            setRooms('');
-            setHeating('');
-            setFloor('');
-            setBuildingAge('');
-            setFurnished('');
+            setAttributeValues({});
             router.push(`/ilan/${response.id}` as any);
           },
         },
@@ -503,14 +451,14 @@ export default function PostAdScreen() {
             {/* Ekmek Kırıntısı (Breadcrumb) */}
             {pathRows.length > 0 && (
               <View style={styles.breadcrumbCard}>
-                <TouchableOpacity onPress={() => setPath([])}>
+                <TouchableOpacity onPress={() => { setPath([]); setAttributeValues({}); }}>
                   <Text style={styles.breadcrumbLink}>Kategoriler</Text>
                 </TouchableOpacity>
                 {pathRows.map((cat, idx) => (
                   <React.Fragment key={cat.id}>
                     <ChevronRight size={12} color="#8a929e" style={{ marginHorizontal: 2 }} />
                     <TouchableOpacity
-                      onPress={() => setPath(path.slice(0, idx + 1))}
+                      onPress={() => { setPath(path.slice(0, idx + 1)); setAttributeValues({}); }}
                       disabled={idx === pathRows.length - 1}>
                       <Text
                         style={[
@@ -709,259 +657,38 @@ export default function PostAdScreen() {
               />
             </View>
 
-            {/* Vasıta Dinamik Özellikleri */}
-            {isVehicle && (
+            {attributesLoading ? <ActivityIndicator color={BrandColors.primary} /> : categoryAttributes.length ? (
               <View style={styles.dynamicSection}>
-                <Text style={styles.dynamicHeader}>Vasıta Özellikleri</Text>
-                <View style={styles.fieldRow}>
-                  <View style={[styles.fieldGroup, { flex: 1 }]}>
-                    <Text style={styles.label}>Model Yılı</Text>
-                    <TextInput
-                      placeholder="2021"
-                      placeholderTextColor="#8a929e"
-                      value={year}
-                      onChangeText={setYear}
-                      keyboardType="numeric"
-                      style={styles.textInput}
-                    />
-                  </View>
-                  <View style={[styles.fieldGroup, { flex: 1 }]}>
-                    <Text style={styles.label}>Kilometre (KM)</Text>
-                    <TextInput
-                      placeholder="65000"
-                      placeholderTextColor="#8a929e"
-                      value={km}
-                      onChangeText={setKm}
-                      keyboardType="numeric"
-                      style={styles.textInput}
-                    />
-                  </View>
-                </View>
-
-                <View style={styles.fieldGroup}>
-                  <Text style={styles.label}>Yakıt Tipi</Text>
-                  <View style={styles.chipRow}>
-                    {FUEL_TYPES.map((f) => (
-                      <TouchableOpacity
-                        key={f}
-                        style={[styles.chipItem, fuel === f && styles.chipItemActive]}
-                        onPress={() => setFuel(f)}>
-                        <Text style={[styles.chipText, fuel === f && styles.chipTextActive]}>
-                          {f}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-
-                <View style={styles.fieldGroup}>
-                  <Text style={styles.label}>Vites Tipi</Text>
-                  <View style={styles.chipRow}>
-                    {GEAR_TYPES.map((g) => (
-                      <TouchableOpacity
-                        key={g}
-                        style={[styles.chipItem, gear === g && styles.chipItemActive]}
-                        onPress={() => setGear(g)}>
-                        <Text style={[styles.chipText, gear === g && styles.chipTextActive]}>
-                          {g}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-
-                <View style={styles.fieldGroup}>
-                  <Text style={styles.label}>Hasar Durumu</Text>
-                  <View style={styles.chipRow}>
-                    {DAMAGE_STATUSES.map((d) => (
-                      <TouchableOpacity
-                        key={d}
-                        style={[styles.chipItem, damage === d && styles.chipItemActive]}
-                        onPress={() => setDamage(d)}>
-                        <Text style={[styles.chipText, damage === d && styles.chipTextActive]}>
-                          {d}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-
-                <View style={styles.fieldGroup}>
-                  <Text style={styles.label}>Takaslı mı?</Text>
-                  <View style={styles.chipRow}>
-                    {(['Evet', 'Hayır'] as const).map((t) => (
-                      <TouchableOpacity
-                        key={t}
-                        style={[styles.chipItem, trade === t && styles.chipItemActive]}
-                        onPress={() => setTrade(t)}>
-                        <Text style={[styles.chipText, trade === t && styles.chipTextActive]}>
-                          {t}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-              </View>
-            )}
-
-            {/* Emlak Dinamik Özellikleri */}
-            {isProperty && (
-              <View style={styles.dynamicSection}>
-                <Text style={styles.dynamicHeader}>Emlak Özellikleri</Text>
-                <View style={styles.fieldRow}>
-                  <View style={[styles.fieldGroup, { flex: 1 }]}>
-                    <Text style={styles.label}>m² (Net)</Text>
-                    <TextInput
-                      placeholder="110"
-                      placeholderTextColor="#8a929e"
-                      value={m2Net}
-                      onChangeText={setM2Net}
-                      keyboardType="numeric"
-                      style={styles.textInput}
-                    />
-                  </View>
-                  <View style={[styles.fieldGroup, { flex: 1 }]}>
-                    <Text style={styles.label}>m² (Brüt)</Text>
-                    <TextInput
-                      placeholder="125"
-                      placeholderTextColor="#8a929e"
-                      value={m2Brut}
-                      onChangeText={setM2Brut}
-                      keyboardType="numeric"
-                      style={styles.textInput}
-                    />
-                  </View>
-                </View>
-
-                <View style={styles.fieldGroup}>
-                  <Text style={styles.label}>Oda Sayısı</Text>
-                  <View style={styles.chipRow}>
-                    {ROOM_TYPES.map((r) => (
-                      <TouchableOpacity
-                        key={r}
-                        style={[styles.chipItem, rooms === r && styles.chipItemActive]}
-                        onPress={() => setRooms(r)}>
-                        <Text style={[styles.chipText, rooms === r && styles.chipTextActive]}>
-                          {r}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-
-                <View style={styles.fieldRow}>
-                  <View style={[styles.fieldGroup, { flex: 1 }]}>
-                    <Text style={styles.label}>Bulunduğu Kat</Text>
-                    <TextInput
-                      placeholder="3. Kat"
-                      placeholderTextColor="#8a929e"
-                      value={floor}
-                      onChangeText={setFloor}
-                      style={styles.textInput}
-                    />
-                  </View>
-                  <View style={[styles.fieldGroup, { flex: 1 }]}>
-                    <Text style={styles.label}>Bina Yaşı</Text>
-                    <TextInput
-                      placeholder="5"
-                      placeholderTextColor="#8a929e"
-                      value={buildingAge}
-                      onChangeText={setBuildingAge}
-                      keyboardType="numeric"
-                      style={styles.textInput}
-                    />
-                  </View>
-                </View>
-
-                <View style={styles.fieldGroup}>
-                  <Text style={styles.label}>Isıtma</Text>
-                  <View style={styles.chipRow}>
-                    {HEATING_TYPES.map((h) => (
-                      <TouchableOpacity
-                        key={h}
-                        style={[styles.chipItem, heating === h && styles.chipItemActive]}
-                        onPress={() => setHeating(h)}>
-                        <Text style={[styles.chipText, heating === h && styles.chipTextActive]}>
-                          {h}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-
-                <View style={styles.fieldGroup}>
-                  <Text style={styles.label}>Eşyalı mı?</Text>
-                  <View style={styles.chipRow}>
-                    {(['Evet', 'Hayır'] as const).map((e) => (
-                      <TouchableOpacity
-                        key={e}
-                        style={[styles.chipItem, furnished === e && styles.chipItemActive]}
-                        onPress={() => setFurnished(e)}>
-                        <Text style={[styles.chipText, furnished === e && styles.chipTextActive]}>
-                          {e}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-              </View>
-            )}
-
-            {/* Kategoriye özel alanlar: web formuyla aynı şema sunucudan alınır. */}
-            {(() => {
-              const handledNames = new Set(['Yıl', 'KM', 'Yakıt', 'Vites', 'Hasar Durumu', 'Takas', 'm² (Net)', 'm² (Brüt)', 'Oda Sayısı', 'Bulunduğu Kat', 'Bina Yaşı', 'Isıtma', 'Eşyalı']);
-              const extraAttributes = categoryAttributes.filter((attribute) => !handledNames.has(attribute.name));
-              if (!extraAttributes.length) return null;
-              return (
-                <View style={styles.dynamicSection}>
-                  <Text style={styles.dynamicHeader}>Kategori Özellikleri</Text>
-                  {attributesLoading ? <ActivityIndicator color={BrandColors.primary} /> : null}
-                  {extraAttributes.filter((attribute) => !['BOOLEAN', 'MULTI'].includes(attribute.type)).map((attribute) => (
+                <Text style={styles.dynamicHeader}>Kategori Özellikleri</Text>
+                {categoryAttributes.map((attribute) => {
+                  const value = attributeValues[attribute.name];
+                  const options = attribute.type === 'BOOLEAN' && !attribute.options?.length ? ['Evet', 'Hayır'] : attribute.options || [];
+                  const selected = String(value ?? '').split(', ').filter(Boolean);
+                  return (
                     <View key={attribute.id} style={styles.fieldGroup}>
                       <Text style={styles.label}>{attribute.name}{attribute.unit ? ` (${attribute.unit})` : ''}{attribute.required ? <Text style={styles.required}> *</Text> : null}</Text>
-                      {attribute.type === 'SELECT' ? (
+                      {['SELECT', 'BOOLEAN', 'MULTI'].includes(attribute.type) ? (
                         <View style={styles.chipRow}>
-                          {(attribute.options || []).map((option) => (
-                            <TouchableOpacity key={option} style={[styles.chipItem, String(attributeValues[attribute.name] ?? '') === option && styles.chipItemActive]} onPress={() => setAttributeValues((values) => ({ ...values, [attribute.name]: option }))}>
-                              <Text style={[styles.chipText, String(attributeValues[attribute.name] ?? '') === option && styles.chipTextActive]}>{option}</Text>
-                            </TouchableOpacity>
-                          ))}
-                        </View>
-                      ) : (
-                        <TextInput value={String(attributeValues[attribute.name] ?? '')} onChangeText={(value) => setAttributeValues((values) => ({ ...values, [attribute.name]: attribute.type === 'NUMBER' && value ? Number(value) : value }))} keyboardType={attribute.type === 'NUMBER' ? 'numeric' : 'default'} style={styles.textInput} />
-                      )}
-                    </View>
-                  ))}
-                  {extraAttributes.filter((attribute) => attribute.type === 'BOOLEAN').map((attribute) => (
-                    <View key={attribute.id} style={styles.fieldGroup}>
-                      <Text style={styles.label}>{attribute.name}{attribute.required ? <Text style={styles.required}> *</Text> : null}</Text>
-                      <View style={styles.chipRow}>
-                        {(attribute.options?.length ? attribute.options : ['Evet', 'Hayır']).map((option) => (
-                          <TouchableOpacity key={option} style={[styles.chipItem, String(attributeValues[attribute.name] ?? '') === option && styles.chipItemActive]} onPress={() => setAttributeValues((values) => ({ ...values, [attribute.name]: option }))}>
-                            <Text style={[styles.chipText, String(attributeValues[attribute.name] ?? '') === option && styles.chipTextActive]}>{option}</Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    </View>
-                  ))}
-                  {extraAttributes.filter((attribute) => attribute.type === 'MULTI').map((attribute) => {
-                    const selected = String(attributeValues[attribute.name] ?? '').split(', ').filter(Boolean);
-                    return (
-                      <View key={attribute.id} style={styles.fieldGroup}>
-                        <Text style={styles.label}>{attribute.name}{attribute.required ? <Text style={styles.required}> *</Text> : null}</Text>
-                        <View style={styles.chipRow}>
-                          {(attribute.options || []).map((option) => {
-                            const isSelected = selected.includes(option);
-                            return <TouchableOpacity key={option} style={[styles.chipItem, isSelected && styles.chipItemActive]} onPress={() => setAttributeValues((values) => ({ ...values, [attribute.name]: (isSelected ? selected.filter((item) => item !== option) : [...selected, option]).join(', ') }))}><Text style={[styles.chipText, isSelected && styles.chipTextActive]}>{option}</Text></TouchableOpacity>;
+                          {options.map((option) => {
+                            const active = attribute.type === 'MULTI' ? selected.includes(option) : String(value ?? '') === option;
+                            return (
+                              <TouchableOpacity key={option} style={[styles.chipItem, active && styles.chipItemActive]} onPress={() => setAttributeValues((values) => {
+                                if (attribute.type === 'MULTI') return { ...values, [attribute.name]: (active ? selected.filter((item) => item !== option) : [...selected, option]).join(', ') };
+                                return { ...values, [attribute.name]: active ? '' : option };
+                              })}>
+                                <Text style={[styles.chipText, active && styles.chipTextActive]}>{option}</Text>
+                              </TouchableOpacity>
+                            );
                           })}
                         </View>
-                      </View>
-                    );
-                  })}
-                </View>
-              );
-            })()}
-
+                      ) : (
+                        <TextInput value={value == null ? '' : String(value)} onChangeText={(input) => setAttributeValues((values) => ({ ...values, [attribute.name]: attribute.type === 'NUMBER' && input ? Number(input) : input }))} keyboardType={attribute.type === 'NUMBER' ? 'numeric' : 'default'} style={styles.textInput} />
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+            ) : null}
             {/* İleri / Geri Butonları */}
             <View style={styles.buttonRow}>
               <TouchableOpacity
@@ -1136,72 +863,12 @@ export default function PostAdScreen() {
                 {/* Özellikler Tablosu */}
                 <Text style={styles.previewSectionHeader}>Teknik Bilgiler</Text>
                 <View style={styles.specsTable}>
-                  {year ? (
-                    <View style={styles.specRow}>
-                      <Text style={styles.specKey}>Model Yılı</Text>
-                      <Text style={styles.specVal}>{year}</Text>
+                  {Object.entries(attributeValues).filter(([, value]) => value !== '' && value != null).map(([name, value]) => (
+                    <View key={name} style={styles.specRow}>
+                      <Text style={styles.specKey}>{name}</Text>
+                      <Text style={styles.specVal}>{String(value)}</Text>
                     </View>
-                  ) : null}
-                  {km ? (
-                    <View style={styles.specRow}>
-                      <Text style={styles.specKey}>Kilometre</Text>
-                      <Text style={styles.specVal}>{Number(km).toLocaleString('tr-TR')} KM</Text>
-                    </View>
-                  ) : null}
-                  {fuel ? (
-                    <View style={styles.specRow}>
-                      <Text style={styles.specKey}>Yakıt Tipi</Text>
-                      <Text style={styles.specVal}>{fuel}</Text>
-                    </View>
-                  ) : null}
-                  {gear ? (
-                    <View style={styles.specRow}>
-                      <Text style={styles.specKey}>Vites Tipi</Text>
-                      <Text style={styles.specVal}>{gear}</Text>
-                    </View>
-                  ) : null}
-                  {damage ? (
-                    <View style={styles.specRow}>
-                      <Text style={styles.specKey}>Hasar Durumu</Text>
-                      <Text style={styles.specVal}>{damage}</Text>
-                    </View>
-                  ) : null}
-                  {trade ? (
-                    <View style={styles.specRow}>
-                      <Text style={styles.specKey}>Takas</Text>
-                      <Text style={styles.specVal}>{trade}</Text>
-                    </View>
-                  ) : null}
-                  {m2Net ? (
-                    <View style={styles.specRow}>
-                      <Text style={styles.specKey}>m² (Net)</Text>
-                      <Text style={styles.specVal}>{m2Net} m²</Text>
-                    </View>
-                  ) : null}
-                  {rooms ? (
-                    <View style={styles.specRow}>
-                      <Text style={styles.specKey}>Oda Sayısı</Text>
-                      <Text style={styles.specVal}>{rooms}</Text>
-                    </View>
-                  ) : null}
-                  {floor ? (
-                    <View style={styles.specRow}>
-                      <Text style={styles.specKey}>Bulunduğu Kat</Text>
-                      <Text style={styles.specVal}>{floor}</Text>
-                    </View>
-                  ) : null}
-                  {heating ? (
-                    <View style={styles.specRow}>
-                      <Text style={styles.specKey}>Isıtma</Text>
-                      <Text style={styles.specVal}>{heating}</Text>
-                    </View>
-                  ) : null}
-                  {furnished ? (
-                    <View style={styles.specRow}>
-                      <Text style={styles.specKey}>Eşyalı</Text>
-                      <Text style={styles.specVal}>{furnished}</Text>
-                    </View>
-                  ) : null}
+                  ))}
                 </View>
               </View>
             </View>

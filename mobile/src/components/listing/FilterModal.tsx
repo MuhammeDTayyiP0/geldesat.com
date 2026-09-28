@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View, Modal, ScrollView, TouchableOpacity, TextInput, Switch, SafeAreaView } from 'react-native';
 import { X, RotateCcw, Check } from 'lucide-react-native';
 import { BrandColors } from '@/constants/Colors';
+import { MobileAttribute } from '@/src/api/client';
 
 export interface FilterState {
   minPrice?: string;
@@ -12,8 +13,7 @@ export interface FilterState {
   maxKm?: string;
   minM2?: string;
   maxM2?: string;
-  fuel?: string;
-  gear?: string;
+  attrs?: Record<string, string[]>;
   isUrgentOnly?: boolean;
   city?: string;
   district?: string;
@@ -27,12 +27,10 @@ interface FilterModalProps {
   initialFilters?: FilterState;
   showVehicleFilters?: boolean;
   showPropertyFilters?: boolean;
+  attributes?: MobileAttribute[];
 }
 
-const FUEL_TYPES = ['Benzin', 'Dizel', 'Hibrit', 'Elektrik', 'LPG'];
-const GEAR_TYPES = ['Otomatik', 'Manuel', 'Yarı Otomatik'];
-
-export function FilterModal({ visible, onClose, onApply, initialFilters = {}, showVehicleFilters = false, showPropertyFilters = false }: FilterModalProps) {
+export function FilterModal({ visible, onClose, onApply, initialFilters = {}, showVehicleFilters = false, showPropertyFilters = false, attributes = [] }: FilterModalProps) {
   const [minPrice, setMinPrice] = useState(initialFilters.minPrice || '');
   const [maxPrice, setMaxPrice] = useState(initialFilters.maxPrice || '');
   const [minYear, setMinYear] = useState(initialFilters.minYear || '');
@@ -41,8 +39,7 @@ export function FilterModal({ visible, onClose, onApply, initialFilters = {}, sh
   const [maxKm, setMaxKm] = useState(initialFilters.maxKm || '');
   const [minM2, setMinM2] = useState(initialFilters.minM2 || '');
   const [maxM2, setMaxM2] = useState(initialFilters.maxM2 || '');
-  const [selectedFuel, setSelectedFuel] = useState<string | undefined>(initialFilters.fuel);
-  const [selectedGear, setSelectedGear] = useState<string | undefined>(initialFilters.gear);
+  const [selectedAttrs, setSelectedAttrs] = useState<Record<string, string[]>>(initialFilters.attrs || {});
   const [isUrgentOnly, setIsUrgentOnly] = useState(initialFilters.isUrgentOnly || false);
   const [city, setCity] = useState(initialFilters.city || '');
   const [district, setDistrict] = useState(initialFilters.district || '');
@@ -54,7 +51,7 @@ export function FilterModal({ visible, onClose, onApply, initialFilters = {}, sh
     setMinYear(initialFilters.minYear || ''); setMaxYear(initialFilters.maxYear || '');
     setMinKm(initialFilters.minKm || ''); setMaxKm(initialFilters.maxKm || '');
     setMinM2(initialFilters.minM2 || ''); setMaxM2(initialFilters.maxM2 || '');
-    setSelectedFuel(initialFilters.fuel); setSelectedGear(initialFilters.gear);
+    setSelectedAttrs(initialFilters.attrs || {});
     setIsUrgentOnly(initialFilters.isUrgentOnly || false); setCity(initialFilters.city || '');
     setDistrict(initialFilters.district || ''); setNeighborhood(initialFilters.neighborhood || '');
   }, [visible, initialFilters]);
@@ -65,8 +62,7 @@ export function FilterModal({ visible, onClose, onApply, initialFilters = {}, sh
     setMinYear('');
     setMaxYear('');
     setMinKm(''); setMaxKm(''); setMinM2(''); setMaxM2('');
-    setSelectedFuel(undefined);
-    setSelectedGear(undefined);
+    setSelectedAttrs({});
     setIsUrgentOnly(false);
     setCity('');
     setDistrict(''); setNeighborhood('');
@@ -82,8 +78,7 @@ export function FilterModal({ visible, onClose, onApply, initialFilters = {}, sh
       maxKm: maxKm.trim() || undefined,
       minM2: minM2.trim() || undefined,
       maxM2: maxM2.trim() || undefined,
-      fuel: selectedFuel,
-      gear: selectedGear,
+      attrs: selectedAttrs,
       isUrgentOnly,
       city: city.trim() || undefined,
       district: district.trim() || undefined,
@@ -193,41 +188,26 @@ export function FilterModal({ visible, onClose, onApply, initialFilters = {}, sh
           </View>
           </> : null}
 
-          {showVehicleFilters ? <>
-          {/* Yakıt Tipi */}
-          <Text style={styles.sectionTitle}>Yakıt Tipi</Text>
-          <View style={styles.chipGrid}>
-            {FUEL_TYPES.map((fuel) => {
-              const isSelected = selectedFuel === fuel;
-              return (
-                <TouchableOpacity
-                  key={fuel}
-                  onPress={() => setSelectedFuel(isSelected ? undefined : fuel)}
-                  style={[styles.chip, isSelected && styles.chipActive]}
-                  activeOpacity={0.7}>
-                  <Text style={[styles.chipText, isSelected && styles.chipTextActive]}>{fuel}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
-          {/* 6. Vites Tipi */}
-          <Text style={styles.sectionTitle}>Vites Tipi</Text>
-          <View style={styles.chipGrid}>
-            {GEAR_TYPES.map((gear) => {
-              const isSelected = selectedGear === gear;
-              return (
-                <TouchableOpacity
-                  key={gear}
-                  onPress={() => setSelectedGear(isSelected ? undefined : gear)}
-                  style={[styles.chip, isSelected && styles.chipActive]}
-                  activeOpacity={0.7}>
-                  <Text style={[styles.chipText, isSelected && styles.chipTextActive]}>{gear}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-          </> : null}
+          {attributes.filter((attribute) => ['SELECT', 'MULTI', 'BOOLEAN'].includes(attribute.type) && attribute.options?.length).map((attribute) => (
+            <View key={attribute.id}>
+              <Text style={styles.sectionTitle}>{attribute.name}</Text>
+              <View style={styles.chipGrid}>
+                {(attribute.options || []).map((option) => {
+                  const selected = selectedAttrs[attribute.name] || [];
+                  const isSelected = selected.includes(option);
+                  return (
+                    <TouchableOpacity key={option} onPress={() => setSelectedAttrs((current) => {
+                      const values = current[attribute.name] || [];
+                      const next = isSelected ? values.filter((value) => value !== option) : [...values, option];
+                      return { ...current, [attribute.name]: next };
+                    })} style={[styles.chip, isSelected && styles.chipActive]} activeOpacity={0.7}>
+                      <Text style={[styles.chipText, isSelected && styles.chipTextActive]}>{option}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          ))}
         </ScrollView>
 
         {/* Alt Buton: Sonuçları Göster */}
