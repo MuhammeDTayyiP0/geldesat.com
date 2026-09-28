@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { cleanPhone, formatPhone, maskPhone10 } from "@/lib/utils";
-import { CheckCircle2, Lock, LogOut, Mail, Shield, Store, User as UserIcon } from "lucide-react";
+import { Bell, CheckCircle2, Heart, LayoutGrid, Lock, LogOut, Mail, MapPin, MessageCircle, Settings2, Shield, Store, User as UserIcon } from "lucide-react";
 import { BrandSpinner } from "@/components/brand/BrandSpinner";
 import { toast } from "sonner";
 
@@ -107,25 +107,30 @@ function Profil() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-10">
+    <div className="mx-auto max-w-3xl px-4 py-6 md:py-10">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Profil ve Hesap Ayarları</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Hesabım</h1>
           <p className="mt-1 text-sm text-muted">{user.primaryEmail}</p>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="gap-2 text-muted hover:text-danger hover:border-danger/30"
-          onClick={() => {
-            if (confirm("Çıkış yapmak istediğinize emin misiniz?")) {
-              void signOut("/");
-            }
-          }}
-        >
-          <LogOut className="size-4" /> Çıkış Yap
-        </Button>
+        <div className="flex items-center gap-2">
+          <a href="#account-settings" className="inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-surface px-3 text-sm font-medium text-fg hover:bg-elevated">
+            <Settings2 className="size-4 text-primary" /> Ayarlar
+          </a>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-2 text-muted hover:text-danger hover:border-danger/30"
+            onClick={() => {
+              if (confirm("Çıkış yapmak istediğinize emin misiniz?")) {
+                void signOut("/");
+              }
+            }}
+          >
+            <LogOut className="size-4" /> Çıkış Yap
+          </Button>
+        </div>
       </div>
 
       <div className="mt-6 grid grid-cols-2 gap-3 text-center">
@@ -139,9 +144,18 @@ function Profil() {
         </div>
       </div>
 
+      <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <AccountShortcut to="/ilanlarim" icon={LayoutGrid} label="İlanlarım" />
+        <AccountShortcut to="/favoriler" icon={Heart} label="Favorilerim" />
+        <AccountShortcut to="/mesajlar" icon={MessageCircle} label="Mesajlarım" />
+        <AccountShortcut to="/bildirimler" icon={Bell} label="Bildirimler" />
+        <AccountShortcut to="/harita" icon={MapPin} label="Haritada keşfet" />
+      </div>
+
       {/* Profil Bilgileri Formu */}
       <form
-        className="mt-8 space-y-4 rounded-xl border border-border bg-surface p-6 shadow-sm"
+        id="account-settings"
+        className="mt-8 scroll-mt-24 space-y-4 rounded-xl border border-border bg-surface p-4 shadow-sm md:p-6"
         onSubmit={handleSaveProfile}
       >
         <div className="flex items-center gap-2 border-b border-border pb-3">
@@ -197,7 +211,7 @@ function Profil() {
       </form>
 
       {/* Hesap & Güvenlik Ayarları */}
-      <div className="mt-8 space-y-6 rounded-xl border border-border bg-surface p-6 shadow-sm">
+      <div className="mt-8 space-y-6 rounded-xl border border-border bg-surface p-4 shadow-sm md:p-6">
         <div className="flex items-center gap-2 border-b border-border pb-3">
           <Shield className="size-5 text-primary" />
           <h2 className="font-semibold text-fg">E-posta ve Güvenlik Ayarları</h2>
@@ -273,7 +287,7 @@ function Profil() {
 
       {/* Mağaza Ayarları */}
       <form
-        className="mt-8 space-y-4 rounded-xl border border-border bg-surface p-6 shadow-sm"
+        className="mt-8 space-y-4 rounded-xl border border-border bg-surface p-4 shadow-sm md:p-6"
         onSubmit={async (e) => {
           e.preventDefault();
           try {
@@ -328,7 +342,7 @@ function Profil() {
       </form>
 
       {/* Kayıtlı Aramalar */}
-      <div className="mt-8 rounded-xl border border-border bg-surface p-6 shadow-sm">
+      <div className="mt-8 rounded-xl border border-border bg-surface p-4 shadow-sm md:p-6">
         <h2 className="font-semibold text-fg">Kayıtlı Aramalar</h2>
         <p className="mt-1 text-sm text-muted">Kriterlerinize uyan yeni bir ilan eklendiğinde bildirim alırsınız.</p>
         {saved.length === 0 ? (
@@ -373,11 +387,15 @@ function Profil() {
         )}
       </div>
 
-      <div className="mt-8 flex gap-4 text-sm font-medium text-primary">
-        <Link to="/ilanlarim" className="hover:underline">İlanlarım →</Link>
-        <Link to="/favoriler" className="hover:underline">Favorilerim →</Link>
-        <Link to="/bildirimler" className="hover:underline">Bildirimlerim →</Link>
-      </div>
     </div>
+  );
+}
+
+function AccountShortcut({ to, icon: Icon, label }: { to: "/ilanlarim" | "/favoriler" | "/mesajlar" | "/bildirimler" | "/harita"; icon: typeof LayoutGrid; label: string }) {
+  return (
+    <Link to={to} className="flex min-h-12 items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-sm font-medium text-fg shadow-sm transition-colors hover:border-primary/30 hover:bg-elevated">
+      <Icon className="size-4 shrink-0 text-primary" />
+      <span className="truncate">{label}</span>
+    </Link>
   );
 }
