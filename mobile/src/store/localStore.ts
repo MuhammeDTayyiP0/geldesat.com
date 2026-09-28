@@ -20,7 +20,10 @@ export interface LocalListing {
   store_name?: string;
   store_slug?: string;
   view_count?: number;
-  status?: 'ACTIVE' | 'PENDING' | 'SOLD' | 'INACTIVE';
+  status?: 'ACTIVE' | 'PENDING' | 'SOLD' | 'INACTIVE' | 'REJECTED';
+  expires_at?: string | null;
+  lat?: number | null;
+  lng?: number | null;
   is_urgent?: boolean;
   is_featured?: boolean;
 }

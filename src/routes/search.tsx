@@ -12,7 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { getCategory, listCategories, searchCatalog } from "@/lib/server/catalog";
+import { getCategory, listCategoryRoots, searchCatalog } from "@/lib/server/catalog";
 import { attrsToSearch, parseAttrs, parseSearch, toFilters, type CatalogSearch } from "@/lib/search-params";
 
 import { ListingCard } from "@/components/listing/ListingCard";
@@ -37,10 +37,10 @@ export const Route = createFileRoute("/search")({
   validateSearch: (s: Record<string, unknown>) => parseSearch(s),
   loaderDeps: ({ search }) => search,
   loader: async ({ deps }) => {
-    const [cat, catList, result] = await Promise.all([
+    const [cat, categoryRoots, result] = await Promise.all([
       deps.category ? getCategory({ data: { slug: deps.category } }) : null,
-      listCategories(),
-      searchCatalog({ data: toFilters(deps) }),
+      listCategoryRoots(),
+      searchCatalog({ data: toFilters({ ...deps, neighborhood: undefined }) }),
     ]);
     return {
       result,
@@ -48,7 +48,7 @@ export const Route = createFileRoute("/search")({
       currentCategory: cat?.category ?? null,
       categoryPath: cat?.path ?? [],
       categoryChildren: cat?.children ?? [],
-      categoriesData: catList,
+      categoryRoots,
     };
   },
   head: ({ loaderData, match }) => {
@@ -97,7 +97,7 @@ function SearchPage() {
     currentCategory,
     categoryPath,
     categoryChildren,
-    categoriesData,
+    categoryRoots,
   } = Route.useLoaderData();
   const nav = useNavigate();
   const user = useCurrentUser();
@@ -120,7 +120,6 @@ function SearchPage() {
       category: search.category,
       city: search.city,
       district: search.district,
-      neighborhood: search.neighborhood,
       minPrice: search.minPrice,
       maxPrice: search.maxPrice,
       sort: search.sort ?? "date_desc",
@@ -175,7 +174,7 @@ function SearchPage() {
       category: filters.category,
       city: filters.city,
       district: filters.district,
-      neighborhood: filters.neighborhood,
+      neighborhood: undefined,
       minPrice: filters.minPrice,
       maxPrice: filters.maxPrice,
       sort: filters.sort,
@@ -233,7 +232,7 @@ function SearchPage() {
     activeChips.push({
       id: "city",
       label: `İl: ${search.city}`,
-      onRemove: () => apply({ city: undefined, district: undefined, neighborhood: undefined }),
+      onRemove: () => apply({ city: undefined, district: undefined }),
     });
   }
 
@@ -241,15 +240,7 @@ function SearchPage() {
     activeChips.push({
       id: "district",
       label: `İlçe: ${search.district}`,
-      onRemove: () => apply({ district: undefined, neighborhood: undefined }),
-    });
-  }
-
-  if (search.neighborhood) {
-    activeChips.push({
-      id: "neighborhood",
-      label: `Mahalle: ${search.neighborhood}`,
-      onRemove: () => apply({ neighborhood: undefined }),
+      onRemove: () => apply({ district: undefined }),
     });
   }
 
@@ -386,7 +377,7 @@ function SearchPage() {
 
         {/* Alt Kategoriler veya Kök Kategoriler */}
         <div className="-mx-4 flex gap-2 overflow-x-auto px-4 py-1.5 no-scrollbar sm:mx-0 sm:px-0">
-          {(categoryChildren.length > 0 ? categoryChildren : categoriesData.roots).slice(0, 10).map((c: any) => {
+          {(categoryChildren.length > 0 ? categoryChildren : categoryRoots.roots).slice(0, 10).map((c: any) => {
             const isSelected = search.category === c.slug;
             return (
               <button
@@ -539,8 +530,6 @@ function SearchPage() {
             onChange={setFilters}
             onApply={() => apply()}
             attributes={attributes}
-            categories={categoriesData.categories}
-            onCategorySelect={(slug) => apply({ category: slug })}
           />
         </div>
 
@@ -758,8 +747,6 @@ function SearchPage() {
                 onChange={setFilters}
                 onApply={() => apply()}
                 attributes={attributes}
-                categories={categoriesData.categories}
-                onCategorySelect={(slug) => setFilters((prev) => ({ ...prev, category: slug, attrs: {} }))}
                 hideApplyButton
                 hideSort
               />

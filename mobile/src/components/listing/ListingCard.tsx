@@ -23,6 +23,7 @@ export interface MobileListing {
   is_featured?: boolean;
   attrs?: Record<string, string | number>;
   category_name?: string;
+  user_id?: string;
 }
 
 interface ListingCardProps {
@@ -31,6 +32,7 @@ interface ListingCardProps {
   onPress?: () => void;
   onFavoritePress?: (id: string, isFav: boolean) => void;
   isFavorite?: boolean;
+  isOwner?: boolean;
 }
 
 function formatPrice(amount: number, currency: string = 'TL') {
@@ -50,11 +52,15 @@ export function ListingCard({
   onPress,
   onFavoritePress,
   isFavorite: initialFavorite = false,
+  isOwner: ownerOverride = false,
 }: ListingCardProps) {
   const [isFavorite, setIsFavorite] = useState(initialFavorite);
   const [favoriteBusy, setFavoriteBusy] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   useEffect(() => setIsFavorite(initialFavorite), [initialFavorite]);
+  useEffect(() => { let active = true; void getStoredUser().then((user) => { if (active) setCurrentUserId(user?.id ?? null); }); return () => { active = false; }; }, []);
+  const isOwner = ownerOverride || Boolean(currentUserId && listing.user_id && currentUserId === listing.user_id);
 
   const rawImage = listing.images?.[0];
   const img = rawImage?.startsWith('/') ? `${API_BASE_URL}${rawImage}` : rawImage;
@@ -111,7 +117,7 @@ export function ListingCard({
       </View>
 
       {/* Web'deki favori butonu */}
-      <TouchableOpacity
+      {!isOwner ? <TouchableOpacity
         style={styles.favButton}
         onPress={(event) => { event.stopPropagation(); void handleFavoriteToggle(); }}
         disabled={favoriteBusy}
@@ -122,7 +128,7 @@ export function ListingCard({
           color={isFavorite ? '#b42318' : '#12151c'}
           fill={isFavorite ? '#b42318' : 'transparent'}
         />
-      </TouchableOpacity>
+      </TouchableOpacity> : null}
     </View>
   );
 

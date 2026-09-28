@@ -33,6 +33,11 @@ export const Route = createFileRoute("/api/mobile/conversations/$id")({
           );
           if (!rows[0]) return Response.json({ success: false, error: "Konuşma bulunamadı." }, { status: 404 });
           const convo = rows[0];
+          const otherUserId = String(convo.buyer_id === userId ? convo.seller_id : convo.buyer_id);
+          const [blockedByMeRows, blockedByOtherRows] = await Promise.all([
+            sql.query<{ id: string }>("select id from user_blocks where blocker_id=$1 and blocked_id=$2 limit 1", [userId, otherUserId]),
+            sql.query<{ id: string }>("select id from user_blocks where blocker_id=$1 and blocked_id=$2 limit 1", [otherUserId, userId]),
+          ]);
           const unread = await sql.query<{ id: string }>(
             "select id from messages where conversation_id=$1 and sender_id<>$2 and read_at is null",
             [params.id, userId],
@@ -56,6 +61,9 @@ export const Route = createFileRoute("/api/mobile/conversations/$id")({
               listing_image: convo.images ? (asJson<string[]>(convo.images, [])[0] ?? null) : null,
               listing_price: convo.price == null ? null : Number(convo.price),
               other_user_name: String(convo.other_name ?? "Üye"), other_user_id: String(convo.other_id),
+              blocked: blockedByMeRows.length > 0 || blockedByOtherRows.length > 0,
+              blockedByMe: blockedByMeRows.length > 0,
+              blockedByOther: blockedByOtherRows.length > 0,
               messages: messageRows.map((m) => ({ id: String(m.id), sender_id: String(m.sender_id), content: String(m.content), created_at: asIso(m.created_at), read_at: m.read_at ? asIso(m.read_at) : null })),
             },
           }, { headers: { "Cache-Control": "private, no-store" } });

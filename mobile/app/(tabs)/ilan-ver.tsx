@@ -41,7 +41,7 @@ import { EMBEDDED_CATEGORIES, CategoryItem } from '@/src/data/categoriesData';
 import { TURKEY_CITIES } from '@/src/data/locations';
 import { AuthGate } from '@/src/components/auth/AuthGate';
 import { getStoredUser } from '@/src/api/auth';
-import { createMobileListing, getMobileCategoryAttributes, getMobileMyListing, getMobileProfile, MobileAttribute } from '@/src/api/client';
+import { createMobileListing, getMobileCategories, getMobileCategoryAttributes, getMobileMyListing, getMobileProfile, MobileAttribute } from '@/src/api/client';
 
 const ICONS: Record<string, any> = {
   home: Building2,
@@ -77,6 +77,7 @@ export default function PostAdScreen() {
   const [path, setPath] = useState<string[]>([]);
   const [catSearch, setCatSearch] = useState('');
   const [categoryAttributes, setCategoryAttributes] = useState<MobileAttribute[]>([]);
+  const [availableCategories, setAvailableCategories] = useState<CategoryItem[]>(EMBEDDED_CATEGORIES);
   const [attributeValues, setAttributeValues] = useState<Record<string, string | number>>({});
   const [attributesLoading, setAttributesLoading] = useState(false);
 
@@ -104,6 +105,14 @@ export default function PostAdScreen() {
 
   useEffect(() => {
     let active = true;
+    void getMobileCategories().then((response) => {
+      if (active && response.categories.length) setAvailableCategories(response.categories);
+    });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
     async function loadForEdit() {
       if (!editId) { setIsEditing(false); return; }
       const user = await getStoredUser();
@@ -113,10 +122,10 @@ export default function PostAdScreen() {
         if (!active) return;
         const listing = response.listing;
         const chain: CategoryItem[] = [];
-        let current = EMBEDDED_CATEGORIES.find((item) => item.id === listing.category_id) || null;
+        let current = availableCategories.find((item) => item.id === listing.category_id) || null;
         while (current) {
           chain.unshift(current);
-          current = current.parent_id ? EMBEDDED_CATEGORIES.find((item) => item.id === current?.parent_id) || null : null;
+          current = current.parent_id ? availableCategories.find((item) => item.id === current?.parent_id) || null : null;
         }
         setPath(chain.map((item) => item.id));
         setTitle(listing.title);
@@ -137,7 +146,7 @@ export default function PostAdScreen() {
     }
     void loadForEdit();
     return () => { active = false; };
-  }, [editId]);
+  }, [editId, availableCategories]);
 
   useEffect(() => {
     if (editId) return;
@@ -174,23 +183,23 @@ export default function PostAdScreen() {
   // Kategori Hiyerarşisi
   const currentCategory = useMemo(() => {
     if (!selectedCatId) return null;
-    return EMBEDDED_CATEGORIES.find((c) => c.id === selectedCatId) || null;
-  }, [selectedCatId]);
+    return availableCategories.find((c) => c.id === selectedCatId) || null;
+  }, [selectedCatId, availableCategories]);
 
   const pathRows = useMemo(() => {
     return path
-      .map((id) => EMBEDDED_CATEGORIES.find((c) => c.id === id))
+      .map((id) => availableCategories.find((c) => c.id === id))
       .filter(Boolean) as CategoryItem[];
-  }, [path]);
+  }, [path, availableCategories]);
 
   const currentChildren = useMemo(() => {
-    let list = EMBEDDED_CATEGORIES.filter((c) => c.parent_id === selectedCatId);
+    let list = availableCategories.filter((c) => c.parent_id === selectedCatId);
     if (catSearch.trim()) {
       const q = catSearch.trim().toLowerCase();
       list = list.filter((c) => c.name.toLowerCase().includes(q));
     }
     return list.sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, 'tr'));
-  }, [selectedCatId, catSearch]);
+  }, [availableCategories, selectedCatId, catSearch]);
 
   const isVehicle = useMemo(() => {
     return path.some((id) => id.includes('vasita') || id.includes('oto') || id.includes('moto'));
@@ -221,7 +230,7 @@ export default function PostAdScreen() {
     setCatSearch('');
 
     // Alt kategori kontrolü (BMW -> Series -> Model -> Leaf)
-    const hasMore = EMBEDDED_CATEGORIES.some((c) => c.parent_id === cat.id);
+      const hasMore = availableCategories.some((c) => c.parent_id === cat.id);
     if (!hasMore) {
       // Yaprak kategori seçildi, otomatik Detay adımına geç
       setStep(1);

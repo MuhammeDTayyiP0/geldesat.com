@@ -1,14 +1,30 @@
-import React from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Tabs } from 'expo-router';
 import { View, Text, StyleSheet, Platform, TouchableOpacity } from 'react-native';
-import { Home, Search, Plus, MessageCircle, User, Bell, MapPin } from 'lucide-react-native';
+import { Home, Search, Plus, MessageCircle, User, Bell, MapPin, Settings2 } from 'lucide-react-native';
 import { BrandColors } from '@/constants/Colors';
 import { LogoMark } from '@/src/components/brand/LogoMark';
+import { getStoredUser } from '@/src/api/auth';
+import { getMobileConversations, getMobileNotifications } from '@/src/api/client';
 
 import { useRouter } from 'expo-router';
 
 export default function TabLayout() {
   const router = useRouter();
+  const [unreadMessages, setUnreadMessages] = useState(0);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const refreshBadges = useCallback(async () => {
+    const user = await getStoredUser();
+    if (!user?.token) { setUnreadMessages(0); setUnreadNotifications(0); return; }
+    const [messages, notifications] = await Promise.allSettled([getMobileConversations(user.token), getMobileNotifications(user.token)]);
+    if (messages.status === 'fulfilled') setUnreadMessages(messages.value.conversations.reduce((count, conversation) => count + conversation.unread_count, 0));
+    if (notifications.status === 'fulfilled') setUnreadNotifications(notifications.value.unread);
+  }, []);
+  useEffect(() => {
+    void refreshBadges();
+    const timer = setInterval(() => { void refreshBadges(); }, 20_000);
+    return () => clearInterval(timer);
+  }, [refreshBadges]);
   return (
     <Tabs
       screenOptions={{
@@ -53,11 +69,12 @@ export default function TabLayout() {
           ),
           headerRight: () => (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 18, marginRight: 16 }}>
-              <TouchableOpacity onPress={() => router.push('/harita' as any)} accessibilityLabel="Harita">
+              <TouchableOpacity onPress={() => router.push('/harita' as any)} accessibilityLabel="Harita" style={styles.headerIconButton}>
                 <MapPin size={20} color="#0d1117" />
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => router.push('/bildirimler' as any)} accessibilityLabel="Bildirimler">
+              <TouchableOpacity onPress={() => router.push('/bildirimler' as any)} accessibilityLabel={unreadNotifications ? `Bildirimler, ${unreadNotifications} okunmamış` : 'Bildirimler'} style={styles.headerIconButton}>
                 <Bell size={20} color="#0d1117" />
+                {unreadNotifications > 0 ? <View style={styles.notificationDot} /> : null}
               </TouchableOpacity>
             </View>
           ),
@@ -105,6 +122,7 @@ export default function TabLayout() {
           tabBarIcon: ({ color, focused }) => (
             <MessageCircle size={22} color={color} strokeWidth={focused ? 2.4 : 1.8} />
           ),
+          tabBarBadge: unreadMessages > 0 ? (unreadMessages > 99 ? '99+' : unreadMessages) : undefined,
         }}
       />
 
@@ -114,6 +132,16 @@ export default function TabLayout() {
         options={{
           title: 'Hesabım',
           headerTitle: 'Hesabım',
+          headerRight: () => (
+            <TouchableOpacity
+              onPress={() => router.push('/ayarlar' as any)}
+              accessibilityRole="button"
+              accessibilityLabel="Hesap ayarları"
+              hitSlop={8}
+              style={styles.headerIconButton}>
+              <Settings2 size={20} color="#12151c" />
+            </TouchableOpacity>
+          ),
           tabBarIcon: ({ color, focused }) => (
             <User size={22} color={color} strokeWidth={focused ? 2.4 : 1.8} />
           ),
@@ -145,6 +173,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
+  headerIconButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginRight: 8 },
+  notificationDot: { position: 'absolute', top: 9, right: 9, width: 9, height: 9, borderRadius: 5, backgroundColor: '#b42318', borderWidth: 1, borderColor: '#fff' },
   brandTitle: {
     fontSize: 20,
     fontWeight: '700',

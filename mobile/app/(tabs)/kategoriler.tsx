@@ -69,7 +69,7 @@ const ICONS: Record<string, any> = {
 
 export default function SearchPage() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ category?: string; q?: string; city?: string }>();
+  const params = useLocalSearchParams<{ category?: string; q?: string; city?: string; filters?: string }>();
 
   const [q, setQ] = useState('');
   const [catSearch, setCatSearch] = useState('');
@@ -109,6 +109,14 @@ export default function SearchPage() {
   useEffect(() => {
     if (typeof params.city === 'string') setActiveFilters((filters) => ({ ...filters, city: params.city }));
   }, [params.city]);
+
+  useEffect(() => {
+    if (!params.filters || typeof params.filters !== 'string') return;
+    try {
+      const parsed = JSON.parse(params.filters) as FilterState;
+      if (parsed && typeof parsed === 'object') setActiveFilters(parsed);
+    } catch {}
+  }, [params.filters]);
 
   useEffect(() => {
     if (params?.category) {
@@ -169,7 +177,6 @@ export default function SearchPage() {
         urgent: activeFilters.isUrgentOnly,
         city: activeFilters.city,
         district: activeFilters.district,
-        neighborhood: activeFilters.neighborhood,
         minPrice: activeFilters.minPrice,
         maxPrice: activeFilters.maxPrice,
         minYear: activeFilters.minYear,
@@ -198,6 +205,7 @@ export default function SearchPage() {
     is_featured: l.boosts?.includes('KALIN'),
     attrs: l.attrs,
     category_name: l.category_name,
+    user_id: l.user_id,
   }));
 
   const toggleSort = () => {
@@ -223,7 +231,6 @@ export default function SearchPage() {
   const activeFilterCount = [
     activeFilters.city,
     activeFilters.district,
-    activeFilters.neighborhood,
     activeFilters.minPrice,
     activeFilters.maxPrice,
     activeFilters.isUrgentOnly,

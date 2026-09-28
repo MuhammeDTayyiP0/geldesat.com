@@ -76,6 +76,7 @@ export default function HomeScreen() {
     is_featured: Boolean(l.featured_until && new Date(l.featured_until).getTime() > Date.now()),
     attrs: l.attrs,
     category_name: l.category_name,
+    user_id: l.user_id,
   }));
 
   const rootCategories = (catData?.categories || []).filter((c) => !c.parent_id);

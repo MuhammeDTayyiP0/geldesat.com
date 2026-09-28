@@ -7,10 +7,11 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Modal,
+  Pressable,
 } from 'react-native';
 import { useRouter, useFocusEffect, Stack } from 'expo-router';
-import { LayoutGrid, Plus, ChevronLeft, Trash2, CheckCircle2, EyeOff, Pencil } from 'lucide-react-native';
-import { BrandColors } from '@/constants/Colors';
+import { LayoutGrid, Plus, ChevronLeft, MoreHorizontal, Pencil, Trash2, EyeOff, CheckCircle2, RefreshCw } from 'lucide-react-native';
 import { ListingCard } from '@/src/components/listing/ListingCard';
 import { getMobileMyListings, updateMobileListingAction } from '@/src/api/client';
 import { getStoredUser } from '@/src/api/auth';
@@ -26,16 +27,19 @@ export default function IlanlarimScreen() {
   const router = useRouter();
   const [listings, setListings] = useState<MyListing[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [selectedListing, setSelectedListing] = useState<MyListing | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const user = await getStoredUser();
       if (!user?.token) { setListings([]); return; }
       const response = await getMobileMyListings(user.token);
       setListings(response.listings);
-    } catch {
-      setListings([]);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : 'İlanlarınız yüklenemedi.');
     } finally {
       setLoading(false);
     }
@@ -70,6 +74,37 @@ export default function IlanlarimScreen() {
     ]);
   };
 
+  const handleRenew = async (id: string) => {
+    const user = await getStoredUser();
+    if (!user?.token) return;
+    try { await updateMobileListingAction(id, 'renew', user.token); await loadData(); }
+    catch (error) { Alert.alert('İlan yenilenemedi', error instanceof Error ? error.message : 'Lütfen tekrar deneyin.'); }
+  };
+
+  const showActions = (item: MyListing) => {
+    setSelectedListing(item);
+  };
+
+  const listingActions = (item: MyListing) => {
+    const expired = Boolean(item.expires_at && new Date(item.expires_at).getTime() <= Date.now());
+    const isPending = item.status === 'PENDING';
+    const isRejected = item.status === 'REJECTED';
+    const choices: Array<{ label: string; icon: React.ReactNode; danger?: boolean; onPress: () => void }> = [
+      { label: 'Düzenle', icon: <Pencil size={18} color="#1a4fd8" />, onPress: () => router.push({ pathname: '/(tabs)/ilan-ver', params: { id: item.id } } as any) },
+    ];
+    if (!isPending && !isRejected && !expired && item.status === 'ACTIVE') {
+      choices.push({ label: 'Yayından kaldır', icon: <EyeOff size={18} color="#5a6270" />, onPress: () => handleSetStatus(item.id, 'INACTIVE') });
+      choices.push({ label: 'Satıldı olarak işaretle', icon: <CheckCircle2 size={18} color="#1f7a4d" />, onPress: () => handleSetStatus(item.id, 'SOLD') });
+    } else if (!isPending && !isRejected && !expired && (item.status === 'INACTIVE' || item.status === 'SOLD')) {
+      choices.push({ label: 'Tekrar yayına al', icon: <CheckCircle2 size={18} color="#1a4fd8" />, onPress: () => handleSetStatus(item.id, 'ACTIVE') });
+    }
+    if (!isRejected && (expired || item.status !== 'ACTIVE')) {
+      choices.push({ label: expired ? '30 gün uzat ve yenile' : '30 gün uzat', icon: <RefreshCw size={18} color="#1a4fd8" />, onPress: () => handleRenew(item.id) });
+    }
+    choices.push({ label: 'İlanı sil', icon: <Trash2 size={18} color="#b42318" />, danger: true, onPress: () => handleDelete(item.id) });
+    return choices;
+  };
+
   return (
     <AuthGate title="İlanlarım" subtitle="İlanlarınızı yönetmek için giriş yapın.">
     <View style={styles.container}>
@@ -84,17 +119,40 @@ export default function IlanlarimScreen() {
           headerRight: () => (
             <TouchableOpacity
               onPress={() => router.push('/(tabs)/ilan-ver')}
-              style={styles.newAdBtn}>
-              <Plus size={16} color="#ffffff" style={{ marginRight: 4 }} />
-              <Text style={styles.newAdBtnText}>Yeni İlan</Text>
+              style={styles.headerIconButton}
+              accessibilityRole="button"
+              accessibilityLabel="Yeni ilan ver"
+              hitSlop={8}>
+              <Plus size={21} color="#12151c" />
             </TouchableOpacity>
           ),
         }}
       />
 
+      <Modal transparent animationType="slide" visible={Boolean(selectedListing)} onRequestClose={() => setSelectedListing(null)}>
+        <Pressable style={styles.sheetBackdrop} onPress={() => setSelectedListing(null)}>
+          <Pressable style={styles.actionSheet} onPress={(event) => event.stopPropagation()}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>İlan işlemleri</Text>
+            <Text style={styles.sheetSubtitle} numberOfLines={1}>{selectedListing?.title}</Text>
+            {selectedListing ? listingActions(selectedListing).map((action) => (
+              <TouchableOpacity key={action.label} style={styles.sheetAction} onPress={() => { setSelectedListing(null); action.onPress(); }}>
+                {action.icon}<Text style={[styles.sheetActionText, action.danger && styles.sheetDanger]}>{action.label}</Text>
+              </TouchableOpacity>
+            )) : null}
+            <TouchableOpacity style={styles.sheetCancel} onPress={() => setSelectedListing(null)}><Text style={styles.sheetCancelText}>Kapat</Text></TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       {loading ? (
         <View style={styles.centerBox}>
           <ActivityIndicator size="small" color="#1a4fd8" />
+        </View>
+      ) : loadError ? (
+        <View style={styles.centerBox}>
+          <Text style={styles.errorText}>{loadError}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={loadData}><Text style={styles.retryText}>Yeniden Dene</Text></TouchableOpacity>
         </View>
       ) : listings.length === 0 ? (
         /* Web Sitesindeki Birebir Boş İlanlarım Kutusu */
@@ -118,9 +176,9 @@ export default function IlanlarimScreen() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
           renderItem={({ item }) => {
-            const isSold = item.status === 'SOLD';
             const isInactive = item.status === 'INACTIVE';
             const isPending = item.status === 'PENDING';
+            const expired = Boolean(item.expires_at && new Date(item.expires_at).getTime() <= Date.now());
             return (
               <View style={styles.listingWrapper}>
                 {/* Durum Rozeti */}
@@ -128,11 +186,11 @@ export default function IlanlarimScreen() {
                   <View
                     style={[
                       styles.statusBadge,
-                      isSold && styles.statusBadgeSold,
+                      item.status === 'SOLD' && styles.statusBadgeSold,
                       isInactive && styles.statusBadgeInactive,
                     ]}>
                     <Text style={styles.statusBadgeText}>
-                      {isPending ? 'İncelemede' : isSold ? 'Satıldı' : isInactive ? 'Yayından Kaldırıldı' : item.status === 'REJECTED' ? 'Reddedildi' : 'Yayında'}
+                      {isPending ? 'İncelemede' : item.status === 'SOLD' ? 'Satıldı' : isInactive ? 'Yayından Kaldırıldı' : item.status === 'REJECTED' ? 'Reddedildi' : expired ? 'Süresi doldu' : 'Yayında'}
                     </Text>
                   </View>
                   <Text style={styles.viewsText}>{item.view_count || 0} görüntülenme</Text>
@@ -150,55 +208,23 @@ export default function IlanlarimScreen() {
                     district: item.district,
                     created_at: item.created_at,
                     category_name: item.category_name,
+                    user_id: (item as MyListing & { user_id?: string }).user_id,
                   }}
                   variant="list"
+                  isOwner
                   onPress={() => router.push(`/ilan/${item.id}` as any)}
                 />
 
-                {/* Aksiyon Butonları (Web ile Birebir) */}
                 <View style={styles.actionsBar}>
-                  <TouchableOpacity style={styles.actionBtn} onPress={() => router.push({ pathname: '/(tabs)/ilan-ver', params: { id: item.id } } as any)}>
-                    <Pencil size={14} color="#1a4fd8" style={{ marginRight: 4 }} />
-                    <Text style={[styles.actionBtnText, { color: '#1a4fd8' }]}>Düzenle</Text>
-                  </TouchableOpacity>
-                  {!isSold && !isPending && item.status !== 'REJECTED' && (
-                    <TouchableOpacity
-                      style={styles.actionBtn}
-                      onPress={() => handleSetStatus(item.id, 'SOLD')}>
-                      <CheckCircle2 size={14} color="#1f7a4d" style={{ marginRight: 4 }} />
-                      <Text style={[styles.actionBtnText, { color: '#1f7a4d' }]}>Satıldı Yap</Text>
-                    </TouchableOpacity>
-                  )}
-
-                  {!isInactive && !isPending && item.status !== 'REJECTED' ? (
-                    <TouchableOpacity
-                      style={styles.actionBtn}
-                      onPress={() => handleSetStatus(item.id, 'INACTIVE')}>
-                      <EyeOff size={14} color="#5a6270" style={{ marginRight: 4 }} />
-                      <Text style={styles.actionBtnText}>Yayından Kaldır</Text>
-                    </TouchableOpacity>
-                  ) : (
-                    <TouchableOpacity
-                      style={styles.actionBtn}
-                      onPress={() => handleSetStatus(item.id, 'ACTIVE')}>
-                      <Text style={[styles.actionBtnText, { color: '#1a4fd8' }]}>Tekrar Yayına Al</Text>
-                    </TouchableOpacity>
-                  )}
-
-                  <TouchableOpacity style={styles.actionBtn} onPress={async () => {
-                    const user = await getStoredUser();
-                    if (!user?.token) return;
-                    try { await updateMobileListingAction(item.id, 'renew', user.token); await loadData(); }
-                    catch (error) { Alert.alert('İlan yenilenemedi', error instanceof Error ? error.message : 'Lütfen tekrar deneyin.'); }
-                  }}>
-                    <Text style={styles.actionBtnText}>30 gün yenile</Text>
-                  </TouchableOpacity>
-
                   <TouchableOpacity
-                    style={[styles.actionBtn, styles.deleteBtn]}
-                    onPress={() => handleDelete(item.id)}>
-                    <Trash2 size={14} color="#b42318" />
+                    style={styles.actionBtn}
+                    onPress={() => showActions(item)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`İşlemler: ${item.title}`}>
+                    <MoreHorizontal size={17} color="#1a4fd8" />
+                    <Text style={styles.actionBtnText}>İşlemler</Text>
                   </TouchableOpacity>
+                  {item.expires_at ? <Text style={styles.expiryText}>{expired ? 'Süresi doldu' : `Bitiş: ${new Date(item.expires_at).toLocaleDateString('tr-TR')}`}</Text> : null}
                 </View>
               </View>
             );
@@ -215,19 +241,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f3f5f8', // Web: --color-bg
   },
-  newAdBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1a4fd8',
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  newAdBtnText: {
-    color: '#ffffff',
-    fontSize: 12,
-    fontWeight: '700',
-  },
+  headerIconButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginRight: -4 },
   centerBox: {
     flex: 1,
     justifyContent: 'center',
@@ -316,7 +330,7 @@ const styles = StyleSheet.create({
   actionsBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
     borderTopWidth: 1,
     borderTopColor: '#f1f5f9',
     marginTop: 10,
@@ -338,8 +352,15 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#12151c',
   },
-  deleteBtn: {
-    backgroundColor: '#fef2f2',
-    borderColor: '#fee2e2',
-  },
+  expiryText: { flex: 1, textAlign: 'right', color: '#5a6270', fontSize: 11 },
+  errorText: { color: '#b42318', fontSize: 14, textAlign: 'center', marginHorizontal: 24 },
+  retryButton: { minHeight: 44, paddingHorizontal: 18, justifyContent: 'center', marginTop: 12, borderRadius: 8, backgroundColor: '#1a4fd8' },
+  retryText: { color: '#fff', fontWeight: '700' },
+  sheetBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(10,16,28,0.35)' },
+  actionSheet: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 28, borderTopLeftRadius: 22, borderTopRightRadius: 22, backgroundColor: '#fff' },
+  sheetHandle: { width: 38, height: 4, borderRadius: 2, backgroundColor: '#cbd2dc', alignSelf: 'center', marginBottom: 14 },
+  sheetTitle: { color: '#12151c', fontSize: 18, fontWeight: '700' }, sheetSubtitle: { color: '#687382', fontSize: 12, marginTop: 3, marginBottom: 10 },
+  sheetAction: { minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#e7ebf0' },
+  sheetActionText: { color: '#12151c', fontSize: 14, fontWeight: '600' }, sheetDanger: { color: '#b42318' },
+  sheetCancel: { minHeight: 46, justifyContent: 'center', alignItems: 'center', marginTop: 10, backgroundColor: '#f3f5f8', borderRadius: 10 }, sheetCancelText: { color: '#12151c', fontWeight: '700' },
 });

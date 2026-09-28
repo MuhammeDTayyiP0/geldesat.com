@@ -1,5 +1,4 @@
 import { TURKEY_CITIES } from "@/lib/data/locations";
-import { NEIGHBORHOODS } from "@/lib/data/geo";
 import { Input, Label, Select } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import type { AttrDef } from "@/lib/server/helpers";
@@ -8,7 +7,6 @@ export type FilterState = {
   category?: string;
   city?: string;
   district?: string;
-  neighborhood?: string;
   minPrice?: string;
   maxPrice?: string;
   sort?: string;
@@ -26,23 +24,18 @@ export function Filters({
   onChange,
   onApply,
   attributes = [],
-  categories = [],
   hideApplyButton = false,
   hideSort = false,
-  onCategorySelect,
 }: {
   value: FilterState;
   onChange: (next: FilterState) => void;
   onApply: () => void;
   attributes?: AttrDef[];
-  categories?: { id: string; name: string; slug: string; parent_id: string | null }[];
   hideApplyButton?: boolean;
   hideSort?: boolean;
-  onCategorySelect?: (slug?: string) => void;
 }) {
   const city = TURKEY_CITIES.find((c) => c.name === value.city);
   const districts = city?.districts ?? [];
-  const hoods = (value.city && value.district && NEIGHBORHOODS[value.city]?.[value.district]) || [];
   const hasVehicle = attributes.some((a) => a.id === "yil" || a.id === "km" || a.name === "Yıl" || a.name === "KM");
   const hasM2 = attributes.some((a) => a.id === "m2" || a.unit === "m²" || a.name.includes("m²"));
 
@@ -58,46 +51,11 @@ export function Filters({
 
   return (
     <aside className="space-y-4 rounded-xl border border-border bg-surface p-4">
-      {categories.length > 0 ? (
-        <div>
-          <div className="flex items-center justify-between pb-1">
-            <Label className="text-xs font-semibold uppercase tracking-wider text-muted">Kategori</Label>
-            {value.category ? (
-              <button
-                type="button"
-                onClick={() => {
-                  onChange({ ...value, category: undefined, attrs: {} });
-                  if (onCategorySelect) onCategorySelect(undefined);
-                }}
-                className="text-xs font-medium text-primary hover:underline"
-              >
-                Temizle
-              </button>
-            ) : null}
-          </div>
-          <Select
-            value={value.category ?? ""}
-            onChange={(e) => {
-              const slug = e.target.value || undefined;
-              onChange({ ...value, category: slug, attrs: {} });
-              if (onCategorySelect) onCategorySelect(slug);
-            }}
-          >
-            <option value="">Tüm kategoriler</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.slug}>
-                {c.parent_id ? `— ${c.name}` : c.name}
-              </option>
-            ))}
-          </Select>
-        </div>
-      ) : null}
-
       <div>
         <Label className="text-xs font-semibold uppercase tracking-wider text-muted">İl</Label>
         <Select
           value={value.city ?? ""}
-          onChange={(e) => onChange({ ...value, city: e.target.value || undefined, district: undefined, neighborhood: undefined })}
+          onChange={(e) => onChange({ ...value, city: e.target.value || undefined, district: undefined })}
         >
           <option value="">Tüm iller</option>
           {TURKEY_CITIES.map((c) => (
@@ -113,7 +71,7 @@ export function Filters({
         <Select
           value={value.district ?? ""}
           disabled={!value.city}
-          onChange={(e) => onChange({ ...value, district: e.target.value || undefined, neighborhood: undefined })}
+          onChange={(e) => onChange({ ...value, district: e.target.value || undefined })}
         >
           <option value="">Tüm ilçeler</option>
           {districts.map((d) => (
@@ -123,20 +81,6 @@ export function Filters({
           ))}
         </Select>
       </div>
-
-      {hoods.length > 0 ? (
-        <div>
-          <Label className="text-xs font-semibold uppercase tracking-wider text-muted">Mahalle</Label>
-          <Select value={value.neighborhood ?? ""} onChange={(e) => set("neighborhood", e.target.value || undefined)}>
-            <option value="">Tüm mahalleler</option>
-            {hoods.map((h) => (
-              <option key={h} value={h}>
-                {h}
-              </option>
-            ))}
-          </Select>
-        </div>
-      ) : null}
 
       <div>
         <Label className="text-xs font-semibold uppercase tracking-wider text-muted">Fiyat (TL)</Label>

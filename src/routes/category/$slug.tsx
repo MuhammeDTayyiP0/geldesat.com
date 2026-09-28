@@ -197,7 +197,6 @@ function CategoryPage() {
       search: {
         city: filters.city,
         district: filters.district,
-        neighborhood: filters.neighborhood,
         minPrice: filters.minPrice,
         maxPrice: filters.maxPrice,
         sort: filters.sort,

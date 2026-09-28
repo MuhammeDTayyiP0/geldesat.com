@@ -276,7 +276,37 @@ async function mobileRequest<T>(path: string, token?: string, init: RequestInit 
 }
 
 export async function getMobileListing(id: string, token?: string) {
-  return mobileRequest<{ success: true; listing: ApiListingResponse['listings'][number] & { status: string; expires_at?: string | null }; isFavorite: boolean; isOwner: boolean }>(`/api/mobile/listings/${encodeURIComponent(id)}`, token);
+  const response = await mobileRequest<{
+    success: true;
+    listing: ApiListingResponse['listings'][number] & { status: string; expires_at?: string | null };
+    isFavorite: boolean;
+    isOwner: boolean;
+    history?: Array<{ price: number; at: string }>;
+    similar?: ApiListingResponse['listings'];
+    reviews?: Array<{ id: string; rating: number; comment: string; reviewer: string; at: string }>;
+    sellerStats?: { rating_avg: number; rating_count: number } | null;
+    favoriteCount?: number;
+    phoneRevealCount?: number;
+    reviewEligibility?: { eligible: boolean; existing: { rating: number; comment: string | null } | null } | null;
+  }>(`/api/mobile/listings/${encodeURIComponent(id)}`, token);
+  return {
+    ...response,
+    history: response.history ?? [],
+    similar: response.similar ?? [],
+    reviews: response.reviews ?? [],
+    sellerStats: response.sellerStats ?? { rating_avg: 0, rating_count: 0 },
+    favoriteCount: response.favoriteCount ?? 0,
+    phoneRevealCount: response.phoneRevealCount ?? 0,
+    reviewEligibility: response.reviewEligibility ?? { eligible: false, existing: null },
+  };
+}
+
+export async function submitMobileReview(listingId: string, rating: number, comment: string, token: string) {
+  return mobileRequest<{ success: true }>('/api/mobile/reviews', token, { method: 'POST', body: JSON.stringify({ listingId, rating, comment }) });
+}
+
+export async function reportMobileListing(listingId: string, reason: string, details: string, token: string) {
+  return mobileRequest<{ success: true }>('/api/mobile/reports', token, { method: 'POST', body: JSON.stringify({ listingId, reason, details }) });
 }
 
 export async function revealMobileListingPhone(id: string, token: string) {
@@ -300,6 +330,9 @@ export interface MobileConversation {
   currency?: string;
   other_user_name: string;
   other_user_id?: string;
+  blocked?: boolean;
+  blockedByMe?: boolean;
+  blockedByOther?: boolean;
   last_message: string;
   last_sender_id?: string;
   updated_at: string;
@@ -321,6 +354,10 @@ export async function getMobileConversation(id: string, token: string) {
 
 export async function sendMobileMessage(id: string, content: string, token: string) {
   return mobileRequest<{ success: true; message: NonNullable<MobileConversation['messages']>[number] }>(`/api/mobile/conversations/${encodeURIComponent(id)}`, token, { method: 'POST', body: JSON.stringify({ content }) });
+}
+
+export async function setMobileUserBlocked(userId: string, blocked: boolean, token: string) {
+  return mobileRequest<{ success: true; blocked: boolean }>('/api/mobile/blocks', token, { method: 'POST', body: JSON.stringify({ userId, blocked }) });
 }
 
 export interface MobileNotification {

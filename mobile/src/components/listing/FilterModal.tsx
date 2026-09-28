@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text, View, Modal, ScrollView, TouchableOpacity, TextInput, Switch, SafeAreaView } from 'react-native';
-import { X, RotateCcw, Check } from 'lucide-react-native';
+import { StyleSheet, Text, View, Modal, ScrollView, TouchableOpacity, TextInput, Switch, FlatList } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { X, RotateCcw, Check, ChevronLeft, ChevronRight, MapPin, Search } from 'lucide-react-native';
 import { BrandColors } from '@/constants/Colors';
 import { MobileAttribute } from '@/src/api/client';
+import { TURKEY_CITIES } from '@/src/data/locations';
 
 export interface FilterState {
   minPrice?: string;
@@ -17,7 +19,6 @@ export interface FilterState {
   isUrgentOnly?: boolean;
   city?: string;
   district?: string;
-  neighborhood?: string;
 }
 
 interface FilterModalProps {
@@ -43,7 +44,8 @@ export function FilterModal({ visible, onClose, onApply, initialFilters = {}, sh
   const [isUrgentOnly, setIsUrgentOnly] = useState(initialFilters.isUrgentOnly || false);
   const [city, setCity] = useState(initialFilters.city || '');
   const [district, setDistrict] = useState(initialFilters.district || '');
-  const [neighborhood, setNeighborhood] = useState(initialFilters.neighborhood || '');
+  const [locationMode, setLocationMode] = useState<'city' | 'district' | null>(null);
+  const [locationSearch, setLocationSearch] = useState('');
 
   useEffect(() => {
     if (!visible) return;
@@ -53,7 +55,8 @@ export function FilterModal({ visible, onClose, onApply, initialFilters = {}, sh
     setMinM2(initialFilters.minM2 || ''); setMaxM2(initialFilters.maxM2 || '');
     setSelectedAttrs(initialFilters.attrs || {});
     setIsUrgentOnly(initialFilters.isUrgentOnly || false); setCity(initialFilters.city || '');
-    setDistrict(initialFilters.district || ''); setNeighborhood(initialFilters.neighborhood || '');
+    setDistrict(initialFilters.district || '');
+    setLocationMode(null); setLocationSearch('');
   }, [visible, initialFilters]);
 
   const handleReset = () => {
@@ -65,7 +68,7 @@ export function FilterModal({ visible, onClose, onApply, initialFilters = {}, sh
     setSelectedAttrs({});
     setIsUrgentOnly(false);
     setCity('');
-    setDistrict(''); setNeighborhood('');
+    setDistrict('');
   };
 
   const handleApply = () => {
@@ -82,7 +85,6 @@ export function FilterModal({ visible, onClose, onApply, initialFilters = {}, sh
       isUrgentOnly,
       city: city.trim() || undefined,
       district: district.trim() || undefined,
-      neighborhood: neighborhood.trim() || undefined,
     });
     onClose();
   };
@@ -92,17 +94,21 @@ export function FilterModal({ visible, onClose, onApply, initialFilters = {}, sh
       <SafeAreaView style={styles.container}>
         {/* Başlık Barı */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={onClose} style={styles.iconButton}>
-            <X size={22} color={BrandColors.text} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Filtreler</Text>
-          <TouchableOpacity onPress={handleReset} style={styles.resetButton}>
-            <RotateCcw size={15} color={BrandColors.danger} style={{ marginRight: 4 }} />
-            <Text style={styles.resetText}>Temizle</Text>
-          </TouchableOpacity>
+          {locationMode ? <TouchableOpacity onPress={() => { setLocationMode(null); setLocationSearch(''); }} style={styles.iconButton}><ChevronLeft size={22} color={BrandColors.text} /></TouchableOpacity> : <TouchableOpacity onPress={onClose} style={styles.iconButton}><X size={22} color={BrandColors.text} /></TouchableOpacity>}
+          <Text style={styles.headerTitle}>{locationMode === 'city' ? 'İl seç' : locationMode === 'district' ? 'İlçe seç' : 'Filtreler'}</Text>
+          {locationMode ? <View style={styles.iconButton} /> : <TouchableOpacity onPress={handleReset} style={styles.resetButton}><RotateCcw size={15} color={BrandColors.danger} style={{ marginRight: 4 }} /><Text style={styles.resetText}>Temizle</Text></TouchableOpacity>}
         </View>
 
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {locationMode ? <View style={styles.locationPicker}>
+          <View style={styles.locationSearch}><Search size={17} color={BrandColors.textMuted} /><TextInput value={locationSearch} onChangeText={setLocationSearch} placeholder={locationMode === 'city' ? 'İl ara' : 'İlçe ara'} placeholderTextColor={BrandColors.textMuted} style={styles.locationSearchInput} autoFocus /></View>
+          <FlatList
+            data={(locationMode === 'city' ? TURKEY_CITIES.map((item) => item.name) : (TURKEY_CITIES.find((item) => item.name === city)?.districts ?? [])).filter((name) => name.toLocaleLowerCase('tr').includes(locationSearch.trim().toLocaleLowerCase('tr')))}
+            keyExtractor={(item) => item}
+            keyboardShouldPersistTaps="handled"
+            ListHeaderComponent={locationMode === 'district' ? <TouchableOpacity style={styles.locationRow} onPress={() => { setDistrict(''); setLocationMode(null); setLocationSearch(''); }}><Text style={styles.locationRowText}>Tüm ilçeler</Text></TouchableOpacity> : <TouchableOpacity style={styles.locationRow} onPress={() => { setCity(''); setDistrict(''); setLocationMode(null); setLocationSearch(''); }}><Text style={styles.locationRowText}>Tüm iller</Text></TouchableOpacity>}
+            renderItem={({ item }) => <TouchableOpacity style={styles.locationRow} onPress={() => { if (locationMode === 'city') { setCity(item); setDistrict(''); } else setDistrict(item); setLocationMode(null); setLocationSearch(''); }}><Text style={styles.locationRowText}>{item}</Text><ChevronRight size={16} color="#a0a8b3" /></TouchableOpacity>}
+          />
+        </View> : <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           {/* 1. Sadece Acil İlanlar */}
           <View style={styles.urgentRow}>
             <View>
@@ -119,15 +125,12 @@ export function FilterModal({ visible, onClose, onApply, initialFilters = {}, sh
 
           {/* 2. Şehir / Konum */}
           <Text style={styles.sectionTitle}>Şehir / Konum</Text>
-          <TextInput
-            placeholder="Örn: İstanbul, Ankara, İzmir..."
-            placeholderTextColor={BrandColors.textMuted}
-            value={city}
-            onChangeText={setCity}
-            style={styles.input}
-          />
-          <TextInput placeholder="İlçe" placeholderTextColor={BrandColors.textMuted} value={district} onChangeText={setDistrict} style={[styles.input, { marginTop: 8 }]} />
-          <TextInput placeholder="Mahalle" placeholderTextColor={BrandColors.textMuted} value={neighborhood} onChangeText={setNeighborhood} style={[styles.input, { marginTop: 8 }]} />
+          <TouchableOpacity style={styles.locationSelectBox} onPress={() => { setLocationMode('city'); setLocationSearch(''); }}>
+            <MapPin size={17} color={BrandColors.primary} /><Text style={[styles.locationSelectText, !city && styles.locationPlaceholder]}>{city || 'Tüm iller'}</Text><ChevronRight size={17} color="#8993a2" />
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.locationSelectBox, !city && styles.locationSelectDisabled]} disabled={!city} onPress={() => { setLocationMode('district'); setLocationSearch(''); }}>
+            <MapPin size={17} color={city ? BrandColors.primary : '#aab2bd'} /><Text style={[styles.locationSelectText, !district && styles.locationPlaceholder]}>{district || (city ? 'Tüm ilçeler' : 'Önce il seçin')}</Text><ChevronRight size={17} color="#8993a2" />
+          </TouchableOpacity>
 
           {/* 3. Fiyat Aralığı (TL) */}
           <Text style={styles.sectionTitle}>Fiyat Aralığı (TL)</Text>
@@ -208,15 +211,15 @@ export function FilterModal({ visible, onClose, onApply, initialFilters = {}, sh
               </View>
             </View>
           ))}
-        </ScrollView>
+        </ScrollView>}
 
         {/* Alt Buton: Sonuçları Göster */}
-        <View style={styles.footer}>
+        {!locationMode ? <View style={styles.footer}>
           <TouchableOpacity style={styles.applyButton} onPress={handleApply} activeOpacity={0.85}>
             <Check size={18} color="#ffffff" style={{ marginRight: 6 }} />
             <Text style={styles.applyButtonText}>Filtreleri Uygula</Text>
           </TouchableOpacity>
-        </View>
+        </View> : null}
       </SafeAreaView>
     </Modal>
   );
@@ -260,6 +263,15 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 24,
   },
+  locationPicker: { flex: 1, paddingHorizontal: 16, paddingTop: 14 },
+  locationSearch: { height: 46, borderRadius: 12, backgroundColor: BrandColors.background, borderWidth: 1, borderColor: BrandColors.border, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 9, marginBottom: 8 },
+  locationSearchInput: { flex: 1, color: BrandColors.text, fontSize: 15, height: '100%' },
+  locationRow: { minHeight: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: BrandColors.border, paddingHorizontal: 4 },
+  locationRowText: { color: BrandColors.text, fontSize: 15, fontWeight: '600' },
+  locationSelectBox: { minHeight: 48, borderRadius: 11, borderWidth: 1, borderColor: BrandColors.border, backgroundColor: '#ffffff', flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, marginBottom: 8 },
+  locationSelectText: { flex: 1, color: BrandColors.text, fontSize: 14, fontWeight: '600' },
+  locationPlaceholder: { color: BrandColors.textMuted, fontWeight: '500' },
+  locationSelectDisabled: { opacity: 0.65, backgroundColor: BrandColors.background },
   urgentRow: {
     flexDirection: 'row',
     alignItems: 'center',

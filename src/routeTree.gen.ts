@@ -33,6 +33,7 @@ import { Route as SayfaSlugRouteImport } from './routes/sayfa/$slug'
 import { Route as UploadsSplatRouteImport } from './routes/uploads/$'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiChatStreamRouteImport } from './routes/api/chat/stream'
+import { Route as ApiMobileBlocksRouteImport } from './routes/api/mobile/blocks'
 import { Route as ApiMobileCategoriesRouteImport } from './routes/api/mobile/categories'
 import { Route as ApiMobileCategoryAttributesRouteImport } from './routes/api/mobile/category-attributes'
 import { Route as ApiMobileConfigRouteImport } from './routes/api/mobile/config'
@@ -42,6 +43,8 @@ import { Route as ApiMobileListingsRouteImport } from './routes/api/mobile/listi
 import { Route as ApiMobileMyListingsRouteImport } from './routes/api/mobile/my-listings'
 import { Route as ApiMobileNotificationsRouteImport } from './routes/api/mobile/notifications'
 import { Route as ApiMobileProfileRouteImport } from './routes/api/mobile/profile'
+import { Route as ApiMobileReportsRouteImport } from './routes/api/mobile/reports'
+import { Route as ApiMobileReviewsRouteImport } from './routes/api/mobile/reviews'
 import { Route as ApiMobileConversationsIdRouteImport } from './routes/api/mobile/conversations/$id'
 import { Route as ApiMobileListingsIdRouteImport } from './routes/api/mobile/listings/$id'
 import { Route as ApiMobileMyListingsIdRouteImport } from './routes/api/mobile/my-listings/$id'
@@ -168,6 +171,11 @@ const ApiChatStreamRoute = ApiChatStreamRouteImport.update({
   path: '/api/chat/stream',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiMobileBlocksRoute = ApiMobileBlocksRouteImport.update({
+  id: '/api/mobile/blocks',
+  path: '/api/mobile/blocks',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiMobileCategoriesRoute = ApiMobileCategoriesRouteImport.update({
   id: '/api/mobile/categories',
   path: '/api/mobile/categories',
@@ -212,6 +220,16 @@ const ApiMobileNotificationsRoute = ApiMobileNotificationsRouteImport.update({
 const ApiMobileProfileRoute = ApiMobileProfileRouteImport.update({
   id: '/api/mobile/profile',
   path: '/api/mobile/profile',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMobileReportsRoute = ApiMobileReportsRouteImport.update({
+  id: '/api/mobile/reports',
+  path: '/api/mobile/reports',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMobileReviewsRoute = ApiMobileReviewsRouteImport.update({
+  id: '/api/mobile/reviews',
+  path: '/api/mobile/reviews',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiMobileConversationsIdRoute =
@@ -266,6 +284,7 @@ export interface FileRoutesByFullPath {
   '/mesajlar/': typeof MesajlarIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/chat/stream': typeof ApiChatStreamRoute
+  '/api/mobile/blocks': typeof ApiMobileBlocksRoute
   '/api/mobile/categories': typeof ApiMobileCategoriesRoute
   '/api/mobile/category-attributes': typeof ApiMobileCategoryAttributesRoute
   '/api/mobile/config': typeof ApiMobileConfigRoute
@@ -275,6 +294,8 @@ export interface FileRoutesByFullPath {
   '/api/mobile/my-listings': typeof ApiMobileMyListingsRouteWithChildren
   '/api/mobile/notifications': typeof ApiMobileNotificationsRoute
   '/api/mobile/profile': typeof ApiMobileProfileRoute
+  '/api/mobile/reports': typeof ApiMobileReportsRoute
+  '/api/mobile/reviews': typeof ApiMobileReviewsRoute
   '/api/mobile/conversations/$id': typeof ApiMobileConversationsIdRoute
   '/api/mobile/listings/$id': typeof ApiMobileListingsIdRoute
   '/api/mobile/my-listings/$id': typeof ApiMobileMyListingsIdRoute
@@ -305,6 +326,7 @@ export interface FileRoutesByTo {
   '/mesajlar': typeof MesajlarIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/chat/stream': typeof ApiChatStreamRoute
+  '/api/mobile/blocks': typeof ApiMobileBlocksRoute
   '/api/mobile/categories': typeof ApiMobileCategoriesRoute
   '/api/mobile/category-attributes': typeof ApiMobileCategoryAttributesRoute
   '/api/mobile/config': typeof ApiMobileConfigRoute
@@ -314,6 +336,8 @@ export interface FileRoutesByTo {
   '/api/mobile/my-listings': typeof ApiMobileMyListingsRouteWithChildren
   '/api/mobile/notifications': typeof ApiMobileNotificationsRoute
   '/api/mobile/profile': typeof ApiMobileProfileRoute
+  '/api/mobile/reports': typeof ApiMobileReportsRoute
+  '/api/mobile/reviews': typeof ApiMobileReviewsRoute
   '/api/mobile/conversations/$id': typeof ApiMobileConversationsIdRoute
   '/api/mobile/listings/$id': typeof ApiMobileListingsIdRoute
   '/api/mobile/my-listings/$id': typeof ApiMobileMyListingsIdRoute
@@ -346,6 +370,7 @@ export interface FileRoutesById {
   '/mesajlar/': typeof MesajlarIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/chat/stream': typeof ApiChatStreamRoute
+  '/api/mobile/blocks': typeof ApiMobileBlocksRoute
   '/api/mobile/categories': typeof ApiMobileCategoriesRoute
   '/api/mobile/category-attributes': typeof ApiMobileCategoryAttributesRoute
   '/api/mobile/config': typeof ApiMobileConfigRoute
@@ -355,6 +380,8 @@ export interface FileRoutesById {
   '/api/mobile/my-listings': typeof ApiMobileMyListingsRouteWithChildren
   '/api/mobile/notifications': typeof ApiMobileNotificationsRoute
   '/api/mobile/profile': typeof ApiMobileProfileRoute
+  '/api/mobile/reports': typeof ApiMobileReportsRoute
+  '/api/mobile/reviews': typeof ApiMobileReviewsRoute
   '/api/mobile/conversations/$id': typeof ApiMobileConversationsIdRoute
   '/api/mobile/listings/$id': typeof ApiMobileListingsIdRoute
   '/api/mobile/my-listings/$id': typeof ApiMobileMyListingsIdRoute
@@ -388,6 +415,7 @@ export interface FileRouteTypes {
     | '/mesajlar/'
     | '/api/auth/$'
     | '/api/chat/stream'
+    | '/api/mobile/blocks'
     | '/api/mobile/categories'
     | '/api/mobile/category-attributes'
     | '/api/mobile/config'
@@ -397,6 +425,8 @@ export interface FileRouteTypes {
     | '/api/mobile/my-listings'
     | '/api/mobile/notifications'
     | '/api/mobile/profile'
+    | '/api/mobile/reports'
+    | '/api/mobile/reviews'
     | '/api/mobile/conversations/$id'
     | '/api/mobile/listings/$id'
     | '/api/mobile/my-listings/$id'
@@ -427,6 +457,7 @@ export interface FileRouteTypes {
     | '/mesajlar'
     | '/api/auth/$'
     | '/api/chat/stream'
+    | '/api/mobile/blocks'
     | '/api/mobile/categories'
     | '/api/mobile/category-attributes'
     | '/api/mobile/config'
@@ -436,6 +467,8 @@ export interface FileRouteTypes {
     | '/api/mobile/my-listings'
     | '/api/mobile/notifications'
     | '/api/mobile/profile'
+    | '/api/mobile/reports'
+    | '/api/mobile/reviews'
     | '/api/mobile/conversations/$id'
     | '/api/mobile/listings/$id'
     | '/api/mobile/my-listings/$id'
@@ -467,6 +500,7 @@ export interface FileRouteTypes {
     | '/mesajlar/'
     | '/api/auth/$'
     | '/api/chat/stream'
+    | '/api/mobile/blocks'
     | '/api/mobile/categories'
     | '/api/mobile/category-attributes'
     | '/api/mobile/config'
@@ -476,6 +510,8 @@ export interface FileRouteTypes {
     | '/api/mobile/my-listings'
     | '/api/mobile/notifications'
     | '/api/mobile/profile'
+    | '/api/mobile/reports'
+    | '/api/mobile/reviews'
     | '/api/mobile/conversations/$id'
     | '/api/mobile/listings/$id'
     | '/api/mobile/my-listings/$id'
@@ -506,6 +542,7 @@ export interface RootRouteChildren {
   UploadsSplatRoute: typeof UploadsSplatRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiChatStreamRoute: typeof ApiChatStreamRoute
+  ApiMobileBlocksRoute: typeof ApiMobileBlocksRoute
   ApiMobileCategoriesRoute: typeof ApiMobileCategoriesRoute
   ApiMobileCategoryAttributesRoute: typeof ApiMobileCategoryAttributesRoute
   ApiMobileConfigRoute: typeof ApiMobileConfigRoute
@@ -515,6 +552,8 @@ export interface RootRouteChildren {
   ApiMobileMyListingsRoute: typeof ApiMobileMyListingsRouteWithChildren
   ApiMobileNotificationsRoute: typeof ApiMobileNotificationsRoute
   ApiMobileProfileRoute: typeof ApiMobileProfileRoute
+  ApiMobileReportsRoute: typeof ApiMobileReportsRoute
+  ApiMobileReviewsRoute: typeof ApiMobileReviewsRoute
   ApiMobileSellersIdRoute: typeof ApiMobileSellersIdRoute
   ApiMobileStoresSlugRoute: typeof ApiMobileStoresSlugRoute
 }
@@ -689,6 +728,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiChatStreamRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/mobile/blocks': {
+      id: '/api/mobile/blocks'
+      path: '/api/mobile/blocks'
+      fullPath: '/api/mobile/blocks'
+      preLoaderRoute: typeof ApiMobileBlocksRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/mobile/categories': {
       id: '/api/mobile/categories'
       path: '/api/mobile/categories'
@@ -750,6 +796,20 @@ declare module '@tanstack/react-router' {
       path: '/api/mobile/profile'
       fullPath: '/api/mobile/profile'
       preLoaderRoute: typeof ApiMobileProfileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/mobile/reports': {
+      id: '/api/mobile/reports'
+      path: '/api/mobile/reports'
+      fullPath: '/api/mobile/reports'
+      preLoaderRoute: typeof ApiMobileReportsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/mobile/reviews': {
+      id: '/api/mobile/reviews'
+      path: '/api/mobile/reviews'
+      fullPath: '/api/mobile/reviews'
+      preLoaderRoute: typeof ApiMobileReviewsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/mobile/conversations/$id': {
@@ -863,6 +923,7 @@ const rootRouteChildren: RootRouteChildren = {
   UploadsSplatRoute: UploadsSplatRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiChatStreamRoute: ApiChatStreamRoute,
+  ApiMobileBlocksRoute: ApiMobileBlocksRoute,
   ApiMobileCategoriesRoute: ApiMobileCategoriesRoute,
   ApiMobileCategoryAttributesRoute: ApiMobileCategoryAttributesRoute,
   ApiMobileConfigRoute: ApiMobileConfigRoute,
@@ -872,6 +933,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiMobileMyListingsRoute: ApiMobileMyListingsRouteWithChildren,
   ApiMobileNotificationsRoute: ApiMobileNotificationsRoute,
   ApiMobileProfileRoute: ApiMobileProfileRoute,
+  ApiMobileReportsRoute: ApiMobileReportsRoute,
+  ApiMobileReviewsRoute: ApiMobileReviewsRoute,
   ApiMobileSellersIdRoute: ApiMobileSellersIdRoute,
   ApiMobileStoresSlugRoute: ApiMobileStoresSlugRoute,
 }

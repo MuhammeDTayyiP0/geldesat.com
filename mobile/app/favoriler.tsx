@@ -100,6 +100,7 @@ export default function FavorilerScreen() {
                 is_urgent: item.is_urgent,
                 is_featured: item.is_featured,
                 category_name: item.category_name,
+                user_id: item.user_id,
               }}
               variant="list"
               onPress={() => router.push(`/ilan/${item.id}` as any)}

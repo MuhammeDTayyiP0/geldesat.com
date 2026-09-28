@@ -37,7 +37,53 @@ export const Route = createFileRoute("/api/mobile/listings/$id")({
           const favoriteRows = userId
             ? await sql.query<{ listing_id: string }>("select listing_id from favorites where user_id=$1 and listing_id=$2", [userId, listing.id])
             : [];
-          return Response.json({ success: true, listing, isFavorite: favoriteRows.length > 0, isOwner: userId === listing.user_id });
+          const [history, similarRows, reviews, stats] = await Promise.all([
+            sql.query<{ price: number | string; recorded_at: string }>("select price,recorded_at from price_history where listing_id=$1 order by recorded_at asc", [listing.id]),
+            sql.query<Record<string, unknown>>(
+              `select l.*,c.name as category_name,c.slug as category_slug,p.display_name as seller_name,
+                      coalesce((select json_agg(b.kind) from boosts b where b.listing_id=l.id and b.ends_at>now()),'[]'::json) as boosts
+               from listings l join categories c on c.id=l.category_id left join profiles p on p.user_id=l.user_id
+               where l.category_id=$1 and l.id<>$2 and l.status='ACTIVE' and (l.expires_at is null or l.expires_at>now())
+               order by l.created_at desc limit 4`, [listing.category_id, listing.id],
+            ),
+            sql.query<Record<string, unknown>>(
+              `select r.id,r.rating,r.comment,r.created_at,p.display_name as reviewer
+               from reviews r left join profiles p on p.user_id=r.reviewer_id where r.seller_id=$1 order by r.created_at desc limit 6`, [listing.user_id],
+            ),
+            sql.query<{ favorite_count: number; phone_reveal_count: number; rating_avg: number; rating_count: number }>(
+              `select
+                (select count(*)::int from favorites where listing_id=$1) as favorite_count,
+                (select count(*)::int from phone_reveals where listing_id=$1) as phone_reveal_count,
+                (select coalesce(avg(rating),0) from reviews where seller_id=$2) as rating_avg,
+                (select count(*)::int from reviews where seller_id=$2) as rating_count`, [listing.id, listing.user_id],
+            ),
+          ]);
+          const sellerReviewEligibility = userId && userId !== listing.user_id
+            ? await sql.query<{ id: string }>(
+                `select id from conversations where (buyer_id=$1 and seller_id=$2) or (buyer_id=$2 and seller_id=$1) limit 1`, [userId, listing.user_id],
+              )
+            : [];
+          const existingReview = userId && userId !== listing.user_id
+            ? await sql.query<{ rating: number; comment: string | null }>(
+                "select rating,comment from reviews where seller_id=$1 and reviewer_id=$2 and listing_id=$3 limit 1", [listing.user_id, userId, listing.id],
+              )
+            : [];
+          const metric = stats[0];
+          const enrichedListing = { ...listing, view_count: Number(listing.view_count || 0) + (userId === listing.user_id ? 0 : 1) };
+          if (userId !== listing.user_id) await sql.query("update listings set view_count=view_count+1 where id=$1", [listing.id]);
+          return Response.json({
+            success: true,
+            listing: enrichedListing,
+            isFavorite: favoriteRows.length > 0,
+            isOwner: userId === listing.user_id,
+            history: history.map((row) => ({ price: Number(row.price), at: String(row.recorded_at) })),
+            similar: similarRows.map(mapListing),
+            reviews: reviews.map((row) => ({ id: String(row.id), rating: Number(row.rating), comment: String(row.comment ?? ''), reviewer: String(row.reviewer ?? 'Üye'), at: String(row.created_at) })),
+            sellerStats: { rating_avg: Number(metric?.rating_avg || 0), rating_count: Number(metric?.rating_count || 0) },
+            favoriteCount: Number(metric?.favorite_count || 0),
+            phoneRevealCount: Number(metric?.phone_reveal_count || 0),
+            reviewEligibility: { eligible: sellerReviewEligibility.length > 0, existing: existingReview[0] ? { rating: Number(existingReview[0].rating), comment: existingReview[0].comment } : null },
+          });
         } catch (error) {
           const message = error instanceof Error ? error.message : "İlan yüklenemedi.";
           return Response.json({ success: false, error: message }, { status: 500 });

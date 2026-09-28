@@ -43,6 +43,9 @@ export const Route = createFileRoute("/api/mobile/favorites")({
             await sql.query("delete from favorites where user_id=$1 and listing_id=$2", [userId, body.listingId]);
             return Response.json({ success: true, favorite: false });
           }
+          if (listing[0].user_id === userId) {
+            return Response.json({ success: false, error: "Kendi ilanınızı favorilere ekleyemezsiniz." }, { status: 400 });
+          }
           await sql.query("insert into favorites (user_id,listing_id) values ($1,$2) on conflict do nothing", [userId, body.listingId]);
           if (listing[0].user_id !== userId) await notify(listing[0].user_id, "favorite", "İlanınız favorilendi", listing[0].title, `/ilan/${listing[0].slug}`);
           return Response.json({ success: true, favorite: true });

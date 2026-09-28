@@ -214,6 +214,14 @@ export const listCategories = createServerFn({ method: "GET" }).handler(async ()
   };
 });
 
+export const listCategoryRoots = createServerFn({ method: "GET" }).handler(async () => {
+  const sql = await getSql();
+  const roots = await sql.query<CategoryRow>(
+    "select id,name,slug,parent_id,icon,sort_order from categories where parent_id is null order by sort_order,name",
+  );
+  return { roots };
+});
+
 export const getCategory = createServerFn({ method: "POST" })
   .validator(z.object({ slug: z.string() }))
   .handler(async ({ data }) => {

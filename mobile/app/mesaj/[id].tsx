@@ -9,12 +9,15 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
+  Alert,
+  Modal,
+  Pressable,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack, useFocusEffect } from 'expo-router';
-import { Send, ChevronLeft, ShieldCheck, User } from 'lucide-react-native';
+import { Send, ChevronLeft, ShieldCheck, MoreHorizontal, Flag, Ban, ShieldOff } from 'lucide-react-native';
 import { BrandColors } from '@/constants/Colors';
 import { getStoredUser } from '@/src/api/auth';
-import { getMobileConversation, MobileConversation, sendMobileMessage } from '@/src/api/client';
+import { getMobileConversation, MobileConversation, reportMobileListing, sendMobileMessage, setMobileUserBlocked } from '@/src/api/client';
 import { AuthGate } from '@/src/components/auth/AuthGate';
 
 const QUICK_REPLIES = [
@@ -31,6 +34,7 @@ export default function ChatScreen() {
   const [thread, setThread] = useState<MobileConversation | null>(null);
   const [userId, setUserId] = useState('');
   const [inputText, setInputText] = useState('');
+  const [actionsOpen, setActionsOpen] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
 
   const loadData = async () => {
@@ -59,6 +63,7 @@ export default function ChatScreen() {
   }, [thread?.messages]);
 
   const handleSend = async (contentToSend?: string) => {
+    if (thread?.blocked) { Alert.alert('Mesaj gönderilemiyor', 'Bu kullanıcıyla sohbet durdurulmuş.'); return; }
     const text = (contentToSend || inputText).trim();
     if (!text || !id) return;
 
@@ -72,6 +77,33 @@ export default function ChatScreen() {
     } catch {
       setInputText(text);
     }
+  };
+
+  const handleToggleBlock = () => {
+    if (!thread?.other_user_id) return;
+    const blocked = !thread.blockedByMe;
+    Alert.alert(blocked ? 'Kullanıcıyı engelle' : 'Engeli kaldır', blocked ? 'Bu kullanıcı size mesaj gönderemeyecek.' : 'Bu kullanıcıyla yeniden mesajlaşabilirsiniz.', [
+      { text: 'Vazgeç', style: 'cancel' },
+      { text: blocked ? 'Engelle' : 'Engeli Kaldır', style: blocked ? 'destructive' : 'default', onPress: async () => {
+        const user = await getStoredUser();
+        if (!user?.token) return;
+        try {
+          await setMobileUserBlocked(thread.other_user_id!, blocked, user.token);
+          setThread((current) => current ? { ...current, blocked, blockedByMe: blocked, blockedByOther: false } : current);
+        } catch (error) { Alert.alert('İşlem yapılamadı', error instanceof Error ? error.message : 'Lütfen tekrar deneyin.'); }
+      } },
+    ]);
+  };
+
+  const handleReportConversation = async () => {
+    if (!thread?.listing_id) return;
+    const user = await getStoredUser();
+    if (!user?.token) return;
+    try {
+      await reportMobileListing(thread.listing_id, 'Uygunsuz mesaj', `Konuşma: ${thread.id}`, user.token);
+      setActionsOpen(false);
+      Alert.alert('Bildirim alındı', 'Konuşmayı inceleyeceğiz. Teşekkür ederiz.');
+    } catch (error) { Alert.alert('Bildirim gönderilemedi', error instanceof Error ? error.message : 'Lütfen tekrar deneyin.'); }
   };
 
   return (
@@ -88,6 +120,7 @@ export default function ChatScreen() {
               <ChevronLeft size={24} color="#12151c" />
             </TouchableOpacity>
           ),
+          headerRight: () => <TouchableOpacity onPress={() => setActionsOpen(true)} style={styles.headerAction} accessibilityRole="button" accessibilityLabel="Sohbet işlemleri"><MoreHorizontal size={22} color="#12151c" /></TouchableOpacity>,
         }}
       />
 
@@ -125,6 +158,8 @@ export default function ChatScreen() {
         </Text>
       </View>
 
+      {thread?.blocked ? <View style={styles.blockedBanner}><Ban size={16} color="#b42318" /><Text style={styles.blockedText}>{thread.blockedByMe ? 'Bu kullanıcıyı engellediniz.' : 'Bu kullanıcı sizi engellemiş.'} Mesaj gönderilemez.</Text></View> : null}
+
       {/* 3. Mesajlar Listesi */}
       <ScrollView
         ref={scrollViewRef}
@@ -153,7 +188,7 @@ export default function ChatScreen() {
       </ScrollView>
 
       {/* 4. Hızlı Cevap Butonları */}
-      <View style={styles.quickRepliesArea}>
+      {!thread?.blocked ? <View style={styles.quickRepliesArea}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickScroll}>
           {QUICK_REPLIES.map((reply) => (
             <TouchableOpacity
@@ -164,10 +199,10 @@ export default function ChatScreen() {
             </TouchableOpacity>
           ))}
         </ScrollView>
-      </View>
+      </View> : null}
 
       {/* 5. Alt Mesaj Giriş Barı */}
-      <View style={styles.inputBar}>
+      {!thread?.blocked ? <View style={styles.inputBar}>
         <TextInput
           placeholder="Mesajınızı yazın..."
           placeholderTextColor="#8a929e"
@@ -181,7 +216,19 @@ export default function ChatScreen() {
           onPress={() => handleSend()}>
           <Send size={18} color="#ffffff" />
         </TouchableOpacity>
-      </View>
+      </View> : null}
+
+      <Modal transparent animationType="slide" visible={actionsOpen} onRequestClose={() => setActionsOpen(false)}>
+        <Pressable style={styles.sheetBackdrop} onPress={() => setActionsOpen(false)}>
+          <Pressable style={styles.actionSheet} onPress={(event) => event.stopPropagation()}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>Sohbet işlemleri</Text>
+            {thread?.blockedByOther ? <View style={styles.blockedNotice}><Text style={styles.blockedNoticeText}>Karşı kullanıcı mesajlaşmayı engellemiş.</Text></View> : <TouchableOpacity style={styles.sheetAction} onPress={() => { setActionsOpen(false); handleToggleBlock(); }}>{thread?.blockedByMe ? <ShieldOff size={19} color="#1a4fd8" /> : <Ban size={19} color="#b42318" />}<Text style={styles.sheetActionText}>{thread?.blockedByMe ? 'Engeli kaldır' : 'Kullanıcıyı engelle'}</Text></TouchableOpacity>}
+            {thread?.listing_id ? <TouchableOpacity style={styles.sheetAction} onPress={() => void handleReportConversation()}><Flag size={19} color="#5a6270" /><Text style={styles.sheetActionText}>Konuşmayı bildir</Text></TouchableOpacity> : null}
+            <TouchableOpacity style={styles.sheetCancel} onPress={() => setActionsOpen(false)}><Text style={styles.sheetCancelText}>Kapat</Text></TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </KeyboardAvoidingView>
     </AuthGate>
   );
@@ -192,6 +239,18 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f3f5f8', // Web: --color-bg
   },
+  headerAction: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginRight: 4 },
+  blockedBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: '#fff1f0', borderBottomWidth: 1, borderBottomColor: '#f6c5c0' },
+  blockedText: { flex: 1, color: '#9b1c13', fontSize: 12, lineHeight: 17 },
+  sheetBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(10,16,28,0.35)' },
+  actionSheet: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 36, borderTopLeftRadius: 22, borderTopRightRadius: 22, backgroundColor: '#fff' },
+  sheetHandle: { width: 38, height: 4, borderRadius: 2, backgroundColor: '#cbd2dc', alignSelf: 'center', marginBottom: 14 },
+  sheetTitle: { color: '#12151c', fontSize: 18, fontWeight: '700', marginBottom: 8 },
+  sheetAction: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#e7ebf0' },
+  sheetActionText: { color: '#12151c', fontSize: 14, fontWeight: '600' },
+  sheetCancel: { minHeight: 46, justifyContent: 'center', alignItems: 'center', marginTop: 10, backgroundColor: '#f3f5f8', borderRadius: 10 },
+  sheetCancelText: { color: '#12151c', fontWeight: '700' },
+  blockedNotice: { paddingVertical: 12 }, blockedNoticeText: { color: '#9b1c13', fontSize: 13 },
   listingSummaryCard: {
     flexDirection: 'row',
     alignItems: 'center',
