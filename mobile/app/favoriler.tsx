@@ -10,27 +10,45 @@ import {
 import { useRouter, useFocusEffect, Stack } from 'expo-router';
 import { Heart, ChevronLeft } from 'lucide-react-native';
 import { BrandColors } from '@/constants/Colors';
-import { ListingCard } from '@/src/components/listing/ListingCard';
-import { getLocalFavorites, LocalListing } from '@/src/store/localStore';
+import { ListingCard, MobileListing } from '@/src/components/listing/ListingCard';
+import { getMobileFavorites } from '@/src/api/client';
+import { getStoredUser } from '@/src/api/auth';
+import { AuthGate } from '@/src/components/auth/AuthGate';
 
 export default function FavorilerScreen() {
   const router = useRouter();
-  const [favs, setFavs] = useState<LocalListing[]>([]);
+  const [favs, setFavs] = useState<MobileListing[]>([]);
   const [loading, setLoading] = useState(true);
 
   useFocusEffect(
     useCallback(() => {
       async function load() {
         setLoading(true);
-        const data = await getLocalFavorites();
-        setFavs(data);
-        setLoading(false);
+        try {
+          const user = await getStoredUser();
+          if (!user?.token) {
+            setFavs([]);
+            return;
+          }
+          const response = await getMobileFavorites(user.token);
+          setFavs(response.listings.map((item) => ({
+            id: item.id, slug: item.slug, title: item.title, price: item.price, currency: item.currency,
+            images: item.images, city: item.city, district: item.district, created_at: item.created_at,
+            is_urgent: item.boosts?.includes('ACIL'), is_featured: item.boosts?.includes('KALIN'),
+            category_name: item.category_name,
+          })));
+        } catch {
+          setFavs([]);
+        } finally {
+          setLoading(false);
+        }
       }
       load();
     }, [])
   );
 
   return (
+    <AuthGate title="Favorilerim" subtitle="Favori ilanlarınızı görüntülemek için giriş yapın.">
     <View style={styles.container}>
       <Stack.Screen
         options={{
@@ -90,6 +108,7 @@ export default function FavorilerScreen() {
         />
       )}
     </View>
+    </AuthGate>
   );
 }
 

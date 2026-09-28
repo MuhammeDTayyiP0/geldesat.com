@@ -60,7 +60,7 @@ export default function HomeScreen() {
   const { data: catData } = useQuery({
     queryKey: ['mobileCategories'],
     queryFn: () => getMobileCategories(),
-    initialData: { success: true, categories: EMBEDDED_CATEGORIES },
+    initialData: { success: true, categories: EMBEDDED_CATEGORIES.map((category) => ({ ...category, icon: category.icon ?? null })) },
   });
 
   const listings: MobileListing[] = (apiData?.listings || []).map((l) => ({
@@ -182,7 +182,9 @@ export default function HomeScreen() {
                   activeOpacity={0.75}>
                   <IconComponent size={22} color={BrandColors.primary} strokeWidth={2} />
                   <Text style={styles.categoryCardName}>{c.name}</Text>
-                  <Text style={styles.categoryCardCount}>Kategoriyi keşfet</Text>
+                  <Text style={styles.categoryCardCount}>
+                    {catData?.counts?.[c.id] != null ? `${catData.counts[c.id]} ilan` : 'Kategoriyi keşfet'}
+                  </Text>
                 </TouchableOpacity>
               );
             })}

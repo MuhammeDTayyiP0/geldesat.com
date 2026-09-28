@@ -1,32 +1,47 @@
-import React from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useRouter, Stack } from 'expo-router';
-import { Bell, ChevronLeft, ShieldCheck, Tag } from 'lucide-react-native';
+import { Bell, ChevronLeft, ShieldCheck, Tag, MessageCircle, Heart as HeartIcon } from 'lucide-react-native';
 import { BrandColors } from '@/constants/Colors';
-
-const SAMPLE_NOTIFICATIONS = [
-  {
-    id: 'n1',
-    title: 'GeldeSat Mobil Uygulamasına Hoş Geldiniz!',
-    body: 'Türkiye genelinde yüz binlerce emlak, vasıta ve ikinci el ilanını ücretsiz keşfedebilir veya saniyeler içinde ilan verebilirsiniz.',
-    time: 'Bugün',
-    icon: ShieldCheck,
-    color: '#1a4fd8',
-  },
-  {
-    id: 'n2',
-    title: 'Ücretsiz İlan Verme Fırsatı',
-    body: 'Satmak istediğiniz ürün veya aracın fotoğraflarını çekip hemen vitrine koyun.',
-    time: 'Dün',
-    icon: Tag,
-    color: '#1f7a4d',
-  },
-];
+import { useFocusEffect } from 'expo-router';
+import { getStoredUser } from '@/src/api/auth';
+import { getMobileNotifications, markMobileNotificationsRead, MobileNotification } from '@/src/api/client';
+import { AuthGate } from '@/src/components/auth/AuthGate';
 
 export default function BildirimlerScreen() {
   const router = useRouter();
+  const [notifications, setNotifications] = useState<MobileNotification[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadNotifications = useCallback(async () => {
+    setLoading(true);
+    try {
+      const user = await getStoredUser();
+      if (!user?.token) {
+        setNotifications([]);
+        return;
+      }
+      const response = await getMobileNotifications(user.token);
+      setNotifications(response.notifications);
+      await markMobileNotificationsRead(user.token);
+    } catch {
+      setNotifications([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(useCallback(() => { void loadNotifications(); }, [loadNotifications]));
+
+  const openNotification = (path: string) => {
+    const [pathname, id] = path.split('/').filter(Boolean);
+    if (pathname === 'ilan' && id) router.push(`/ilan/${id}` as any);
+    else if (pathname === 'mesajlar' && id) router.push(`/mesaj/${id}` as any);
+    else if (pathname === 'mesajlar') router.push('/(tabs)/mesajlar' as any);
+  };
 
   return (
+    <AuthGate title="Bildirimler" subtitle="Bildirimlerinizi görmek için giriş yapın.">
     <View style={styles.container}>
       <Stack.Screen
         options={{
@@ -39,8 +54,10 @@ export default function BildirimlerScreen() {
         }}
       />
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {SAMPLE_NOTIFICATIONS.length === 0 ? (
+      {loading ? (
+        <View style={styles.loading}><ActivityIndicator color={BrandColors.primary} /></View>
+      ) : <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {notifications.length === 0 ? (
           /* Web Sitesindeki Birebir Boş Bildirimler Kutusu */
           <View style={styles.emptyCard}>
             <Bell size={40} color="#8a929e" style={{ marginBottom: 12 }} />
@@ -51,25 +68,26 @@ export default function BildirimlerScreen() {
           </View>
         ) : (
           <View style={styles.notificationsList}>
-            {SAMPLE_NOTIFICATIONS.map((item) => {
-              const IconComp = item.icon;
+            {notifications.map((item) => {
+              const IconComp = item.type === 'message' ? MessageCircle : item.type === 'favorite' ? HeartIcon : item.type === 'listing' ? Tag : ShieldCheck;
               return (
-                <View key={item.id} style={styles.notifItem}>
-                  <View style={[styles.iconBox, { backgroundColor: item.color + '15' }]}>
-                    <IconComp size={20} color={item.color} />
+                <TouchableOpacity key={item.id} style={styles.notifItem} onPress={() => openNotification(item.link)} activeOpacity={0.75}>
+                  <View style={[styles.iconBox, { backgroundColor: item.read ? '#eef1f5' : '#eaf0ff' }]}>
+                    <IconComp size={20} color={item.read ? '#5a6270' : '#1a4fd8'} />
                   </View>
                   <View style={styles.notifContent}>
                     <Text style={styles.notifTitle}>{item.title}</Text>
                     <Text style={styles.notifBody}>{item.body}</Text>
-                    <Text style={styles.notifTime}>{item.time}</Text>
+                    <Text style={styles.notifTime}>{new Date(item.created_at).toLocaleDateString('tr-TR')}</Text>
                   </View>
-                </View>
+                </TouchableOpacity>
               );
             })}
           </View>
         )}
-      </ScrollView>
+      </ScrollView>}
     </View>
+    </AuthGate>
   );
 }
 
@@ -81,6 +99,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: 16,
   },
+  loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   emptyCard: {
     borderWidth: 1.5,
     borderStyle: 'dashed',

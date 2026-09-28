@@ -8,6 +8,7 @@ import {
   Share,
   Linking,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import {
@@ -26,14 +27,10 @@ import { BrandColors } from '@/constants/Colors';
 import { ListingImageGallery } from '@/src/components/listing/ListingImageGallery';
 import { StickyContactBar } from '@/src/components/listing/StickyContactBar';
 import {
-  getLocalFavorites,
-  getMyLocalListings,
-  isFavorite,
-  toggleLocalFavorite,
-  createLocalConversation,
   LocalListing,
 } from '@/src/store/localStore';
-import { API_BASE_URL } from '@/src/api/client';
+import { getMobileListing, revealMobileListingPhone, startMobileConversation, toggleMobileFavorite } from '@/src/api/client';
+import { getStoredUser } from '@/src/api/auth';
 
 export default function IlanDetayScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -42,60 +39,28 @@ export default function IlanDetayScreen() {
   const [listing, setListing] = useState<LocalListing | null>(null);
   const [loading, setLoading] = useState(true);
   const [isFav, setIsFav] = useState(false);
+  const [phone, setPhone] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
     async function fetchListing() {
       setLoading(true);
       try {
-        // 1. Önce cihazdaki yerel ilanlarımda ve favorilerde ara
-        const myList = await getMyLocalListings();
-        const foundLocal = myList.find((l) => l.id === id);
-        if (foundLocal && isMounted) {
-          setListing(foundLocal);
-          const favStatus = await isFavorite(foundLocal.id);
-          setIsFav(favStatus);
-          setLoading(false);
-          return;
-        }
-
-        const favList = await getLocalFavorites();
-        const foundFav = favList.find((l) => l.id === id);
-        if (foundFav && isMounted) {
-          setListing(foundFav);
-          setIsFav(true);
-          setLoading(false);
-          return;
-        }
-
-        // 2. Canlı API'den çekmeyi dene
-        const res = await fetch(`${API_BASE_URL}/api/mobile/listings?limit=50`);
-        if (res.ok) {
-          const data = await res.json();
-          const match = (data?.listings || []).find((l: any) => l.id === id || l.slug === id);
-          if (match && isMounted) {
-            const mapped: LocalListing = {
-              id: match.id,
-              title: match.title,
-              price: match.price,
-              currency: match.currency || 'TL',
-              description: match.description,
-              city: match.city,
-              district: match.district,
-              images: match.images?.length > 0 ? match.images : ['https://images.unsplash.com/photo-1555215695-3004980ad54e?w=800'],
-              attrs: match.attrs || {},
-              created_at: match.created_at,
-              category_name: match.category_name,
-              seller_name: match.seller_name || 'GeldeSat Satıcısı',
-              is_urgent: match.boosts?.includes('ACIL'),
-              is_featured: match.boosts?.includes('KALIN'),
-            };
-            setListing(mapped);
-            const favStatus = await isFavorite(mapped.id);
-            setIsFav(favStatus);
-            setLoading(false);
-            return;
-          }
+        const user = await getStoredUser();
+        const result = await getMobileListing(id, user?.token);
+        if (isMounted) {
+          const item = result.listing;
+          setListing({
+            id: item.id, title: item.title, price: item.price, currency: item.currency,
+            description: item.description, city: item.city, district: item.district,
+            images: item.images?.length ? item.images : [], attrs: item.attrs || {},
+            created_at: item.created_at, category_name: item.category_name,
+            category_slug: item.category_slug, seller_name: item.seller_name || 'GeldeSat Satıcısı',
+            seller_id: item.user_id, store_name: item.store_name, store_slug: item.store_slug,
+            status: item.status as LocalListing['status'], is_urgent: item.boosts?.includes('ACIL'),
+            is_featured: item.boosts?.includes('KALIN'),
+          });
+          setIsFav(result.isFavorite);
         }
       } catch {
         // Hata durumunda sessiz kal
@@ -112,19 +77,55 @@ export default function IlanDetayScreen() {
 
   const handleToggleFavorite = async () => {
     if (!listing) return;
-    const newStatus = await toggleLocalFavorite(listing);
-    setIsFav(newStatus);
+    const user = await getStoredUser();
+    if (!user?.token) {
+      Alert.alert('Giriş gerekli', 'Favori ilanlarınızı hesabınızla eşitlemek için giriş yapın.', [
+        { text: 'Vazgeç', style: 'cancel' }, { text: 'Giriş Yap', onPress: () => router.push('/login' as any) },
+      ]);
+      return;
+    }
+    try {
+      const result = await toggleMobileFavorite(listing.id, user.token);
+      setIsFav(result.favorite);
+    } catch (error) {
+      Alert.alert('Favori güncellenemedi', error instanceof Error ? error.message : 'Lütfen tekrar deneyin.');
+    }
   };
 
-  const handleCall = () => {
-    const phone = listing?.phone || '08500000000';
-    Linking.openURL(`tel:${phone}`);
+  const handleCall = async () => {
+    if (!listing) return;
+    if (phone) { await Linking.openURL(`tel:${phone.replace(/[^0-9+]/g, '')}`); return; }
+    const user = await getStoredUser();
+    if (!user?.token) {
+      Alert.alert('Giriş gerekli', 'Satıcının telefon numarasını görmek için giriş yapın.', [
+        { text: 'Vazgeç', style: 'cancel' }, { text: 'Giriş Yap', onPress: () => router.push('/login' as any) },
+      ]);
+      return;
+    }
+    try {
+      const result = await revealMobileListingPhone(listing.id, user.token);
+      setPhone(result.phone);
+      await Linking.openURL(`tel:${result.phone.replace(/[^0-9+]/g, '')}`);
+    } catch (error) {
+      Alert.alert('Telefon alınamadı', error instanceof Error ? error.message : 'Satıcı telefon numarası paylaşmamış.');
+    }
   };
 
   const handleMessage = async () => {
     if (!listing) return;
-    const convId = await createLocalConversation(listing, `Merhaba, "${listing.title}" ilanınız için yazıyorum. Hâlâ satılık mı?`);
-    router.push(`/mesaj/${convId}` as any);
+    const user = await getStoredUser();
+    if (!user?.token) {
+      Alert.alert('Giriş gerekli', 'Satıcıya mesaj göndermek için giriş yapın.', [
+        { text: 'Vazgeç', style: 'cancel' }, { text: 'Giriş Yap', onPress: () => router.push('/login' as any) },
+      ]);
+      return;
+    }
+    try {
+      const result = await startMobileConversation(listing.id, `Merhaba, "${listing.title}" ilanınız için yazıyorum. Hâlâ satılık mı?`, user.token);
+      router.push(`/mesaj/${result.conversationId}` as any);
+    } catch (error) {
+      Alert.alert('Mesaj gönderilemedi', error instanceof Error ? error.message : 'Lütfen tekrar deneyin.');
+    }
   };
 
   const handleShare = async () => {
@@ -225,6 +226,7 @@ export default function IlanDetayScreen() {
 
         {/* 3. Satıcı Kartı */}
         <View style={styles.sellerCard}>
+          <TouchableOpacity style={styles.sellerIdentity} onPress={() => listing.seller_id && router.push(`/satici/${listing.seller_id}` as any)} disabled={!listing.seller_id}>
           <View style={styles.sellerAvatar}>
             <Text style={styles.sellerAvatarLetter}>
               {listing.seller_name ? listing.seller_name.charAt(0).toUpperCase() : 'S'}
@@ -234,6 +236,8 @@ export default function IlanDetayScreen() {
             <Text style={styles.sellerName}>{listing.seller_name || 'GeldeSat Satıcısı'}</Text>
             <Text style={styles.sellerBadge}>Doğrulanmış Üye</Text>
           </View>
+          </TouchableOpacity>
+          {listing.store_slug ? <TouchableOpacity onPress={() => router.push(`/magaza/${listing.store_slug}` as any)}><Text style={styles.storeLink}>{listing.store_name || 'Mağazayı Gör'}</Text></TouchableOpacity> : null}
           <TouchableOpacity style={styles.sellerMsgBtn} onPress={handleMessage}>
             <MessageCircle size={16} color="#1a4fd8" />
             <Text style={styles.sellerMsgBtnText}>Mesaj</Text>
@@ -279,11 +283,12 @@ export default function IlanDetayScreen() {
       <StickyContactBar
         price={listing.price}
         currency={listing.currency}
-        phone={listing.phone}
+        phone={phone}
         listingTitle={listing.title}
         isFavorite={isFav}
         onFavoriteToggle={handleToggleFavorite}
         onChatPress={handleMessage}
+        onCallPress={handleCall}
       />
     </View>
   );
@@ -422,6 +427,8 @@ const styles = StyleSheet.create({
     borderColor: '#d8dee6',
     marginBottom: 10,
   },
+  sellerIdentity: { flex: 1, flexDirection: 'row', alignItems: 'center', minWidth: 0 },
+  storeLink: { color: '#1a4fd8', fontSize: 12, fontWeight: '600', marginRight: 8 },
   sellerAvatar: {
     width: 44,
     height: 44,

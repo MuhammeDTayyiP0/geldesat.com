@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -35,12 +35,13 @@ import {
   Eye,
 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { BrandColors } from '@/constants/Colors';
 import { EMBEDDED_CATEGORIES, CategoryItem } from '@/src/data/categoriesData';
 import { TURKEY_CITIES } from '@/src/data/locations';
-import { saveMyLocalListing } from '@/src/store/localStore';
 import { AuthGate } from '@/src/components/auth/AuthGate';
+import { getStoredUser } from '@/src/api/auth';
+import { createMobileListing, getMobileCategoryAttributes, getMobileMyListing, getMobileProfile, MobileAttribute } from '@/src/api/client';
 
 const ICONS: Record<string, any> = {
   home: Building2,
@@ -74,11 +75,15 @@ const STEPS = ['Kategori', 'Detay', 'Fotoğraf', 'Önizleme'];
 
 export default function PostAdScreen() {
   const router = useRouter();
+  const { id: editId } = useLocalSearchParams<{ id?: string }>();
 
   // Web ile 1:1 4-Aşama: 0: Kategori, 1: Detay, 2: Fotoğraf, 3: Önizleme
   const [step, setStep] = useState<0 | 1 | 2 | 3>(0);
   const [path, setPath] = useState<string[]>([]);
   const [catSearch, setCatSearch] = useState('');
+  const [categoryAttributes, setCategoryAttributes] = useState<MobileAttribute[]>([]);
+  const [attributeValues, setAttributeValues] = useState<Record<string, string | number>>({});
+  const [attributesLoading, setAttributesLoading] = useState(false);
 
   // Form Verileri (Detay)
   const [title, setTitle] = useState('');
@@ -107,6 +112,7 @@ export default function PostAdScreen() {
 
   // Fotoğraflar
   const [images, setImages] = useState<string[]>([]);
+  const [imagePayloads, setImagePayloads] = useState<Record<string, string>>({});
 
   // Şehir / İlçe Modalları
   const [cityModalVisible, setCityModalVisible] = useState(false);
@@ -114,10 +120,92 @@ export default function PostAdScreen() {
   const [citySearchQuery, setCitySearchQuery] = useState('');
 
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // Kategori Hiyerarşisi
+  const [isEditing, setIsEditing] = useState(false);
   const selectedCatId = path[path.length - 1] || null;
 
+  useEffect(() => {
+    let active = true;
+    async function loadForEdit() {
+      if (!editId) { setIsEditing(false); return; }
+      const user = await getStoredUser();
+      if (!user?.token) return;
+      try {
+        const response = await getMobileMyListing(editId, user.token);
+        if (!active) return;
+        const listing = response.listing;
+        const chain: CategoryItem[] = [];
+        let current = EMBEDDED_CATEGORIES.find((item) => item.id === listing.category_id) || null;
+        while (current) {
+          chain.unshift(current);
+          current = current.parent_id ? EMBEDDED_CATEGORIES.find((item) => item.id === current?.parent_id) || null : null;
+        }
+        setPath(chain.map((item) => item.id));
+        setTitle(listing.title);
+        setPrice(String(listing.price));
+        setDescription(listing.description);
+        setCity(listing.city || '');
+        setDistrict(listing.district || '');
+        setPhone(listing.phone || '');
+        setNeighborhood(listing.neighborhood || '');
+        setImages(listing.images || []);
+        setImagePayloads({});
+        setAttributeValues(listing.attrs ?? {});
+        setYear(String(listing.attrs?.['Yıl'] || ''));
+        setKm(String(listing.attrs?.KM || ''));
+        setFuel(String(listing.attrs?.['Yakıt'] || ''));
+        setGear(String(listing.attrs?.['Vites'] || ''));
+        setDamage(String(listing.attrs?.['Hasar Durumu'] || ''));
+        setTrade((listing.attrs?.Takas === 'Evet' || listing.attrs?.Takas === 'Hayır') ? listing.attrs.Takas : '');
+        setM2Net(String(listing.attrs?.['m² (Net)'] || ''));
+        setM2Brut(String(listing.attrs?.['m² (Brüt)'] || ''));
+        setRooms(String(listing.attrs?.['Oda Sayısı'] || ''));
+        setFloor(String(listing.attrs?.['Bulunduğu Kat'] || ''));
+        setBuildingAge(String(listing.attrs?.['Bina Yaşı'] || ''));
+        setHeating(String(listing.attrs?.['Isıtma'] || ''));
+        setFurnished((listing.attrs?.Eşyalı === 'Evet' || listing.attrs?.Eşyalı === 'Hayır') ? listing.attrs.Eşyalı : '');
+        setStep(1);
+        setIsEditing(true);
+      } catch (error) {
+        Alert.alert('İlan yüklenemedi', error instanceof Error ? error.message : 'İlan düzenleme bilgileri alınamadı.');
+      }
+    }
+    void loadForEdit();
+    return () => { active = false; };
+  }, [editId]);
+
+  useEffect(() => {
+    if (editId) return;
+    let active = true;
+    async function loadProfileDefaults() {
+      const user = await getStoredUser();
+      if (!user?.token) return;
+      try {
+        const response = await getMobileProfile(user.token);
+        if (!active || !response.profile) return;
+        setPhone(response.profile.phone || '');
+        setCity(response.profile.city || '');
+        setDistrict(response.profile.district || '');
+      } catch {}
+    }
+    void loadProfileDefaults();
+    return () => { active = false; };
+  }, [editId]);
+
+  useEffect(() => {
+    let active = true;
+    if (!selectedCatId) {
+      setCategoryAttributes([]);
+      return () => { active = false; };
+    }
+    setAttributesLoading(true);
+    getMobileCategoryAttributes(selectedCatId)
+      .then((response) => { if (active) setCategoryAttributes(response.attributes); })
+      .catch(() => { if (active) setCategoryAttributes([]); })
+      .finally(() => { if (active) setAttributesLoading(false); });
+    return () => { active = false; };
+  }, [selectedCatId]);
+
+  // Kategori Hiyerarşisi
   const currentCategory = useMemo(() => {
     if (!selectedCatId) return null;
     return EMBEDDED_CATEGORIES.find((c) => c.id === selectedCatId) || null;
@@ -163,6 +251,7 @@ export default function PostAdScreen() {
   const handleSelectCategory = (cat: CategoryItem) => {
     const nextPath = [...path, cat.id];
     setPath(nextPath);
+    setAttributeValues({});
     setCatSearch('');
 
     // Alt kategori kontrolü (BMW -> Series -> Model -> Leaf)
@@ -196,11 +285,14 @@ export default function PostAdScreen() {
       mediaTypes: ['images'],
       allowsEditing: true,
       aspect: [4, 3],
-      quality: 0.8,
+      quality: 0.55,
+      base64: true,
     });
 
     if (!result.canceled && result.assets[0]?.uri) {
-      setImages((prev) => [...prev, result.assets[0].uri]);
+      const asset = result.assets[0];
+      setImages((prev) => [...prev, asset.uri]);
+      if (asset.base64) setImagePayloads((prev) => ({ ...prev, [asset.uri]: `data:${asset.mimeType || 'image/jpeg'};base64,${asset.base64}` }));
     }
   };
 
@@ -220,11 +312,19 @@ export default function PostAdScreen() {
       mediaTypes: ['images'],
       allowsMultipleSelection: true,
       selectionLimit: remaining,
-      quality: 0.8,
+      quality: 0.55,
+      base64: true,
     });
 
     if (!result.canceled && result.assets.length > 0) {
       setImages((prev) => [...prev, ...result.assets.map((a) => a.uri)]);
+      setImagePayloads((prev) => {
+        const next = { ...prev };
+        for (const asset of result.assets) {
+          if (asset.base64) next[asset.uri] = `data:${asset.mimeType || 'image/jpeg'};base64,${asset.base64}`;
+        }
+        return next;
+      });
     }
   };
 
@@ -234,7 +334,9 @@ export default function PostAdScreen() {
   };
 
   const handleRemoveImage = (index: number) => {
+    const removed = images[index];
     setImages((prev) => prev.filter((_, i) => i !== index));
+    setImagePayloads((prev) => { const next = { ...prev }; delete next[removed]; return next; });
   };
 
   // Doğrulama ve Adım Geçişleri
@@ -256,6 +358,10 @@ export default function PostAdScreen() {
       Alert.alert('Eksik Bilgi', 'Lütfen il seçiniz.');
       return;
     }
+    if (!district.trim()) {
+      Alert.alert('Eksik Bilgi', 'Lütfen ilçe seçiniz.');
+      return;
+    }
     setStep(2);
   };
 
@@ -268,53 +374,40 @@ export default function PostAdScreen() {
   };
 
   // İlan Yayınlama
-  const handlePublish = () => {
+  const handlePublish = async () => {
     setIsSubmitting(true);
-    const newId = 'ilan_' + Date.now();
-    const numPrice = Number(price.replace(/[^0-9]/g, '')) || 0;
-
-    const newListing = {
-      id: newId,
-      title: title.trim(),
-      price: numPrice,
-      currency: 'TL',
-      description: description.trim(),
-      city: city.trim(),
-      district: district.trim() || null,
-      neighborhood: neighborhood.trim() || null,
-      images: images.length > 0 ? images : ['https://images.unsplash.com/photo-1555215695-3004980ad54e?w=800'],
-      phone: phone.trim() || null,
-      attrs: {
-        ...(year ? { 'Yıl': year } : {}),
-        ...(km ? { 'KM': km } : {}),
-        ...(fuel ? { 'Yakıt': fuel } : {}),
-        ...(gear ? { 'Vites': gear } : {}),
-        ...(damage ? { 'Hasar Durumu': damage } : {}),
-        ...(trade ? { 'Takas': trade } : {}),
-        ...(m2Net ? { 'm² (Net)': m2Net } : {}),
-        ...(m2Brut ? { 'm² (Brüt)': m2Brut } : {}),
-        ...(rooms ? { 'Oda Sayısı': rooms } : {}),
-        ...(floor ? { 'Bulunduğu Kat': floor } : {}),
-        ...(buildingAge ? { 'Bina Yaşı': buildingAge } : {}),
-        ...(heating ? { 'Isıtma': heating } : {}),
-        ...(furnished ? { 'Eşyalı': furnished } : {}),
-      },
-      created_at: new Date().toISOString(),
-      category_name: currentCategory?.name || 'Genel',
-      category_slug: currentCategory?.slug,
-      seller_name: 'Ben (İlan Sahibi)',
-      view_count: 1,
-      status: 'ACTIVE' as const,
-    };
-
-    setTimeout(async () => {
-      await saveMyLocalListing(newListing);
+    try {
+      const user = await getStoredUser();
+      if (!user?.token) throw new Error('İlan vermek için yeniden giriş yapın.');
+      const attrs: Record<string, string | number> = {
+        ...attributeValues,
+        ...(year ? { 'Yıl': year } : {}), ...(km ? { 'KM': km } : {}), ...(fuel ? { 'Yakıt': fuel } : {}),
+        ...(gear ? { 'Vites': gear } : {}), ...(damage ? { 'Hasar Durumu': damage } : {}), ...(trade ? { 'Takas': trade } : {}),
+        ...(m2Net ? { 'm² (Net)': m2Net } : {}), ...(m2Brut ? { 'm² (Brüt)': m2Brut } : {}), ...(rooms ? { 'Oda Sayısı': rooms } : {}),
+        ...(floor ? { 'Bulunduğu Kat': floor } : {}), ...(buildingAge ? { 'Bina Yaşı': buildingAge } : {}),
+        ...(heating ? { 'Isıtma': heating } : {}), ...(furnished ? { 'Eşyalı': furnished } : {}),
+      };
+      const response = await createMobileListing({
+        id: editId || undefined,
+        categoryId: selectedCatId,
+        title: title.trim(),
+        price: Number(price.replace(/[^0-9]/g, '')) || 0,
+        description: description.trim(),
+        city: city.trim(),
+        district: district.trim(),
+        neighborhood: neighborhood.trim() || undefined,
+        phone: phone.trim() || undefined,
+        images: images.map((uri) => imagePayloads[uri] || uri),
+        attrs,
+      }, user.token);
       setIsSubmitting(false);
-      Alert.alert('Tebrikler!', 'İlanınız ücretsiz olarak başarıyla yayınlandı.', [
+      const reviewText = response.status === 'PENDING'
+        ? 'İlanınız kaydedildi ve inceleme için sıraya alındı.'
+        : 'İlanınız başarıyla yayınlandı.';
+      Alert.alert(isEditing ? 'İlan güncellendi' : 'İlan kaydedildi', isEditing ? 'Değişiklikleriniz kaydedildi.' : reviewText, [
         {
           text: 'İlanı Gör',
           onPress: () => {
-            // Formu sıfırla ve ilana git
             setStep(0);
             setPath([]);
             setTitle('');
@@ -325,6 +418,8 @@ export default function PostAdScreen() {
             setPhone('');
             setDescription('');
             setImages([]);
+            setImagePayloads({});
+            setIsEditing(false);
             setYear('');
             setKm('');
             setFuel('');
@@ -338,11 +433,14 @@ export default function PostAdScreen() {
             setFloor('');
             setBuildingAge('');
             setFurnished('');
-            router.push(`/ilan/${newId}` as any);
+            router.push(`/ilan/${response.id}` as any);
           },
         },
       ]);
-    }, 700);
+    } catch (error) {
+      setIsSubmitting(false);
+      Alert.alert('İlan kaydedilemedi', error instanceof Error ? error.message : 'Lütfen bilgileri kontrol edip tekrar deneyin.');
+    }
   };
 
   return (
@@ -809,6 +907,61 @@ export default function PostAdScreen() {
               </View>
             )}
 
+            {/* Kategoriye özel alanlar: web formuyla aynı şema sunucudan alınır. */}
+            {(() => {
+              const handledNames = new Set(['Yıl', 'KM', 'Yakıt', 'Vites', 'Hasar Durumu', 'Takas', 'm² (Net)', 'm² (Brüt)', 'Oda Sayısı', 'Bulunduğu Kat', 'Bina Yaşı', 'Isıtma', 'Eşyalı']);
+              const extraAttributes = categoryAttributes.filter((attribute) => !handledNames.has(attribute.name));
+              if (!extraAttributes.length) return null;
+              return (
+                <View style={styles.dynamicSection}>
+                  <Text style={styles.dynamicHeader}>Kategori Özellikleri</Text>
+                  {attributesLoading ? <ActivityIndicator color={BrandColors.primary} /> : null}
+                  {extraAttributes.filter((attribute) => !['BOOLEAN', 'MULTI'].includes(attribute.type)).map((attribute) => (
+                    <View key={attribute.id} style={styles.fieldGroup}>
+                      <Text style={styles.label}>{attribute.name}{attribute.unit ? ` (${attribute.unit})` : ''}{attribute.required ? <Text style={styles.required}> *</Text> : null}</Text>
+                      {attribute.type === 'SELECT' ? (
+                        <View style={styles.chipRow}>
+                          {(attribute.options || []).map((option) => (
+                            <TouchableOpacity key={option} style={[styles.chipItem, String(attributeValues[attribute.name] ?? '') === option && styles.chipItemActive]} onPress={() => setAttributeValues((values) => ({ ...values, [attribute.name]: option }))}>
+                              <Text style={[styles.chipText, String(attributeValues[attribute.name] ?? '') === option && styles.chipTextActive]}>{option}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      ) : (
+                        <TextInput value={String(attributeValues[attribute.name] ?? '')} onChangeText={(value) => setAttributeValues((values) => ({ ...values, [attribute.name]: attribute.type === 'NUMBER' && value ? Number(value) : value }))} keyboardType={attribute.type === 'NUMBER' ? 'numeric' : 'default'} style={styles.textInput} />
+                      )}
+                    </View>
+                  ))}
+                  {extraAttributes.filter((attribute) => attribute.type === 'BOOLEAN').map((attribute) => (
+                    <View key={attribute.id} style={styles.fieldGroup}>
+                      <Text style={styles.label}>{attribute.name}{attribute.required ? <Text style={styles.required}> *</Text> : null}</Text>
+                      <View style={styles.chipRow}>
+                        {(attribute.options?.length ? attribute.options : ['Evet', 'Hayır']).map((option) => (
+                          <TouchableOpacity key={option} style={[styles.chipItem, String(attributeValues[attribute.name] ?? '') === option && styles.chipItemActive]} onPress={() => setAttributeValues((values) => ({ ...values, [attribute.name]: option }))}>
+                            <Text style={[styles.chipText, String(attributeValues[attribute.name] ?? '') === option && styles.chipTextActive]}>{option}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
+                  ))}
+                  {extraAttributes.filter((attribute) => attribute.type === 'MULTI').map((attribute) => {
+                    const selected = String(attributeValues[attribute.name] ?? '').split(', ').filter(Boolean);
+                    return (
+                      <View key={attribute.id} style={styles.fieldGroup}>
+                        <Text style={styles.label}>{attribute.name}{attribute.required ? <Text style={styles.required}> *</Text> : null}</Text>
+                        <View style={styles.chipRow}>
+                          {(attribute.options || []).map((option) => {
+                            const isSelected = selected.includes(option);
+                            return <TouchableOpacity key={option} style={[styles.chipItem, isSelected && styles.chipItemActive]} onPress={() => setAttributeValues((values) => ({ ...values, [attribute.name]: (isSelected ? selected.filter((item) => item !== option) : [...selected, option]).join(', ') }))}><Text style={[styles.chipText, isSelected && styles.chipTextActive]}>{option}</Text></TouchableOpacity>;
+                          })}
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              );
+            })()}
+
             {/* İleri / Geri Butonları */}
             <View style={styles.buttonRow}>
               <TouchableOpacity
@@ -1067,7 +1220,7 @@ export default function PostAdScreen() {
                 {isSubmitting ? (
                   <ActivityIndicator color="#ffffff" size="small" />
                 ) : (
-                  <Text style={styles.primaryBtnText}>Ücretsiz İlanı Yayınla</Text>
+            <Text style={styles.primaryBtnText}>{isEditing ? 'Değişiklikleri Kaydet' : 'Ücretsiz İlanı Yayınla'}</Text>
                 )}
               </TouchableOpacity>
             </View>

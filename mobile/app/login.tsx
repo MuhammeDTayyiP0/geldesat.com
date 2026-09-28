@@ -10,9 +10,10 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Linking,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { X, Mail, Lock, User, Eye, EyeOff, CheckCircle } from 'lucide-react-native';
+import { X, Mail, Lock, User, Eye, EyeOff, Check } from 'lucide-react-native';
 import { BrandColors } from '@/constants/Colors';
 import { LogoMark } from '@/src/components/brand/LogoMark';
 import { mobileSignIn, mobileSignUp } from '@/src/api/auth';
@@ -25,14 +26,19 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
 
   const handleSubmit = async () => {
     if (!email.trim() || !email.includes('@')) {
       Alert.alert('Geçersiz Bilgi', 'Lütfen geçerli bir e-posta adresi girin.');
       return;
     }
-    if (password.length < 6) {
-      Alert.alert('Geçersiz Bilgi', 'Şifre en az 6 karakter olmalıdır.');
+    if (password.length < 8) {
+      Alert.alert('Geçersiz Bilgi', 'Şifre en az 8 karakter olmalıdır.');
+      return;
+    }
+    if (mode === 'up' && !termsAccepted) {
+      Alert.alert('Sözleşme onayı gerekli', 'Kayıt olmak için üyelik sözleşmesini ve gizlilik politikasını kabul edin.');
       return;
     }
     if (mode === 'up' && !name.trim()) {
@@ -144,7 +150,7 @@ export default function LoginScreen() {
             <View style={styles.inputWrapper}>
               <Lock size={18} color="#8a929e" style={styles.inputIcon} />
               <TextInput
-                placeholder="En az 6 karakter"
+                placeholder="En az 8 karakter"
                 placeholderTextColor="#8a929e"
                 value={password}
                 onChangeText={setPassword}
@@ -158,6 +164,18 @@ export default function LoginScreen() {
               </TouchableOpacity>
             </View>
           </View>
+
+          {mode === 'up' ? (
+            <TouchableOpacity style={styles.termsAcceptRow} onPress={() => setTermsAccepted((value) => !value)} activeOpacity={0.8}>
+              <View style={[styles.termsCheckbox, termsAccepted && styles.termsCheckboxActive]}>
+                {termsAccepted ? <Check size={14} color="#ffffff" /> : null}
+              </View>
+              <Text style={styles.termsAcceptText}>
+                <Text onPress={() => void Linking.openURL('https://www.geldesat.com/sayfa/uyelik')}>Üyelik sözleşmesini</Text> ve{' '}
+                <Text onPress={() => void Linking.openURL('https://www.geldesat.com/sayfa/gizlilik')}>gizlilik politikasını</Text> okudum, kabul ediyorum.
+              </Text>
+            </TouchableOpacity>
+          ) : null}
 
           {/* Gönder Butonu */}
           <TouchableOpacity
@@ -315,6 +333,10 @@ const styles = StyleSheet.create({
     marginTop: 24,
     paddingHorizontal: 10,
   },
+  termsAcceptRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 9, marginBottom: 14 },
+  termsCheckbox: { width: 20, height: 20, borderRadius: 5, borderWidth: 1, borderColor: '#d8dee6', alignItems: 'center', justifyContent: 'center', backgroundColor: '#ffffff' },
+  termsCheckboxActive: { borderColor: '#1a4fd8', backgroundColor: '#1a4fd8' },
+  termsAcceptText: { flex: 1, fontSize: 12, lineHeight: 18, color: '#5a6270' },
   termsText: {
     fontSize: 11,
     color: '#8a929e',

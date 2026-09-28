@@ -10,14 +10,12 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import { useLocalSearchParams, useRouter, Stack, useFocusEffect } from 'expo-router';
 import { Send, ChevronLeft, ShieldCheck, User } from 'lucide-react-native';
 import { BrandColors } from '@/constants/Colors';
-import {
-  getLocalThread,
-  saveLocalMessage,
-  LocalConversation,
-} from '@/src/store/localStore';
+import { getStoredUser } from '@/src/api/auth';
+import { getMobileConversation, MobileConversation, sendMobileMessage } from '@/src/api/client';
+import { AuthGate } from '@/src/components/auth/AuthGate';
 
 const QUICK_REPLIES = [
   'Merhaba, ilan hâlâ güncel mi?',
@@ -30,19 +28,29 @@ export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
 
-  const [thread, setThread] = useState<LocalConversation | null>(null);
+  const [thread, setThread] = useState<MobileConversation | null>(null);
+  const [userId, setUserId] = useState('');
   const [inputText, setInputText] = useState('');
   const scrollViewRef = useRef<ScrollView>(null);
 
   const loadData = async () => {
     if (!id) return;
-    const data = await getLocalThread(id);
-    setThread(data);
+    const user = await getStoredUser();
+    if (!user?.token) return;
+    setUserId(user.id);
+    try {
+      const response = await getMobileConversation(id, user.token);
+      setThread(response.thread);
+    } catch {
+      setThread(null);
+    }
   };
 
-  useEffect(() => {
-    loadData();
-  }, [id]);
+  useFocusEffect(React.useCallback(() => {
+    void loadData();
+    const timer = setInterval(() => { void loadData(); }, 12_000);
+    return () => clearInterval(timer);
+  }, [id]));
 
   useEffect(() => {
     setTimeout(() => {
@@ -55,25 +63,19 @@ export default function ChatScreen() {
     if (!text || !id) return;
 
     setInputText('');
-    const updated = await saveLocalMessage(id, text, 'me');
-    if (updated) {
-      setThread({ ...updated });
+    const user = await getStoredUser();
+    if (!user?.token) return;
+    try {
+      const response = await sendMobileMessage(id, text, user.token);
+      setInputText('');
+      setThread((current) => current ? { ...current, messages: [...(current.messages || []), response.message] } : current);
+    } catch {
+      setInputText(text);
     }
-
-    // Gerçekçi satıcı yanıt simülasyonu (Alıcı-satıcı akışını test etmek için)
-    setTimeout(async () => {
-      const reply = await saveLocalMessage(
-        id,
-        'Merhaba! Evet, ürün hâlâ satışta. Detaylı bilgi almak isterseniz telefon numaram üzerinden de arayabilirsiniz.',
-        'seller'
-      );
-      if (reply) {
-        setThread({ ...reply });
-      }
-    }, 1200);
   };
 
   return (
+    <AuthGate title="Mesajlaşma" subtitle="Mesajlarınızı görüntülemek için giriş yapın.">
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
@@ -129,7 +131,7 @@ export default function ChatScreen() {
         contentContainerStyle={styles.messagesScroll}
         showsVerticalScrollIndicator={false}>
         {(thread?.messages || []).map((msg) => {
-          const isMe = msg.sender_id === 'me';
+          const isMe = msg.sender_id === userId;
           return (
             <View
               key={msg.id}
@@ -181,6 +183,7 @@ export default function ChatScreen() {
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
+    </AuthGate>
   );
 }
 

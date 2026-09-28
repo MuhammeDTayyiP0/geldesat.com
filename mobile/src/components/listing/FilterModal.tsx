@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View, Modal, ScrollView, TouchableOpacity, TextInput, Switch, SafeAreaView } from 'react-native';
 import { X, RotateCcw, Check } from 'lucide-react-native';
 import { BrandColors } from '@/constants/Colors';
@@ -8,10 +8,16 @@ export interface FilterState {
   maxPrice?: string;
   minYear?: string;
   maxYear?: string;
+  minKm?: string;
+  maxKm?: string;
+  minM2?: string;
+  maxM2?: string;
   fuel?: string;
   gear?: string;
   isUrgentOnly?: boolean;
   city?: string;
+  district?: string;
+  neighborhood?: string;
 }
 
 interface FilterModalProps {
@@ -19,30 +25,51 @@ interface FilterModalProps {
   onClose: () => void;
   onApply: (filters: FilterState) => void;
   initialFilters?: FilterState;
+  showVehicleFilters?: boolean;
+  showPropertyFilters?: boolean;
 }
 
 const FUEL_TYPES = ['Benzin', 'Dizel', 'Hibrit', 'Elektrik', 'LPG'];
 const GEAR_TYPES = ['Otomatik', 'Manuel', 'Yarı Otomatik'];
 
-export function FilterModal({ visible, onClose, onApply, initialFilters = {} }: FilterModalProps) {
+export function FilterModal({ visible, onClose, onApply, initialFilters = {}, showVehicleFilters = false, showPropertyFilters = false }: FilterModalProps) {
   const [minPrice, setMinPrice] = useState(initialFilters.minPrice || '');
   const [maxPrice, setMaxPrice] = useState(initialFilters.maxPrice || '');
   const [minYear, setMinYear] = useState(initialFilters.minYear || '');
   const [maxYear, setMaxYear] = useState(initialFilters.maxYear || '');
+  const [minKm, setMinKm] = useState(initialFilters.minKm || '');
+  const [maxKm, setMaxKm] = useState(initialFilters.maxKm || '');
+  const [minM2, setMinM2] = useState(initialFilters.minM2 || '');
+  const [maxM2, setMaxM2] = useState(initialFilters.maxM2 || '');
   const [selectedFuel, setSelectedFuel] = useState<string | undefined>(initialFilters.fuel);
   const [selectedGear, setSelectedGear] = useState<string | undefined>(initialFilters.gear);
   const [isUrgentOnly, setIsUrgentOnly] = useState(initialFilters.isUrgentOnly || false);
   const [city, setCity] = useState(initialFilters.city || '');
+  const [district, setDistrict] = useState(initialFilters.district || '');
+  const [neighborhood, setNeighborhood] = useState(initialFilters.neighborhood || '');
+
+  useEffect(() => {
+    if (!visible) return;
+    setMinPrice(initialFilters.minPrice || ''); setMaxPrice(initialFilters.maxPrice || '');
+    setMinYear(initialFilters.minYear || ''); setMaxYear(initialFilters.maxYear || '');
+    setMinKm(initialFilters.minKm || ''); setMaxKm(initialFilters.maxKm || '');
+    setMinM2(initialFilters.minM2 || ''); setMaxM2(initialFilters.maxM2 || '');
+    setSelectedFuel(initialFilters.fuel); setSelectedGear(initialFilters.gear);
+    setIsUrgentOnly(initialFilters.isUrgentOnly || false); setCity(initialFilters.city || '');
+    setDistrict(initialFilters.district || ''); setNeighborhood(initialFilters.neighborhood || '');
+  }, [visible, initialFilters]);
 
   const handleReset = () => {
     setMinPrice('');
     setMaxPrice('');
     setMinYear('');
     setMaxYear('');
+    setMinKm(''); setMaxKm(''); setMinM2(''); setMaxM2('');
     setSelectedFuel(undefined);
     setSelectedGear(undefined);
     setIsUrgentOnly(false);
     setCity('');
+    setDistrict(''); setNeighborhood('');
   };
 
   const handleApply = () => {
@@ -51,10 +78,16 @@ export function FilterModal({ visible, onClose, onApply, initialFilters = {} }: 
       maxPrice: maxPrice.trim() || undefined,
       minYear: minYear.trim() || undefined,
       maxYear: maxYear.trim() || undefined,
+      minKm: minKm.trim() || undefined,
+      maxKm: maxKm.trim() || undefined,
+      minM2: minM2.trim() || undefined,
+      maxM2: maxM2.trim() || undefined,
       fuel: selectedFuel,
       gear: selectedGear,
       isUrgentOnly,
       city: city.trim() || undefined,
+      district: district.trim() || undefined,
+      neighborhood: neighborhood.trim() || undefined,
     });
     onClose();
   };
@@ -98,6 +131,8 @@ export function FilterModal({ visible, onClose, onApply, initialFilters = {} }: 
             onChangeText={setCity}
             style={styles.input}
           />
+          <TextInput placeholder="İlçe" placeholderTextColor={BrandColors.textMuted} value={district} onChangeText={setDistrict} style={[styles.input, { marginTop: 8 }]} />
+          <TextInput placeholder="Mahalle" placeholderTextColor={BrandColors.textMuted} value={neighborhood} onChangeText={setNeighborhood} style={[styles.input, { marginTop: 8 }]} />
 
           {/* 3. Fiyat Aralığı (TL) */}
           <Text style={styles.sectionTitle}>Fiyat Aralığı (TL)</Text>
@@ -121,7 +156,7 @@ export function FilterModal({ visible, onClose, onApply, initialFilters = {} }: 
             />
           </View>
 
-          {/* 4. Model Yılı */}
+          {showVehicleFilters ? <>
           <Text style={styles.sectionTitle}>Model Yılı</Text>
           <View style={styles.rangeRow}>
             <TextInput
@@ -142,8 +177,24 @@ export function FilterModal({ visible, onClose, onApply, initialFilters = {} }: 
               style={[styles.input, styles.rangeInput]}
             />
           </View>
+          <Text style={styles.sectionTitle}>Kilometre (KM)</Text>
+          <View style={styles.rangeRow}>
+            <TextInput placeholder="Min KM" placeholderTextColor={BrandColors.textMuted} value={minKm} onChangeText={setMinKm} keyboardType="numeric" style={[styles.input, styles.rangeInput]} />
+            <Text style={styles.rangeSeparator}>-</Text>
+            <TextInput placeholder="Max KM" placeholderTextColor={BrandColors.textMuted} value={maxKm} onChangeText={setMaxKm} keyboardType="numeric" style={[styles.input, styles.rangeInput]} />
+          </View>
+          </> : null}
+          {showPropertyFilters ? <>
+          <Text style={styles.sectionTitle}>Metrekare (m²)</Text>
+          <View style={styles.rangeRow}>
+            <TextInput placeholder="Min m²" placeholderTextColor={BrandColors.textMuted} value={minM2} onChangeText={setMinM2} keyboardType="numeric" style={[styles.input, styles.rangeInput]} />
+            <Text style={styles.rangeSeparator}>-</Text>
+            <TextInput placeholder="Max m²" placeholderTextColor={BrandColors.textMuted} value={maxM2} onChangeText={setMaxM2} keyboardType="numeric" style={[styles.input, styles.rangeInput]} />
+          </View>
+          </> : null}
 
-          {/* 5. Yakıt Tipi */}
+          {showVehicleFilters ? <>
+          {/* Yakıt Tipi */}
           <Text style={styles.sectionTitle}>Yakıt Tipi</Text>
           <View style={styles.chipGrid}>
             {FUEL_TYPES.map((fuel) => {
@@ -176,6 +227,7 @@ export function FilterModal({ visible, onClose, onApply, initialFilters = {} }: 
               );
             })}
           </View>
+          </> : null}
         </ScrollView>
 
         {/* Alt Buton: Sonuçları Göster */}

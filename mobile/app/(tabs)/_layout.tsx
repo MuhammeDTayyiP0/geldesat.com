@@ -1,7 +1,7 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
 import { View, Text, StyleSheet, Platform, TouchableOpacity } from 'react-native';
-import { Home, Search, Plus, MessageCircle, User, Bell } from 'lucide-react-native';
+import { Home, Search, Plus, MessageCircle, User, Bell, MapPin } from 'lucide-react-native';
 import { BrandColors } from '@/constants/Colors';
 import { LogoMark } from '@/src/components/brand/LogoMark';
 
@@ -52,11 +52,14 @@ export default function TabLayout() {
             </View>
           ),
           headerRight: () => (
-            <TouchableOpacity
-              style={{ marginRight: 16 }}
-              onPress={() => router.push('/bildirimler' as any)}>
-              <Bell size={20} color="#0d1117" />
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 18, marginRight: 16 }}>
+              <TouchableOpacity onPress={() => router.push('/harita' as any)} accessibilityLabel="Harita">
+                <MapPin size={20} color="#0d1117" />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => router.push('/bildirimler' as any)} accessibilityLabel="Bildirimler">
+                <Bell size={20} color="#0d1117" />
+              </TouchableOpacity>
+            </View>
           ),
           tabBarIcon: ({ color, focused }) => (
             <Home size={22} color={color} strokeWidth={focused ? 2.4 : 1.8} />

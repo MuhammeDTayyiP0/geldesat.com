@@ -29,7 +29,7 @@ import {
   Briefcase,
   Layers,
 } from 'lucide-react-native';
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { BrandColors } from '@/constants/Colors';
 import { ListingCard, MobileListing } from '@/src/components/listing/ListingCard';
@@ -69,7 +69,7 @@ const ICONS: Record<string, any> = {
 
 export default function SearchPage() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ category?: string }>();
+  const params = useLocalSearchParams<{ category?: string; q?: string; city?: string }>();
 
   const [q, setQ] = useState('');
   const [catSearch, setCatSearch] = useState('');
@@ -84,7 +84,7 @@ export default function SearchPage() {
   const { data: catData } = useQuery({
     queryKey: ['mobileCategories'],
     queryFn: () => getMobileCategories(),
-    initialData: { success: true, categories: EMBEDDED_CATEGORIES },
+    initialData: { success: true, categories: EMBEDDED_CATEGORIES.map((category) => ({ ...category, icon: category.icon ?? null })) },
   });
 
   const allCategories: CategoryItem[] = useMemo(() => {
@@ -92,6 +92,14 @@ export default function SearchPage() {
   }, [catData]);
 
   // Sayfaya URL parametresiyle (örn: ana sayfadan) gelindiyse kategoriyi seç
+  useEffect(() => {
+    if (typeof params.q === 'string') setQ(params.q);
+  }, [params.q]);
+
+  useEffect(() => {
+    if (typeof params.city === 'string') setActiveFilters((filters) => ({ ...filters, city: params.city }));
+  }, [params.city]);
+
   useEffect(() => {
     if (params?.category) {
       const match = allCategories.find(
@@ -140,19 +148,37 @@ export default function SearchPage() {
 
   // 2. Canlı İlanlar (Web veritabanından)
   const activeSlug = currentCategory?.slug;
-  const { data: apiData, isLoading, refetch } = useQuery({
+  const { data: apiData, isLoading, refetch, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
     queryKey: ['mobileSearchListings', q, activeSlug, sortIndex, activeFilters],
-    queryFn: () =>
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) =>
       getMobileListings({
         q: q.trim() || undefined,
         category: activeSlug,
         sort: SORT_OPTIONS[sortIndex].value,
         urgent: activeFilters.isUrgentOnly,
         city: activeFilters.city,
+        district: activeFilters.district,
+        neighborhood: activeFilters.neighborhood,
+        minPrice: activeFilters.minPrice,
+        maxPrice: activeFilters.maxPrice,
+        minYear: activeFilters.minYear,
+        maxYear: activeFilters.maxYear,
+        minKm: activeFilters.minKm,
+        maxKm: activeFilters.maxKm,
+        minM2: activeFilters.minM2,
+        maxM2: activeFilters.maxM2,
+        attrs: {
+          ...(activeFilters.fuel ? { Yakıt: activeFilters.fuel } : {}),
+          ...(activeFilters.gear ? { Vites: activeFilters.gear } : {}),
+        },
+        limit: 20,
+        offset: pageParam,
       }),
+    getNextPageParam: (lastPage) => lastPage.offset + lastPage.limit < lastPage.total ? lastPage.offset + lastPage.limit : undefined,
   });
 
-  const listings: MobileListing[] = (apiData?.listings || []).map((l) => ({
+  const listings: MobileListing[] = (apiData?.pages.flatMap((page) => page.listings) || []).map((l) => ({
     id: l.id,
     title: l.title,
     price: l.price,
@@ -189,11 +215,19 @@ export default function SearchPage() {
 
   const activeFilterCount = [
     activeFilters.city,
+    activeFilters.district,
+    activeFilters.neighborhood,
     activeFilters.minPrice,
     activeFilters.maxPrice,
     activeFilters.isUrgentOnly,
     activeFilters.fuel,
     activeFilters.gear,
+    activeFilters.minYear,
+    activeFilters.maxYear,
+    activeFilters.minKm,
+    activeFilters.maxKm,
+    activeFilters.minM2,
+    activeFilters.maxM2,
   ].filter(Boolean).length;
 
   return (
@@ -351,7 +385,7 @@ export default function SearchPage() {
       {/* 3. Sıralama ve Görünüm Kontrol Çubuğu */}
       <View style={styles.controlBar}>
         <Text style={styles.resultCountText}>
-          {apiData?.total ?? listings.length} ilan bulundu
+          {apiData?.pages[0]?.total ?? listings.length} ilan bulundu
         </Text>
 
         <View style={styles.controlActions}>
@@ -418,6 +452,9 @@ export default function SearchPage() {
               onPress={() => router.push(`/ilan/${item.id}` as any)}
             />
           )}
+          onEndReached={() => { if (hasNextPage && !isFetchingNextPage) void fetchNextPage(); }}
+          onEndReachedThreshold={0.45}
+          ListFooterComponent={isFetchingNextPage ? <ActivityIndicator style={{ padding: 18 }} color={BrandColors.primary} /> : null}
         />
       )}
 
@@ -426,6 +463,8 @@ export default function SearchPage() {
         visible={isFilterModalOpen}
         onClose={() => setIsFilterModalOpen(false)}
         initialFilters={activeFilters}
+        showVehicleFilters={categoryPath[0]?.id === 'vasita'}
+        showPropertyFilters={categoryPath[0]?.id === 'emlak'}
         onApply={(newFilters) => setActiveFilters(newFilters)}
       />
     </View>

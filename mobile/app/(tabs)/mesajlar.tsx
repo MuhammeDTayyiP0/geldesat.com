@@ -12,23 +12,35 @@ import {
 import { useRouter, useFocusEffect } from 'expo-router';
 import { MessageCircle, Search, ChevronRight, X } from 'lucide-react-native';
 import { BrandColors } from '@/constants/Colors';
-import { getLocalConversations, LocalConversation } from '@/src/store/localStore';
+import { getMobileConversations, MobileConversation } from '@/src/api/client';
+import { getStoredUser } from '@/src/api/auth';
 import { AuthGate } from '@/src/components/auth/AuthGate';
 
 export default function MessagesScreen() {
   const router = useRouter();
-  const [conversations, setConversations] = useState<LocalConversation[]>([]);
+  const [conversations, setConversations] = useState<MobileConversation[]>([]);
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
 
   const loadData = useCallback(async () => {
-    const list = await getLocalConversations();
-    setConversations(list);
+    const user = await getStoredUser();
+    if (!user?.token) {
+      setConversations([]);
+      return;
+    }
+    try {
+      const response = await getMobileConversations(user.token);
+      setConversations(response.conversations);
+    } catch {
+      setConversations([]);
+    }
   }, []);
 
   useFocusEffect(
     useCallback(() => {
-      loadData();
+      void loadData();
+      const timer = setInterval(() => { void loadData(); }, 12_000);
+      return () => clearInterval(timer);
     }, [loadData])
   );
 
@@ -38,12 +50,12 @@ export default function MessagesScreen() {
       list = list.filter((c) => c.unread_count > 0);
     }
     if (q.trim()) {
-      const s = q.trim().toLowerCase();
+      const s = q.trim().toLocaleLowerCase('tr');
       list = list.filter(
         (c) =>
-          c.other_user_name.toLowerCase().includes(s) ||
-          c.listing_title.toLowerCase().includes(s) ||
-          c.last_message.toLowerCase().includes(s)
+          c.other_user_name.toLocaleLowerCase('tr').includes(s) ||
+          c.listing_title.toLocaleLowerCase('tr').includes(s) ||
+          c.last_message.toLocaleLowerCase('tr').includes(s)
       );
     }
     return list;
@@ -140,9 +152,10 @@ export default function MessagesScreen() {
                   {item.listing_title}
                 </Text>
                 <Text style={styles.lastMsg} numberOfLines={1}>
-                  {item.last_message}
+                  {item.last_sender_id && item.last_sender_id !== item.other_user_id ? 'Siz: ' : ''}{item.last_message}
                 </Text>
               </View>
+              {item.unread_count > 0 ? <View style={styles.unreadDot} /> : null}
               <ChevronRight size={16} color="#8a929e" />
             </TouchableOpacity>
           )}
@@ -283,6 +296,7 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 8,
   },
+  unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#1a4fd8', marginRight: 4 },
   topMetaRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

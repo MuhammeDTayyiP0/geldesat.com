@@ -9,26 +9,36 @@ import {
   Alert,
 } from 'react-native';
 import { useRouter, useFocusEffect, Stack } from 'expo-router';
-import { LayoutGrid, Plus, ChevronLeft, Trash2, CheckCircle2, EyeOff } from 'lucide-react-native';
+import { LayoutGrid, Plus, ChevronLeft, Trash2, CheckCircle2, EyeOff, Pencil } from 'lucide-react-native';
 import { BrandColors } from '@/constants/Colors';
 import { ListingCard } from '@/src/components/listing/ListingCard';
-import {
-  getMyLocalListings,
-  updateListingStatus,
-  deleteMyLocalListing,
-  LocalListing,
-} from '@/src/store/localStore';
+import { getMobileMyListings, updateMobileListingAction } from '@/src/api/client';
+import { getStoredUser } from '@/src/api/auth';
+import { AuthGate } from '@/src/components/auth/AuthGate';
+
+type MyListing = {
+  id: string; title: string; price: number; currency: string; images: string[]; city: string | null;
+  district: string | null; created_at: string; category_name?: string; status?: string;
+  view_count?: number; expires_at?: string | null;
+};
 
 export default function IlanlarimScreen() {
   const router = useRouter();
-  const [listings, setListings] = useState<LocalListing[]>([]);
+  const [listings, setListings] = useState<MyListing[]>([]);
   const [loading, setLoading] = useState(true);
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const data = await getMyLocalListings();
-    setListings(data);
-    setLoading(false);
+    try {
+      const user = await getStoredUser();
+      if (!user?.token) { setListings([]); return; }
+      const response = await getMobileMyListings(user.token);
+      setListings(response.listings);
+    } catch {
+      setListings([]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useFocusEffect(
@@ -38,8 +48,10 @@ export default function IlanlarimScreen() {
   );
 
   const handleSetStatus = async (id: string, status: 'ACTIVE' | 'SOLD' | 'INACTIVE') => {
-    await updateListingStatus(id, status);
-    loadData();
+    const user = await getStoredUser();
+    if (!user?.token) return;
+    try { await updateMobileListingAction(id, 'status', user.token, status); await loadData(); }
+    catch (error) { Alert.alert('İşlem başarısız', error instanceof Error ? error.message : 'Lütfen tekrar deneyin.'); }
   };
 
   const handleDelete = (id: string) => {
@@ -49,14 +61,17 @@ export default function IlanlarimScreen() {
         text: 'Sil',
         style: 'destructive',
         onPress: async () => {
-          await deleteMyLocalListing(id);
-          loadData();
+          const user = await getStoredUser();
+          if (!user?.token) return;
+          try { await updateMobileListingAction(id, 'delete', user.token); await loadData(); }
+          catch (error) { Alert.alert('İlan silinemedi', error instanceof Error ? error.message : 'Lütfen tekrar deneyin.'); }
         },
       },
     ]);
   };
 
   return (
+    <AuthGate title="İlanlarım" subtitle="İlanlarınızı yönetmek için giriş yapın.">
     <View style={styles.container}>
       <Stack.Screen
         options={{
@@ -105,6 +120,7 @@ export default function IlanlarimScreen() {
           renderItem={({ item }) => {
             const isSold = item.status === 'SOLD';
             const isInactive = item.status === 'INACTIVE';
+            const isPending = item.status === 'PENDING';
             return (
               <View style={styles.listingWrapper}>
                 {/* Durum Rozeti */}
@@ -116,10 +132,10 @@ export default function IlanlarimScreen() {
                       isInactive && styles.statusBadgeInactive,
                     ]}>
                     <Text style={styles.statusBadgeText}>
-                      {isSold ? 'Satıldı' : isInactive ? 'Yayından Kaldırıldı' : 'Yayında'}
+                      {isPending ? 'İncelemede' : isSold ? 'Satıldı' : isInactive ? 'Yayından Kaldırıldı' : item.status === 'REJECTED' ? 'Reddedildi' : 'Yayında'}
                     </Text>
                   </View>
-                  <Text style={styles.viewsText}>{item.view_count || 1} görüntülenme</Text>
+                  <Text style={styles.viewsText}>{item.view_count || 0} görüntülenme</Text>
                 </View>
 
                 {/* İlan Kartı */}
@@ -141,7 +157,11 @@ export default function IlanlarimScreen() {
 
                 {/* Aksiyon Butonları (Web ile Birebir) */}
                 <View style={styles.actionsBar}>
-                  {!isSold && (
+                  <TouchableOpacity style={styles.actionBtn} onPress={() => router.push({ pathname: '/(tabs)/ilan-ver', params: { id: item.id } } as any)}>
+                    <Pencil size={14} color="#1a4fd8" style={{ marginRight: 4 }} />
+                    <Text style={[styles.actionBtnText, { color: '#1a4fd8' }]}>Düzenle</Text>
+                  </TouchableOpacity>
+                  {!isSold && !isPending && item.status !== 'REJECTED' && (
                     <TouchableOpacity
                       style={styles.actionBtn}
                       onPress={() => handleSetStatus(item.id, 'SOLD')}>
@@ -150,7 +170,7 @@ export default function IlanlarimScreen() {
                     </TouchableOpacity>
                   )}
 
-                  {!isInactive ? (
+                  {!isInactive && !isPending && item.status !== 'REJECTED' ? (
                     <TouchableOpacity
                       style={styles.actionBtn}
                       onPress={() => handleSetStatus(item.id, 'INACTIVE')}>
@@ -165,6 +185,15 @@ export default function IlanlarimScreen() {
                     </TouchableOpacity>
                   )}
 
+                  <TouchableOpacity style={styles.actionBtn} onPress={async () => {
+                    const user = await getStoredUser();
+                    if (!user?.token) return;
+                    try { await updateMobileListingAction(item.id, 'renew', user.token); await loadData(); }
+                    catch (error) { Alert.alert('İlan yenilenemedi', error instanceof Error ? error.message : 'Lütfen tekrar deneyin.'); }
+                  }}>
+                    <Text style={styles.actionBtnText}>30 gün yenile</Text>
+                  </TouchableOpacity>
+
                   <TouchableOpacity
                     style={[styles.actionBtn, styles.deleteBtn]}
                     onPress={() => handleDelete(item.id)}>
@@ -177,6 +206,7 @@ export default function IlanlarimScreen() {
         />
       )}
     </View>
+    </AuthGate>
   );
 }
 

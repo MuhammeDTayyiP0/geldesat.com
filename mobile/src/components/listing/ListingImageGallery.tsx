@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, View, Image, Dimensions, FlatList, TouchableOpacity, Modal, SafeAreaView } from 'react-native';
-import { X, Maximize2 } from 'lucide-react-native';
+import { ImageIcon, X, Maximize2 } from 'lucide-react-native';
 import { BrandColors } from '@/constants/Colors';
+import { API_BASE_URL } from '@/src/api/client';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const GALLERY_HEIGHT = 280;
@@ -16,8 +17,8 @@ export function ListingImageGallery({ images, title }: ListingImageGalleryProps)
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   const validImages = images?.length
-    ? images
-    : ['https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&q=80'];
+    ? images.map((image) => image.startsWith('/') ? `${API_BASE_URL}${image}` : image)
+    : [];
 
   const onScroll = (event: any) => {
     const slide = Math.round(event.nativeEvent.contentOffset.x / SCREEN_WIDTH);
@@ -29,34 +30,41 @@ export function ListingImageGallery({ images, title }: ListingImageGalleryProps)
   return (
     <View style={styles.container}>
       {/* Yatay Kaydırılabilir Galeri */}
-      <FlatList
-        data={validImages}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        onMomentumScrollEnd={onScroll}
-        keyExtractor={(_, index) => String(index)}
-        renderItem={({ item }) => (
-          <TouchableOpacity activeOpacity={0.9} onPress={() => setIsFullscreen(true)} style={styles.imageSlide}>
-            <Image source={{ uri: item }} style={styles.galleryImage} resizeMode="cover" />
-          </TouchableOpacity>
-        )}
-      />
+      {validImages.length ? (
+        <FlatList
+          data={validImages}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          onMomentumScrollEnd={onScroll}
+          keyExtractor={(_, index) => String(index)}
+          renderItem={({ item }) => (
+            <TouchableOpacity activeOpacity={0.9} onPress={() => setIsFullscreen(true)} style={styles.imageSlide}>
+              <Image source={{ uri: item }} style={styles.galleryImage} resizeMode="cover" />
+            </TouchableOpacity>
+          )}
+        />
+      ) : (
+        <View style={styles.emptyGallery}>
+          <ImageIcon size={38} color="#8a929e" />
+          <Text style={styles.emptyGalleryText}>Bu ilan için fotoğraf eklenmemiş.</Text>
+        </View>
+      )}
 
       {/* Sayfa Sayacı Rozeti (Örn: 1 / 5) */}
-      <View style={styles.counterBadge}>
+      {validImages.length > 0 ? <View style={styles.counterBadge}>
         <Text style={styles.counterText}>
           {activeIndex + 1} / {validImages.length}
         </Text>
-      </View>
+      </View> : null}
 
       {/* Büyütme İkonu */}
-      <TouchableOpacity style={styles.expandButton} onPress={() => setIsFullscreen(true)}>
+      {validImages.length > 0 ? <TouchableOpacity style={styles.expandButton} onPress={() => setIsFullscreen(true)}>
         <Maximize2 size={16} color="#ffffff" />
-      </TouchableOpacity>
+      </TouchableOpacity> : null}
 
       {/* Tam Ekran Galeri Modalı */}
-      <Modal visible={isFullscreen} transparent={false} animationType="fade">
+      <Modal visible={isFullscreen && validImages.length > 0} transparent={false} animationType="fade">
         <SafeAreaView style={styles.fullscreenContainer}>
           {/* Üst Bar: Kapat Butonu ve Başlık */}
           <View style={styles.fullscreenHeader}>
@@ -107,6 +115,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  emptyGallery: {
+    width: '100%',
+    height: GALLERY_HEIGHT,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#e8ecf2',
+  },
+  emptyGalleryText: { color: '#5a6270', fontSize: 13 },
   galleryImage: {
     width: SCREEN_WIDTH,
     height: GALLERY_HEIGHT,

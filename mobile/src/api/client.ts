@@ -12,6 +12,8 @@ export interface ApiListingResponse {
   total: number;
   limit: number;
   offset: number;
+  page?: number;
+  pages?: number;
   listings: Array<{
     id: string;
     slug: string;
@@ -21,19 +23,30 @@ export interface ApiListingResponse {
     currency: string;
     city: string | null;
     district: string | null;
+    neighborhood?: string | null;
+    category_id?: string;
     images: string[];
     attrs: Record<string, string | number>;
     created_at: string;
     category_name?: string;
     category_slug?: string;
     seller_name?: string;
+    user_id?: string;
+    store_name?: string;
+    store_slug?: string;
+    lat?: number | null;
+    lng?: number | null;
     boosts?: string[];
     featured_until?: string | null;
+    status?: string;
+    view_count?: number;
+    expires_at?: string | null;
   }>;
 }
 
 export interface ApiCategoryResponse {
   success: boolean;
+  counts?: Record<string, number>;
   categories: Array<{
     id: string;
     name: string;
@@ -42,6 +55,56 @@ export interface ApiCategoryResponse {
     icon: string | null;
     sort_order: number;
   }>;
+}
+
+export interface MobileAttribute {
+  id: string;
+  name: string;
+  type: 'TEXT' | 'NUMBER' | 'SELECT' | 'BOOLEAN' | 'MULTI' | string;
+  options: string[] | null;
+  unit: string | null;
+  required: boolean;
+}
+
+export async function getMobileCategoryAttributes(categoryId: string) {
+  return mobileRequest<{ success: true; attributes: MobileAttribute[] }>(
+    `/api/mobile/category-attributes?categoryId=${encodeURIComponent(categoryId)}`,
+  );
+}
+
+export interface MobileSellerProfile {
+  id: string;
+  name: string;
+  bio: string;
+  city: string;
+  since: string;
+  listing_count: number;
+  rating_avg: number;
+  rating_count: number;
+  store: { name: string; slug: string; plan: string } | null;
+  reviews: Array<{ id: string; rating: number; comment: string; reviewer: string; at: string }>;
+}
+
+export async function getMobileSeller(id: string) {
+  return mobileRequest<{ success: true; seller: MobileSellerProfile; listings: ApiListingResponse['listings'] }>(
+    `/api/mobile/sellers/${encodeURIComponent(id)}`,
+  );
+}
+
+export interface MobileStore {
+  id: string;
+  user_id: string;
+  name: string;
+  slug: string;
+  description: string;
+  city: string;
+  plan: string;
+}
+
+export async function getMobileStore(slug: string) {
+  return mobileRequest<{ success: true; store: MobileStore; listings: ApiListingResponse['listings'] }>(
+    `/api/mobile/stores/${encodeURIComponent(slug)}`,
+  );
 }
 
 export interface ApiConfigResponse {
@@ -149,6 +212,17 @@ export async function getMobileListings(params: {
   featured?: boolean;
   city?: string;
   sort?: string;
+  district?: string;
+  neighborhood?: string;
+  minPrice?: string | number;
+  maxPrice?: string | number;
+  minYear?: string | number;
+  maxYear?: string | number;
+  minKm?: string | number;
+  maxKm?: string | number;
+  minM2?: string | number;
+  maxM2?: string | number;
+  attrs?: Record<string, string | string[] | number>;
   limit?: number;
   offset?: number;
 } = {}): Promise<ApiListingResponse> {
@@ -158,7 +232,14 @@ export async function getMobileListings(params: {
   if (params.urgent) query.append('urgent', 'true');
   if (params.featured) query.append('featured', 'true');
   if (params.city) query.append('city', params.city);
+  if (params.district) query.append('district', params.district);
+  if (params.neighborhood) query.append('neighborhood', params.neighborhood);
   if (params.sort) query.append('sort', params.sort);
+  for (const key of ['minPrice', 'maxPrice', 'minYear', 'maxYear', 'minKm', 'maxKm', 'minM2', 'maxM2'] as const) {
+    const value = params[key];
+    if (value !== undefined && String(value).trim()) query.append(key, String(value));
+  }
+  if (params.attrs && Object.keys(params.attrs).length) query.append('attrs', JSON.stringify(params.attrs));
   if (params.limit) query.append('limit', String(params.limit));
   if (params.offset) query.append('offset', String(params.offset));
 
@@ -182,6 +263,92 @@ export async function getMobileListings(params: {
       listings: [],
     };
   }
+}
+
+async function mobileRequest<T>(path: string, token?: string, init: RequestInit = {}): Promise<T> {
+  const headers = new Headers(init.headers);
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+  const response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data?.success === false) throw new Error(data?.error || 'İstek tamamlanamadı.');
+  return data as T;
+}
+
+export async function getMobileListing(id: string, token?: string) {
+  return mobileRequest<{ success: true; listing: ApiListingResponse['listings'][number] & { status: string; expires_at?: string | null }; isFavorite: boolean; isOwner: boolean }>(`/api/mobile/listings/${encodeURIComponent(id)}`, token);
+}
+
+export async function revealMobileListingPhone(id: string, token: string) {
+  return mobileRequest<{ success: true; phone: string }>(`/api/mobile/listings/${encodeURIComponent(id)}`, token, { method: 'POST' });
+}
+
+export async function getMobileFavorites(token: string) {
+  return mobileRequest<{ success: true; listings: ApiListingResponse['listings'] }>('/api/mobile/favorites', token);
+}
+
+export async function toggleMobileFavorite(listingId: string, token: string) {
+  return mobileRequest<{ success: true; favorite: boolean }>('/api/mobile/favorites', token, { method: 'POST', body: JSON.stringify({ listingId }) });
+}
+
+export interface MobileConversation {
+  id: string;
+  listing_id: string;
+  listing_title: string;
+  listing_image?: string | null;
+  listing_price?: number | null;
+  currency?: string;
+  other_user_name: string;
+  other_user_id?: string;
+  last_message: string;
+  last_sender_id?: string;
+  updated_at: string;
+  unread_count: number;
+  messages?: Array<{ id: string; sender_id: string; content: string; created_at: string; read_at?: string | null }>;
+}
+
+export async function getMobileConversations(token: string) {
+  return mobileRequest<{ success: true; conversations: MobileConversation[] }>('/api/mobile/conversations', token);
+}
+
+export async function startMobileConversation(listingId: string, content: string, token: string) {
+  return mobileRequest<{ success: true; conversationId: string }>('/api/mobile/conversations', token, { method: 'POST', body: JSON.stringify({ listingId, content }) });
+}
+
+export async function getMobileConversation(id: string, token: string) {
+  return mobileRequest<{ success: true; thread: MobileConversation }>(`/api/mobile/conversations/${encodeURIComponent(id)}`, token);
+}
+
+export async function sendMobileMessage(id: string, content: string, token: string) {
+  return mobileRequest<{ success: true; message: NonNullable<MobileConversation['messages']>[number] }>(`/api/mobile/conversations/${encodeURIComponent(id)}`, token, { method: 'POST', body: JSON.stringify({ content }) });
+}
+
+export interface MobileNotification {
+  id: string; type: string; title: string; body: string; link: string; read: boolean; created_at: string;
+}
+
+export async function getMobileNotifications(token: string) {
+  return mobileRequest<{ success: true; notifications: MobileNotification[]; unread: number }>('/api/mobile/notifications', token);
+}
+
+export async function markMobileNotificationsRead(token: string) {
+  return mobileRequest<{ success: true }>('/api/mobile/notifications', token, { method: 'POST' });
+}
+
+export async function getMobileMyListings(token: string) {
+  return mobileRequest<{ success: true; listings: ApiListingResponse['listings'] }>('/api/mobile/my-listings', token);
+}
+
+export async function getMobileMyListing(id: string, token: string) {
+  return mobileRequest<{ success: true; listing: ApiListingResponse['listings'][number] & { status: string; phone?: string } }>(`/api/mobile/my-listings/${encodeURIComponent(id)}`, token);
+}
+
+export async function createMobileListing(listing: Record<string, unknown>, token: string) {
+  return mobileRequest<{ success: true; id: string; slug: string; status: string }>('/api/mobile/my-listings', token, { method: 'POST', body: JSON.stringify(listing) });
+}
+
+export async function updateMobileListingAction(id: string, action: 'status' | 'delete' | 'renew', token: string, status?: string) {
+  return mobileRequest<{ success: true }>(`/api/mobile/my-listings/${encodeURIComponent(id)}`, token, { method: 'POST', body: JSON.stringify({ action, status }) });
 }
 
 import { EMBEDDED_CATEGORIES } from '../data/categoriesData';
@@ -212,6 +379,7 @@ export async function getMobileCategories(): Promise<ApiCategoryResponse> {
       icon: c.icon ?? null,
       sort_order: c.sort_order,
     })),
+    counts: {},
   };
 }
 

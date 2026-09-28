@@ -13,11 +13,23 @@ export const Route = createFileRoute("/api/mobile/categories")({
              from categories
              order by parent_id nulls first, sort_order asc, name asc`,
           );
+          const countRows = await sql.query<{ category_id: string; n: number }>(
+            `with recursive tree(root_id, category_id) as (
+               select id, id from categories
+               union all
+               select tree.root_id, c.id from categories c join tree on c.parent_id=tree.category_id
+             )
+             select tree.root_id as category_id, count(l.id)::int as n
+             from tree left join listings l on l.category_id=tree.category_id and l.status='ACTIVE'
+               and (l.expires_at is null or l.expires_at>now())
+             group by tree.root_id`,
+          );
 
           return new Response(
             JSON.stringify({
               success: true,
               categories: rows,
+              counts: Object.fromEntries(countRows.map((row) => [row.category_id, row.n])),
             }),
             {
               status: 200,

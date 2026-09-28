@@ -137,7 +137,7 @@ export async function mobileSignUp(
         errorMsg.includes('password') ||
         data?.code === 'PASSWORD_TOO_SHORT'
       ) {
-        errorMsg = 'Şifre en az 6 karakter olmalıdır.';
+        errorMsg = 'Şifre en az 8 karakter olmalıdır.';
       } else if (errorMsg.includes('Origin') || errorMsg.includes('origin')) {
         errorMsg = 'Güvenlik doğrulaması başarısız oldu. Lütfen tekrar deneyin.';
       }

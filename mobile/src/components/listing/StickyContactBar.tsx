@@ -11,6 +11,7 @@ interface StickyContactBarProps {
   isFavorite?: boolean;
   onFavoriteToggle?: () => void;
   onChatPress?: () => void;
+  onCallPress?: () => void;
 }
 
 export function StickyContactBar({
@@ -21,17 +22,13 @@ export function StickyContactBar({
   isFavorite = false,
   onFavoriteToggle,
   onChatPress,
+  onCallPress,
 }: StickyContactBarProps) {
   const formattedPrice = new Intl.NumberFormat('tr-TR').format(price) + ' ' + currency;
 
   const handleCall = () => {
-    if (phone) {
-      const clean = phone.replace(/[^0-9+]/g, '');
-      Linking.openURL(`tel:${clean}`);
-    } else {
-      // Varsayılan telefon numarası veya bilgi
-      Linking.openURL('tel:08500000000');
-    }
+    if (onCallPress) onCallPress();
+    else if (phone) Linking.openURL(`tel:${phone.replace(/[^0-9+]/g, '')}`);
   };
 
   const handleWhatsApp = () => {

@@ -16,6 +16,9 @@ export interface LocalListing {
   category_name?: string;
   category_slug?: string;
   seller_name?: string;
+  seller_id?: string;
+  store_name?: string;
+  store_slug?: string;
   view_count?: number;
   status?: 'ACTIVE' | 'PENDING' | 'SOLD' | 'INACTIVE';
   is_urgent?: boolean;

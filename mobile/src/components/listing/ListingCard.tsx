@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, Image, TouchableOpacity, Dimensions } from 'react-native';
+import { StyleSheet, Text, View, Image, TouchableOpacity, Dimensions, Alert } from 'react-native';
+import { useEffect } from 'react';
 import { Heart, MapPin, ImageIcon } from 'lucide-react-native';
 import { BrandColors } from '@/constants/Colors';
+import { getStoredUser } from '@/src/api/auth';
+import { API_BASE_URL, toggleMobileFavorite } from '@/src/api/client';
 
 const { width } = Dimensions.get('window');
 const GRID_CARD_WIDTH = (width - 36) / 2;
@@ -27,6 +30,7 @@ interface ListingCardProps {
   variant?: 'grid' | 'list' | 'feed';
   onPress?: () => void;
   onFavoritePress?: (id: string, isFav: boolean) => void;
+  isFavorite?: boolean;
 }
 
 function formatPrice(amount: number, currency: string = 'TL') {
@@ -45,18 +49,39 @@ export function ListingCard({
   variant = 'grid',
   onPress,
   onFavoritePress,
+  isFavorite: initialFavorite = false,
 }: ListingCardProps) {
-  const [isFavorite, setIsFavorite] = useState(false);
+  const [isFavorite, setIsFavorite] = useState(initialFavorite);
+  const [favoriteBusy, setFavoriteBusy] = useState(false);
 
-  const img = listing.images?.[0];
+  useEffect(() => setIsFavorite(initialFavorite), [initialFavorite]);
+
+  const rawImage = listing.images?.[0];
+  const img = rawImage?.startsWith('/') ? `${API_BASE_URL}${rawImage}` : rawImage;
   const locationText = [listing.city, listing.district].filter(Boolean).join(' / ') || 'Konum yok';
   const attrPills = listing.attrs ? Object.values(listing.attrs).slice(0, 3) : [];
 
-  const handleFavoriteToggle = () => {
-    const nextState = !isFavorite;
-    setIsFavorite(nextState);
+  const handleFavoriteToggle = async () => {
+    if (favoriteBusy) return;
     if (onFavoritePress) {
+      const nextState = !isFavorite;
+      setIsFavorite(nextState);
       onFavoritePress(listing.id, nextState);
+      return;
+    }
+    const user = await getStoredUser();
+    if (!user?.token) {
+      Alert.alert('Giriş gerekli', 'Favori ilanlarınızı hesabınızla eşitlemek için giriş yapın.');
+      return;
+    }
+    setFavoriteBusy(true);
+    try {
+      const result = await toggleMobileFavorite(listing.id, user.token);
+      setIsFavorite(result.favorite);
+    } catch (error) {
+      Alert.alert('Favori güncellenemedi', error instanceof Error ? error.message : 'Lütfen tekrar deneyin.');
+    } finally {
+      setFavoriteBusy(false);
     }
   };
 
@@ -88,7 +113,8 @@ export function ListingCard({
       {/* Web'deki favori butonu */}
       <TouchableOpacity
         style={styles.favButton}
-        onPress={handleFavoriteToggle}
+        onPress={(event) => { event.stopPropagation(); void handleFavoriteToggle(); }}
+        disabled={favoriteBusy}
         activeOpacity={0.8}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
         <Heart
