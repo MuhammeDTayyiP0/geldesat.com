@@ -99,6 +99,7 @@ function PostForm() {
   const [phone, setPhone] = useState("");
   const [images, setImages] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [storeId, setStoreId] = useState<string | undefined>();
   const [loaded, setLoaded] = useState(!editId);
   const keepValuesFor = useRef<string | null>(null);
@@ -169,8 +170,6 @@ function PostForm() {
 
   if (isPending || (user && !loaded)) return <BrandSpinner fullPage text="İlan formu hazırlanıyor…" />;
   if (!user) return <RedirectToSignIn />;
-
-  const [uploading, setUploading] = useState(false);
 
   async function onFiles(files: FileList | null) {
     if (!files) return;

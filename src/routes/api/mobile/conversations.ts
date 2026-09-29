@@ -3,16 +3,8 @@ import { getSql } from "@/lib/db";
 import { getMobileUserId } from "@/lib/server/mobile-auth";
 import { asIso, asJson, newId, num, LISTING_PHOTO_MSG } from "@/lib/utils";
 import { ensureProfile, notify, rateLimit } from "@/lib/server/helpers";
-import { broadcastChatMessage, broadcastChatRead, broadcastUserInbox } from "@/lib/server/chat-bus";
-
-async function isBlocked(a: string, b: string) {
-  const sql = await getSql();
-  const rows = await sql.query<{ id: string }>(
-    `select id from user_blocks where (blocker_id=$1 and blocked_id=$2) or (blocker_id=$2 and blocked_id=$1) limit 1`,
-    [a, b],
-  );
-  return Boolean(rows[0]);
-}
+import { broadcastChatMessage, broadcastUserInbox } from "@/lib/server/chat-bus";
+import { hasUserBlock } from "@/lib/server/user-blocks";
 
 export const Route = createFileRoute("/api/mobile/conversations")({
   server: {
@@ -70,7 +62,7 @@ export const Route = createFileRoute("/api/mobile/conversations")({
           );
           if (!listing[0]) return Response.json({ success: false, error: "İlan bulunamadı." }, { status: 404 });
           if (listing[0].user_id === userId) return Response.json({ success: false, error: "Kendi ilanınıza mesaj gönderemezsiniz." }, { status: 400 });
-          if (await isBlocked(userId, listing[0].user_id)) return Response.json({ success: false, error: "Bu kullanıcıyla mesajlaşamazsınız." }, { status: 403 });
+          if (await hasUserBlock(sql, userId, listing[0].user_id)) return Response.json({ success: false, error: "Bu kullanıcıyla mesajlaşamazsınız." }, { status: 403 });
           const provisionalId = newId("cnv");
           await sql.query(
             `insert into conversations (id,listing_id,buyer_id,seller_id) values ($1,$2,$3,$4)
