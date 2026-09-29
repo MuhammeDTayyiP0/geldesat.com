@@ -19,6 +19,7 @@ export interface FilterState {
   isUrgentOnly?: boolean;
   city?: string;
   district?: string;
+  neighborhood?: string;
 }
 
 interface FilterModalProps {
@@ -44,6 +45,7 @@ export function FilterModal({ visible, onClose, onApply, initialFilters = {}, sh
   const [isUrgentOnly, setIsUrgentOnly] = useState(initialFilters.isUrgentOnly || false);
   const [city, setCity] = useState(initialFilters.city || '');
   const [district, setDistrict] = useState(initialFilters.district || '');
+  const [neighborhood, setNeighborhood] = useState(initialFilters.neighborhood || '');
   const [locationMode, setLocationMode] = useState<'city' | 'district' | null>(null);
   const [locationSearch, setLocationSearch] = useState('');
 
@@ -56,6 +58,7 @@ export function FilterModal({ visible, onClose, onApply, initialFilters = {}, sh
     setSelectedAttrs(initialFilters.attrs || {});
     setIsUrgentOnly(initialFilters.isUrgentOnly || false); setCity(initialFilters.city || '');
     setDistrict(initialFilters.district || '');
+    setNeighborhood(initialFilters.neighborhood || '');
     setLocationMode(null); setLocationSearch('');
   }, [visible, initialFilters]);
 
@@ -69,6 +72,7 @@ export function FilterModal({ visible, onClose, onApply, initialFilters = {}, sh
     setIsUrgentOnly(false);
     setCity('');
     setDistrict('');
+    setNeighborhood('');
   };
 
   const handleApply = () => {
@@ -85,6 +89,7 @@ export function FilterModal({ visible, onClose, onApply, initialFilters = {}, sh
       isUrgentOnly,
       city: city.trim() || undefined,
       district: district.trim() || undefined,
+      neighborhood: neighborhood.trim() || undefined,
     });
     onClose();
   };
@@ -131,6 +136,15 @@ export function FilterModal({ visible, onClose, onApply, initialFilters = {}, sh
           <TouchableOpacity style={[styles.locationSelectBox, !city && styles.locationSelectDisabled]} disabled={!city} onPress={() => { setLocationMode('district'); setLocationSearch(''); }}>
             <MapPin size={17} color={city ? BrandColors.primary : '#aab2bd'} /><Text style={[styles.locationSelectText, !district && styles.locationPlaceholder]}>{district || (city ? 'Tüm ilçeler' : 'Önce il seçin')}</Text><ChevronRight size={17} color="#8993a2" />
           </TouchableOpacity>
+          <TextInput
+            value={neighborhood}
+            onChangeText={setNeighborhood}
+            editable={Boolean(district)}
+            placeholder={district ? 'Mahalle adı' : 'Önce ilçe seçin'}
+            placeholderTextColor={BrandColors.textMuted}
+            style={[styles.input, !district && styles.locationSelectDisabled]}
+            accessibilityLabel="Mahalle"
+          />
 
           {/* 3. Fiyat Aralığı (TL) */}
           <Text style={styles.sectionTitle}>Fiyat Aralığı (TL)</Text>

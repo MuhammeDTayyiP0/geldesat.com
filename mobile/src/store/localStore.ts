@@ -99,7 +99,7 @@ export async function saveMyLocalListing(listing: LocalListing): Promise<void> {
     const filtered = list.filter((l) => l.id !== listing.id);
     filtered.unshift(listing);
     await SecureStore.setItemAsync(MY_LISTINGS_KEY, JSON.stringify(filtered));
-  } catch {}
+  } catch { /* Legacy local cache is best-effort. */ }
 }
 
 export async function updateListingStatus(id: string, status: 'ACTIVE' | 'SOLD' | 'INACTIVE'): Promise<void> {
@@ -107,7 +107,7 @@ export async function updateListingStatus(id: string, status: 'ACTIVE' | 'SOLD' 
     const list = await getMyLocalListings();
     const updated = list.map((l) => (l.id === id ? { ...l, status } : l));
     await SecureStore.setItemAsync(MY_LISTINGS_KEY, JSON.stringify(updated));
-  } catch {}
+  } catch { /* Legacy local cache is best-effort. */ }
 }
 
 export async function deleteMyLocalListing(id: string): Promise<void> {
@@ -115,7 +115,7 @@ export async function deleteMyLocalListing(id: string): Promise<void> {
     const list = await getMyLocalListings();
     const filtered = list.filter((l) => l.id !== id);
     await SecureStore.setItemAsync(MY_LISTINGS_KEY, JSON.stringify(filtered));
-  } catch {}
+  } catch { /* Legacy local cache is best-effort. */ }
 }
 
 // ================= MESAJLAR & KONUŞMALAR =================

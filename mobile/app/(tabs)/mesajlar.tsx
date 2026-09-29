@@ -8,6 +8,8 @@ import {
   TouchableOpacity,
   FlatList,
   Image,
+  AppState,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { MessageCircle, Search, ChevronRight, X } from 'lucide-react-native';
@@ -21,26 +23,40 @@ export default function MessagesScreen() {
   const [conversations, setConversations] = useState<MobileConversation[]>([]);
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   const loadData = useCallback(async () => {
-    const user = await getStoredUser();
-    if (!user?.token) {
-      setConversations([]);
-      return;
-    }
     try {
+      const user = await getStoredUser();
+      if (!user?.token) {
+        setConversations([]);
+        setLoadError('');
+        return;
+      }
       const response = await getMobileConversations(user.token);
       setConversations(response.conversations);
-    } catch {
-      setConversations([]);
+      setLoadError('');
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : 'Mesajlar yüklenemedi.');
+    } finally {
+      setLoading(false);
     }
   }, []);
 
   useFocusEffect(
     useCallback(() => {
-      void loadData();
-      const timer = setInterval(() => { void loadData(); }, 12_000);
-      return () => clearInterval(timer);
+      let focused = true;
+      let inFlight = false;
+      const poll = async () => {
+        if (!focused || inFlight || AppState.currentState !== 'active') return;
+        inFlight = true;
+        try { await loadData(); } finally { inFlight = false; }
+      };
+      void poll();
+      const timer = setInterval(() => { void poll(); }, 20_000);
+      const appState = AppState.addEventListener('change', (state) => { if (state === 'active') void poll(); });
+      return () => { focused = false; clearInterval(timer); appState.remove(); };
     }, [loadData])
   );
 
@@ -103,7 +119,17 @@ export default function MessagesScreen() {
       </View>
 
       {/* 2. Konuşma Listesi veya Web ile Birebir Boş Durum */}
-      {filtered.length === 0 ? (
+      {loading ? (
+        <View style={styles.emptyCard}><ActivityIndicator color={BrandColors.primary} /></View>
+      ) : loadError ? (
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyTitle}>Mesajlar yüklenemedi</Text>
+          <Text style={styles.emptyDesc}>{loadError}</Text>
+          <TouchableOpacity style={styles.browseBtn} onPress={() => void loadData()} accessibilityRole="button">
+            <Text style={styles.browseBtnText}>Yeniden Dene</Text>
+          </TouchableOpacity>
+        </View>
+      ) : filtered.length === 0 ? (
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <View style={styles.emptyCard}>
             <View style={styles.iconCircle}>

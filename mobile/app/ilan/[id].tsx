@@ -17,20 +17,15 @@ import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import {
   MapPin,
   Calendar,
-  Eye,
   Share2,
   ShieldCheck,
-  ChevronRight,
   AlertCircle,
-  Heart,
   Pencil,
-  Phone,
   MessageCircle,
   Star,
   Flag,
   Navigation,
 } from 'lucide-react-native';
-import { BrandColors } from '@/constants/Colors';
 import { ListingImageGallery } from '@/src/components/listing/ListingImageGallery';
 import { StickyContactBar } from '@/src/components/listing/StickyContactBar';
 import {
@@ -161,7 +156,7 @@ export default function IlanDetayScreen() {
       await Share.share({
         message: `${listing.title} - https://www.geldesat.com/ilan/${listing.id}`,
       });
-    } catch {}
+    } catch { /* The share sheet may be unavailable on a simulator. */ }
   };
 
   const handleReport = async () => {

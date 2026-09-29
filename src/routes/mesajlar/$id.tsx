@@ -83,6 +83,36 @@ function Thread() {
   const lastRef = useRef<string | undefined>(undefined);
   const stickRef = useRef(true);
 
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+
+    const initialHeight = window.innerHeight;
+    const syncViewport = () => {
+      document.documentElement.style.setProperty("--chat-viewport-height", `${Math.round(viewport.height)}px`);
+      document.documentElement.style.setProperty("--chat-viewport-offset", `${Math.round(viewport.offsetTop)}px`);
+      const inputFocused = document.activeElement === box.current;
+      const keyboardOpen = inputFocused && viewport.height < initialHeight - 100;
+      document.documentElement.style.setProperty(
+        "--chat-bottom-inset",
+        keyboardOpen ? "0px" : "env(safe-area-inset-bottom, 0px)",
+      );
+    };
+
+    syncViewport();
+    viewport.addEventListener("resize", syncViewport);
+    viewport.addEventListener("scroll", syncViewport);
+    window.addEventListener("resize", syncViewport);
+    return () => {
+      viewport.removeEventListener("resize", syncViewport);
+      viewport.removeEventListener("scroll", syncViewport);
+      window.removeEventListener("resize", syncViewport);
+      document.documentElement.style.removeProperty("--chat-viewport-height");
+      document.documentElement.style.removeProperty("--chat-viewport-offset");
+      document.documentElement.style.removeProperty("--chat-bottom-inset");
+    };
+  }, []);
+
   const userId = user?.id;
 
   useEffect(() => {
@@ -308,7 +338,7 @@ function Thread() {
   let lastSender = "";
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-bg">
+    <div className="flex min-h-0 flex-1 flex-col bg-bg" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
       {/* 1. Üst Başlık: Kullanıcı Profili ve Eylemler */}
       <div className="flex items-center gap-2 border-b border-border bg-surface px-3 py-2.5 shadow-2xs">
         <Link
@@ -603,7 +633,7 @@ function Thread() {
         </div>
       ) : (
         <form
-          className="flex items-end gap-2 border-t border-border bg-surface p-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+          className="chat-composer flex items-end gap-2 border-t border-border bg-surface p-2.5"
           onSubmit={(e) => {
             e.preventDefault();
             void submit();

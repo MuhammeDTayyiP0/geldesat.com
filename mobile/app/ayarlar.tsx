@@ -1,11 +1,12 @@
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Stack, useFocusEffect, useRouter } from 'expo-router';
-import { ChevronRight, KeyRound, LogOut, Mail, Search, ShieldCheck, Store, Trash2, UserRound, X } from 'lucide-react-native';
+import { Bell, ChevronRight, KeyRound, LogOut, Mail, Search, ShieldCheck, Store, Trash2, UserRound, X } from 'lucide-react-native';
 import { AuthGate } from '@/src/components/auth/AuthGate';
 import { getStoredUser, mobileSignOut, MobileUser } from '@/src/api/auth';
-import { deleteMobileSavedSearch, getMobileProfile, MobileProfile, mobileChangePassword, updateMobileProfile, updateMobileStore } from '@/src/api/client';
+import { deleteMobileSavedSearch, getMobileProfile, MobileProfile, mobileChangePassword, registerMobilePushToken, unregisterMobilePushToken, updateMobileProfile, updateMobileStore } from '@/src/api/client';
 import { TURKEY_CITIES } from '@/src/data/locations';
+import { clearRegisteredPushToken, getRegisteredPushToken, registerForPushNotificationsAsync } from '@/src/services/notifications';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -23,10 +24,13 @@ export default function ProfileScreen() {
   const [securityBusy, setSecurityBusy] = useState(false);
   const [cityPickerOpen, setCityPickerOpen] = useState(false);
   const [citySearch, setCitySearch] = useState('');
+  const [pushToken, setPushToken] = useState<string | null>(null);
+  const [pushBusy, setPushBusy] = useState(false);
 
   const loadUser = useCallback(async () => {
     const user = await getStoredUser();
     setCurrentUser(user);
+    setPushToken(await getRegisteredPushToken());
     if (!user?.token) {
       setProfile(null);
       return;
@@ -135,6 +139,32 @@ export default function ProfileScreen() {
     ]);
   };
 
+  const handlePushToggle = async () => {
+    if (!currentUser?.token || pushBusy) return;
+    setPushBusy(true);
+    try {
+      if (pushToken) {
+        await unregisterMobilePushToken(currentUser.token, pushToken);
+        await clearRegisteredPushToken();
+        setPushToken(null);
+        Alert.alert('Bildirimler kapatıldı', 'Bu cihaz için push bildirimleri kapatıldı.');
+      } else {
+        const registered = await registerForPushNotificationsAsync();
+        if (!registered) {
+          Alert.alert('İzin gerekli', 'Push bildirimlerini açmak için cihaz ayarlarından GeldeSat bildirimlerine izin verin.');
+          return;
+        }
+        await registerMobilePushToken(currentUser.token, registered, Platform.OS === 'ios' ? 'ios' : 'android');
+        setPushToken(registered);
+        Alert.alert('Bildirimler açıldı', 'Mesaj ve ilan güncellemelerini bu cihazda alacaksınız.');
+      }
+    } catch (error) {
+      Alert.alert('İşlem tamamlanamadı', error instanceof Error ? error.message : 'Lütfen tekrar deneyin.');
+    } finally {
+      setPushBusy(false);
+    }
+  };
+
   return (
     <AuthGate
       title="Ayarlar"
@@ -161,6 +191,17 @@ export default function ProfileScreen() {
             <Text style={styles.statValue}>{profileBusy ? '…' : profile?.rating_avg ? profile.rating_avg.toFixed(1) : '—'}</Text>
             <Text style={styles.statLabel}>Satıcı Puanı</Text>
           </View>
+        </View>
+
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeading}>
+            <Bell size={19} color="#1a4fd8" />
+            <Text style={styles.sectionTitle}>Push Bildirimleri</Text>
+          </View>
+          <Text style={styles.sectionDescription}>Yeni mesaj ve ilan güncellemelerini bu cihazda alın.</Text>
+          <TouchableOpacity style={styles.secondaryButton} onPress={() => void handlePushToggle()} disabled={pushBusy || !currentUser?.token} activeOpacity={0.8} accessibilityRole="button">
+            {pushBusy ? <ActivityIndicator color="#1a4fd8" /> : <Text style={styles.secondaryButtonText}>{pushToken ? 'Bu Cihazda Kapat' : 'Bildirimleri Aç'}</Text>}
+          </TouchableOpacity>
         </View>
 
         <View style={styles.sectionCard}>
@@ -233,7 +274,11 @@ export default function ProfileScreen() {
             <View style={styles.emptySearches}><Text style={styles.emptySearchesText}>Henüz kayıtlı aramanız bulunmuyor.</Text></View>
           ) : savedSearches.map((item) => (
             <View key={item.id} style={styles.savedSearchRow}>
-              <TouchableOpacity style={styles.savedSearchMain} onPress={() => router.push({ pathname: '/(tabs)/kategoriler', params: { q: item.query || '', filters: item.filters || '' } } as any)}>
+              <TouchableOpacity style={styles.savedSearchMain} onPress={() => {
+                let category = '';
+                try { category = JSON.parse(item.filters)?.category || ''; } catch { /* Keep the saved query even if old filter data is malformed. */ }
+                router.push({ pathname: '/(tabs)/kategoriler', params: { q: item.query || '', filters: item.filters || '', category } } as any);
+              }}>
                 <Search size={16} color="#1a4fd8" />
                 <Text style={styles.savedSearchLabel} numberOfLines={1}>{item.label || item.query || 'Kayıtlı Arama'}</Text>
               </TouchableOpacity>

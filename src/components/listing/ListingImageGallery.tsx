@@ -252,7 +252,7 @@ export function ListingImageGallery({ images, title, categoryName }: ListingImag
             >
               {/* Top Navigation Bar */}
               <div
-                className="relative z-50 flex h-16 w-full items-center justify-between px-4 sm:px-6 bg-gradient-to-b from-black/90 via-black/60 to-transparent pointer-events-auto"
+                className="listing-lightbox-header relative z-50 flex w-full items-center justify-between px-4 pb-2 sm:px-6 bg-gradient-to-b from-black/90 via-black/60 to-transparent pointer-events-auto"
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="flex items-center gap-3">
@@ -282,7 +282,7 @@ export function ListingImageGallery({ images, title, categoryName }: ListingImag
                 <img
                   src={validImages[currentIdx]}
                   alt={`${title} - Büyük Görsel ${currentIdx + 1}`}
-                  className="max-h-[82vh] max-w-full object-contain transition-all duration-200 cursor-default shadow-2xl"
+                  className="max-h-[82dvh] max-w-full object-contain transition-all duration-200 cursor-default shadow-2xl"
                   onClick={(e) => e.stopPropagation()}
                 />
 
@@ -320,7 +320,7 @@ export function ListingImageGallery({ images, title, categoryName }: ListingImag
               {/* Bottom Thumbnails Strip in Fullscreen */}
               {total > 1 ? (
                 <div
-                  className="relative z-50 flex h-20 w-full items-center justify-center gap-2 overflow-x-auto px-4 pb-4 pt-1 bg-gradient-to-t from-black/90 via-black/60 to-transparent scrollbar-none pointer-events-auto"
+                  className="listing-lightbox-thumbnails relative z-50 flex w-full items-center justify-center gap-2 overflow-x-auto px-4 pt-1 bg-gradient-to-t from-black/90 via-black/60 to-transparent scrollbar-none pointer-events-auto"
                   onClick={(e) => e.stopPropagation()}
                 >
                   {validImages.map((img, i) => (

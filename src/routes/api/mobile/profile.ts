@@ -97,6 +97,26 @@ export const Route = createFileRoute("/api/mobile/profile")({
           if (!userId) return Response.json({ success: false, error: "Oturum açmanız gerekiyor." }, { status: 401 });
 
           const body: unknown = await request.json();
+          if (body && typeof body === "object" && "action" in body && body.action === "saved-search") {
+            const input = z.object({
+              action: z.literal("saved-search"),
+              label: z.string().trim().max(60).optional(),
+              query: z.string().trim().max(200).optional(),
+              filters: z.record(z.string(), z.unknown()).default({}),
+            }).safeParse(body);
+            if (!input.success) return Response.json({ success: false, error: "Arama bilgilerini kontrol edin." }, { status: 400 });
+            const filtersJson = JSON.stringify(input.data.filters);
+            if (filtersJson.length > 12_000) return Response.json({ success: false, error: "Filtreler çok uzun." }, { status: 400 });
+            const sql = await getSql();
+            const query = input.data.query || "";
+            const label = input.data.label || query || "Kayıtlı arama";
+            const id = newId("ss");
+            await sql.query(
+              "insert into saved_searches (id,user_id,label,query,filters) values ($1,$2,$3,$4,$5::jsonb)",
+              [id, userId, label, query, filtersJson],
+            );
+            return Response.json({ success: true, savedSearch: { id, label, query, filters: filtersJson } });
+          }
           if (body && typeof body === "object" && "action" in body && body.action === "store") {
             const parsedStore = StoreInput.safeParse(body);
             if (!parsedStore.success) return Response.json({ success: false, error: "Mağaza bilgilerini kontrol edin." }, { status: 400 });

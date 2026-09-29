@@ -12,6 +12,8 @@ import {
   Alert,
   Modal,
   Pressable,
+  AppState,
+  ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack, useFocusEffect } from 'expo-router';
 import { Send, ChevronLeft, ShieldCheck, MoreHorizontal, Flag, Ban, ShieldOff } from 'lucide-react-native';
@@ -32,12 +34,13 @@ export default function ChatScreen() {
   const router = useRouter();
 
   const [thread, setThread] = useState<MobileConversation | null>(null);
+  const [loadError, setLoadError] = useState('');
   const [userId, setUserId] = useState('');
   const [inputText, setInputText] = useState('');
   const [actionsOpen, setActionsOpen] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
 
-  const loadData = async () => {
+  const loadData = React.useCallback(async () => {
     if (!id) return;
     const user = await getStoredUser();
     if (!user?.token) return;
@@ -45,16 +48,25 @@ export default function ChatScreen() {
     try {
       const response = await getMobileConversation(id, user.token);
       setThread(response.thread);
-    } catch {
-      setThread(null);
+      setLoadError('');
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : 'Mesajlar yüklenemedi.');
     }
-  };
+  }, [id]);
 
   useFocusEffect(React.useCallback(() => {
-    void loadData();
-    const timer = setInterval(() => { void loadData(); }, 12_000);
-    return () => clearInterval(timer);
-  }, [id]));
+    let focused = true;
+    let inFlight = false;
+    const poll = async () => {
+      if (!focused || inFlight || AppState.currentState !== 'active') return;
+      inFlight = true;
+      try { await loadData(); } finally { inFlight = false; }
+    };
+    void poll();
+    const timer = setInterval(() => { void poll(); }, 20_000);
+    const appState = AppState.addEventListener('change', (state) => { if (state === 'active') void poll(); });
+    return () => { focused = false; clearInterval(timer); appState.remove(); };
+  }, [loadData]));
 
   useEffect(() => {
     setTimeout(() => {
@@ -159,6 +171,13 @@ export default function ChatScreen() {
       </View>
 
       {thread?.blocked ? <View style={styles.blockedBanner}><Ban size={16} color="#b42318" /><Text style={styles.blockedText}>{thread.blockedByMe ? 'Bu kullanıcıyı engellediniz.' : 'Bu kullanıcı sizi engellemiş.'} Mesaj gönderilemez.</Text></View> : null}
+
+      {!thread && loadError ? (
+        <View style={styles.loadErrorBox}>
+          <Text style={styles.loadErrorText}>{loadError}</Text>
+          <TouchableOpacity onPress={() => void loadData()} accessibilityRole="button"><Text style={styles.retryText}>Yeniden Dene</Text></TouchableOpacity>
+        </View>
+      ) : !thread ? <ActivityIndicator style={{ marginVertical: 18 }} color={BrandColors.primary} /> : null}
 
       {/* 3. Mesajlar Listesi */}
       <ScrollView
@@ -315,6 +334,9 @@ const styles = StyleSheet.create({
     color: '#065f46',
     lineHeight: 15,
   },
+  loadErrorBox: { marginHorizontal: 16, marginVertical: 12, padding: 14, borderRadius: 10, borderWidth: 1, borderColor: '#fecdca', backgroundColor: '#fff7f6', alignItems: 'center', gap: 8 },
+  loadErrorText: { color: '#b42318', fontSize: 13, textAlign: 'center' },
+  retryText: { color: '#1a4fd8', fontSize: 13, fontWeight: '700', padding: 8 },
   messagesScroll: {
     padding: 16,
     paddingBottom: 20,

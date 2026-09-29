@@ -223,10 +223,50 @@ export async function notify(userId: string, type: string, title: string, body: 
      values ($1, $2, $3, $4, $5, $6)`,
     [`ntf_${crypto.randomUUID().slice(0, 12)}`, userId, type, title, body, link],
   );
+
+  // Push delivery is best effort: an Expo outage must not break the action that
+  // created the in-app notification.
+  try {
+    const devices = await sql.query<{ token: string }>(
+      "select token from mobile_push_tokens where user_id=$1",
+      [userId],
+    );
+    if (devices.length) {
+      const response = await fetch("https://exp.host/--/api/v2/push/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify(devices.map(({ token }) => ({
+          to: token,
+          title,
+          body,
+          sound: "default",
+          data: { link },
+          channelId: "default",
+        }))),
+        signal: AbortSignal.timeout(2500),
+      });
+      if (!response.ok) {
+        console.warn(`[push] Expo returned ${response.status}`);
+      } else {
+        const tickets = await response.json().catch(() => null) as { data?: Array<{ status?: string; details?: { error?: string } }> } | null;
+        const staleTokens = devices.filter((_, index) =>
+          tickets?.data?.[index]?.status === "error" && tickets.data[index]?.details?.error === "DeviceNotRegistered",
+        );
+        if (staleTokens.length) {
+          await Promise.all(staleTokens.map(({ token }) =>
+            sql.query("delete from mobile_push_tokens where token=$1", [token]),
+          ));
+        }
+      }
+    }
+  } catch (error) {
+    console.warn("[push] Notification delivery failed", error instanceof Error ? error.message : "unknown error");
+  }
 }
 
 const ALLOWED_DATA = /^data:image\/(jpeg|png|webp);base64,/i;
-const ALLOWED_UPLOAD_PATH = /^\/uploads\/[a-zA-Z0-9_\-\.]+\.(webp|jpg|jpeg|png)$/i;
+const ALLOWED_UPLOAD_PATH = /^\/uploads\/[-a-zA-Z0-9_.]+\.(webp|jpg|jpeg|png)$/i;
+const ALLOWED_MOBILE_IMAGE_PATH = /^\/api\/mobile\/images\/[0-9a-f-]{36}$/i;
 const ALLOWED_HTTP_URL = /^https?:\/\/[^\s]+$/i;
 
 /** Normalize a TR mobile number to 05XXXXXXXXX. */
@@ -244,7 +284,7 @@ export function normalizeTrPhone(raw: string): string {
 export function assertImages(images: string[]) {
   if (images.length > 10) throw new Error("En fazla 10 fotoğraf yükleyebilirsiniz.");
   for (const img of images) {
-    if (ALLOWED_UPLOAD_PATH.test(img)) continue;
+    if (ALLOWED_UPLOAD_PATH.test(img) || ALLOWED_MOBILE_IMAGE_PATH.test(img)) continue;
     if (ALLOWED_HTTP_URL.test(img) && img.length <= 2048) continue;
     if (ALLOWED_DATA.test(img) && img.length <= 450_000) continue;
     throw new Error("Geçersiz görsel. Yalnızca JPEG/PNG/WebP formatı kabul edilir.");

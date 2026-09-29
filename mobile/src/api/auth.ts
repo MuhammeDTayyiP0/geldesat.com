@@ -1,5 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
 import { API_BASE_URL } from './client';
+import { clearRegisteredPushToken, getRegisteredPushToken } from '../services/notifications';
 
 export interface MobileUser {
   id: string;
@@ -10,17 +11,64 @@ export interface MobileUser {
 
 const USER_STORAGE_KEY = 'geldesat_mobile_user';
 const TOKEN_STORAGE_KEY = 'geldesat_mobile_token';
+let storedUserCache: MobileUser | null | undefined;
+let storedUserRead: Promise<MobileUser | null> | null = null;
 
 /**
  * Cihazın güvenli anahtarlığında (Keychain/Keystore) kayıtlı kullanıcıyı okur.
  */
 export async function getStoredUser(): Promise<MobileUser | null> {
+  if (storedUserCache !== undefined) return storedUserCache;
+  if (storedUserRead) return storedUserRead;
+  storedUserRead = (async () => {
   try {
     const raw = await SecureStore.getItemAsync(USER_STORAGE_KEY);
     if (!raw) return null;
-    return JSON.parse(raw);
+    return JSON.parse(raw) as MobileUser;
   } catch {
     return null;
+  }
+  })();
+  storedUserCache = await storedUserRead;
+  storedUserRead = null;
+  return storedUserCache;
+}
+
+/** Validate a saved mobile token against Better Auth before trusting its user. */
+export async function validateMobileSession(token: string): Promise<MobileUser | null> {
+  const response = await fetch(`${API_BASE_URL}/api/auth/get-session`, {
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!response.ok) return null;
+  const data = await response.json().catch(() => null);
+  if (!data?.user?.id) return null;
+  return {
+    id: String(data.user.id),
+    email: String(data.user.email || ''),
+    name: String(data.user.name || data.user.email?.split('@')[0] || 'GeldeSat üyesi'),
+    token,
+  };
+}
+
+/** Restore only a session confirmed by the server. Keep it on transient network errors. */
+export async function restoreMobileSession(): Promise<MobileUser | null> {
+  const stored = await getStoredUser();
+  if (!stored) return null;
+  if (!stored.token) {
+    await setStoredUser(null);
+    return null;
+  }
+  try {
+    const verified = await validateMobileSession(stored.token);
+    if (!verified) {
+      await setStoredUser(null);
+      return null;
+    }
+    await setStoredUser(verified);
+    return verified;
+  } catch {
+    return stored;
   }
 }
 
@@ -28,6 +76,8 @@ export async function getStoredUser(): Promise<MobileUser | null> {
  * Kullanıcıyı güvenli anahtarlığa kaydeder.
  */
 export async function setStoredUser(user: MobileUser | null): Promise<void> {
+  storedUserCache = user;
+  storedUserRead = null;
   try {
     if (!user) {
       await SecureStore.deleteItemAsync(USER_STORAGE_KEY);
@@ -38,7 +88,7 @@ export async function setStoredUser(user: MobileUser | null): Promise<void> {
         await SecureStore.setItemAsync(TOKEN_STORAGE_KEY, user.token);
       }
     }
-  } catch {}
+  } catch { /* SecureStore can be unavailable on web; server auth still fails closed. */ }
 }
 
 /**
@@ -62,17 +112,18 @@ export async function mobileSignIn(
 
     const data = await res.json().catch(() => ({}));
 
-    if (res.ok && data?.user) {
+    const sessionToken = data?.token || data?.session?.token;
+    if (res.ok && data?.user?.id && sessionToken) {
       const user: MobileUser = {
         id: data.user.id,
         email: data.user.email,
         name: data.user.name || email.split('@')[0],
-        token: data.token || data.session?.token,
+        token: sessionToken,
       };
       await setStoredUser(user);
       return { success: true, user };
     } else {
-      let errorMsg = data?.message || 'Giriş yapılamadı.';
+      let errorMsg = data?.message || (res.ok ? 'Güvenli oturum oluşturulamadı. Lütfen tekrar deneyin.' : 'Giriş yapılamadı.');
       if (
         errorMsg === 'Invalid email or password' ||
         data?.code === 'INVALID_EMAIL_OR_PASSWORD'
@@ -83,7 +134,7 @@ export async function mobileSignIn(
       }
       return { success: false, error: errorMsg };
     }
-  } catch (err: any) {
+  } catch {
     return {
       success: false,
       error: 'Sunucuya bağlanılamadı. Lütfen internet bağlantınızı kontrol edin.',
@@ -117,17 +168,18 @@ export async function mobileSignUp(
 
     const data = await res.json().catch(() => ({}));
 
-    if (res.ok && data?.user) {
+    const sessionToken = data?.token || data?.session?.token;
+    if (res.ok && data?.user?.id && sessionToken) {
       const user: MobileUser = {
         id: data.user.id,
         email: data.user.email,
         name: data.user.name || name,
-        token: data.token,
+        token: sessionToken,
       };
       await setStoredUser(user);
       return { success: true, user };
     } else {
-      let errorMsg = data?.message || 'Kayıt işlemi tamamlanamadı.';
+      let errorMsg = data?.message || (res.ok ? 'Güvenli oturum oluşturulamadı. Lütfen tekrar deneyin.' : 'Kayıt işlemi tamamlanamadı.');
       if (
         errorMsg.includes('already exists') ||
         data?.code === 'USER_ALREADY_EXISTS'
@@ -143,7 +195,7 @@ export async function mobileSignUp(
       }
       return { success: false, error: errorMsg };
     }
-  } catch (err: any) {
+  } catch {
     return {
       success: false,
       error: 'Sunucuya bağlanılamadı. Lütfen internet bağlantınızı kontrol edin.',
@@ -158,6 +210,14 @@ export async function mobileSignOut(): Promise<void> {
   try {
     const user = await getStoredUser();
     if (user?.token) {
+      const pushToken = await getRegisteredPushToken();
+      if (pushToken) {
+        await fetch(`${API_BASE_URL}/api/mobile/notifications`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${user.token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'unregister-push', token: pushToken }),
+        }).catch(() => {});
+      }
       await fetch(`${API_BASE_URL}/api/auth/sign-out`, {
         method: 'POST',
         headers: {
@@ -167,6 +227,7 @@ export async function mobileSignOut(): Promise<void> {
         },
       }).catch(() => {});
     }
-  } catch {}
+  } catch { /* Logout must still clear local session state. */ }
+  await clearRegisteredPushToken();
   await setStoredUser(null);
 }

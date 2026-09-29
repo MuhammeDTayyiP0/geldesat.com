@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View, ScrollView, TextInput, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
 import { Search, Building2, Car, ShoppingBag, Wrench, PawPrint, Tractor, GraduationCap, Users, Briefcase } from 'lucide-react-native';
 import { useQuery } from '@tanstack/react-query';
@@ -44,14 +44,21 @@ export default function HomeScreen() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState('all');
   const [q, setQ] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(q.trim()), 350);
+    return () => clearTimeout(timer);
+  }, [q]);
 
   // 1. Canlı İlan Verileri (Gerçek Veritabanı)
   const { data: apiData, isLoading, isRefetching, refetch } = useQuery({
-    queryKey: ['mobileListings', activeTab, q],
+    queryKey: ['mobileListings', activeTab, debouncedQuery],
     queryFn: () =>
       getMobileListings({
+        featured: true,
         category: activeTab === 'all' ? undefined : activeTab,
-        q: q.trim() || undefined,
+        q: debouncedQuery || undefined,
         limit: 8,
       }),
   });
@@ -76,6 +83,8 @@ export default function HomeScreen() {
     is_featured: Boolean(l.featured_until && new Date(l.featured_until).getTime() > Date.now()),
     attrs: l.attrs,
     category_name: l.category_name,
+    seller_name: l.seller_name,
+    store_name: l.store_name,
     user_id: l.user_id,
   }));
 
@@ -98,11 +107,9 @@ export default function HomeScreen() {
       refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={BrandColors.primary} />}>
       {/* 1. Web Sitesindeki Birebir Hero Bölümü */}
       <View style={styles.heroSection}>
-        <Text style={styles.heroPreTitle}>TÜRKİYE İLAN PLATFORMU</Text>
-        <Text style={styles.heroMainTitle}>GeldeSat — Emlak, Vasıta ve İkinci El İlanları</Text>
-        <Text style={styles.heroSubtitle}>
-          {apiData?.total ? `${apiData.total} yayındaki ilan. ` : ''}Ücretsiz ilan verin, satıcıyla doğrudan konuşun.
-        </Text>
+        <View style={styles.heroEyebrow}><View style={styles.heroAccent} /><Text style={styles.heroPreTitle}>TÜRKİYE İLAN PLATFORMU</Text></View>
+        <Text style={styles.heroMainTitle}>Aradığını bul.{ '\n' }GeldeSat’ta.</Text>
+        <Text style={styles.heroSubtitle}>Ücretsiz ilan verin, satıcıyla doğrudan konuşun.</Text>
 
         {/* Web'deki Arama Kutusu (border border-border bg-bg p-2 shadow-card) */}
         <View style={styles.searchCard}>
@@ -253,9 +260,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#d8dee6', // Web: border-border
     paddingHorizontal: 16,
-    paddingTop: 40,
-    paddingBottom: 40,
+    paddingTop: 22,
+    paddingBottom: 24,
   },
+  heroEyebrow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  heroAccent: { width: 18, height: 3, borderRadius: 2, backgroundColor: '#1a4fd8' },
   heroPreTitle: {
     fontSize: 11,
     fontWeight: '700',
@@ -264,11 +273,11 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   heroMainTitle: {
-    fontSize: 30,
+    fontSize: 28,
     fontWeight: '700',
     color: '#12151c', // Web: text-fg
-    lineHeight: 36,
-    marginTop: 6,
+    lineHeight: 33,
+    marginTop: 9,
     letterSpacing: -0.4,
   },
   heroSubtitle: {
@@ -371,7 +380,7 @@ const styles = StyleSheet.create({
   // 2. Kategoriler Bölümü
   sectionContainer: {
     paddingHorizontal: 16,
-    paddingVertical: 40,
+    paddingVertical: 24,
   },
   sectionHeader: {
     marginBottom: 12,
@@ -414,8 +423,8 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#d8dee6',
     paddingHorizontal: 16,
-    paddingVertical: 40,
-    paddingBottom: 56,
+    paddingVertical: 24,
+    paddingBottom: 40,
   },
   vitrinHeaderRow: {
     flexDirection: 'row',

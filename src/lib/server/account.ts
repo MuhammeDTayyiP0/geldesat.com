@@ -572,6 +572,8 @@ export const adminDeleteUser = createServerFn({ method: "POST" })
 
     // Safely delete all related data
     await sql.query("delete from notifications where user_id=$1", [data.userId]);
+    await sql.query("delete from mobile_push_tokens where user_id=$1", [data.userId]);
+    await sql.query("delete from mobile_listing_images where user_id=$1", [data.userId]);
     await sql.query("delete from saved_searches where user_id=$1", [data.userId]);
     await sql.query("delete from credit_ledger where user_id=$1", [data.userId]);
     await sql.query("delete from credit_orders where user_id=$1", [data.userId]);

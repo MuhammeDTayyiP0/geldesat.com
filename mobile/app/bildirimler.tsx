@@ -12,9 +12,11 @@ export default function BildirimlerScreen() {
   const router = useRouter();
   const [notifications, setNotifications] = useState<MobileNotification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   const loadNotifications = useCallback(async () => {
     setLoading(true);
+    setLoadError('');
     try {
       const user = await getStoredUser();
       if (!user?.token) {
@@ -22,10 +24,10 @@ export default function BildirimlerScreen() {
         return;
       }
       const response = await getMobileNotifications(user.token);
-      setNotifications(response.notifications);
       await markMobileNotificationsRead(user.token);
-    } catch {
-      setNotifications([]);
+      setNotifications(response.notifications.map((item) => ({ ...item, read: true })));
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : 'Bildirimler yüklenemedi.');
     } finally {
       setLoading(false);
     }
@@ -56,6 +58,14 @@ export default function BildirimlerScreen() {
 
       {loading ? (
         <View style={styles.loading}><ActivityIndicator color={BrandColors.primary} /></View>
+      ) : loadError ? (
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyTitle}>Bildirimler yüklenemedi</Text>
+          <Text style={styles.emptyDesc}>{loadError}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={() => void loadNotifications()} accessibilityRole="button">
+            <Text style={styles.retryText}>Yeniden Dene</Text>
+          </TouchableOpacity>
+        </View>
       ) : <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {notifications.length === 0 ? (
           /* Web Sitesindeki Birebir Boş Bildirimler Kutusu */
@@ -163,4 +173,6 @@ const styles = StyleSheet.create({
     color: '#8a929e',
     marginTop: 6,
   },
+  retryButton: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 18, marginTop: 12, borderRadius: 8, backgroundColor: '#1a4fd8' },
+  retryText: { color: '#ffffff', fontWeight: '700' },
 });

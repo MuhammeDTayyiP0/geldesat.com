@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { getSql } from "@/lib/db";
 import { getMobileUserId } from "@/lib/server/mobile-auth";
 import { mapListing, notify } from "@/lib/server/helpers";
+import { deleteUnusedListingImages } from "@/lib/server/upload.server";
 
 export const Route = createFileRoute("/api/mobile/my-listings/$id")({
   server: {
@@ -31,10 +32,11 @@ export const Route = createFileRoute("/api/mobile/my-listings/$id")({
           if (!userId) return Response.json({ success: false, error: "Giriş yapmanız gerekiyor." }, { status: 401 });
           const body = await request.json() as { action?: unknown; status?: unknown };
           const sql = await getSql();
-          const rows = await sql.query<{ id: string; user_id: string; status: string; slug: string }>("select id,user_id,status,slug from listings where id=$1", [params.id]);
+          const rows = await sql.query<{ id: string; user_id: string; status: string; slug: string; images: string[] }>("select id,user_id,status,slug,images from listings where id=$1", [params.id]);
           if (!rows[0] || rows[0].user_id !== userId) return Response.json({ success: false, error: "İlan bulunamadı." }, { status: 404 });
           if (body.action === "delete") {
             await sql.query("delete from listings where id=$1 and user_id=$2", [params.id,userId]);
+            await deleteUnusedListingImages(sql, userId, rows[0].images || []);
             return Response.json({ success: true });
           }
           if (body.action === "renew") {

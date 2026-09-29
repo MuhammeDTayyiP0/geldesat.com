@@ -11,8 +11,6 @@ import {
   ActivityIndicator,
   Modal,
   FlatList,
-  KeyboardAvoidingView,
-  Platform,
 } from 'react-native';
 import {
   Camera,
@@ -32,16 +30,16 @@ import {
   Briefcase,
   Search,
   MapPin,
-  Eye,
 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { BrandColors } from '@/constants/Colors';
 import { EMBEDDED_CATEGORIES, CategoryItem } from '@/src/data/categoriesData';
 import { TURKEY_CITIES } from '@/src/data/locations';
 import { AuthGate } from '@/src/components/auth/AuthGate';
 import { getStoredUser } from '@/src/api/auth';
-import { createMobileListing, getMobileCategories, getMobileCategoryAttributes, getMobileMyListing, getMobileProfile, MobileAttribute } from '@/src/api/client';
+import { API_BASE_URL, createMobileListing, deleteMobileListingImage, getMobileCategories, getMobileCategoryAttributes, getMobileMyListing, getMobileProfile, MobileAttribute, uploadMobileListingImage } from '@/src/api/client';
 
 const ICONS: Record<string, any> = {
   home: Building2,
@@ -92,7 +90,9 @@ export default function PostAdScreen() {
 
   // Fotoğraflar
   const [images, setImages] = useState<string[]>([]);
-  const [imagePayloads, setImagePayloads] = useState<Record<string, string>>({});
+  const [uploadedImages, setUploadedImages] = useState<Record<string, string>>({});
+  const [preparingImages, setPreparingImages] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
 
   // Şehir / İlçe Modalları
   const [cityModalVisible, setCityModalVisible] = useState(false);
@@ -136,7 +136,7 @@ export default function PostAdScreen() {
         setPhone(listing.phone || '');
         setNeighborhood(listing.neighborhood || '');
         setImages(listing.images || []);
-        setImagePayloads({});
+        setUploadedImages({});
         setAttributeValues(listing.attrs ?? {});
         setStep(1);
         setIsEditing(true);
@@ -160,7 +160,7 @@ export default function PostAdScreen() {
         setPhone(response.profile.phone || '');
         setCity(response.profile.city || '');
         setDistrict(response.profile.district || '');
-      } catch {}
+      } catch { /* Listing creation can continue with values left blank. */ }
     }
     void loadProfileDefaults();
     return () => { active = false; };
@@ -245,6 +245,35 @@ export default function PostAdScreen() {
     }
   };
 
+  // Photos are normalized to a bounded JPEG on device before any network request.
+  const prepareImage = async (uri: string, width?: number, height?: number) => {
+    const longestEdge = Math.max(width || 0, height || 0);
+    const actions = longestEdge > 1600
+      ? [{ resize: width && height && width >= height ? { width: 1600 } : { height: 1600 } }]
+      : [];
+    const result = await ImageManipulator.manipulateAsync(uri, actions, {
+      compress: 0.78,
+      format: ImageManipulator.SaveFormat.JPEG,
+    });
+    return result.uri;
+  };
+
+  const addPreparedAssets = async (assets: ImagePicker.ImagePickerAsset[]) => {
+    setPreparingImages(true);
+    const prepared: string[] = [];
+    let failed = 0;
+    try {
+      for (const asset of assets.slice(0, Math.max(0, 10 - images.length))) {
+        try { prepared.push(await prepareImage(asset.uri, asset.width, asset.height)); }
+        catch { failed += 1; }
+      }
+      if (prepared.length) setImages((prev) => [...prev, ...prepared].slice(0, 10));
+      if (failed) Alert.alert('Bazı fotoğraflar hazırlanamadı', `${failed} fotoğraf eklenemedi. Diğer seçilen fotoğraflar korundu; başarısız olanları yeniden seçebilirsiniz.`);
+    } finally {
+      setPreparingImages(false);
+    }
+  };
+
   // Fotoğraf Yükleme
   const handleTakePhoto = async () => {
     if (images.length >= 10) {
@@ -262,13 +291,10 @@ export default function PostAdScreen() {
       allowsEditing: true,
       aspect: [4, 3],
       quality: 0.55,
-      base64: true,
     });
 
     if (!result.canceled && result.assets[0]?.uri) {
-      const asset = result.assets[0];
-      setImages((prev) => [...prev, asset.uri]);
-      if (asset.base64) setImagePayloads((prev) => ({ ...prev, [asset.uri]: `data:${asset.mimeType || 'image/jpeg'};base64,${asset.base64}` }));
+      await addPreparedAssets([result.assets[0]]);
     }
   };
 
@@ -289,18 +315,10 @@ export default function PostAdScreen() {
       allowsMultipleSelection: true,
       selectionLimit: remaining,
       quality: 0.55,
-      base64: true,
     });
 
     if (!result.canceled && result.assets.length > 0) {
-      setImages((prev) => [...prev, ...result.assets.map((a) => a.uri)]);
-      setImagePayloads((prev) => {
-        const next = { ...prev };
-        for (const asset of result.assets) {
-          if (asset.base64) next[asset.uri] = `data:${asset.mimeType || 'image/jpeg'};base64,${asset.base64}`;
-        }
-        return next;
-      });
+      await addPreparedAssets(result.assets);
     }
   };
 
@@ -312,7 +330,9 @@ export default function PostAdScreen() {
   const handleRemoveImage = (index: number) => {
     const removed = images[index];
     setImages((prev) => prev.filter((_, i) => i !== index));
-    setImagePayloads((prev) => { const next = { ...prev }; delete next[removed]; return next; });
+    setUploadedImages((prev) => { const next = { ...prev }; delete next[removed]; return next; });
+    const uploadedUrl = uploadedImages[removed];
+    if (uploadedUrl) void getStoredUser().then((user) => user?.token ? deleteMobileListingImage(uploadedUrl, user.token) : undefined).catch(() => undefined);
   };
 
   // Doğrulama ve Adım Geçişleri
@@ -356,6 +376,23 @@ export default function PostAdScreen() {
       const user = await getStoredUser();
       if (!user?.token) throw new Error('İlan vermek için yeniden giriş yapın.');
       const attrs = attributeValues;
+      const localImages = images.filter((uri) => !uri.startsWith('/uploads/') && !uri.startsWith('/api/mobile/images/') && !/^https?:\/\//i.test(uri));
+      const readyImages: string[] = [];
+      let uploadedCount = localImages.filter((uri) => Boolean(uploadedImages[uri])).length;
+      setUploadProgress({ done: 0, total: localImages.length });
+      for (const uri of images) {
+        if (uploadedImages[uri]) {
+          readyImages.push(uploadedImages[uri]);
+        } else if (uri.startsWith('/uploads/') || uri.startsWith('/api/mobile/images/') || /^https?:\/\//i.test(uri)) {
+          readyImages.push(uri);
+        } else {
+          const uploaded = await uploadMobileListingImage(uri, user.token);
+          readyImages.push(uploaded.url);
+          uploadedCount += 1;
+          setUploadedImages((prev) => ({ ...prev, [uri]: uploaded.url }));
+          setUploadProgress({ done: uploadedCount, total: localImages.length });
+        }
+      }
       const response = await createMobileListing({
         id: editId || undefined,
         categoryId: selectedCatId,
@@ -366,10 +403,11 @@ export default function PostAdScreen() {
         district: district.trim(),
         neighborhood: neighborhood.trim() || undefined,
         phone: phone.trim() || undefined,
-        images: images.map((uri) => imagePayloads[uri] || uri),
+        images: readyImages,
         attrs,
       }, user.token);
       setIsSubmitting(false);
+      setUploadProgress(null);
       const reviewText = response.status === 'PENDING'
         ? 'İlanınız kaydedildi ve inceleme için sıraya alındı.'
         : 'İlanınız başarıyla yayınlandı.';
@@ -387,7 +425,7 @@ export default function PostAdScreen() {
             setPhone('');
             setDescription('');
             setImages([]);
-            setImagePayloads({});
+            setUploadedImages({});
             setIsEditing(false);
             setAttributeValues({});
             router.push(`/ilan/${response.id}` as any);
@@ -396,6 +434,7 @@ export default function PostAdScreen() {
       ]);
     } catch (error) {
       setIsSubmitting(false);
+      setUploadProgress(null);
       Alert.alert('İlan kaydedilemedi', error instanceof Error ? error.message : 'Lütfen bilgileri kontrol edip tekrar deneyin.');
     }
   };
@@ -725,6 +764,8 @@ export default function PostAdScreen() {
                 <Text style={styles.photoCountText}>{images.length}/10 Fotoğraf</Text>
               </View>
             </View>
+            {preparingImages ? <Text style={styles.photoProgressText}>Fotoğraflar hazırlanıyor…</Text> : null}
+            {uploadProgress ? <Text style={styles.photoProgressText}>Fotoğraflar yükleniyor {uploadProgress.done}/{uploadProgress.total}. Yükleme bitmeden ilan gönderilmez.</Text> : null}
             <Text style={styles.pageSubtitle}>
               Görseller vitrinde 4:3 oranında görünür. İlk fotoğraf ilanınızın ana vitrin kapağı olacaktır.
             </Text>
@@ -751,6 +792,7 @@ export default function PostAdScreen() {
                   <TouchableOpacity
                     style={styles.uploadActionBtn}
                     onPress={handlePickImages}
+                    disabled={preparingImages || isSubmitting}
                     activeOpacity={0.8}>
                     <ImageIcon size={16} color="#1a4fd8" style={{ marginRight: 6 }} />
                     <Text style={styles.uploadActionBtnText}>Galeriden Seç</Text>
@@ -758,6 +800,7 @@ export default function PostAdScreen() {
                   <TouchableOpacity
                     style={styles.uploadActionBtn}
                     onPress={handleTakePhoto}
+                    disabled={preparingImages || isSubmitting}
                     activeOpacity={0.8}>
                     <Camera size={16} color="#1a4fd8" style={{ marginRight: 6 }} />
                     <Text style={styles.uploadActionBtnText}>Fotoğraf Çek</Text>
@@ -771,7 +814,7 @@ export default function PostAdScreen() {
               <View style={styles.photosGrid}>
                 {images.map((uri, index) => (
                   <View key={index} style={styles.photoGridItem}>
-                    <Image source={{ uri }} style={styles.photoGridImg} />
+                    <Image source={{ uri: uri.startsWith('/') ? `${API_BASE_URL}${uri}` : uri }} style={styles.photoGridImg} />
                     {index === 0 ? (
                       <View style={styles.primaryCoverBadge}>
                         <Text style={styles.primaryCoverBadgeText}>Ana Kapak</Text>
@@ -1350,6 +1393,13 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: '#1a4fd8',
+  },
+  photoProgressText: {
+    color: '#1a4fd8',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 8,
+    lineHeight: 18,
   },
   warnBox: {
     backgroundColor: '#fffbeb',

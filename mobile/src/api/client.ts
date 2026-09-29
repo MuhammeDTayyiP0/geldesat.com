@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import { DeviceEventEmitter, Platform } from 'react-native';
 
 /**
  * geldesat.com Canlı API Adresi
@@ -143,63 +143,53 @@ export interface MobileProfileResponse {
 }
 
 export async function getMobileProfile(token: string): Promise<MobileProfileResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/mobile/profile`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data?.error || 'Profil bilgileri alınamadı.');
-  return data;
+  return mobileRequest<MobileProfileResponse>('/api/mobile/profile', token);
 }
 
 export async function updateMobileProfile(
   token: string,
   profile: Pick<MobileProfile, 'display_name' | 'phone' | 'bio' | 'city' | 'district'>,
 ): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/mobile/profile`, {
+  await mobileRequest<{ success: true }>('/api/mobile/profile', token, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(profile),
   });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok || data?.success === false) throw new Error(data?.error || 'Profil kaydedilemedi.');
 }
 
 export async function updateMobileStore(
   token: string,
   store: { name: string; description: string; city: string; phone: string },
 ): Promise<{ id: string; slug: string }> {
-  const response = await fetch(`${API_BASE_URL}/api/mobile/profile`, {
+  const data = await mobileRequest<{ success: true; store: { id: string; slug: string } }>('/api/mobile/profile', token, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ action: 'store', ...store }),
   });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok || data?.success === false || !data?.store) throw new Error(data?.error || 'Mağaza bilgileri kaydedilemedi.');
+  if (!data?.store) throw new Error('Mağaza bilgileri kaydedilemedi.');
   return data.store;
 }
 
 export async function deleteMobileSavedSearch(token: string, id: string): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/mobile/profile?id=${encodeURIComponent(id)}`, {
+  await mobileRequest<{ success: true }>(`/api/mobile/profile?id=${encodeURIComponent(id)}`, token, {
     method: 'DELETE',
-    headers: { Authorization: `Bearer ${token}` },
   });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok || data?.success === false) throw new Error(data?.error || 'Kayıtlı arama silinemedi.');
+}
+
+export async function createMobileSavedSearch(token: string, input: { label: string; query: string; filters: Record<string, unknown> }) {
+  return mobileRequest<{ success: true; savedSearch: { id: string; label: string; query: string; filters: string } }>('/api/mobile/profile', token, {
+    method: 'POST', body: JSON.stringify({ action: 'saved-search', ...input }),
+  });
 }
 
 export async function mobileChangePassword(token: string, currentPassword: string, newPassword: string): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/auth/change-password`, {
+  await mobileRequest<{ success?: boolean }>('/api/auth/change-password', token, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
       Origin: API_BASE_URL,
       Referer: `${API_BASE_URL}/`,
     },
     body: JSON.stringify({ currentPassword, newPassword, revokeOtherSessions: false }),
   });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok || data?.error) throw new Error(data?.message || data?.error?.message || 'Şifre değiştirilemedi.');
 }
 
 /**
@@ -247,13 +237,13 @@ export async function getMobileListings(params: {
     const res = await fetch(`${API_BASE_URL}/api/mobile/listings?${query.toString()}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();
-  } catch (err) {
+  } catch {
     // Yerel geliştirme durumunda yedek adrese bağlanmayı dene
     try {
       const localUrl = Platform.OS === 'android' ? 'http://192.168.1.123:8080' : 'http://localhost:8080';
       const localRes = await fetch(`${localUrl}/api/mobile/listings?${query.toString()}`);
       if (localRes.ok) return await localRes.json();
-    } catch {}
+    } catch { /* Local fallback is best-effort; return the visible API error below. */ }
     return {
       success: false,
       error: 'İlanlara şu anda ulaşılamıyor. İnternet bağlantınızı kontrol edip yeniden deneyin.',
@@ -268,10 +258,18 @@ export async function getMobileListings(params: {
 async function mobileRequest<T>(path: string, token?: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   if (token) headers.set('Authorization', `Bearer ${token}`);
-  if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+  if (init.body && !(typeof FormData !== 'undefined' && init.body instanceof FormData) && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
   const response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok || data?.success === false) throw new Error(data?.error || 'İstek tamamlanamadı.');
+  if (response.status === 401 && token) {
+    const { setStoredUser } = await import('./auth');
+    await setStoredUser(null);
+    DeviceEventEmitter.emit('geldesat:auth-expired');
+  }
+  if (!response.ok || data?.success === false || data?.error) {
+    const message = typeof data?.error === 'string' ? data.error : data?.message;
+    throw new Error(message || 'İstek tamamlanamadı.');
+  }
   return data as T;
 }
 
@@ -372,6 +370,18 @@ export async function markMobileNotificationsRead(token: string) {
   return mobileRequest<{ success: true }>('/api/mobile/notifications', token, { method: 'POST' });
 }
 
+export async function registerMobilePushToken(token: string, pushToken: string, platform: 'ios' | 'android') {
+  return mobileRequest<{ success: true }>('/api/mobile/notifications', token, {
+    method: 'POST', body: JSON.stringify({ action: 'register-push', token: pushToken, platform }),
+  });
+}
+
+export async function unregisterMobilePushToken(token: string, pushToken: string) {
+  return mobileRequest<{ success: true }>('/api/mobile/notifications', token, {
+    method: 'POST', body: JSON.stringify({ action: 'unregister-push', token: pushToken }),
+  });
+}
+
 export async function getMobileMyListings(token: string) {
   return mobileRequest<{ success: true; listings: ApiListingResponse['listings'] }>('/api/mobile/my-listings', token);
 }
@@ -382,6 +392,22 @@ export async function getMobileMyListing(id: string, token: string) {
 
 export async function createMobileListing(listing: Record<string, unknown>, token: string) {
   return mobileRequest<{ success: true; id: string; slug: string; status: string }>('/api/mobile/my-listings', token, { method: 'POST', body: JSON.stringify(listing) });
+}
+
+export async function uploadMobileListingImage(uri: string, token: string) {
+  const form = new FormData();
+  form.append('file', { uri, name: `listing-${Date.now()}.jpg`, type: 'image/jpeg' } as unknown as Blob);
+  return mobileRequest<{ success: true; url: string }>('/api/mobile/images', token, {
+    method: 'POST',
+    body: form,
+    signal: AbortSignal.timeout(20_000),
+  });
+}
+
+export async function deleteMobileListingImage(url: string, token: string) {
+  const match = url.match(/^\/api\/mobile\/images\/([0-9a-f-]{36})$/i);
+  if (!match) return;
+  await mobileRequest<{ success: true }>(`/api/mobile/images/${match[1]}`, token, { method: 'DELETE' });
 }
 
 export async function updateMobileListingAction(id: string, action: 'status' | 'delete' | 'renew', token: string, status?: string) {
@@ -403,7 +429,7 @@ export async function getMobileCategories(): Promise<ApiCategoryResponse> {
         return data;
       }
     }
-  } catch {}
+  } catch { /* Embedded categories keep search available during network outages. */ }
 
 // Canlı sunucuda yeni endpoint henüz dağıtılmamış olsa dahi veritabanı kategorilerini anında sunar
   return {

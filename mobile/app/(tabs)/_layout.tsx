@@ -1,6 +1,6 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Tabs } from 'expo-router';
-import { View, Text, StyleSheet, Platform, TouchableOpacity } from 'react-native';
+import { AppState, View, Text, StyleSheet, Platform, TouchableOpacity } from 'react-native';
 import { Home, Search, Plus, MessageCircle, User, Bell, MapPin, Settings2 } from 'lucide-react-native';
 import { BrandColors } from '@/constants/Colors';
 import { LogoMark } from '@/src/components/brand/LogoMark';
@@ -13,17 +13,29 @@ export default function TabLayout() {
   const router = useRouter();
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const refreshingBadges = useRef(false);
   const refreshBadges = useCallback(async () => {
+    if (AppState.currentState !== 'active' || refreshingBadges.current) return;
+    refreshingBadges.current = true;
+    try {
     const user = await getStoredUser();
     if (!user?.token) { setUnreadMessages(0); setUnreadNotifications(0); return; }
     const [messages, notifications] = await Promise.allSettled([getMobileConversations(user.token), getMobileNotifications(user.token)]);
     if (messages.status === 'fulfilled') setUnreadMessages(messages.value.conversations.reduce((count, conversation) => count + conversation.unread_count, 0));
     if (notifications.status === 'fulfilled') setUnreadNotifications(notifications.value.unread);
+    } finally {
+      refreshingBadges.current = false;
+    }
   }, []);
   useEffect(() => {
     void refreshBadges();
-    const timer = setInterval(() => { void refreshBadges(); }, 20_000);
-    return () => clearInterval(timer);
+    const timer = setInterval(() => {
+      if (AppState.currentState === 'active') void refreshBadges();
+    }, 30_000);
+    const appState = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void refreshBadges();
+    });
+    return () => { clearInterval(timer); appState.remove(); };
   }, [refreshBadges]);
   return (
     <Tabs
@@ -148,13 +160,6 @@ export default function TabLayout() {
         }}
       />
 
-      {/* Eski template sekmesi */}
-      <Tabs.Screen
-        name="two"
-        options={{
-          href: null,
-        }}
-      />
     </Tabs>
   );
 }

@@ -22,7 +22,7 @@ export const Route = createRootRoute({
   head: () => ({
     meta: [
       { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1, interactive-widget=resizes-content" },
+      { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" },
       // Fallback title — her route kendi title'ını override eder
       { title: `${APP_NAME} — Türkiye İlan Platformu` },
       { name: "description", content: "GeldeSat — Türkiye'nin ilan platformu. Emlak, vasıta, ikinci el eşya ve hizmet ilanlarını ücretsiz verin, kolayca alın-satın. Güvenli iletişim, anlık mesajlaşma." },
@@ -117,10 +117,10 @@ function Shell() {
   }, []);
 
   return (
-    <div className={isChat ? "flex h-dvh flex-col overflow-hidden" : "flex min-h-dvh flex-1 flex-col"}>
+    <div className={isChatThread ? "flex app-chat-shell flex-col overflow-hidden" : isChat ? "flex h-dvh flex-col overflow-hidden" : "flex min-h-dvh flex-1 flex-col"}>
       <TopProgressBar />
       <Header className={isChatThread ? "hidden md:block" : undefined} />
-      <main className={isChat ? "flex min-h-0 flex-1 flex-col overflow-hidden" : "flex-1 pb-24 md:pb-12"}>
+      <main className={isChat ? "flex min-h-0 flex-1 flex-col overflow-hidden" : "flex-1 mobile-content-space md:pb-12"}>
         <Outlet />
       </main>
       {isChat ? null : <Footer />}

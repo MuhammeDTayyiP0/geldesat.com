@@ -4,6 +4,7 @@ import { CITY_COORDS } from "@/lib/data/geo";
 import { newId, num, slugify } from "@/lib/utils";
 import { inheritedAttributes, ensureProfile, rateLimit, assertImages, notify, normalizeTrPhone } from "./helpers";
 import { notifySearchHits } from "./ops";
+import { deleteUnusedListingImages } from "./upload.server";
 
 export const ListingInput = z.object({
   id: z.string().optional(),
@@ -36,6 +37,17 @@ export async function saveListingRecord(userId: string, data: ListingInputData) 
   const phone = data.phone?.trim() ? normalizeTrPhone(data.phone) : profile[0]?.phone;
   if (phone) normalizeTrPhone(phone);
   assertImages(data.images);
+  const mobileImageIds = data.images.flatMap((image) => {
+    const match = image.match(/^\/api\/mobile\/images\/([0-9a-f-]{36})$/i);
+    return match ? [match[1]] : [];
+  });
+  if (mobileImageIds.length) {
+    const owned = await sql.query<{ id: string }>(
+      "select id from mobile_listing_images where user_id=$1 and id=any($2::text[])",
+      [userId, mobileImageIds],
+    );
+    if (owned.length !== new Set(mobileImageIds).size) throw new Error("Fotoğraflarınızdan biri bulunamadı. Lütfen yeniden yükleyin.");
+  }
 
   const photoNeed = await sql.query<{ id: string }>(
     `with recursive chain as (
@@ -56,8 +68,8 @@ export async function saveListingRecord(userId: string, data: ListingInputData) 
   const coords = CITY_COORDS[data.city];
   const slugBase = slugify(data.title) || "ilan";
   if (data.id) {
-    const existing = await sql.query<{ user_id: string; slug: string; price: string | number; status: string }>(
-      "select user_id, slug, price, status from listings where id = $1", [data.id],
+    const existing = await sql.query<{ user_id: string; slug: string; price: string | number; status: string; images: string[] }>(
+      "select user_id, slug, price, status, images from listings where id = $1", [data.id],
     );
     if (!existing[0]) throw new Error("İlan bulunamadı");
     if (existing[0].user_id !== userId && profile[0]?.role !== "ADMIN") throw new Error("Yetkisiz işlem");
@@ -70,6 +82,7 @@ export async function saveListingRecord(userId: string, data: ListingInputData) 
         coords?.lat ?? null,coords?.lng ?? null,JSON.stringify(data.images),JSON.stringify(data.attrs),
         data.phone?.trim() ? normalizeTrPhone(data.phone) : null,data.storeId || null,nextStatus],
     );
+    await deleteUnusedListingImages(sql, userId, (existing[0].images || []).filter((image) => !data.images.includes(image)));
     if (num(existing[0].price) !== data.price) await sql.query("insert into price_history (listing_id,price) values ($1,$2)", [data.id,data.price]);
     if (existing[0].status === "REJECTED") {
       await notify(userId,"listing","İlanınız tekrar incelemede","Düzenlenen ilan onay kuyruğuna alındı.",`/ilan/${existing[0].slug}`);

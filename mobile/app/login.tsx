@@ -14,7 +14,6 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { X, Mail, Lock, User, Eye, EyeOff, Check } from 'lucide-react-native';
-import { BrandColors } from '@/constants/Colors';
 import { LogoMark } from '@/src/components/brand/LogoMark';
 import { mobileSignIn, mobileSignUp } from '@/src/api/auth';
 

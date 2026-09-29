@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   FlatList,
+  Alert,
 } from 'react-native';
 import {
   Search,
@@ -28,13 +29,15 @@ import {
   Users,
   Briefcase,
   Layers,
+  BookmarkPlus,
 } from 'lucide-react-native';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { BrandColors } from '@/constants/Colors';
 import { ListingCard, MobileListing } from '@/src/components/listing/ListingCard';
 import { FilterModal, FilterState } from '@/src/components/listing/FilterModal';
-import { getMobileListings, getMobileCategories, getMobileCategoryAttributes } from '@/src/api/client';
+import { createMobileSavedSearch, getMobileListings, getMobileCategories, getMobileCategoryAttributes } from '@/src/api/client';
+import { getStoredUser } from '@/src/api/auth';
 import { EMBEDDED_CATEGORIES, CategoryItem } from '@/src/data/categoriesData';
 
 const SORT_OPTIONS = [
@@ -72,6 +75,7 @@ export default function SearchPage() {
   const params = useLocalSearchParams<{ category?: string; q?: string; city?: string; filters?: string }>();
 
   const [q, setQ] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [catSearch, setCatSearch] = useState('');
   const [selectedCatId, setSelectedCatId] = useState<string | null>(null);
   const [sortIndex, setSortIndex] = useState(0);
@@ -79,6 +83,12 @@ export default function SearchPage() {
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const [activeFilters, setActiveFilters] = useState<FilterState>({});
   const [showCategoryBrowser, setShowCategoryBrowser] = useState(true);
+  const [savingSearch, setSavingSearch] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(q.trim()), 350);
+    return () => clearTimeout(timer);
+  }, [q]);
 
   // 1. Canlı / Yerleşik Kategoriler
   const { data: catData } = useQuery({
@@ -113,9 +123,13 @@ export default function SearchPage() {
   useEffect(() => {
     if (!params.filters || typeof params.filters !== 'string') return;
     try {
-      const parsed = JSON.parse(params.filters) as FilterState;
+      const parsed = JSON.parse(params.filters) as FilterState & { sort?: string };
       if (parsed && typeof parsed === 'object') setActiveFilters(parsed);
-    } catch {}
+      if (parsed?.sort) {
+        const savedSort = SORT_OPTIONS.findIndex((option) => option.value === parsed.sort);
+        if (savedSort >= 0) setSortIndex(savedSort);
+      }
+    } catch { /* Ignore malformed route filter params and keep the defaults. */ }
   }, [params.filters]);
 
   useEffect(() => {
@@ -167,16 +181,17 @@ export default function SearchPage() {
   // 2. Canlı İlanlar (Web veritabanından)
   const activeSlug = currentCategory?.slug;
   const { data: apiData, isLoading, refetch, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
-    queryKey: ['mobileSearchListings', q, activeSlug, sortIndex, activeFilters],
+    queryKey: ['mobileSearchListings', debouncedQuery, activeSlug, sortIndex, activeFilters],
     initialPageParam: 0,
     queryFn: ({ pageParam }) =>
       getMobileListings({
-        q: q.trim() || undefined,
+        q: debouncedQuery || undefined,
         category: activeSlug,
         sort: SORT_OPTIONS[sortIndex].value,
         urgent: activeFilters.isUrgentOnly,
         city: activeFilters.city,
         district: activeFilters.district,
+        neighborhood: activeFilters.neighborhood,
         minPrice: activeFilters.minPrice,
         maxPrice: activeFilters.maxPrice,
         minYear: activeFilters.minYear,
@@ -205,11 +220,49 @@ export default function SearchPage() {
     is_featured: l.boosts?.includes('KALIN'),
     attrs: l.attrs,
     category_name: l.category_name,
+    seller_name: l.seller_name,
+    store_name: l.store_name,
     user_id: l.user_id,
   }));
 
   const toggleSort = () => {
     setSortIndex((prev) => (prev + 1) % SORT_OPTIONS.length);
+  };
+
+  const saveCurrentSearch = async () => {
+    if (savingSearch) return;
+    setSavingSearch(true);
+    try {
+      const user = await getStoredUser();
+      if (!user?.token) {
+        router.push('/login' as any);
+        return;
+      }
+      const filters = {
+        category: activeSlug,
+        sort: SORT_OPTIONS[sortIndex].value,
+        isUrgentOnly: activeFilters.isUrgentOnly,
+        city: activeFilters.city,
+        district: activeFilters.district,
+        neighborhood: activeFilters.neighborhood,
+        minPrice: activeFilters.minPrice,
+        maxPrice: activeFilters.maxPrice,
+        minYear: activeFilters.minYear,
+        maxYear: activeFilters.maxYear,
+        minKm: activeFilters.minKm,
+        maxKm: activeFilters.maxKm,
+        minM2: activeFilters.minM2,
+        maxM2: activeFilters.maxM2,
+        attrs: activeFilters.attrs,
+      };
+      const label = [debouncedQuery, currentCategory?.name, activeFilters.city].filter(Boolean).join(' · ') || 'Tüm ilanlar';
+      await createMobileSavedSearch(user.token, { label, query: debouncedQuery, filters });
+      Alert.alert('Arama kaydedildi', 'Bu aramaya uyan yeni ilanlar için bildirim alacaksınız.');
+    } catch (error) {
+      Alert.alert('Arama kaydedilemedi', error instanceof Error ? error.message : 'Lütfen tekrar deneyin.');
+    } finally {
+      setSavingSearch(false);
+    }
   };
 
   const handleSelectCategory = (cat: CategoryItem) => {
@@ -231,6 +284,7 @@ export default function SearchPage() {
   const activeFilterCount = [
     activeFilters.city,
     activeFilters.district,
+    activeFilters.neighborhood,
     activeFilters.minPrice,
     activeFilters.maxPrice,
     activeFilters.isUrgentOnly,
@@ -402,6 +456,10 @@ export default function SearchPage() {
         </Text>
 
         <View style={styles.controlActions}>
+          <TouchableOpacity style={styles.sortButton} onPress={() => void saveCurrentSearch()} disabled={savingSearch} accessibilityRole="button" accessibilityLabel="Bu aramayı kaydet">
+            <BookmarkPlus size={15} color="#1a4fd8" style={{ marginRight: 4 }} />
+            <Text style={styles.sortButtonText}>{savingSearch ? 'Kaydediliyor' : 'Kaydet'}</Text>
+          </TouchableOpacity>
           {/* Sıralama Butonu */}
           <TouchableOpacity style={styles.sortButton} onPress={toggleSort} activeOpacity={0.7}>
             <ArrowUpDown size={14} color="#12151c" style={{ marginRight: 4 }} />
@@ -421,6 +479,16 @@ export default function SearchPage() {
       {isLoading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="small" color="#1a4fd8" />
+        </View>
+      ) : apiData?.pages[0]?.success === false ? (
+        <View style={styles.emptyContainer}>
+          <View style={styles.emptyDashedBox}>
+            <Text style={styles.emptyTitle}>İlanlar yüklenemedi</Text>
+            <Text style={styles.emptyDesc}>{apiData.pages[0].error || 'Bağlantınızı kontrol edip yeniden deneyin.'}</Text>
+            <TouchableOpacity style={styles.emptyPrimaryBtn} onPress={() => void refetch()} accessibilityRole="button">
+              <Text style={styles.emptyPrimaryBtnText}>Yeniden Dene</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       ) : listings.length === 0 ? (
         <View style={styles.emptyContainer}>

@@ -1,13 +1,10 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, Image, TouchableOpacity, Dimensions, Alert } from 'react-native';
+import { StyleSheet, Text, View, Image, TouchableOpacity, useWindowDimensions, Alert } from 'react-native';
 import { useEffect } from 'react';
-import { Heart, MapPin, ImageIcon } from 'lucide-react-native';
-import { BrandColors } from '@/constants/Colors';
+import { Heart, MapPin, ImageIcon, Store } from 'lucide-react-native';
 import { getStoredUser } from '@/src/api/auth';
 import { API_BASE_URL, toggleMobileFavorite } from '@/src/api/client';
 
-const { width } = Dimensions.get('window');
-const GRID_CARD_WIDTH = (width - 36) / 2;
 
 export interface MobileListing {
   id: string;
@@ -23,6 +20,8 @@ export interface MobileListing {
   is_featured?: boolean;
   attrs?: Record<string, string | number>;
   category_name?: string;
+  seller_name?: string;
+  store_name?: string | null;
   user_id?: string;
 }
 
@@ -54,6 +53,8 @@ export function ListingCard({
   isFavorite: initialFavorite = false,
   isOwner: ownerOverride = false,
 }: ListingCardProps) {
+  const { width } = useWindowDimensions();
+  const gridCardWidth = Math.max(140, (width - 36) / 2);
   const [isFavorite, setIsFavorite] = useState(initialFavorite);
   const [favoriteBusy, setFavoriteBusy] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -92,7 +93,7 @@ export function ListingCard({
   };
 
   const media = (
-    <View style={variant === 'list' ? styles.listMedia : variant === 'feed' ? styles.feedMedia : styles.gridMedia}>
+    <View style={variant === 'list' ? styles.listMedia : variant === 'feed' ? styles.feedMedia : [styles.gridMedia, { height: gridCardWidth * 0.75 }]}>
       {img ? (
         <Image source={{ uri: img }} style={styles.image} resizeMode="cover" />
       ) : (
@@ -142,6 +143,13 @@ export function ListingCard({
         {listing.title}
       </Text>
 
+      {listing.store_name || listing.seller_name ? (
+        <View style={styles.sellerRow}>
+          {listing.store_name ? <Store size={11} color="#5a6270" /> : null}
+          <Text style={styles.sellerText} numberOfLines={1}>{listing.store_name || listing.seller_name}</Text>
+        </View>
+      ) : null}
+
       {/* Özellik Pilleri (Web'deki attrs) */}
       {attrPills.length > 0 && (
         <View style={styles.pillsRow}>
@@ -170,7 +178,7 @@ export function ListingCard({
 
   return (
     <TouchableOpacity
-      style={variant === 'list' ? styles.listCard : variant === 'feed' ? styles.feedCard : styles.gridCard}
+      style={variant === 'list' ? styles.listCard : variant === 'feed' ? styles.feedCard : [styles.gridCard, { width: gridCardWidth }]}
       onPress={onPress}
       activeOpacity={0.88}>
       {media}
@@ -182,7 +190,6 @@ export function ListingCard({
 const styles = StyleSheet.create({
   // Web'deki rounded-xl border border-border bg-surface shadow-card
   gridCard: {
-    width: GRID_CARD_WIDTH,
     backgroundColor: '#ffffff',
     borderRadius: 12,
     borderWidth: 1,
@@ -217,7 +224,6 @@ const styles = StyleSheet.create({
   // 4/3 Aspect Ratio
   gridMedia: {
     width: '100%',
-    height: (GRID_CARD_WIDTH * 3) / 4,
     backgroundColor: '#eef1f5',
     position: 'relative',
   },
@@ -331,6 +337,18 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 4,
     marginBottom: 6,
+  },
+  sellerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+    marginBottom: 5,
+  },
+  sellerText: {
+    color: '#5a6270',
+    fontSize: 10,
+    flexShrink: 1,
   },
   pill: {
     backgroundColor: '#eef1f5',

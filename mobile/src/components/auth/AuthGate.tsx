@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -14,7 +14,6 @@ import {
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { Mail, Lock, User, Eye, EyeOff, Check } from 'lucide-react-native';
-import { BrandColors } from '@/constants/Colors';
 import { LogoMark } from '@/src/components/brand/LogoMark';
 import { getStoredUser, mobileSignIn, mobileSignUp, MobileUser } from '@/src/api/auth';
 

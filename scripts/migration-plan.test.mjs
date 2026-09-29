@@ -56,9 +56,13 @@ test("non-.sql entries are dropped (readdir also yields the auth/ directory)", (
   assert.deepEqual(pendingMigrations(["auth", "README.md"], []), []);
 });
 
-test("the auth schema ships outside the globbed directory", () => {
+test("active workspace migrations include auth and app schema in the root glob", () => {
   const migrationsDir = join(projectRoot(), "migrations");
-  assert.deepEqual(pendingMigrations(readdirSync(migrationsDir), []), []);
+  const entries = readdirSync(migrationsDir);
+  const pending = pendingMigrations(entries, []);
+  assert.ok(pending.some(({ name }) => name === "0001_auth.sql"));
+  assert.ok(pending.some(({ name }) => name === "0018_mobile_listing_images.sql"));
+  assert.equal(pendingMigrations(["auth"], []).length, 0);
   assert.ok(readdirSync(join(migrationsDir, "auth")).includes("0001_auth.sql"));
 });
 

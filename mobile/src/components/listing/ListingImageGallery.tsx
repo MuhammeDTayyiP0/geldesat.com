@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { StyleSheet, Text, View, Image, Dimensions, FlatList, TouchableOpacity, Modal, LayoutChangeEvent } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ImageIcon, X, Maximize2 } from 'lucide-react-native';
-import { BrandColors } from '@/constants/Colors';
 import { API_BASE_URL } from '@/src/api/client';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
@@ -126,7 +125,7 @@ export function ListingImageGallery({ images, title }: ListingImageGalleryProps)
           keyExtractor={(_, index) => String(index)}
           renderItem={({ item }) => (
         <TouchableOpacity activeOpacity={0.9} onPress={() => { resetZoom(); setIsFullscreen(true); }} style={styles.imageSlide}>
-              <Image source={{ uri: item }} style={styles.galleryImage} resizeMode="cover" />
+              <Image source={{ uri: item }} style={styles.galleryImage} resizeMode="cover" accessibilityLabel={`${title} fotoğrafı`} />
             </TouchableOpacity>
           )}
         />
@@ -179,7 +178,7 @@ export function ListingImageGallery({ images, title }: ListingImageGalleryProps)
             renderItem={({ item }) => (
               <GestureDetector gesture={fullscreenGesture}>
                 <View style={styles.fullscreenSlide} onLayout={onViewportLayout}>
-                  <Animated.Image source={{ uri: item }} style={[styles.fullscreenImage, animatedImageStyle]} resizeMode="contain" />
+                  <Animated.Image source={{ uri: item }} style={[styles.fullscreenImage, animatedImageStyle]} resizeMode="contain" accessibilityLabel={`${title} fotoğrafı`} />
                 </View>
               </GestureDetector>
             )}

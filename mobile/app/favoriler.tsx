@@ -9,7 +9,6 @@ import {
 } from 'react-native';
 import { useRouter, useFocusEffect, Stack } from 'expo-router';
 import { Heart, ChevronLeft } from 'lucide-react-native';
-import { BrandColors } from '@/constants/Colors';
 import { ListingCard, MobileListing } from '@/src/components/listing/ListingCard';
 import { getMobileFavorites } from '@/src/api/client';
 import { getStoredUser } from '@/src/api/auth';
@@ -19,32 +18,39 @@ export default function FavorilerScreen() {
   const router = useRouter();
   const [favs, setFavs] = useState<MobileListing[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+
+  const loadFavorites = useCallback(async (isActive: () => boolean = () => true) => {
+    if (isActive()) { setLoading(true); setLoadError(''); }
+    try {
+      const user = await getStoredUser();
+      if (!user?.token) {
+        if (isActive()) setFavs([]);
+        return;
+      }
+      const response = await getMobileFavorites(user.token);
+      if (isActive()) setFavs(response.listings.map((item) => ({
+        id: item.id, slug: item.slug, title: item.title, price: item.price, currency: item.currency,
+        images: item.images, city: item.city, district: item.district, created_at: item.created_at,
+        is_urgent: item.boosts?.includes('ACIL'), is_featured: item.boosts?.includes('KALIN'),
+        category_name: item.category_name,
+        seller_name: item.seller_name,
+        store_name: item.store_name,
+        user_id: item.user_id,
+      })));
+    } catch (error) {
+      if (isActive()) setLoadError(error instanceof Error ? error.message : 'Favoriler yüklenemedi.');
+    } finally {
+      if (isActive()) setLoading(false);
+    }
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
-      async function load() {
-        setLoading(true);
-        try {
-          const user = await getStoredUser();
-          if (!user?.token) {
-            setFavs([]);
-            return;
-          }
-          const response = await getMobileFavorites(user.token);
-          setFavs(response.listings.map((item) => ({
-            id: item.id, slug: item.slug, title: item.title, price: item.price, currency: item.currency,
-            images: item.images, city: item.city, district: item.district, created_at: item.created_at,
-            is_urgent: item.boosts?.includes('ACIL'), is_featured: item.boosts?.includes('KALIN'),
-            category_name: item.category_name,
-          })));
-        } catch {
-          setFavs([]);
-        } finally {
-          setLoading(false);
-        }
-      }
-      load();
-    }, [])
+      let active = true;
+      void loadFavorites(() => active);
+      return () => { active = false; };
+    }, [loadFavorites])
   );
 
   return (
@@ -64,6 +70,16 @@ export default function FavorilerScreen() {
       {loading ? (
         <View style={styles.centerBox}>
           <ActivityIndicator size="small" color="#1a4fd8" />
+        </View>
+      ) : loadError ? (
+        <View style={styles.emptyContainer}>
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>Favoriler yüklenemedi</Text>
+            <Text style={styles.emptyDesc}>{loadError}</Text>
+            <TouchableOpacity style={styles.browseBtn} onPress={() => void loadFavorites()}>
+              <Text style={styles.browseBtnText}>Yeniden Dene</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       ) : favs.length === 0 ? (
         /* Web Sitesindeki Birebir Boş Favoriler Kutusu */
@@ -100,6 +116,8 @@ export default function FavorilerScreen() {
                 is_urgent: item.is_urgent,
                 is_featured: item.is_featured,
                 category_name: item.category_name,
+                seller_name: item.seller_name,
+                store_name: item.store_name,
                 user_id: item.user_id,
               }}
               variant="list"

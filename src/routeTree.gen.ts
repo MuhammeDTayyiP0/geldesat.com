@@ -39,6 +39,7 @@ import { Route as ApiMobileCategoryAttributesRouteImport } from './routes/api/mo
 import { Route as ApiMobileConfigRouteImport } from './routes/api/mobile/config'
 import { Route as ApiMobileConversationsRouteImport } from './routes/api/mobile/conversations'
 import { Route as ApiMobileFavoritesRouteImport } from './routes/api/mobile/favorites'
+import { Route as ApiMobileImagesRouteImport } from './routes/api/mobile/images'
 import { Route as ApiMobileListingsRouteImport } from './routes/api/mobile/listings'
 import { Route as ApiMobileMyListingsRouteImport } from './routes/api/mobile/my-listings'
 import { Route as ApiMobileNotificationsRouteImport } from './routes/api/mobile/notifications'
@@ -46,6 +47,7 @@ import { Route as ApiMobileProfileRouteImport } from './routes/api/mobile/profil
 import { Route as ApiMobileReportsRouteImport } from './routes/api/mobile/reports'
 import { Route as ApiMobileReviewsRouteImport } from './routes/api/mobile/reviews'
 import { Route as ApiMobileConversationsIdRouteImport } from './routes/api/mobile/conversations/$id'
+import { Route as ApiMobileImagesIdRouteImport } from './routes/api/mobile/images/$id'
 import { Route as ApiMobileListingsIdRouteImport } from './routes/api/mobile/listings/$id'
 import { Route as ApiMobileMyListingsIdRouteImport } from './routes/api/mobile/my-listings/$id'
 import { Route as ApiMobileSellersIdRouteImport } from './routes/api/mobile/sellers/$id'
@@ -202,6 +204,11 @@ const ApiMobileFavoritesRoute = ApiMobileFavoritesRouteImport.update({
   path: '/api/mobile/favorites',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiMobileImagesRoute = ApiMobileImagesRouteImport.update({
+  id: '/api/mobile/images',
+  path: '/api/mobile/images',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiMobileListingsRoute = ApiMobileListingsRouteImport.update({
   id: '/api/mobile/listings',
   path: '/api/mobile/listings',
@@ -238,6 +245,11 @@ const ApiMobileConversationsIdRoute =
     path: '/$id',
     getParentRoute: () => ApiMobileConversationsRoute,
   } as any)
+const ApiMobileImagesIdRoute = ApiMobileImagesIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => ApiMobileImagesRoute,
+} as any)
 const ApiMobileListingsIdRoute = ApiMobileListingsIdRouteImport.update({
   id: '/$id',
   path: '/$id',
@@ -290,6 +302,7 @@ export interface FileRoutesByFullPath {
   '/api/mobile/config': typeof ApiMobileConfigRoute
   '/api/mobile/conversations': typeof ApiMobileConversationsRouteWithChildren
   '/api/mobile/favorites': typeof ApiMobileFavoritesRoute
+  '/api/mobile/images': typeof ApiMobileImagesRouteWithChildren
   '/api/mobile/listings': typeof ApiMobileListingsRouteWithChildren
   '/api/mobile/my-listings': typeof ApiMobileMyListingsRouteWithChildren
   '/api/mobile/notifications': typeof ApiMobileNotificationsRoute
@@ -297,6 +310,7 @@ export interface FileRoutesByFullPath {
   '/api/mobile/reports': typeof ApiMobileReportsRoute
   '/api/mobile/reviews': typeof ApiMobileReviewsRoute
   '/api/mobile/conversations/$id': typeof ApiMobileConversationsIdRoute
+  '/api/mobile/images/$id': typeof ApiMobileImagesIdRoute
   '/api/mobile/listings/$id': typeof ApiMobileListingsIdRoute
   '/api/mobile/my-listings/$id': typeof ApiMobileMyListingsIdRoute
   '/api/mobile/sellers/$id': typeof ApiMobileSellersIdRoute
@@ -332,6 +346,7 @@ export interface FileRoutesByTo {
   '/api/mobile/config': typeof ApiMobileConfigRoute
   '/api/mobile/conversations': typeof ApiMobileConversationsRouteWithChildren
   '/api/mobile/favorites': typeof ApiMobileFavoritesRoute
+  '/api/mobile/images': typeof ApiMobileImagesRouteWithChildren
   '/api/mobile/listings': typeof ApiMobileListingsRouteWithChildren
   '/api/mobile/my-listings': typeof ApiMobileMyListingsRouteWithChildren
   '/api/mobile/notifications': typeof ApiMobileNotificationsRoute
@@ -339,6 +354,7 @@ export interface FileRoutesByTo {
   '/api/mobile/reports': typeof ApiMobileReportsRoute
   '/api/mobile/reviews': typeof ApiMobileReviewsRoute
   '/api/mobile/conversations/$id': typeof ApiMobileConversationsIdRoute
+  '/api/mobile/images/$id': typeof ApiMobileImagesIdRoute
   '/api/mobile/listings/$id': typeof ApiMobileListingsIdRoute
   '/api/mobile/my-listings/$id': typeof ApiMobileMyListingsIdRoute
   '/api/mobile/sellers/$id': typeof ApiMobileSellersIdRoute
@@ -376,6 +392,7 @@ export interface FileRoutesById {
   '/api/mobile/config': typeof ApiMobileConfigRoute
   '/api/mobile/conversations': typeof ApiMobileConversationsRouteWithChildren
   '/api/mobile/favorites': typeof ApiMobileFavoritesRoute
+  '/api/mobile/images': typeof ApiMobileImagesRouteWithChildren
   '/api/mobile/listings': typeof ApiMobileListingsRouteWithChildren
   '/api/mobile/my-listings': typeof ApiMobileMyListingsRouteWithChildren
   '/api/mobile/notifications': typeof ApiMobileNotificationsRoute
@@ -383,6 +400,7 @@ export interface FileRoutesById {
   '/api/mobile/reports': typeof ApiMobileReportsRoute
   '/api/mobile/reviews': typeof ApiMobileReviewsRoute
   '/api/mobile/conversations/$id': typeof ApiMobileConversationsIdRoute
+  '/api/mobile/images/$id': typeof ApiMobileImagesIdRoute
   '/api/mobile/listings/$id': typeof ApiMobileListingsIdRoute
   '/api/mobile/my-listings/$id': typeof ApiMobileMyListingsIdRoute
   '/api/mobile/sellers/$id': typeof ApiMobileSellersIdRoute
@@ -421,6 +439,7 @@ export interface FileRouteTypes {
     | '/api/mobile/config'
     | '/api/mobile/conversations'
     | '/api/mobile/favorites'
+    | '/api/mobile/images'
     | '/api/mobile/listings'
     | '/api/mobile/my-listings'
     | '/api/mobile/notifications'
@@ -428,6 +447,7 @@ export interface FileRouteTypes {
     | '/api/mobile/reports'
     | '/api/mobile/reviews'
     | '/api/mobile/conversations/$id'
+    | '/api/mobile/images/$id'
     | '/api/mobile/listings/$id'
     | '/api/mobile/my-listings/$id'
     | '/api/mobile/sellers/$id'
@@ -463,6 +483,7 @@ export interface FileRouteTypes {
     | '/api/mobile/config'
     | '/api/mobile/conversations'
     | '/api/mobile/favorites'
+    | '/api/mobile/images'
     | '/api/mobile/listings'
     | '/api/mobile/my-listings'
     | '/api/mobile/notifications'
@@ -470,6 +491,7 @@ export interface FileRouteTypes {
     | '/api/mobile/reports'
     | '/api/mobile/reviews'
     | '/api/mobile/conversations/$id'
+    | '/api/mobile/images/$id'
     | '/api/mobile/listings/$id'
     | '/api/mobile/my-listings/$id'
     | '/api/mobile/sellers/$id'
@@ -506,6 +528,7 @@ export interface FileRouteTypes {
     | '/api/mobile/config'
     | '/api/mobile/conversations'
     | '/api/mobile/favorites'
+    | '/api/mobile/images'
     | '/api/mobile/listings'
     | '/api/mobile/my-listings'
     | '/api/mobile/notifications'
@@ -513,6 +536,7 @@ export interface FileRouteTypes {
     | '/api/mobile/reports'
     | '/api/mobile/reviews'
     | '/api/mobile/conversations/$id'
+    | '/api/mobile/images/$id'
     | '/api/mobile/listings/$id'
     | '/api/mobile/my-listings/$id'
     | '/api/mobile/sellers/$id'
@@ -548,6 +572,7 @@ export interface RootRouteChildren {
   ApiMobileConfigRoute: typeof ApiMobileConfigRoute
   ApiMobileConversationsRoute: typeof ApiMobileConversationsRouteWithChildren
   ApiMobileFavoritesRoute: typeof ApiMobileFavoritesRoute
+  ApiMobileImagesRoute: typeof ApiMobileImagesRouteWithChildren
   ApiMobileListingsRoute: typeof ApiMobileListingsRouteWithChildren
   ApiMobileMyListingsRoute: typeof ApiMobileMyListingsRouteWithChildren
   ApiMobileNotificationsRoute: typeof ApiMobileNotificationsRoute
@@ -770,6 +795,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiMobileFavoritesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/mobile/images': {
+      id: '/api/mobile/images'
+      path: '/api/mobile/images'
+      fullPath: '/api/mobile/images'
+      preLoaderRoute: typeof ApiMobileImagesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/mobile/listings': {
       id: '/api/mobile/listings'
       path: '/api/mobile/listings'
@@ -818,6 +850,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/mobile/conversations/$id'
       preLoaderRoute: typeof ApiMobileConversationsIdRouteImport
       parentRoute: typeof ApiMobileConversationsRoute
+    }
+    '/api/mobile/images/$id': {
+      id: '/api/mobile/images/$id'
+      path: '/$id'
+      fullPath: '/api/mobile/images/$id'
+      preLoaderRoute: typeof ApiMobileImagesIdRouteImport
+      parentRoute: typeof ApiMobileImagesRoute
     }
     '/api/mobile/listings/$id': {
       id: '/api/mobile/listings/$id'
@@ -878,6 +917,18 @@ const ApiMobileConversationsRouteWithChildren =
     ApiMobileConversationsRouteChildren,
   )
 
+interface ApiMobileImagesRouteChildren {
+  ApiMobileImagesIdRoute: typeof ApiMobileImagesIdRoute
+}
+
+const ApiMobileImagesRouteChildren: ApiMobileImagesRouteChildren = {
+  ApiMobileImagesIdRoute: ApiMobileImagesIdRoute,
+}
+
+const ApiMobileImagesRouteWithChildren = ApiMobileImagesRoute._addFileChildren(
+  ApiMobileImagesRouteChildren,
+)
+
 interface ApiMobileListingsRouteChildren {
   ApiMobileListingsIdRoute: typeof ApiMobileListingsIdRoute
 }
@@ -929,6 +980,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiMobileConfigRoute: ApiMobileConfigRoute,
   ApiMobileConversationsRoute: ApiMobileConversationsRouteWithChildren,
   ApiMobileFavoritesRoute: ApiMobileFavoritesRoute,
+  ApiMobileImagesRoute: ApiMobileImagesRouteWithChildren,
   ApiMobileListingsRoute: ApiMobileListingsRouteWithChildren,
   ApiMobileMyListingsRoute: ApiMobileMyListingsRouteWithChildren,
   ApiMobileNotificationsRoute: ApiMobileNotificationsRoute,
