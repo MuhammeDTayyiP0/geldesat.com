@@ -1,7 +1,8 @@
 import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Linking, Platform } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Linking } from 'react-native';
 import { Phone, MessageCircle, Heart } from 'lucide-react-native';
 import { BrandColors } from '@/constants/Colors';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface StickyContactBarProps {
   price: number;
@@ -24,6 +25,7 @@ export function StickyContactBar({
   onChatPress,
   onCallPress,
 }: StickyContactBarProps) {
+  const insets = useSafeAreaInsets();
   const formattedPrice = new Intl.NumberFormat('tr-TR').format(price) + ' ' + currency;
 
   const handleCall = () => {
@@ -42,7 +44,7 @@ export function StickyContactBar({
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingBottom: Math.max(insets.bottom, 12) }]}>
       {/* Fiyat ve Favori */}
       <View style={styles.priceContainer}>
         <Text style={styles.priceLabel}>Fiyat</Text>
@@ -87,7 +89,7 @@ const styles = StyleSheet.create({
     borderTopColor: BrandColors.border,
     paddingHorizontal: 16,
     paddingTop: 10,
-    paddingBottom: Platform.OS === 'ios' ? 30 : 12,
+    paddingBottom: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',

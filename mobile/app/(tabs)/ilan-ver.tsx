@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Modal,
   FlatList,
+  Platform,
 } from 'react-native';
 import {
   Camera,
@@ -40,6 +41,7 @@ import { TURKEY_CITIES } from '@/src/data/locations';
 import { AuthGate } from '@/src/components/auth/AuthGate';
 import { getStoredUser } from '@/src/api/auth';
 import { API_BASE_URL, createMobileListing, deleteMobileListingImage, getMobileCategories, getMobileCategoryAttributes, getMobileMyListing, getMobileProfile, MobileAttribute, uploadMobileListingImage } from '@/src/api/client';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const ICONS: Record<string, any> = {
   home: Building2,
@@ -68,6 +70,7 @@ const STEPS = ['Kategori', 'Detay', 'Fotoğraf', 'Önizleme'];
 
 export default function PostAdScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { id: editId } = useLocalSearchParams<{ id?: string }>();
 
   // Web ile 1:1 4-Aşama: 0: Kategori, 1: Detay, 2: Fotoğraf, 3: Önizleme
@@ -947,8 +950,8 @@ export default function PostAdScreen() {
         )}
 
         {/* ŞEHİR SEÇİM MODALI */}
-        <Modal visible={cityModalVisible} animationType="slide">
-          <View style={styles.modalContainer}>
+        <Modal visible={cityModalVisible} animationType="slide" statusBarTranslucent={Platform.OS === 'android'} navigationBarTranslucent={Platform.OS === 'android'} onRequestClose={() => setCityModalVisible(false)}>
+          <View style={[styles.modalContainer, { paddingTop: insets.top + 8, paddingBottom: insets.bottom }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>İl Seçiniz</Text>
               <TouchableOpacity onPress={() => setCityModalVisible(false)} style={styles.modalCloseBtn}>
@@ -988,8 +991,8 @@ export default function PostAdScreen() {
         </Modal>
 
         {/* İLÇE SEÇİM MODALI */}
-        <Modal visible={districtModalVisible} animationType="slide">
-          <View style={styles.modalContainer}>
+        <Modal visible={districtModalVisible} animationType="slide" statusBarTranslucent={Platform.OS === 'android'} navigationBarTranslucent={Platform.OS === 'android'} onRequestClose={() => setDistrictModalVisible(false)}>
+          <View style={[styles.modalContainer, { paddingTop: insets.top + 8, paddingBottom: insets.bottom }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{city} - İlçe Seçiniz</Text>
               <TouchableOpacity onPress={() => setDistrictModalVisible(false)} style={styles.modalCloseBtn}>
@@ -1656,7 +1659,7 @@ const styles = StyleSheet.create({
   modalContainer: {
     flex: 1,
     backgroundColor: '#ffffff',
-    paddingTop: 50,
+    paddingTop: 8,
     paddingHorizontal: 16,
   },
   modalHeader: {

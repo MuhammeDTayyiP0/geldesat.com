@@ -7,9 +7,11 @@ import { getStoredUser, mobileSignOut, MobileUser } from '@/src/api/auth';
 import { deleteMobileSavedSearch, getMobileProfile, MobileProfile, mobileChangePassword, registerMobilePushToken, unregisterMobilePushToken, updateMobileProfile, updateMobileStore } from '@/src/api/client';
 import { TURKEY_CITIES } from '@/src/data/locations';
 import { clearRegisteredPushToken, getRegisteredPushToken, registerForPushNotificationsAsync } from '@/src/services/notifications';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [currentUser, setCurrentUser] = useState<MobileUser | null>(null);
   const [profile, setProfile] = useState<MobileProfile | null>(null);
   const [profileBusy, setProfileBusy] = useState(false);
@@ -289,8 +291,8 @@ export default function ProfileScreen() {
           ))}
         </View>
 
-        <Modal visible={cityPickerOpen} animationType="slide" onRequestClose={() => setCityPickerOpen(false)}>
-          <View style={styles.cityModal}>
+        <Modal visible={cityPickerOpen} animationType="slide" statusBarTranslucent={Platform.OS === 'android'} navigationBarTranslucent={Platform.OS === 'android'} onRequestClose={() => setCityPickerOpen(false)}>
+          <View style={[styles.cityModal, { paddingTop: insets.top + 8, paddingBottom: insets.bottom }]}>
             <View style={styles.cityModalHeader}><Text style={styles.cityModalTitle}>Şehir seçin</Text><TouchableOpacity onPress={() => setCityPickerOpen(false)} style={styles.cityClose}><X size={20} color="#12151c" /></TouchableOpacity></View>
             <View style={styles.citySearch}><Search size={17} color="#7a8492" /><TextInput value={citySearch} onChangeText={setCitySearch} placeholder="Şehir ara" placeholderTextColor="#8a929e" style={styles.citySearchInput} autoFocus /></View>
             <FlatList data={TURKEY_CITIES.filter((city) => city.name.toLocaleLowerCase('tr').includes(citySearch.trim().toLocaleLowerCase('tr')))} keyExtractor={(city) => String(city.id)} keyboardShouldPersistTaps="handled" renderItem={({ item }) => <TouchableOpacity style={styles.cityRow} onPress={() => { updateField('city', item.name); updateField('district', ''); setCityPickerOpen(false); setCitySearch(''); }}><Text style={styles.cityRowText}>{item.name}</Text><ChevronRight size={16} color="#a0a8b3" /></TouchableOpacity>} />
@@ -374,5 +376,5 @@ const styles = StyleSheet.create({
   emailInfo: { flex: 1, gap: 3 },
   citySelector: { minHeight: 44, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderRadius: 8, borderWidth: 1, borderColor: '#d8dee6', backgroundColor: '#fff' },
   citySelectorText: { color: '#12151c', fontSize: 14 }, cityPlaceholder: { color: '#8a929e' },
-  cityModal: { flex: 1, backgroundColor: '#f3f5f8', paddingTop: 56, paddingHorizontal: 18 }, cityModalHeader: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, cityModalTitle: { color: '#12151c', fontSize: 20, fontWeight: '700' }, cityClose: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff', borderRadius: 21 }, citySearch: { height: 46, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, marginVertical: 12, backgroundColor: '#fff', borderRadius: 9, borderWidth: 1, borderColor: '#d8dee6' }, citySearchInput: { flex: 1, color: '#12151c', fontSize: 14 }, cityRow: { minHeight: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#d8dee6' }, cityRowText: { color: '#12151c', fontSize: 15 },
+  cityModal: { flex: 1, backgroundColor: '#f3f5f8', paddingHorizontal: 18 }, cityModalHeader: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, cityModalTitle: { color: '#12151c', fontSize: 20, fontWeight: '700' }, cityClose: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff', borderRadius: 21 }, citySearch: { height: 46, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, marginVertical: 12, backgroundColor: '#fff', borderRadius: 9, borderWidth: 1, borderColor: '#d8dee6' }, citySearchInput: { flex: 1, color: '#12151c', fontSize: 14 }, cityRow: { minHeight: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#d8dee6' }, cityRowText: { color: '#12151c', fontSize: 15 },
 });

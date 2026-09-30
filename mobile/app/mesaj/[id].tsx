@@ -14,6 +14,7 @@ import {
   Pressable,
   AppState,
   ActivityIndicator,
+  Keyboard,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack, useFocusEffect } from 'expo-router';
 import { Send, ChevronLeft, ShieldCheck, MoreHorizontal, Flag, Ban, ShieldOff } from 'lucide-react-native';
@@ -21,6 +22,7 @@ import { BrandColors } from '@/constants/Colors';
 import { getStoredUser } from '@/src/api/auth';
 import { getMobileConversation, MobileConversation, reportMobileListing, sendMobileMessage, setMobileUserBlocked } from '@/src/api/client';
 import { AuthGate } from '@/src/components/auth/AuthGate';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const QUICK_REPLIES = [
   'Merhaba, ilan hâlâ güncel mi?',
@@ -32,13 +34,22 @@ const QUICK_REPLIES = [
 export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const [thread, setThread] = useState<MobileConversation | null>(null);
   const [loadError, setLoadError] = useState('');
   const [userId, setUserId] = useState('');
   const [inputText, setInputText] = useState('');
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [inputHeight, setInputHeight] = useState(40);
   const scrollViewRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    const show = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', () => setKeyboardVisible(true));
+    const hide = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => setKeyboardVisible(false));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
 
   const loadData = React.useCallback(async () => {
     if (!id) return;
@@ -121,8 +132,8 @@ export default function ChatScreen() {
   return (
     <AuthGate title="Mesajlaşma" subtitle="Mesajlarınızı görüntülemek için giriş yapın.">
     <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 56 : 0}
       style={styles.container}>
       <Stack.Screen
         options={{
@@ -182,8 +193,10 @@ export default function ChatScreen() {
       {/* 3. Mesajlar Listesi */}
       <ScrollView
         ref={scrollViewRef}
+        style={styles.messageList}
         contentContainerStyle={styles.messagesScroll}
-        showsVerticalScrollIndicator={false}>
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled">
         {(thread?.messages || []).map((msg) => {
           const isMe = msg.sender_id === userId;
           return (
@@ -221,13 +234,17 @@ export default function ChatScreen() {
       </View> : null}
 
       {/* 5. Alt Mesaj Giriş Barı */}
-      {!thread?.blocked ? <View style={styles.inputBar}>
+      {!thread?.blocked ? <View style={[styles.inputBar, { paddingBottom: keyboardVisible ? 8 : Math.max(insets.bottom, 8) }]}>
         <TextInput
           placeholder="Mesajınızı yazın..."
           placeholderTextColor="#8a929e"
           value={inputText}
           onChangeText={setInputText}
-          style={styles.textInput}
+          multiline
+          scrollEnabled={inputHeight >= 112}
+          onContentSizeChange={(event) => setInputHeight(Math.min(112, Math.max(40, event.nativeEvent.contentSize.height + 8)))}
+          style={[styles.textInput, { height: inputHeight }]}
+          textAlignVertical="center"
         />
         <TouchableOpacity
           style={[styles.sendBtn, !inputText.trim() && styles.sendBtnDisabled]}
@@ -237,9 +254,9 @@ export default function ChatScreen() {
         </TouchableOpacity>
       </View> : null}
 
-      <Modal transparent animationType="slide" visible={actionsOpen} onRequestClose={() => setActionsOpen(false)}>
+      <Modal transparent animationType="slide" visible={actionsOpen} statusBarTranslucent={Platform.OS === 'android'} navigationBarTranslucent={Platform.OS === 'android'} onRequestClose={() => setActionsOpen(false)}>
         <Pressable style={styles.sheetBackdrop} onPress={() => setActionsOpen(false)}>
-          <Pressable style={styles.actionSheet} onPress={(event) => event.stopPropagation()}>
+          <Pressable style={[styles.actionSheet, { paddingBottom: Math.max(insets.bottom, 16) }]} onPress={(event) => event.stopPropagation()}>
             <View style={styles.sheetHandle} />
             <Text style={styles.sheetTitle}>Sohbet işlemleri</Text>
             {thread?.blockedByOther ? <View style={styles.blockedNotice}><Text style={styles.blockedNoticeText}>Karşı kullanıcı mesajlaşmayı engellemiş.</Text></View> : <TouchableOpacity style={styles.sheetAction} onPress={() => { setActionsOpen(false); handleToggleBlock(); }}>{thread?.blockedByMe ? <ShieldOff size={19} color="#1a4fd8" /> : <Ban size={19} color="#b42318" />}<Text style={styles.sheetActionText}>{thread?.blockedByMe ? 'Engeli kaldır' : 'Kullanıcıyı engelle'}</Text></TouchableOpacity>}
@@ -258,6 +275,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f3f5f8', // Web: --color-bg
   },
+  messageList: { flex: 1 },
   headerAction: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginRight: 4 },
   blockedBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: '#fff1f0', borderBottomWidth: 1, borderBottomColor: '#f6c5c0' },
   blockedText: { flex: 1, color: '#9b1c13', fontSize: 12, lineHeight: 17 },
@@ -338,6 +356,8 @@ const styles = StyleSheet.create({
   loadErrorText: { color: '#b42318', fontSize: 13, textAlign: 'center' },
   retryText: { color: '#1a4fd8', fontSize: 13, fontWeight: '700', padding: 8 },
   messagesScroll: {
+    flexGrow: 1,
+    justifyContent: 'flex-end',
     padding: 16,
     paddingBottom: 20,
     gap: 10,
@@ -432,7 +452,8 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     borderColor: '#d8dee6',
-    height: 40,
+    minHeight: 40,
+    maxHeight: 112,
     paddingHorizontal: 16,
     fontSize: 14,
     color: '#12151c',

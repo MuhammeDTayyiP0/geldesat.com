@@ -4,6 +4,7 @@ import { getMobileUserId } from "@/lib/server/mobile-auth";
 import { asIso, asJson, newId, num, LISTING_PHOTO_MSG } from "@/lib/utils";
 import { ensureProfile, notify, rateLimit } from "@/lib/server/helpers";
 import { broadcastChatMessage, broadcastUserInbox } from "@/lib/server/chat-bus";
+import { createOrGetConversation, insertConversationMessage } from "@/lib/server/mobile-conversation-store";
 import { hasUserBlock } from "@/lib/server/user-blocks";
 
 export const Route = createFileRoute("/api/mobile/conversations")({
@@ -63,21 +64,10 @@ export const Route = createFileRoute("/api/mobile/conversations")({
           if (!listing[0]) return Response.json({ success: false, error: "İlan bulunamadı." }, { status: 404 });
           if (listing[0].user_id === userId) return Response.json({ success: false, error: "Kendi ilanınıza mesaj gönderemezsiniz." }, { status: 400 });
           if (await hasUserBlock(sql, userId, listing[0].user_id)) return Response.json({ success: false, error: "Bu kullanıcıyla mesajlaşamazsınız." }, { status: 403 });
-          const provisionalId = newId("cnv");
-          await sql.query(
-            `insert into conversations (id,listing_id,buyer_id,seller_id) values ($1,$2,$3,$4)
-             on conflict (listing_id,buyer_id) do update set updated_at=now()`,
-            [provisionalId, body.listingId, userId, listing[0].user_id],
-          );
-          const conversation = await sql.query<{ id: string }>("select id from conversations where listing_id=$1 and buyer_id=$2", [body.listingId, userId]);
-          const conversationId = conversation[0]?.id ?? provisionalId;
+          const conversationId = await createOrGetConversation(sql, body.listingId, userId, listing[0].user_id, newId("cnv"));
           const messageId = newId("msg");
-          const inserted = await sql.query<{ id: string; sender_id: string; content: string; created_at: string; read_at: string | null }>(
-            "insert into messages (id,conversation_id,sender_id,content) values ($1,$2,$3,$4) returning id,sender_id,content,created_at,read_at",
-            [messageId, conversationId, userId, body.content.trim()],
-          );
-          await sql.query("update conversations set updated_at=now() where id=$1", [conversationId]);
-          const msg = { ...inserted[0], created_at: asIso(inserted[0].created_at) };
+          const inserted = await insertConversationMessage(sql, messageId, conversationId, userId, body.content.trim()) as { id: string; sender_id: string; content: string; created_at: string; read_at: string | null };
+          const msg = { ...inserted, created_at: asIso(inserted.created_at) };
           broadcastChatMessage(conversationId, msg);
           broadcastUserInbox(listing[0].user_id, { type: "new_message", conversationId, message: msg });
           broadcastUserInbox(userId, { type: "inbox_ping", conversationId });

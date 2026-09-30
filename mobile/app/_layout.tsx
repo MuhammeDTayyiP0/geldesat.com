@@ -11,6 +11,7 @@ import { ActivityIndicator, DeviceEventEmitter, View } from 'react-native';
 import { BrandColors } from '@/constants/Colors';
 import { useRouter } from 'expo-router';
 import { addNotificationTapListener } from '@/src/services/notifications';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -35,9 +36,11 @@ SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <RootLayoutNav />
-    </QueryClientProvider>
+    <SafeAreaProvider>
+      <QueryClientProvider client={queryClient}>
+        <RootLayoutNav />
+      </QueryClientProvider>
+    </SafeAreaProvider>
   );
 }
 

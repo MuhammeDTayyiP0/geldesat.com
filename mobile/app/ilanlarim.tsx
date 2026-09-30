@@ -16,6 +16,7 @@ import { ListingCard } from '@/src/components/listing/ListingCard';
 import { getMobileMyListings, updateMobileListingAction } from '@/src/api/client';
 import { getStoredUser } from '@/src/api/auth';
 import { AuthGate } from '@/src/components/auth/AuthGate';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type MyListing = {
   id: string; title: string; price: number; currency: string; images: string[]; city: string | null;
@@ -25,6 +26,7 @@ type MyListing = {
 
 export default function IlanlarimScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [listings, setListings] = useState<MyListing[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -129,9 +131,9 @@ export default function IlanlarimScreen() {
         }}
       />
 
-      <Modal transparent animationType="slide" visible={Boolean(selectedListing)} onRequestClose={() => setSelectedListing(null)}>
+      <Modal transparent animationType="slide" visible={Boolean(selectedListing)} statusBarTranslucent navigationBarTranslucent onRequestClose={() => setSelectedListing(null)}>
         <Pressable style={styles.sheetBackdrop} onPress={() => setSelectedListing(null)}>
-          <Pressable style={styles.actionSheet} onPress={(event) => event.stopPropagation()}>
+          <Pressable style={[styles.actionSheet, { paddingBottom: Math.max(insets.bottom, 16) }]} onPress={(event) => event.stopPropagation()}>
             <View style={styles.sheetHandle} />
             <Text style={styles.sheetTitle}>İlan işlemleri</Text>
             <Text style={styles.sheetSubtitle} numberOfLines={1}>{selectedListing?.title}</Text>

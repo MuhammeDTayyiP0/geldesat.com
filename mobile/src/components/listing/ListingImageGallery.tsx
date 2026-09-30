@@ -1,12 +1,11 @@
-import React, { useState } from 'react';
-import { StyleSheet, Text, View, Image, Dimensions, FlatList, TouchableOpacity, Modal, LayoutChangeEvent } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { useEffect, useMemo, useState } from 'react';
+import { StyleSheet, Text, View, Image, FlatList, TouchableOpacity, Modal, LayoutChangeEvent, Platform, StatusBar, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ImageIcon, X, Maximize2 } from 'lucide-react-native';
 import { API_BASE_URL } from '@/src/api/client';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const GALLERY_HEIGHT = 280;
 
 interface ListingImageGalleryProps {
@@ -15,16 +14,26 @@ interface ListingImageGalleryProps {
 }
 
 export function ListingImageGallery({ images, title }: ListingImageGalleryProps) {
+  const { width: screenWidth } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const [activeIndex, setActiveIndex] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isZoomed, setIsZoomed] = useState(false);
-  const [viewport, setViewport] = useState({ width: SCREEN_WIDTH, height: 1 });
+  const [viewport, setViewport] = useState({ width: screenWidth, height: 1 });
+  const [naturalSize, setNaturalSize] = useState({ width: screenWidth, height: 1 });
   const zoomScale = useSharedValue(1);
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
   const baseScale = useSharedValue(1);
   const baseX = useSharedValue(0);
   const baseY = useSharedValue(0);
+  const imageWidth = useSharedValue(screenWidth);
+  const imageHeight = useSharedValue(1);
+
+  const validImages = useMemo(
+    () => images?.length ? images.map((image) => image.startsWith('/') ? `${API_BASE_URL}${image}` : image) : [],
+    [images],
+  );
 
   const resetZoom = () => {
     zoomScale.value = withSpring(1);
@@ -36,9 +45,9 @@ export function ListingImageGallery({ images, title }: ListingImageGalleryProps)
     setIsZoomed(false);
   };
 
-  const clampOffset = (offset: number, scale: number, length: number) => {
+  const clampOffset = (offset: number, scale: number, imageLength: number, viewportLength: number) => {
     'worklet';
-    const limit = Math.max(0, (length * (scale - 1)) / 2);
+    const limit = Math.max(0, (imageLength * scale - viewportLength) / 2);
     return Math.max(-limit, Math.min(limit, offset));
   };
 
@@ -54,8 +63,18 @@ export function ListingImageGallery({ images, title }: ListingImageGalleryProps)
       const factor = nextScale / baseScale.value;
       const centerX = viewport.width / 2;
       const centerY = viewport.height / 2;
-      translateX.value = clampOffset(event.focalX - centerX - (event.focalX - centerX - baseX.value) * factor, nextScale, viewport.width);
-      translateY.value = clampOffset(event.focalY - centerY - (event.focalY - centerY - baseY.value) * factor, nextScale, viewport.height);
+      translateX.value = clampOffset(
+        event.focalX - centerX - (event.focalX - centerX - baseX.value) * factor,
+        nextScale,
+        imageWidth.value,
+        viewport.width,
+      );
+      translateY.value = clampOffset(
+        event.focalY - centerY - (event.focalY - centerY - baseY.value) * factor,
+        nextScale,
+        imageHeight.value,
+        viewport.height,
+      );
       zoomScale.value = nextScale;
     })
     .onEnd(() => {
@@ -74,11 +93,11 @@ export function ListingImageGallery({ images, title }: ListingImageGalleryProps)
       baseY.value = translateY.value;
     })
     .onUpdate((event) => {
-      translateX.value = clampOffset(baseX.value + event.translationX, zoomScale.value, viewport.width);
-      translateY.value = clampOffset(baseY.value + event.translationY, zoomScale.value, viewport.height);
+      translateX.value = clampOffset(baseX.value + event.translationX, zoomScale.value, imageWidth.value, viewport.width);
+      translateY.value = clampOffset(baseY.value + event.translationY, zoomScale.value, imageHeight.value, viewport.height);
     });
 
-  const doubleTapGesture = Gesture.Tap().numberOfTaps(2).onEnd(() => {
+  const doubleTapGesture = Gesture.Tap().numberOfTaps(2).onEnd((event) => {
     if (zoomScale.value > 1.02) {
       zoomScale.value = withSpring(1);
       translateX.value = withSpring(0);
@@ -86,6 +105,8 @@ export function ListingImageGallery({ images, title }: ListingImageGalleryProps)
       runOnJS(setIsZoomed)(false);
     } else {
       zoomScale.value = withSpring(2);
+      translateX.value = withSpring(clampOffset(viewport.width / 2 - event.x, 2, imageWidth.value, viewport.width));
+      translateY.value = withSpring(clampOffset(viewport.height / 2 - event.y, 2, imageHeight.value, viewport.height));
       runOnJS(setIsZoomed)(true);
     }
   });
@@ -100,16 +121,39 @@ export function ListingImageGallery({ images, title }: ListingImageGalleryProps)
     setViewport({ width, height });
   };
 
-  const validImages = images?.length
-    ? images.map((image) => image.startsWith('/') ? `${API_BASE_URL}${image}` : image)
-    : [];
+  useEffect(() => {
+    if (!isFullscreen || !validImages[activeIndex]) return;
+    let mounted = true;
+    Image.getSize(validImages[activeIndex], (width, height) => {
+      if (mounted) setNaturalSize({ width, height });
+    }, () => {
+      if (mounted) setNaturalSize({ width: screenWidth, height: viewport.height || 1 });
+    });
+    return () => { mounted = false; };
+  }, [activeIndex, isFullscreen, screenWidth, validImages, viewport.height]);
+
+  useEffect(() => {
+    if (!viewport.width || !viewport.height || !naturalSize.width || !naturalSize.height) return;
+    const containScale = Math.min(viewport.width / naturalSize.width, viewport.height / naturalSize.height);
+    imageWidth.value = naturalSize.width * containScale;
+    imageHeight.value = naturalSize.height * containScale;
+  }, [imageHeight, imageWidth, naturalSize, viewport]);
 
   const onScroll = (event: any) => {
-    const slide = Math.round(event.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+    const slide = Math.round(event.nativeEvent.contentOffset.x / screenWidth);
     if (slide !== activeIndex) {
       resetZoom();
       setActiveIndex(slide);
     }
+  };
+
+  const openFullscreen = () => {
+    resetZoom();
+    setIsFullscreen(true);
+  };
+  const closeFullscreen = () => {
+    resetZoom();
+    setIsFullscreen(false);
   };
 
   return (
@@ -124,8 +168,8 @@ export function ListingImageGallery({ images, title }: ListingImageGalleryProps)
           onMomentumScrollEnd={onScroll}
           keyExtractor={(_, index) => String(index)}
           renderItem={({ item }) => (
-        <TouchableOpacity activeOpacity={0.9} onPress={() => { resetZoom(); setIsFullscreen(true); }} style={styles.imageSlide}>
-              <Image source={{ uri: item }} style={styles.galleryImage} resizeMode="cover" accessibilityLabel={`${title} fotoğrafı`} />
+            <TouchableOpacity activeOpacity={0.9} onPress={openFullscreen} style={[styles.imageSlide, { width: screenWidth }]}>
+              <Image source={{ uri: item }} style={[styles.galleryImage, { width: screenWidth }]} resizeMode="cover" accessibilityLabel={`${title} fotoğrafı`} />
             </TouchableOpacity>
           )}
         />
@@ -136,54 +180,48 @@ export function ListingImageGallery({ images, title }: ListingImageGalleryProps)
         </View>
       )}
 
-      {/* Sayfa Sayacı Rozeti (Örn: 1 / 5) */}
       {validImages.length > 0 ? <View style={styles.counterBadge}>
-        <Text style={styles.counterText}>
-          {activeIndex + 1} / {validImages.length}
-        </Text>
+        <Text style={styles.counterText}>{activeIndex + 1} / {validImages.length}</Text>
       </View> : null}
-
-      {/* Büyütme İkonu */}
-      {validImages.length > 0 ? <TouchableOpacity style={styles.expandButton} onPress={() => { resetZoom(); setIsFullscreen(true); }}>
+      {validImages.length > 0 ? <TouchableOpacity style={styles.expandButton} onPress={openFullscreen} accessibilityRole="button" accessibilityLabel="Fotoğrafı tam ekran aç">
         <Maximize2 size={16} color="#ffffff" />
       </TouchableOpacity> : null}
 
-      {/* Tam Ekran Galeri Modalı */}
-      <Modal visible={isFullscreen && validImages.length > 0} transparent={false} animationType="fade">
-        <SafeAreaView style={styles.fullscreenContainer}>
-          {/* Üst Bar: Kapat Butonu ve Başlık */}
-          <View style={styles.fullscreenHeader}>
-            <Text style={styles.fullscreenCounter}>
-              {activeIndex + 1} / {validImages.length}
-            </Text>
-            <TouchableOpacity onPress={() => setIsFullscreen(false)} style={styles.closeButton}>
+      <Modal
+        visible={isFullscreen && validImages.length > 0}
+        transparent={false}
+        animationType="fade"
+        statusBarTranslucent={Platform.OS === 'android'}
+        navigationBarTranslucent={Platform.OS === 'android'}
+        onRequestClose={closeFullscreen}>
+        <View style={styles.fullscreenContainer}>
+          <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+          <View style={[styles.fullscreenHeader, { paddingTop: insets.top + 8 }]}>
+            <Text style={styles.fullscreenCounter}>{activeIndex + 1} / {validImages.length}</Text>
+            <TouchableOpacity onPress={closeFullscreen} style={styles.closeButton} accessibilityRole="button" accessibilityLabel="Fotoğrafı kapat">
               <X size={24} color="#ffffff" />
             </TouchableOpacity>
           </View>
-
-          {/* Tam Ekran Kaydırıcı */}
           <FlatList
+            style={styles.fullscreenList}
             data={validImages}
             horizontal
             pagingEnabled
+            scrollEnabled={!isZoomed}
             initialScrollIndex={activeIndex}
-            getItemLayout={(_, index) => ({
-              length: SCREEN_WIDTH,
-              offset: SCREEN_WIDTH * index,
-              index,
-            })}
+            getItemLayout={(_, index) => ({ length: screenWidth, offset: screenWidth * index, index })}
             showsHorizontalScrollIndicator={false}
             onMomentumScrollEnd={onScroll}
             keyExtractor={(_, index) => `fs-${index}`}
             renderItem={({ item }) => (
               <GestureDetector gesture={fullscreenGesture}>
-                <View style={styles.fullscreenSlide} onLayout={onViewportLayout}>
-                  <Animated.Image source={{ uri: item }} style={[styles.fullscreenImage, animatedImageStyle]} resizeMode="contain" accessibilityLabel={`${title} fotoğrafı`} />
+                <View style={[styles.fullscreenSlide, { width: screenWidth }]} onLayout={onViewportLayout}>
+                  <Animated.Image source={{ uri: item }} style={[styles.fullscreenImage, animatedImageStyle, { width: screenWidth }]} resizeMode="contain" accessibilityLabel={`${title} fotoğrafı`} />
                 </View>
               </GestureDetector>
             )}
           />
-        </SafeAreaView>
+        </View>
       </Modal>
     </View>
   );
@@ -197,7 +235,6 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   imageSlide: {
-    width: SCREEN_WIDTH,
     height: GALLERY_HEIGHT,
     justifyContent: 'center',
     alignItems: 'center',
@@ -212,7 +249,6 @@ const styles = StyleSheet.create({
   },
   emptyGalleryText: { color: '#5a6270', fontSize: 13 },
   galleryImage: {
-    width: SCREEN_WIDTH,
     height: GALLERY_HEIGHT,
   },
   counterBadge: {
@@ -240,40 +276,24 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-
-  // Tam Ekran Stilleri
-  fullscreenContainer: {
-    flex: 1,
-    backgroundColor: '#000000',
-  },
+  fullscreenContainer: { flex: 1, backgroundColor: '#000000' },
   fullscreenHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingBottom: 12,
   },
-  fullscreenCounter: {
-    color: '#ffffff',
-    fontSize: 15,
-    fontWeight: '700',
-  },
+  fullscreenCounter: { color: '#ffffff', fontSize: 15, fontWeight: '700' },
   closeButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  fullscreenSlide: {
-    width: SCREEN_WIDTH,
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  fullscreenImage: {
-    width: SCREEN_WIDTH,
-    height: '100%',
-  },
+  fullscreenList: { flex: 1 },
+  fullscreenSlide: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  fullscreenImage: { height: '100%' },
 });

@@ -34,10 +34,12 @@ import {
 import { getMobileListing, revealMobileListingPhone, reportMobileListing, startMobileConversation, submitMobileReview, toggleMobileFavorite } from '@/src/api/client';
 import { getStoredUser } from '@/src/api/auth';
 import { ListingCard } from '@/src/components/listing/ListingCard';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function IlanDetayScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const [listing, setListing] = useState<LocalListing | null>(null);
   const [loading, setLoading] = useState(true);
@@ -238,7 +240,7 @@ export default function IlanDetayScreen() {
         }}
       />
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: 90 + insets.bottom }]} showsVerticalScrollIndicator={false}>
         {/* 1. Tam Ekran Destekli Görsel Galerisi */}
         <ListingImageGallery images={listing.images} title={listing.title} />
 
@@ -371,7 +373,7 @@ export default function IlanDetayScreen() {
       </ScrollView>
 
       {/* 7. Alt Sabit İletişim Barı */}
-      {isOwner ? <View style={styles.ownerBar}>
+      {isOwner ? <View style={[styles.ownerBar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
         <View style={styles.ownerPrice}><Text style={styles.ownerPriceLabel}>İlan fiyatı</Text><Text style={styles.ownerPriceValue}>{formattedPrice}</Text></View>
         <TouchableOpacity style={styles.manageButton} onPress={() => router.push({ pathname: '/(tabs)/ilan-ver', params: { id: listing.id } } as any)} accessibilityRole="button">
           <Pencil size={17} color="#fff" /><Text style={styles.manageButtonText}>İlanı Yönet</Text>
@@ -649,7 +651,7 @@ const styles = StyleSheet.create({
     color: '#065f46',
     lineHeight: 16,
   },
-  ownerBar: { position: 'absolute', bottom: 0, left: 0, right: 0, minHeight: 78, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#d8dee6', paddingHorizontal: 16, paddingTop: 10, paddingBottom: 24, flexDirection: 'row', alignItems: 'center', gap: 12, shadowColor: '#000', shadowOffset: { width: 0, height: -3 }, shadowOpacity: 0.08, shadowRadius: 6, elevation: 10 },
+  ownerBar: { position: 'absolute', bottom: 0, left: 0, right: 0, minHeight: 78, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#d8dee6', paddingHorizontal: 16, paddingTop: 10, paddingBottom: 12, flexDirection: 'row', alignItems: 'center', gap: 12, shadowColor: '#000', shadowOffset: { width: 0, height: -3 }, shadowOpacity: 0.08, shadowRadius: 6, elevation: 10 },
   ownerPrice: { flex: 1 }, ownerPriceLabel: { fontSize: 11, color: '#8a929e' }, ownerPriceValue: { fontSize: 16, color: '#1a4fd8', fontWeight: '800' },
   manageButton: { height: 46, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 16, backgroundColor: '#1a4fd8', borderRadius: 10 }, manageButtonText: { color: '#fff', fontSize: 13, fontWeight: '700' },
   headerActions: { flexDirection: 'row', alignItems: 'center', marginRight: 4 }, headerActionButton: { width: 42, height: 44, alignItems: 'center', justifyContent: 'center' },

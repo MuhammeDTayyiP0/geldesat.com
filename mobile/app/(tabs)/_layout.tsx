@@ -8,9 +8,11 @@ import { getStoredUser } from '@/src/api/auth';
 import { getMobileConversations, getMobileNotifications } from '@/src/api/client';
 
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function TabLayout() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   const refreshingBadges = useRef(false);
@@ -46,8 +48,8 @@ export default function TabLayout() {
           backgroundColor: '#ffffff',
           borderTopColor: '#d8dee6',
           borderTopWidth: 1,
-          height: Platform.OS === 'ios' ? 84 : 64,
-          paddingBottom: Platform.OS === 'ios' ? 24 : 8,
+          height: 56 + Math.max(insets.bottom, 8),
+          paddingBottom: Math.max(insets.bottom, 8),
           paddingTop: 6,
           elevation: 8,
           shadowColor: '#000',
