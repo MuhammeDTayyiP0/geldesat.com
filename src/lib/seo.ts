@@ -241,6 +241,17 @@ export function buildListingSeo(input: ListingSeoInput): ListingSeoOutput {
 
   // İlan Özellikleri (Yıl, KM, Yakıt, Vites, m², vb.)
   const attrs = listing.attrs || {};
+  const conditionLabel = String(attrs["Durum"] ?? "").trim().toLocaleLowerCase("tr");
+  const itemCondition = conditionLabel === "yeni" || conditionLabel === "sıfır"
+    ? "https://schema.org/NewCondition"
+    : conditionLabel === "ikinci el" || conditionLabel === "kullanılmış"
+      ? "https://schema.org/UsedCondition"
+      : conditionLabel === "yenilenmiş"
+        ? "https://schema.org/RefurbishedCondition"
+        : undefined;
+  const priceValidUntil = listing.expires_at && Number.isFinite(Date.parse(listing.expires_at))
+    ? new Date(listing.expires_at).toISOString().slice(0, 10)
+    : undefined;
   const year = attrs["Yıl"] ? String(attrs["Yıl"]) : null;
   const km = attrs["KM"] ? `${attrs["KM"]} KM` : null;
   const fuel = attrs["Yakıt"] ? String(attrs["Yakıt"]) : null;
@@ -315,7 +326,7 @@ export function buildListingSeo(input: ListingSeoInput): ListingSeoOutput {
     "@type": "Offer",
     priceCurrency: listing.currency || "TRY",
     price: listing.price,
-    priceValidUntil: new Date(Date.now() + 30 * 86400_000).toISOString().slice(0, 10),
+    ...(priceValidUntil ? { priceValidUntil } : {}),
     availability:
       listing.status === "ACTIVE"
         ? "https://schema.org/InStock"
@@ -374,7 +385,7 @@ export function buildListingSeo(input: ListingSeoInput): ListingSeoOutput {
             },
           }
         : {}),
-      itemCondition: "https://schema.org/UsedCondition",
+      ...(itemCondition ? { itemCondition } : {}),
       offers: baseOffer,
       ...(datePublished ? { datePublished } : {}),
       ...(dateModified ? { dateModified } : {}),
@@ -402,20 +413,10 @@ export function buildListingSeo(input: ListingSeoInput): ListingSeoOutput {
       url: pageUrl,
       sku: listing.id?.substring(0, 8),
       image: absoluteImages.length > 0 ? absoluteImages : [coverImage],
+      ...(itemCondition ? { itemCondition } : {}),
       offers: baseOffer,
       ...(datePublished ? { datePublished } : {}),
       ...(dateModified ? { dateModified } : {}),
-    };
-  }
-
-  // Seller rating eklenebilir
-  if (seller && seller.rating_count > 0) {
-    structuredData.aggregateRating = {
-      "@type": "AggregateRating",
-      ratingValue: seller.rating_avg.toFixed(1),
-      reviewCount: seller.rating_count,
-      bestRating: 5,
-      worstRating: 1,
     };
   }
 

@@ -12,8 +12,8 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { getCategory, listCategoryRoots, searchCatalog } from "@/lib/server/catalog";
-import { attrsToSearch, parseAttrs, parseSearch, toFilters, type CatalogSearch } from "@/lib/search-params";
+import { getCategory, listCategories, searchCatalog } from "@/lib/server/catalog";
+import { attrsToSearch, inferSearchCategoryId, parseAttrs, parseSearch, toFilters, type CatalogSearch } from "@/lib/search-params";
 
 import { ListingCard } from "@/components/listing/ListingCard";
 import { Filters, type FilterState } from "@/components/listing/Filters";
@@ -24,6 +24,7 @@ import { saveSearch } from "@/lib/server/social";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { toast } from "sonner";
 import { cn, formatNumber } from "@/lib/utils";
+import { CategoryButtons } from "@/components/listing/CategoryPicker";
 
 const SORT_OPTIONS = [
   { value: "date_desc", label: "En Yeni İlanlar" },
@@ -37,18 +38,29 @@ export const Route = createFileRoute("/search")({
   validateSearch: (s: Record<string, unknown>) => parseSearch(s),
   loaderDeps: ({ search }) => search,
   loader: async ({ deps }) => {
-    const [cat, categoryRoots, result] = await Promise.all([
+    const [requestedCategory, categoryData, result] = await Promise.all([
       deps.category ? getCategory({ data: { slug: deps.category } }) : null,
-      listCategoryRoots(),
+      listCategories(),
       searchCatalog({ data: toFilters({ ...deps, neighborhood: undefined }) }),
     ]);
+    const inferredCategoryId = !deps.category && deps.q?.trim()
+      ? inferSearchCategoryId(result.listings.map((listing) => listing.category_id), categoryData.categories)
+      : undefined;
+    const inferredCategory = inferredCategoryId
+      ? categoryData.categories.find((category) => category.id === inferredCategoryId)
+      : undefined;
+    const categoryContext = requestedCategory?.category
+      ? requestedCategory
+      : inferredCategory
+        ? await getCategory({ data: { slug: inferredCategory.slug } })
+        : null;
     return {
       result,
-      attributes: cat?.attributes ?? [],
-      currentCategory: cat?.category ?? null,
-      categoryPath: cat?.path ?? [],
-      categoryChildren: cat?.children ?? [],
-      categoryRoots,
+      attributes: categoryContext?.attributes ?? [],
+      currentCategory: categoryContext?.category ?? null,
+      categoryPath: categoryContext?.path ?? [],
+      categoryChildren: categoryContext?.children ?? [],
+      categoryRoots: categoryData.roots,
     };
   },
   head: ({ loaderData, match }) => {
@@ -346,57 +358,49 @@ function SearchPage() {
       </form>
 
       {/* 2. Hızlı Kategori Gezintisi (Yatay Kaydırılabilir Çipler) */}
-      <div className="mb-4">
-        {categoryPath.length > 0 ? (
-          <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted">
-            <button
-              type="button"
-              onClick={() => apply({ category: undefined })}
-              className="font-medium hover:text-primary transition-colors"
-            >
-              Tüm Kategoriler
-            </button>
-            {categoryPath.map((c: any, i: number) => (
-              <span key={c.id} className="flex items-center gap-1.5">
-                <ChevronRight className="size-3 text-subtle" />
-                {i === categoryPath.length - 1 ? (
-                  <span className="font-semibold text-fg">{c.name}</span>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => apply({ category: c.slug })}
-                    className="hover:text-primary transition-colors"
-                  >
-                    {c.name}
-                  </button>
-                )}
-              </span>
-            ))}
-          </div>
-        ) : null}
-
-        {/* Alt Kategoriler veya Kök Kategoriler */}
-        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 py-1.5 no-scrollbar sm:mx-0 sm:px-0">
-          {(categoryChildren.length > 0 ? categoryChildren : categoryRoots.roots).slice(0, 10).map((c: any) => {
-            const isSelected = search.category === c.slug;
-            return (
+      <details open={Boolean(currentCategory)} className="mb-4 rounded-xl border border-border bg-surface px-3 sm:px-4">
+        <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-fg">
+          <span>Kategori{currentCategory ? ` · ${currentCategory.name}` : ""}</span>
+          <span className="text-xs font-medium text-muted">Kategoriye göre daralt</span>
+        </summary>
+        <div className="border-t border-border/70 py-3">
+          {categoryPath.length > 0 ? (
+            <div className="mb-3 flex flex-wrap items-center gap-1.5 text-xs text-muted">
               <button
-                key={c.id}
                 type="button"
-                onClick={() => apply({ category: isSelected ? undefined : c.slug })}
-                className={cn(
-                  "shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition-all active:scale-95",
-                  isSelected
-                    ? "border-primary bg-primary text-primary-fg shadow-xs"
-                    : "border-border bg-surface text-fg hover:border-primary/50 hover:bg-elevated",
-                )}
+                onClick={() => apply({ category: undefined })}
+                className="font-medium hover:text-primary transition-colors"
               >
-                {c.name}
+                Tüm Kategoriler
               </button>
-            );
-          })}
+              {categoryPath.map((category: { id: string; name: string; slug: string }, index: number) => (
+                <span key={category.id} className="flex items-center gap-1.5">
+                  <ChevronRight className="size-3 text-subtle" />
+                  {index === categoryPath.length - 1 ? (
+                    <span className="font-semibold text-fg">{category.name}</span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => apply({ category: category.slug })}
+                      className="hover:text-primary transition-colors"
+                    >
+                      {category.name}
+                    </button>
+                  )}
+                </span>
+              ))}
+            </div>
+          ) : null}
+          {(currentCategory ? categoryChildren : categoryRoots).length > 0 ? (
+            <CategoryButtons
+              items={currentCategory ? categoryChildren : categoryRoots}
+              onPick={(category) => apply({ category: category.slug })}
+            />
+          ) : (
+            <p className="text-sm text-muted">Bu seviyede alt kategori yok. Üst kategoriye dönmek için yukarıdaki yolu kullanın.</p>
+          )}
         </div>
-      </div>
+      </details>
 
       {/* 3. Başlık & Araç Çubuğu */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">

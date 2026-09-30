@@ -16,8 +16,8 @@ Disallow: /ilan-ver
 # API rotalari
 Disallow: /api/
 
-# Arama ve filtreleme sayfalari (duplicate content onlemi)
-Disallow: /search
+# Arama sayfalari robots.txt ile engellenmez; /search yaniti noindex meta tasir.
+# Boylece Google noindex direktifini okuyabilir ve arama URL'lerini dizine eklemez.
 
 # Sitemap index
 Sitemap: https://www.geldesat.com/sitemap.xml

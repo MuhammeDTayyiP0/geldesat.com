@@ -17,6 +17,45 @@ export type CatalogSearch = {
   attrs?: string;
 };
 
+type SearchCategoryNode = { id: string; parent_id: string | null };
+
+/**
+ * Find the category level that lets a text search continue through the same
+ * taxonomy as category browsing. One matched leaf opens at its parent so its
+ * siblings (for example, model variants) remain selectable.
+ */
+export function inferSearchCategoryId(
+  resultCategoryIds: readonly string[],
+  categories: readonly SearchCategoryNode[],
+): string | undefined {
+  const byId = new Map(categories.map((category) => [category.id, category]));
+  const ids = [...new Set(resultCategoryIds)].filter((id) => byId.has(id));
+  if (ids.length === 0) return undefined;
+
+  const paths = ids.map((id) => {
+    const path: string[] = [];
+    let current = byId.get(id);
+    while (current) {
+      path.unshift(current.id);
+      current = current.parent_id ? byId.get(current.parent_id) : undefined;
+    }
+    return path;
+  });
+
+  const commonPath: string[] = [];
+  const shortestPathLength = Math.min(...paths.map((path) => path.length));
+  for (let i = 0; i < shortestPathLength; i += 1) {
+    const candidate = paths[0][i];
+    if (paths.every((path) => path[i] === candidate)) commonPath.push(candidate);
+    else break;
+  }
+
+  if (paths.length === 1 && commonPath.length > 1) {
+    return commonPath[commonPath.length - 2];
+  }
+  return commonPath[commonPath.length - 1];
+}
+
 export function parseSearch(s: Record<string, unknown>): CatalogSearch {
   const str = (k: string) => (typeof s[k] === "string" ? (s[k] as string) : undefined);
   return {
