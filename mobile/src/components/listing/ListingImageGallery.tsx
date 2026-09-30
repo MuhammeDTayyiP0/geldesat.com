@@ -3,7 +3,7 @@ import { StyleSheet, Text, View, Image, FlatList, TouchableOpacity, Modal, Layou
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ImageIcon, X, Maximize2 } from 'lucide-react-native';
 import { API_BASE_URL } from '@/src/api/client';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 
 const GALLERY_HEIGHT = 280;
@@ -194,7 +194,9 @@ export function ListingImageGallery({ images, title }: ListingImageGalleryProps)
         statusBarTranslucent={Platform.OS === 'android'}
         navigationBarTranslucent={Platform.OS === 'android'}
         onRequestClose={closeFullscreen}>
-        <View style={styles.fullscreenContainer}>
+        {/* Native Modal creates a separate native root; gesture handlers must be
+            mounted under a root inside the modal as well as in the app shell. */}
+        <GestureHandlerRootView style={styles.fullscreenContainer}>
           <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
           <View style={[styles.fullscreenHeader, { paddingTop: insets.top + 8 }]}>
             <Text style={styles.fullscreenCounter}>{activeIndex + 1} / {validImages.length}</Text>
@@ -221,7 +223,7 @@ export function ListingImageGallery({ images, title }: ListingImageGalleryProps)
               </GestureDetector>
             )}
           />
-        </View>
+        </GestureHandlerRootView>
       </Modal>
     </View>
   );

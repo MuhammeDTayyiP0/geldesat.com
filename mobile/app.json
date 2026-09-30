@@ -24,6 +24,7 @@
     },
     "android": {
       "package": "com.geldesat.app",
+      "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundColor": "#1a4fd8"

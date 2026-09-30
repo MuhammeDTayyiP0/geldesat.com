@@ -42,7 +42,6 @@ export default function ChatScreen() {
   const [inputText, setInputText] = useState('');
   const [actionsOpen, setActionsOpen] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
-  const [inputHeight, setInputHeight] = useState(40);
   const scrollViewRef = useRef<ScrollView>(null);
 
   useEffect(() => {
@@ -132,7 +131,9 @@ export default function ChatScreen() {
   return (
     <AuthGate title="Mesajlaşma" subtitle="Mesajlarınızı görüntülemek için giriş yapın.">
     <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      // iOS needs the explicit keyboard inset. Android's window uses adjustResize,
+      // so adding KeyboardAvoidingView's height adjustment there resizes twice.
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 56 : 0}
       style={styles.container}>
       <Stack.Screen
@@ -234,16 +235,15 @@ export default function ChatScreen() {
       </View> : null}
 
       {/* 5. Alt Mesaj Giriş Barı */}
-      {!thread?.blocked ? <View style={[styles.inputBar, { paddingBottom: keyboardVisible ? 8 : Math.max(insets.bottom, 8) }]}>
+      {!thread?.blocked ? <View style={[styles.inputBar, { paddingBottom: keyboardVisible ? 0 : insets.bottom }]}>
         <TextInput
           placeholder="Mesajınızı yazın..."
           placeholderTextColor="#8a929e"
           value={inputText}
           onChangeText={setInputText}
           multiline
-          scrollEnabled={inputHeight >= 112}
-          onContentSizeChange={(event) => setInputHeight(Math.min(112, Math.max(40, event.nativeEvent.contentSize.height + 8)))}
-          style={[styles.textInput, { height: inputHeight }]}
+          scrollEnabled
+          style={styles.textInput}
           textAlignVertical="center"
         />
         <TouchableOpacity
