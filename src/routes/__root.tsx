@@ -1,7 +1,5 @@
 import { createRootRoute, HeadContent, Outlet, Scripts, useRouterState } from "@tanstack/react-router";
 import { useEffect } from "react";
-import { AuthProvider } from "@/lib/auth/provider";
-import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { BottomNav } from "@/components/layout/BottomNav";
@@ -27,6 +25,8 @@ export const Route = createRootRoute({
       { title: `${APP_NAME} — Türkiye İlan Platformu` },
       { name: "description", content: "GeldeSat — Türkiye'nin ilan platformu. Emlak, vasıta, ikinci el eşya ve hizmet ilanlarını ücretsiz verin, kolayca alın-satın. Güvenli iletişim, anlık mesajlaşma." },
       { name: "theme-color", content: "#1A4FD8" },
+      { name: "application-name", content: APP_NAME },
+      { name: "apple-mobile-web-app-title", content: APP_NAME },
       { name: "robots", content: "index,follow" },
       // Coğrafi meta etiketler — Türkiye aramaları için
       { name: "geo.region", content: "TR" },
@@ -52,9 +52,10 @@ export const Route = createRootRoute({
     ],
     links: [
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
+      { rel: "icon", type: "image/png", sizes: "512x512", href: "/favicon.png" },
       { rel: "stylesheet", href: appCss },
-      { rel: "manifest", href: "/__grok/manifest.webmanifest" },
-      { rel: "apple-touch-icon", href: "/__grok/icon-180.png" },
+      { rel: "manifest", href: "/site.webmanifest" },
+      { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
@@ -166,10 +167,7 @@ function Root() {
           </div>
           <p className="splash-text">GeldeSat</p>
         </div>
-        <PreviewHostBridge />
-        <AuthProvider>
-          <Shell />
-        </AuthProvider>
+        <Shell />
         <Scripts />
       </body>
     </html>

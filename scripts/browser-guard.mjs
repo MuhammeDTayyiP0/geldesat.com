@@ -2,8 +2,7 @@
  * Target checks shared by the Playwright capture scripts.
  *
  * Both run Chromium with `--no-sandbox` as root and take their URL and output
- * path from argv, so unchecked they will render `file:///root/.grok/auth.json`
- * into a PNG the agent can read, and write it anywhere.
+ * path from argv, so validate them before opening files or writing screenshots.
  */
 import { resolve, sep } from "node:path";
 

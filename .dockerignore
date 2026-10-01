@@ -7,8 +7,8 @@ screenshots
 .output
 dist
 *.zip
-.grok/skills
-.grok/references
-.grok/preview.log
+.cache
+.app-env.json
+.grok
 AGENTS.md
 AGENTS.project.md

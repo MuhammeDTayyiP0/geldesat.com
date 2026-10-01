@@ -14,7 +14,6 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { SignedIn, SignedOut } from "@/lib/auth/gates";
 import { authEnabled, signOut } from "@/lib/auth/client";
-import { hasGateSessionMarker } from "@/lib/auth/gate-session-marker";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { unreadCount } from "@/lib/server/social";
 import { getMe } from "@/lib/server/account";
@@ -38,7 +37,7 @@ function AccountMenu({ admin }: { admin: boolean }) {
   const [signingOut, setSigningOut] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const label = user?.displayName ?? user?.primaryEmail ?? "Hesap";
-  const canSignOut = authEnabled && !hasGateSessionMarker();
+  const canSignOut = authEnabled;
 
   useEffect(() => {
     function onDoc(e: MouseEvent) {

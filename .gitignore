@@ -18,8 +18,10 @@ dist
 .nitro/
 .vercel
 
-# testing & grok / ai artifacts
+# testing and local app artifacts
 /coverage
+.cache
+.app-env.json
 .grok
 screenshots
 artifacts/

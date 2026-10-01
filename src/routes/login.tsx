@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { GROK_PROVIDERS, authClient, authEnabled, signIn } from "@/lib/auth/client";
+import { authClient, authEnabled, googleAuthEnabled } from "@/lib/auth/client";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { toast } from "sonner";
@@ -58,29 +58,23 @@ function Login() {
             <p className="text-sm text-muted">İlan, mesaj ve favori için giriş yapın.</p>
           </div>
         </div>
-        {authEnabled && import.meta.env.VITE_SELF_HOST !== "true" ? (
+        {authEnabled && googleAuthEnabled ? (
           <>
-            <div className="mt-6 space-y-2">
-              {GROK_PROVIDERS.filter((p) => p.idp === "google").map((p) => (
-                <Button
-                  key={p.providerId}
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => void signIn(p.providerId, { callbackURL: "/" })}
-                >
-                  {p.label} ile devam et
-                </Button>
-              ))}
-            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-6 w-full"
+              onClick={() => void authClient.signIn.social({ provider: "google", callbackURL: "/" })}
+            >
+              Google ile devam et
+            </Button>
             <div className="my-6 flex items-center gap-3 text-xs text-subtle">
               <span className="h-px flex-1 bg-border" />
               e-posta
               <span className="h-px flex-1 bg-border" />
             </div>
           </>
-        ) : (
-          <div className="mt-6" />
-        )}
+        ) : <div className="mt-6" />}
         {!authEnabled ? (
           <p className="mt-4 text-sm text-muted">Giriş şu an kapalı.</p>
         ) : null}
