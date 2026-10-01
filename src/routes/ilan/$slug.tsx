@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate, notFound } from "@tanstack/react-router";
 import { NotFound } from "@/components/common/NotFound";
-import { buildListingSeo } from "@/lib/seo";
+import { buildListingSeo, isListingIndexable } from "@/lib/seo";
 import {
   AlertCircle,
   Check,
@@ -96,7 +96,7 @@ export const Route = createFileRoute("/ilan/$slug")({
       meta: [
         { title: seo.title },
         { name: "description", content: seo.description },
-        { name: "robots", content: listing.status === "ACTIVE" ? "index,follow" : "noindex,nofollow" },
+        { name: "robots", content: isListingIndexable(listing.status, listing.expires_at) ? "index,follow" : "noindex,nofollow" },
         ...(seller?.name ? [{ name: "author", content: seller.name }] : []),
         // Open Graph
         { property: "og:site_name", content: "GeldeSat" },

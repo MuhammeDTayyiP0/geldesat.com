@@ -125,18 +125,14 @@ function buildStaticSitemap(): string {
   ]);
 }
 
-/** /sitemap-categories.xml — Yalnızca aktif ilanı olan veya kök kategoriler ve gerçek lastmod */
+/** /sitemap-categories.xml — Gerçek kategori route'larının tamamı ve aktif ilanlardan lastmod */
 async function buildCategoriesSitemap(): Promise<string> {
   const today = new Date().toISOString().slice(0, 10);
   try {
     const { getSql } = await import("../../src/lib/db");
     const sql = await getSql();
     const cats = await sql.query<{ slug: string; lastmod: string }>(
-      `WITH active_cats AS (
-         SELECT DISTINCT category_id FROM listings
-         WHERE status = 'ACTIVE' AND (expires_at IS NULL OR expires_at > now())
-       ),
-       cat_dates AS (
+      `WITH cat_dates AS (
          SELECT category_id, MAX(COALESCE(updated_at, created_at)) as max_date
          FROM listings
          WHERE status = 'ACTIVE' AND (expires_at IS NULL OR expires_at > now())
@@ -146,12 +142,6 @@ async function buildCategoriesSitemap(): Promise<string> {
               COALESCE(TO_CHAR(cd.max_date, 'YYYY-MM-DD'), $1) as lastmod
        FROM categories c
        LEFT JOIN cat_dates cd ON cd.category_id = c.id
-       WHERE c.parent_id IS NULL
-          OR c.id IN (SELECT category_id FROM active_cats)
-          OR EXISTS (
-            SELECT 1 FROM categories ch
-            WHERE ch.parent_id = c.id AND ch.id IN (SELECT category_id FROM active_cats)
-          )
        ORDER BY c.sort_order, c.name`,
       [today],
     );
@@ -297,17 +287,7 @@ function buildRobots(): string {
     "User-agent: *",
     "Allow: /",
     "",
-    "# Özel / kişisel sayfalar — indekslenmemeli",
-    "Disallow: /admin",
-    "Disallow: /profil",
-    "Disallow: /ilanlarim",
-    "Disallow: /mesajlar",
-    "Disallow: /favoriler",
-    "Disallow: /bildirimler",
-    "Disallow: /doping",
-    "Disallow: /arsiv",
-    "Disallow: /login",
-    "Disallow: /ilan-ver",
+    "# Uygulama sayfaları kendi noindex meta direktiflerini Google'a iletebilmelidir.",
     "",
     "# API rotaları",
     "Disallow: /api/",

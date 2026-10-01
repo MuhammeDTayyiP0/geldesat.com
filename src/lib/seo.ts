@@ -1,9 +1,21 @@
 import { formatPrice } from "./utils";
-import type { CategoryRow, ListingCard } from "./server/helpers";
+import type { ListingCard } from "./server/helpers";
 
 export const SITE_NAME = "GeldeSat";
 export const BASE_URL = "https://www.geldesat.com";
 export const DEFAULT_OG_IMAGE = `${BASE_URL}/og.jpg`;
+
+/** Matches the public visibility window used by listing sitemaps. */
+export function isListingIndexable(
+  status: string,
+  expiresAt: string | null | undefined,
+  now = Date.now(),
+): boolean {
+  if (status !== "ACTIVE") return false;
+  if (!expiresAt) return true;
+  const expiresAtMs = Date.parse(expiresAt);
+  return Number.isFinite(expiresAtMs) && expiresAtMs > now;
+}
 
 /**
  * Generic root category names that don't add value when subcategories exist.
