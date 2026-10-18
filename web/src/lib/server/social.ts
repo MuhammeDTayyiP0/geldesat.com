@@ -4,7 +4,6 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { newId, num, asJson, asIso, LISTING_PHOTO_MSG } from "@/lib/utils";
 import {
-  assertSavedSearchQuota,
   canReviewSeller,
   ensureProfile,
   firstInWindow,
@@ -516,47 +515,6 @@ export const unreadCount = createServerFn({ method: "GET" })
       [context.userId],
     );
     return { notifications: a[0]?.n ?? 0, messages: b[0]?.n ?? 0 };
-  });
-
-export const saveSearch = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
-  .validator(z.object({ label: z.string().max(60).optional(), query: z.string().optional(), filters: z.record(z.string(), z.unknown()) }))
-  .handler(async ({ context, data }) => {
-    const sql = await getSql();
-    const filters = JSON.stringify(data.filters);
-    if (filters.length > 12_000 || (data.query?.length ?? 0) > 200) throw new Error("Arama çok uzun.");
-    await assertSavedSearchQuota(sql, context.userId);
-    await sql.query(
-      "insert into saved_searches (id, user_id, label, query, filters) values ($1,$2,$3,$4,$5::jsonb)",
-      [newId("ss"), context.userId, data.label || data.query || "Kayıtlı arama", data.query || "", filters],
-    );
-    return { ok: true };
-  });
-
-export const mySavedSearches = createServerFn({ method: "GET" })
-  .middleware([authMiddleware])
-  .handler(async ({ context }) => {
-    const sql = await getSql();
-    const rows = await sql.query<Record<string, unknown>>(
-      "select id, label, query, filters, created_at from saved_searches where user_id=$1 order by created_at desc",
-      [context.userId],
-    );
-    return rows.map((r) => ({
-      id: String(r.id),
-      label: String(r.label ?? ""),
-      query: String(r.query ?? ""),
-      filters: String(typeof r.filters === "string" ? r.filters : JSON.stringify(r.filters ?? {})),
-      created_at: String(r.created_at),
-    }));
-  });
-
-export const deleteSavedSearch = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
-  .validator(z.object({ id: z.string() }))
-  .handler(async ({ context, data }) => {
-    const sql = await getSql();
-    await sql.query("delete from saved_searches where id=$1 and user_id=$2", [data.id, context.userId]);
-    return { ok: true };
   });
 
 export const blockUser = createServerFn({ method: "POST" })

@@ -386,15 +386,6 @@ export async function canReviewSeller(sql: QuerySql, reviewerId: string, sellerI
 
 export const REVIEW_NOT_ELIGIBLE = "Yalnızca karşılıklı mesajlaştığınız satıcıları puanlayabilirsiniz.";
 
-const SAVED_SEARCH_LIMIT = 30;
-
-export async function assertSavedSearchQuota(sql: QuerySql, userId: string): Promise<void> {
-  const rows = await sql.query<{ n: number }>("select count(*)::int as n from saved_searches where user_id=$1", [userId]);
-  if ((rows[0]?.n ?? 0) >= SAVED_SEARCH_LIMIT) {
-    throw new Error(`En fazla ${SAVED_SEARCH_LIMIT} kayıtlı arama tutabilirsiniz. Eskilerden birini silin.`);
-  }
-}
-
 /** A user's still-open report on a listing; repeats are dropped instead of queued again. */
 export async function hasOpenReport(sql: QuerySql, listingId: string, reporterId: string): Promise<boolean> {
   const rows = await sql.query<{ id: string }>(

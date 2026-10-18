@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { getSql } from "@/lib/db";
 import { auth } from "@/lib/auth/server";
-import { assertSavedSearchQuota, ensureProfile, normalizeTrPhone } from "@/lib/server/helpers";
+import { ensureProfile, normalizeTrPhone } from "@/lib/server/helpers";
 import { newId, slugify } from "@/lib/utils";
 import { publicErrorMessage } from "@/lib/server/errors";
 
@@ -35,7 +35,7 @@ export const Route = createFileRoute("/api/mobile/profile")({
 
           const sql = await getSql();
           await ensureProfile(userId);
-          const [profileRows, storeRows, savedRows] = await Promise.all([
+          const [profileRows, storeRows] = await Promise.all([
             sql.query<Record<string, unknown>>(
               `select p.display_name, p.phone, p.bio, p.city, p.district,
                 (select count(*)::int from listings where user_id=p.user_id) as listing_count,
@@ -48,10 +48,6 @@ export const Route = createFileRoute("/api/mobile/profile")({
             ),
             sql.query<Record<string, unknown>>(
               "select id, name, slug, plan, city, description from stores where user_id=$1 limit 1",
-              [userId],
-            ),
-            sql.query<Record<string, unknown>>(
-              "select id, label, query, filters, created_at from saved_searches where user_id=$1 order by created_at desc",
               [userId],
             ),
           ]);
@@ -80,12 +76,8 @@ export const Route = createFileRoute("/api/mobile/profile")({
               city: String(storeRows[0].city ?? ""),
               description: String(storeRows[0].description ?? ""),
             } : null,
-            savedSearches: savedRows.map((row) => ({
-              id: String(row.id),
-              label: String(row.label ?? ""),
-              query: String(row.query ?? ""),
-              filters: typeof row.filters === "string" ? row.filters : JSON.stringify(row.filters ?? {}),
-            })),
+            // Saved searches were removed; the field stays empty for older app builds.
+            savedSearches: [],
           }, { headers: { "Cache-Control": "private, no-store" } });
         } catch (err) {
           const message = publicErrorMessage(err, "Profil yüklenemedi.");
@@ -99,25 +91,7 @@ export const Route = createFileRoute("/api/mobile/profile")({
 
           const body: unknown = await request.json();
           if (body && typeof body === "object" && "action" in body && body.action === "saved-search") {
-            const input = z.object({
-              action: z.literal("saved-search"),
-              label: z.string().trim().max(60).optional(),
-              query: z.string().trim().max(200).optional(),
-              filters: z.record(z.string(), z.unknown()).default({}),
-            }).safeParse(body);
-            if (!input.success) return Response.json({ success: false, error: "Arama bilgilerini kontrol edin." }, { status: 400 });
-            const filtersJson = JSON.stringify(input.data.filters);
-            if (filtersJson.length > 12_000) return Response.json({ success: false, error: "Filtreler çok uzun." }, { status: 400 });
-            const sql = await getSql();
-            await assertSavedSearchQuota(sql, userId);
-            const query = input.data.query || "";
-            const label = input.data.label || query || "Kayıtlı arama";
-            const id = newId("ss");
-            await sql.query(
-              "insert into saved_searches (id,user_id,label,query,filters) values ($1,$2,$3,$4,$5::jsonb)",
-              [id, userId, label, query, filtersJson],
-            );
-            return Response.json({ success: true, savedSearch: { id, label, query, filters: filtersJson } });
+            return Response.json({ success: false, error: "Kayıtlı arama özelliği kaldırıldı." }, { status: 410 });
           }
           if (body && typeof body === "object" && "action" in body && body.action === "store") {
             const parsedStore = StoreInput.safeParse(body);
@@ -171,20 +145,8 @@ export const Route = createFileRoute("/api/mobile/profile")({
           return Response.json({ success: false, error: message }, { status: 500 });
         }
       },
-      DELETE: async ({ request }) => {
-        try {
-          const userId = await getUserId(request);
-          if (!userId) return Response.json({ success: false, error: "Oturum açmanız gerekiyor." }, { status: 401 });
-          const id = new URL(request.url).searchParams.get("id");
-          if (!id) return Response.json({ success: false, error: "Kayıtlı arama bulunamadı." }, { status: 400 });
-          const sql = await getSql();
-          await sql.query("delete from saved_searches where id=$1 and user_id=$2", [id, userId]);
-          return Response.json({ success: true });
-        } catch (err) {
-          const message = publicErrorMessage(err, "Kayıtlı arama silinemedi.");
-          return Response.json({ success: false, error: message }, { status: 500 });
-        }
-      },
+      DELETE: () =>
+        Response.json({ success: false, error: "Kayıtlı arama özelliği kaldırıldı." }, { status: 410 }),
     },
   },
 });

@@ -1,4 +1,4 @@
-import { createRootRoute, HeadContent, Outlet, Scripts, useRouterState } from "@tanstack/react-router";
+import { createRootRoute, HeadContent, Outlet, Scripts, useRouter, useRouterState } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
@@ -134,6 +134,8 @@ function Shell() {
 }
 
 function Root() {
+  // Production CSP nonce (see router.tsx); the splash script is the only inline script we write.
+  const nonce = useRouter().options.ssr?.nonce;
   return (
     <html lang="tr" className="antialiased" suppressHydrationWarning>
       <head>
@@ -142,9 +144,12 @@ function Root() {
           <style dangerouslySetInnerHTML={{ __html: "#app-splash-loader{display:none!important}" }} />
         </noscript>
         <HeadContent />
+        {/* Fallback if hydration is slow: only hides the splash; Shell removes it after hydrating. */}
         <script
+          nonce={nonce}
+          suppressHydrationWarning
           dangerouslySetInnerHTML={{
-            __html: `setTimeout(function(){var e=document.getElementById("app-splash-loader");if(e){e.style.opacity="0";e.style.pointerEvents="none";setTimeout(function(){if(e.parentNode)e.parentNode.removeChild(e)},300)}},2500);`,
+            __html: `setTimeout(function(){var e=document.getElementById("app-splash-loader");if(e){e.style.opacity="0";e.style.pointerEvents="none";e.style.visibility="hidden"}},2500);`,
           }}
         />
       </head>

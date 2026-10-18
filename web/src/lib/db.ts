@@ -19,7 +19,8 @@ const databaseUrl =
 export const dbSource: DbSource = databaseUrl ? "postgres" : "pglite";
 
 function assertDatabaseConfigured(): void {
-  if (dbSource === "pglite" && process.env.NODE_ENV === "production") {
+  // GELDESAT_ALLOW_MEMORY_DB=1 is for smoke-testing a local build only.
+  if (dbSource === "pglite" && process.env.NODE_ENV === "production" && process.env.GELDESAT_ALLOW_MEMORY_DB !== "1") {
     throw new Error("[db] DATABASE_URL is not set; refusing to run production on the in-memory PGLite fallback.");
   }
 }

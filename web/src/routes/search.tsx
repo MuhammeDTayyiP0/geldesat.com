@@ -20,9 +20,6 @@ import { Filters, type FilterState } from "@/components/listing/Filters";
 import { ListingGridSkeleton } from "@/components/listing/ListingGridSkeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { saveSearch } from "@/lib/server/social";
-import { useCurrentUser } from "@/lib/auth/use-current-user";
-import { toast } from "sonner";
 import { cn, formatNumber } from "@/lib/utils";
 import { CategoryButtons } from "@/components/listing/CategoryPicker";
 
@@ -112,7 +109,6 @@ function SearchPage() {
     categoryRoots,
   } = Route.useLoaderData();
   const nav = useNavigate();
-  const user = useCurrentUser();
 
   const [view, setView] = useState<"list" | "grid">("grid");
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
@@ -448,22 +444,6 @@ function SearchPage() {
             <ArrowUpDown className="size-3.5" />
             <span>Sırala</span>
           </Button>
-
-          {/* Aramayı Kaydet Butonu */}
-          {user ? (
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-xs font-medium rounded-lg"
-              onClick={() =>
-                saveSearch({ data: { query: search.q, filters: search } })
-                  .then(() => toast.success("Arama kaydedildi. Yeni ilanlar için bildirim gönderilecek."))
-                  .catch(() => toast.error("Kayıt için giriş gerekli"))
-              }
-            >
-              Kaydet
-            </Button>
-          ) : null}
 
           {/* Görünüm Değiştirici: Liste / 2'li Izgara */}
           <div className="flex rounded-lg border border-border bg-surface p-0.5 shadow-2xs">

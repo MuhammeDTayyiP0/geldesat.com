@@ -1,7 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { getMe, updateProfile, upsertStore } from "@/lib/server/account";
-import { deleteSavedSearch, mySavedSearches } from "@/lib/server/social";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { authClient, signOut } from "@/lib/auth/client";
@@ -33,7 +32,6 @@ function Profil() {
   const [city, setCity] = useState("");
   const [storeName, setStoreName] = useState("");
   const [storeDesc, setStoreDesc] = useState("");
-  const [saved, setSaved] = useState<Awaited<ReturnType<typeof mySavedSearches>>>([]);
 
   // Password change state
   const [currentPassword, setCurrentPassword] = useState("");
@@ -58,7 +56,6 @@ function Profil() {
         initializedRef.current = true;
       }
     });
-    void mySavedSearches().then(setSaved).catch(() => setSaved([]));
   }, [userId]);
 
   if (isPending || (!me && user)) return <BrandSpinner fullPage text="Profiliniz yükleniyor…" />;
@@ -340,53 +337,6 @@ function Profil() {
           ) : null}
         </div>
       </form>
-
-      {/* Kayıtlı Aramalar */}
-      <div className="mt-8 rounded-xl border border-border bg-surface p-4 shadow-sm md:p-6">
-        <h2 className="font-semibold text-fg">Kayıtlı Aramalar</h2>
-        <p className="mt-1 text-sm text-muted">Kriterlerinize uyan yeni bir ilan eklendiğinde bildirim alırsınız.</p>
-        {saved.length === 0 ? (
-          <p className="mt-4 rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted">
-            Henüz kayıtlı aramanız bulunmuyor. Arama sayfasından “Aramayı Kaydet” diyebilirsiniz.
-          </p>
-        ) : (
-          <ul className="mt-4 divide-y divide-border">
-            {saved.map((s) => {
-              let href = `/search?q=${encodeURIComponent(s.query)}`;
-              try {
-                const f = JSON.parse(s.filters) as Record<string, string>;
-                const params = new URLSearchParams();
-                for (const [k, v] of Object.entries(f)) {
-                  if (v) params.set(k, String(v));
-                }
-                const q = params.toString();
-                if (q) href = `/search?${q}`;
-              } catch {
-                /* keep href */
-              }
-              return (
-                <li key={s.id} className="flex items-center justify-between gap-3 py-2.5">
-                  <a href={href} className="min-w-0 truncate text-sm font-medium hover:text-primary">
-                    {s.label || s.query || "Kayıtlı Arama"}
-                  </a>
-                  <button
-                    type="button"
-                    className="shrink-0 text-xs font-medium text-danger hover:underline"
-                    onClick={() =>
-                      void deleteSavedSearch({ data: { id: s.id } }).then(() =>
-                        setSaved((prev) => prev.filter((x) => x.id !== s.id)),
-                      )
-                    }
-                  >
-                    Sil
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
-
     </div>
   );
 }

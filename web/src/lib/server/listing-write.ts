@@ -3,7 +3,6 @@ import { getSql } from "@/lib/db";
 import { CITY_COORDS } from "@/lib/data/geo";
 import { asJson, newId, num, slugify } from "@/lib/utils";
 import { inheritedAttributes, ensureProfile, rateLimit, assertImages, notify, normalizeTrPhone } from "./helpers";
-import { notifySearchHits } from "./ops";
 import { deleteUnusedListingImages } from "./upload.server";
 
 export const ListingInput = z.object({
@@ -139,9 +138,5 @@ export async function saveListingRecord(userId: string, data: ListingInputData) 
       data.neighborhood || null,coords?.lat ?? null,coords?.lng ?? null,JSON.stringify(data.images),JSON.stringify(data.attrs),phoneOverride],
   );
   await sql.query("insert into price_history (listing_id,price) values ($1,$2)", [id,data.price]);
-  if (status === "ACTIVE") {
-    void notifySearchHits({ id,slug,user_id:userId,title:data.title,description:data.description,category_id:data.categoryId,
-      city:data.city,district:data.district,neighborhood:data.neighborhood || null,price:data.price,attrs:data.attrs }).catch(() => undefined);
-  }
   return { id, slug, status };
 }

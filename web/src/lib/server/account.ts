@@ -15,7 +15,6 @@ import {
   notify,
   normalizeTrPhone,
 } from "./helpers";
-import { listingFromRow, notifySearchHits } from "./ops";
 import { ListingInput, renewedStatus, saveListingRecord } from "./listing-write";
 
 export const getMe = createServerFn({ method: "GET" })
@@ -144,12 +143,6 @@ export const setListingStatus = createServerFn({ method: "POST" })
           : `İlanınız şu gerekçeyle reddedildi: ${rejectReason}. İlanınızı düzenleyip tekrar onaya gönderebilirsiniz.`,
         `/ilan/${slug[0]?.slug ?? data.id}`,
       );
-    }
-    if (data.status === "ACTIVE") {
-      const full = await sql.query<Record<string, unknown>>("select * from listings where id=$1", [data.id]);
-      if (full[0]) {
-        void notifySearchHits(listingFromRow(full[0], String(full[0].user_id))).catch(() => undefined);
-      }
     }
     return { ok: true };
   });
@@ -579,7 +572,6 @@ export const adminDeleteUser = createServerFn({ method: "POST" })
     await sql.transaction(async (tx) => {
       await tx.query("delete from notifications where user_id=$1", [data.userId]);
       await tx.query("delete from mobile_push_tokens where user_id=$1", [data.userId]);
-      await tx.query("delete from saved_searches where user_id=$1", [data.userId]);
       await tx.query("delete from credit_ledger where user_id=$1", [data.userId]);
       await tx.query("delete from credit_orders where user_id=$1", [data.userId]);
       await tx.query("delete from boosts where user_id=$1", [data.userId]);

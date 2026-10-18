@@ -1,5 +1,15 @@
-import { useMemo } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import { authClient } from "./client";
+
+const noSubscribe = () => () => {};
+
+/**
+ * False while React hydrates server HTML (it then uses the server snapshot),
+ * true for every render after that, including lazily-hydrated routes.
+ */
+function useHydrated(): boolean {
+  return useSyncExternalStore(noSubscribe, () => true, () => false);
+}
 
 /** Normalized user shape used across the app. */
 export type AppUser = {
@@ -39,7 +49,11 @@ export function useCurrentUserState(): CurrentUserState {
     };
   }, [rawUser]);
 
-  return useMemo(() => ({ user, isPending }), [user, isPending]);
+  // The server always renders the "still loading" state, so the first client
+  // render must too or hydration mismatches; the real state follows on mount.
+  const hydrated = useHydrated();
+  const pending = !hydrated || isPending;
+  return useMemo(() => ({ user: hydrated ? user : null, isPending: pending }), [hydrated, user, pending]);
 }
 
 /**

@@ -1,8 +1,8 @@
 /**
  * Baseline security headers on every response (pages, API, sitemaps, images).
  *
- * The CSP only covers framing, plugins and <base>: the SSR shell relies on
- * inline scripts, so a script-src policy would need nonces end to end.
+ * The CSP here is the fallback for non-page responses. Server-rendered pages get
+ * the full nonce-based policy from src/router.tsx, which this middleware keeps.
  */
 
 interface HeaderEvent {
