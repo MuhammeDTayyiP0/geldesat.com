@@ -72,7 +72,7 @@ function layout(input: {
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:520px">
     <tr><td style="padding:0 4px 20px">
       <table role="presentation" cellspacing="0" cellpadding="0"><tr>
-        <td style="width:36px;height:36px;border-radius:10px;background:${BRAND};color:#ffffff;font-size:20px;font-weight:800;text-align:center;line-height:36px">G</td>
+        <td style="width:40px;height:40px"><img src="${SITE}/email-logo.png" width="40" height="40" alt="GeldeSat" style="display:block;width:40px;height:40px;border:0;border-radius:10px;box-shadow:0 1px 2px rgba(13,17,23,0.12)"></td>
         <td style="padding-left:10px;font-size:20px;font-weight:800;letter-spacing:-0.3px;color:#0d1117">GeldeSat</td>
       </tr></table>
     </td></tr>
