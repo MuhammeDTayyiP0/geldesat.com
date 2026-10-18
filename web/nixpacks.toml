@@ -6,7 +6,7 @@ HOST = "0.0.0.0"
 nixPkgs = ["nodejs_22"]
 
 [phases.install]
-cmds = ["npm ci"]
+cmds = ["npm install -g npm@11 && npm ci"]
 
 [phases.build]
 cmds = ["npm run build"]

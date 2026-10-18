@@ -2,7 +2,8 @@
 FROM node:22-bookworm-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+# The lockfile is written by npm 11; npm 10 (bundled with node 22) rejects it.
+RUN npm install -g npm@11 && npm ci
 COPY . .
 # Coolify passes build variables as build args; Vite inlines VITE_* at build time.
 ARG VITE_GOOGLE_AUTH_ENABLED=false
