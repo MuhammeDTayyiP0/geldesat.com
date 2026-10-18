@@ -14,8 +14,12 @@ import {
   rateLimit,
   notify,
   normalizeTrPhone,
+  revealListingPhone,
+  viewerKey,
 } from "./helpers";
+import { getRequest } from "@tanstack/react-start/server";
 import { ListingInput, renewedStatus, saveListingRecord } from "./listing-write";
+import { purgeUserData } from "./account-purge";
 
 /** True only for a signed-in ADMIN; never throws, so routes can gate on it (e.g. 404 for everyone else). */
 export const isAdminSession = createServerFn({ method: "GET" }).handler(async () => {
@@ -362,25 +366,15 @@ export const applyBoost = createServerFn({ method: "POST" })
     throw new Error("Doping şu an kapalı.");
   });
 
+/** Phone for a listing; anonymous viewers allowed only when the seller shows it to everyone. */
 export const revealPhone = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
-  .validator(z.object({ listingId: z.string() }))
-  .handler(async ({ context, data }) => {
-    rateLimit(`phone:${context.userId}`, 30, 60_000);
-    const sql = await getSql();
-    const rows = await sql.query<{ phone_override: string | null; user_id: string }>(
-      "select phone_override, user_id from listings where id=$1 and status='ACTIVE' and (expires_at is null or expires_at > now())",
-      [data.listingId],
-    );
-    if (!rows[0]) throw new Error("İlan yok");
-    const prof = await sql.query<{ phone: string | null }>(
-      "select phone from profiles where user_id=$1",
-      [rows[0].user_id],
-    );
-    const phone = rows[0].phone_override || prof[0]?.phone;
-    if (!phone) throw new Error("Telefon paylaşılmamış");
-    await sql.query("insert into phone_reveals (listing_id, viewer_id) values ($1,$2)", [data.listingId, context.userId]);
-    return { phone };
+  .validator(z.object({ listingId: z.string().max(200) }))
+  .handler(async ({ data }) => {
+    const { getSessionUser } = await import("@/lib/auth/verify.server");
+    const user = await getSessionUser();
+    const request = getRequest();
+    rateLimit(`phone:${request ? viewerKey(request.headers, user?.id) : user?.id ?? "unknown"}`, 30, 60_000);
+    return { phone: await revealListingPhone(data.listingId, user?.id ?? null) };
   });
 
 export const getSeller = createServerFn({ method: "POST" })
@@ -579,46 +573,7 @@ export const adminDeleteUser = createServerFn({ method: "POST" })
       throw new Error("Yönetici rolündeki bir kullanıcıyı silemezsiniz. Lütfen önce rolünü 'USER' olarak değiştirin.");
     }
 
-    // All or nothing: a failure part-way must not leave a half-deleted account.
-    await sql.transaction(async (tx) => {
-      await tx.query("delete from notifications where user_id=$1", [data.userId]);
-      await tx.query("delete from mobile_push_tokens where user_id=$1", [data.userId]);
-      await tx.query("delete from credit_ledger where user_id=$1", [data.userId]);
-      await tx.query("delete from credit_orders where user_id=$1", [data.userId]);
-      await tx.query("delete from boosts where user_id=$1", [data.userId]);
-      await tx.query("delete from phone_reveals where viewer_id=$1", [data.userId]);
-      await tx.query("delete from favorites where user_id=$1", [data.userId]);
-      await tx.query("delete from reviews where seller_id=$1 or reviewer_id=$1", [data.userId]);
-      await tx.query("delete from reports where reporter_id=$1", [data.userId]);
-      await tx.query(
-        `delete from messages where sender_id=$1 or conversation_id in (
-           select id from conversations where buyer_id=$1 or seller_id=$1
-         )`,
-        [data.userId],
-      );
-      await tx.query("delete from conversations where buyer_id=$1 or seller_id=$1", [data.userId]);
-
-      if (data.deleteListings) {
-        await tx.query("delete from listings where user_id=$1", [data.userId]);
-        await tx.query("delete from mobile_listing_images where user_id=$1", [data.userId]);
-      } else {
-        // Kept listings still reference the user's photos, so those stay.
-        await tx.query("update listings set status='INACTIVE' where user_id=$1", [data.userId]);
-        await tx.query(
-          `delete from mobile_listing_images i where i.user_id=$1 and not exists (
-             select 1 from listings l where l.user_id=$1 and (
-               l.images @> jsonb_build_array('/api/mobile/images/' || i.id) or
-               l.images @> jsonb_build_array('/uploads/' || i.storage_key)))`,
-          [data.userId],
-        );
-      }
-
-      await tx.query("delete from stores where user_id=$1", [data.userId]);
-      await tx.query("delete from profiles where user_id=$1", [data.userId]);
-      await tx.query('delete from "session" where "userId"=$1', [data.userId]);
-      await tx.query('delete from "account" where "userId"=$1', [data.userId]);
-      await tx.query('delete from "user" where id=$1', [data.userId]);
-    });
+    await purgeUserData(sql, data.userId, { deleteListings: data.deleteListings });
 
     return { ok: true };
   });

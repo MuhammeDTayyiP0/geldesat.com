@@ -1,5 +1,6 @@
 import { getSql } from "@/lib/db";
 import { asJson, num } from "@/lib/utils";
+import { resolveNotifyPrefs, type NotifyChannelPrefs, type PhoneVisibility } from "@/lib/notification-prefs";
 
 export type CategoryRow = {
   id: string;
@@ -269,11 +270,19 @@ export async function creditBalance(userId: string) {
 
 export async function notify(userId: string, type: string, title: string, body: string, link: string) {
   const sql = await getSql();
-  await sql.query(
-    `insert into notifications (id, user_id, type, title, body, link)
-     values ($1, $2, $3, $4, $5, $6)`,
-    [`ntf_${crypto.randomUUID().slice(0, 12)}`, userId, type, title, body, link],
-  );
+  // Respect the recipient's notification settings (missing types/keys mean "on").
+  const prefRows = await sql.query<{ notify_prefs: unknown }>("select notify_prefs from profiles where user_id=$1", [userId]);
+  const prefs = resolveNotifyPrefs(asJson(prefRows[0]?.notify_prefs, {}));
+  const channel = (prefs as Record<string, NotifyChannelPrefs | undefined>)[type] ?? { inapp: true, push: true };
+
+  if (channel.inapp) {
+    await sql.query(
+      `insert into notifications (id, user_id, type, title, body, link)
+       values ($1, $2, $3, $4, $5, $6)`,
+      [`ntf_${crypto.randomUUID().slice(0, 12)}`, userId, type, title, body, link],
+    );
+  }
+  if (!channel.push) return;
 
   // Push delivery is best effort: an Expo outage must not break the action that
   // created the in-app notification.
@@ -403,4 +412,29 @@ export function viewerKey(headers: Headers, userId?: string | null): string {
   if (userId) return `u:${userId}`;
   const forwarded = headers.get("x-forwarded-for")?.split(",")[0]?.trim();
   return `ip:${forwarded || headers.get("x-real-ip") || "unknown"}`;
+}
+
+/**
+ * The phone a viewer may see for a live listing, honouring the seller's
+ * visibility setting, and records the reveal. Throws a user-facing error.
+ */
+export async function revealListingPhone(listingRef: string, viewerId: string | null): Promise<string> {
+  const sql = await getSql();
+  const rows = await sql.query<{ id: string; phone_override: string | null; phone: string | null; phone_visibility: PhoneVisibility | null }>(
+    `select l.id, l.phone_override, p.phone, p.phone_visibility
+     from listings l left join profiles p on p.user_id = l.user_id
+     where (l.id=$1 or lower(l.slug)=lower($1)) and l.status='ACTIVE'
+       and (l.expires_at is null or l.expires_at > now())
+     limit 1`,
+    [listingRef],
+  );
+  const row = rows[0];
+  if (!row) throw new Error("İlan bulunamadı.");
+  const visibility = row.phone_visibility ?? "members";
+  if (visibility === "hidden") throw new Error("Satıcı telefonunu paylaşmıyor; mesajla ulaşabilirsiniz.");
+  if (visibility === "members" && !viewerId) throw new Error("Telefonu görmek için giriş yapın.");
+  const phone = row.phone_override || row.phone;
+  if (!phone) throw new Error("Satıcı telefon numarası paylaşmamış.");
+  await sql.query("insert into phone_reveals (listing_id, viewer_id) values ($1,$2)", [row.id, viewerId ?? "anon"]);
+  return phone;
 }

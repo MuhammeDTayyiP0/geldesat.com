@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getSql } from "@/lib/db";
 import { auth } from "@/lib/auth/server";
-import { canReviewSeller, firstInWindow, mapListing, rateLimit, viewerKey } from "@/lib/server/helpers";
+import { canReviewSeller, firstInWindow, mapListing, rateLimit, revealListingPhone, viewerKey } from "@/lib/server/helpers";
 import { publicErrorMessage } from "@/lib/server/errors";
 
 async function sessionUserId(request: Request) {
@@ -90,20 +90,15 @@ export const Route = createFileRoute("/api/mobile/listings/$id")({
       POST: async ({ request, params }) => {
         try {
           const userId = await sessionUserId(request);
-          if (!userId) return Response.json({ success: false, error: "Telefonu görmek için giriş yapın." }, { status: 401 });
-          rateLimit(`mobile-phone:${userId}`, 30, 60_000);
-          const sql = await getSql();
-          const rows = await sql.query<{ id: string; user_id: string; phone_override: string | null }>(
-            `select l.id,l.user_id,l.phone_override from listings l
-             where (l.id=$1 or lower(l.slug)=lower($1)) and l.status='ACTIVE'
-               and (l.expires_at is null or l.expires_at>now()) limit 1`,
-            [params.id],
-          );
-          if (!rows[0]) return Response.json({ success: false, error: "İlan bulunamadı." }, { status: 404 });
-          const profile = await sql.query<{ phone: string | null }>("select phone from profiles where user_id=$1", [rows[0].user_id]);
-          const phone = rows[0].phone_override || profile[0]?.phone;
-          if (!phone) return Response.json({ success: false, error: "Satıcı telefon numarası paylaşmamış." }, { status: 404 });
-          await sql.query("insert into phone_reveals (listing_id, viewer_id) values ($1,$2)", [rows[0].id, userId]);
+          rateLimit(`mobile-phone:${viewerKey(request.headers, userId)}`, 30, 60_000);
+          let phone: string;
+          try {
+            phone = await revealListingPhone(params.id, userId ?? null);
+          } catch (err) {
+            const message = err instanceof Error ? err.message : "Telefon numarası alınamadı.";
+            const status = /giriş yapın/.test(message) ? 401 : 404;
+            return Response.json({ success: false, error: message }, { status });
+          }
           return Response.json({ success: true, phone });
         } catch (error) {
           const message = publicErrorMessage(error, "Telefon numarası alınamadı.");

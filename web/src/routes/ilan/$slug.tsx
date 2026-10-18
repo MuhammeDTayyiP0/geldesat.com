@@ -132,7 +132,7 @@ function ListingPage() {
   const nav = useNavigate();
   const router = useRouter();
   const { user, isPending } = useCurrentUserState();
-  const { listing, path, similar, seller, store, history, has_phone, approved, fav_count, phone_reveal_count } = data;
+  const { listing, path, similar, seller, store, history, has_phone, phone_visibility, show_whatsapp, approved, fav_count, phone_reveal_count } = data;
 
   const [fav, setFav] = useState(false);
   const [favBusy, setFavBusy] = useState(false);
@@ -156,7 +156,7 @@ function ListingPage() {
   const location = [listing.neighborhood, listing.district, listing.city].filter(Boolean).join(", ");
   const firstPrice = history[0]?.price ?? listing.price;
   const priceDrop = history.length > 1 && listing.price < firstPrice ? firstPrice - listing.price : 0;
-  const whatsapp = phone ? whatsappLink(phone, listing.title) : null;
+  const whatsapp = phone && show_whatsapp ? whatsappLink(phone, listing.title) : null;
 
   // Count a view once per page visit, after we know the visitor is not the owner.
   useEffect(() => {
@@ -214,7 +214,8 @@ function ListingPage() {
   }
 
   async function onRevealPhone() {
-    if (!requireUser() || phoneBusy) return;
+    // Sellers who show their phone to everyone don't make buyers sign in first.
+    if ((phone_visibility !== "everyone" && !requireUser()) || phoneBusy) return;
     setPhoneBusy(true);
     try {
       setPhone((await revealPhone({ data: { listingId: listing.id } })).phone);

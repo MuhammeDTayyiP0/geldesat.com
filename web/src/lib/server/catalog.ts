@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { getSql } from "@/lib/db";
 import { listingNoFromSlug, num } from "@/lib/utils";
+import type { PhoneVisibility } from "@/lib/notification-prefs";
 import {
   inheritedAttributes,
   listingSelect,
@@ -281,6 +282,7 @@ export const getListing = createServerFn({ method: "POST" })
       : "lower(l.slug) = lower($1) or lower(l.legacy_slug) = lower($1) or l.id = $1";
     const rows = await sql.query<Record<string, unknown>>(
       `select ${listingSelect()}, l.phone_override, p.phone as profile_phone, p.avatar_url as profile_avatar,
+         coalesce(p.phone_visibility, 'members') as phone_visibility, coalesce(p.show_whatsapp, true) as show_whatsapp,
          (l.approved_at is not null) as approved,
          (select count(*)::int from favorites where listing_id = l.id) as fav_count,
          (select count(*)::int from phone_reveals where listing_id = l.id) as phone_reveal_count,
@@ -353,10 +355,13 @@ export const getListing = createServerFn({ method: "POST" })
        from profiles p where p.user_id = $1`,
       [listing.user_id],
     );
-    const hasPhone = Boolean(
-      (typeof rows[0].phone_override === "string" && rows[0].phone_override.trim()) ||
-      (typeof rows[0].profile_phone === "string" && rows[0].profile_phone.trim())
-    );
+    const phoneVisibility = String(rows[0].phone_visibility) as PhoneVisibility;
+    const hasPhone =
+      phoneVisibility !== "hidden" &&
+      Boolean(
+        (typeof rows[0].phone_override === "string" && rows[0].phone_override.trim()) ||
+        (typeof rows[0].profile_phone === "string" && rows[0].profile_phone.trim())
+      );
     return {
       listing,
       path,
@@ -382,6 +387,9 @@ export const getListing = createServerFn({ method: "POST" })
           }
         : null,
       has_phone: hasPhone,
+      /** Signed-out visitors may reveal the phone only when this is "everyone". */
+      phone_visibility: phoneVisibility,
+      show_whatsapp: Boolean(rows[0].show_whatsapp),
       /** Owner may put it back live without moderation (it was approved before). */
       approved: Boolean(rows[0].approved),
       fav_count: num(rows[0].fav_count),

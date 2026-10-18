@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 import {
   Bell,
+  BellRing,
+  FileDown,
   Heart,
+  Lock,
   LayoutGrid,
   MessageCircle,
   ShieldCheck,
@@ -23,6 +26,9 @@ type NavTo =
   | "/ayarlar/profil"
   | "/ayarlar/guvenlik"
   | "/ayarlar/magaza"
+  | "/ayarlar/gizlilik"
+  | "/ayarlar/bildirimler"
+  | "/ayarlar/hesap"
   | "/admin";
 
 export type AccountNavItem = { to: NavTo; label: string; icon: LucideIcon; badge?: "messages" | "notifications"; hint?: string };
@@ -43,8 +49,11 @@ export const ACCOUNT_SECTIONS: Array<{ title: string; items: AccountNavItem[] }>
     title: "Ayarlar",
     items: [
       { to: "/ayarlar/profil", label: "Profil bilgileri", icon: UserPen, hint: "Fotoğraf, ad, telefon, konum" },
+      { to: "/ayarlar/gizlilik", label: "Gizlilik", icon: Lock, hint: "Telefonumu kimler görebilir, WhatsApp" },
+      { to: "/ayarlar/bildirimler", label: "Bildirim tercihleri", icon: BellRing, hint: "Mesaj, favori, ilan durumu" },
       { to: "/ayarlar/guvenlik", label: "Hesap ve güvenlik", icon: ShieldCheck, hint: "E-posta, şifre, oturumlar" },
       { to: "/ayarlar/magaza", label: "Mağazam", icon: Store, hint: "Kurumsal mağaza sayfası" },
+      { to: "/ayarlar/hesap", label: "Verilerim ve hesabım", icon: FileDown, hint: "Verilerimi indir, hesabı sil" },
     ],
   },
 ];

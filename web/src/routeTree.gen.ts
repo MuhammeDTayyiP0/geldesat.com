@@ -26,7 +26,10 @@ import { Route as SifreSifirlaRouteImport } from './routes/sifre-sifirla'
 import { Route as ApiAvatarRouteImport } from './routes/api/avatar'
 import { Route as ApiUploadRouteImport } from './routes/api/upload'
 import { Route as AyarlarIndexRouteImport } from './routes/ayarlar/index'
+import { Route as AyarlarBildirimlerRouteImport } from './routes/ayarlar/bildirimler'
+import { Route as AyarlarGizlilikRouteImport } from './routes/ayarlar/gizlilik'
 import { Route as AyarlarGuvenlikRouteImport } from './routes/ayarlar/guvenlik'
+import { Route as AyarlarHesapRouteImport } from './routes/ayarlar/hesap'
 import { Route as AyarlarMagazaRouteImport } from './routes/ayarlar/magaza'
 import { Route as AyarlarProfilRouteImport } from './routes/ayarlar/profil'
 import { Route as CategorySlugRouteImport } from './routes/category/$slug'
@@ -40,6 +43,7 @@ import { Route as UploadsSplatRouteImport } from './routes/uploads/$'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiAvatarIdRouteImport } from './routes/api/avatar/$id'
 import { Route as ApiChatStreamRouteImport } from './routes/api/chat/stream'
+import { Route as ApiHesapVerilerimRouteImport } from './routes/api/hesap/verilerim'
 import { Route as ApiMobileBlocksRouteImport } from './routes/api/mobile/blocks'
 import { Route as ApiMobileCategoriesRouteImport } from './routes/api/mobile/categories'
 import { Route as ApiMobileCategoryAttributesRouteImport } from './routes/api/mobile/category-attributes'
@@ -145,9 +149,24 @@ const AyarlarIndexRoute = AyarlarIndexRouteImport.update({
   path: '/ayarlar/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AyarlarBildirimlerRoute = AyarlarBildirimlerRouteImport.update({
+  id: '/ayarlar/bildirimler',
+  path: '/ayarlar/bildirimler',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AyarlarGizlilikRoute = AyarlarGizlilikRouteImport.update({
+  id: '/ayarlar/gizlilik',
+  path: '/ayarlar/gizlilik',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AyarlarGuvenlikRoute = AyarlarGuvenlikRouteImport.update({
   id: '/ayarlar/guvenlik',
   path: '/ayarlar/guvenlik',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AyarlarHesapRoute = AyarlarHesapRouteImport.update({
+  id: '/ayarlar/hesap',
+  path: '/ayarlar/hesap',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AyarlarMagazaRoute = AyarlarMagazaRouteImport.update({
@@ -213,6 +232,11 @@ const ApiAvatarIdRoute = ApiAvatarIdRouteImport.update({
 const ApiChatStreamRoute = ApiChatStreamRouteImport.update({
   id: '/api/chat/stream',
   path: '/api/chat/stream',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiHesapVerilerimRoute = ApiHesapVerilerimRouteImport.update({
+  id: '/api/hesap/verilerim',
+  path: '/api/hesap/verilerim',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiMobileBlocksRoute = ApiMobileBlocksRouteImport.update({
@@ -330,7 +354,10 @@ export interface FileRoutesByFullPath {
   '/sifre-sifirla': typeof SifreSifirlaRoute
   '/api/avatar': typeof ApiAvatarRouteWithChildren
   '/api/upload': typeof ApiUploadRoute
+  '/ayarlar/bildirimler': typeof AyarlarBildirimlerRoute
+  '/ayarlar/gizlilik': typeof AyarlarGizlilikRoute
   '/ayarlar/guvenlik': typeof AyarlarGuvenlikRoute
+  '/ayarlar/hesap': typeof AyarlarHesapRoute
   '/ayarlar/magaza': typeof AyarlarMagazaRoute
   '/ayarlar/profil': typeof AyarlarProfilRoute
   '/category/$slug': typeof CategorySlugRoute
@@ -345,6 +372,7 @@ export interface FileRoutesByFullPath {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/avatar/$id': typeof ApiAvatarIdRoute
   '/api/chat/stream': typeof ApiChatStreamRoute
+  '/api/hesap/verilerim': typeof ApiHesapVerilerimRoute
   '/api/mobile/blocks': typeof ApiMobileBlocksRoute
   '/api/mobile/categories': typeof ApiMobileCategoriesRoute
   '/api/mobile/category-attributes': typeof ApiMobileCategoryAttributesRoute
@@ -381,7 +409,10 @@ export interface FileRoutesByTo {
   '/sifre-sifirla': typeof SifreSifirlaRoute
   '/api/avatar': typeof ApiAvatarRouteWithChildren
   '/api/upload': typeof ApiUploadRoute
+  '/ayarlar/bildirimler': typeof AyarlarBildirimlerRoute
+  '/ayarlar/gizlilik': typeof AyarlarGizlilikRoute
   '/ayarlar/guvenlik': typeof AyarlarGuvenlikRoute
+  '/ayarlar/hesap': typeof AyarlarHesapRoute
   '/ayarlar/magaza': typeof AyarlarMagazaRoute
   '/ayarlar/profil': typeof AyarlarProfilRoute
   '/category/$slug': typeof CategorySlugRoute
@@ -396,6 +427,7 @@ export interface FileRoutesByTo {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/avatar/$id': typeof ApiAvatarIdRoute
   '/api/chat/stream': typeof ApiChatStreamRoute
+  '/api/hesap/verilerim': typeof ApiHesapVerilerimRoute
   '/api/mobile/blocks': typeof ApiMobileBlocksRoute
   '/api/mobile/categories': typeof ApiMobileCategoriesRoute
   '/api/mobile/category-attributes': typeof ApiMobileCategoryAttributesRoute
@@ -434,7 +466,10 @@ export interface FileRoutesById {
   '/sifre-sifirla': typeof SifreSifirlaRoute
   '/api/avatar': typeof ApiAvatarRouteWithChildren
   '/api/upload': typeof ApiUploadRoute
+  '/ayarlar/bildirimler': typeof AyarlarBildirimlerRoute
+  '/ayarlar/gizlilik': typeof AyarlarGizlilikRoute
   '/ayarlar/guvenlik': typeof AyarlarGuvenlikRoute
+  '/ayarlar/hesap': typeof AyarlarHesapRoute
   '/ayarlar/magaza': typeof AyarlarMagazaRoute
   '/ayarlar/profil': typeof AyarlarProfilRoute
   '/category/$slug': typeof CategorySlugRoute
@@ -449,6 +484,7 @@ export interface FileRoutesById {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/avatar/$id': typeof ApiAvatarIdRoute
   '/api/chat/stream': typeof ApiChatStreamRoute
+  '/api/hesap/verilerim': typeof ApiHesapVerilerimRoute
   '/api/mobile/blocks': typeof ApiMobileBlocksRoute
   '/api/mobile/categories': typeof ApiMobileCategoriesRoute
   '/api/mobile/category-attributes': typeof ApiMobileCategoryAttributesRoute
@@ -488,7 +524,10 @@ export interface FileRouteTypes {
     | '/sifre-sifirla'
     | '/api/avatar'
     | '/api/upload'
+    | '/ayarlar/bildirimler'
+    | '/ayarlar/gizlilik'
     | '/ayarlar/guvenlik'
+    | '/ayarlar/hesap'
     | '/ayarlar/magaza'
     | '/ayarlar/profil'
     | '/category/$slug'
@@ -503,6 +542,7 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/avatar/$id'
     | '/api/chat/stream'
+    | '/api/hesap/verilerim'
     | '/api/mobile/blocks'
     | '/api/mobile/categories'
     | '/api/mobile/category-attributes'
@@ -539,7 +579,10 @@ export interface FileRouteTypes {
     | '/sifre-sifirla'
     | '/api/avatar'
     | '/api/upload'
+    | '/ayarlar/bildirimler'
+    | '/ayarlar/gizlilik'
     | '/ayarlar/guvenlik'
+    | '/ayarlar/hesap'
     | '/ayarlar/magaza'
     | '/ayarlar/profil'
     | '/category/$slug'
@@ -554,6 +597,7 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/avatar/$id'
     | '/api/chat/stream'
+    | '/api/hesap/verilerim'
     | '/api/mobile/blocks'
     | '/api/mobile/categories'
     | '/api/mobile/category-attributes'
@@ -591,7 +635,10 @@ export interface FileRouteTypes {
     | '/sifre-sifirla'
     | '/api/avatar'
     | '/api/upload'
+    | '/ayarlar/bildirimler'
+    | '/ayarlar/gizlilik'
     | '/ayarlar/guvenlik'
+    | '/ayarlar/hesap'
     | '/ayarlar/magaza'
     | '/ayarlar/profil'
     | '/category/$slug'
@@ -606,6 +653,7 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/avatar/$id'
     | '/api/chat/stream'
+    | '/api/hesap/verilerim'
     | '/api/mobile/blocks'
     | '/api/mobile/categories'
     | '/api/mobile/category-attributes'
@@ -644,7 +692,10 @@ export interface RootRouteChildren {
   SifreSifirlaRoute: typeof SifreSifirlaRoute
   ApiAvatarRoute: typeof ApiAvatarRouteWithChildren
   ApiUploadRoute: typeof ApiUploadRoute
+  AyarlarBildirimlerRoute: typeof AyarlarBildirimlerRoute
+  AyarlarGizlilikRoute: typeof AyarlarGizlilikRoute
   AyarlarGuvenlikRoute: typeof AyarlarGuvenlikRoute
+  AyarlarHesapRoute: typeof AyarlarHesapRoute
   AyarlarMagazaRoute: typeof AyarlarMagazaRoute
   AyarlarProfilRoute: typeof AyarlarProfilRoute
   CategorySlugRoute: typeof CategorySlugRoute
@@ -656,6 +707,7 @@ export interface RootRouteChildren {
   AyarlarIndexRoute: typeof AyarlarIndexRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiChatStreamRoute: typeof ApiChatStreamRoute
+  ApiHesapVerilerimRoute: typeof ApiHesapVerilerimRoute
   ApiMobileBlocksRoute: typeof ApiMobileBlocksRoute
   ApiMobileCategoriesRoute: typeof ApiMobileCategoriesRoute
   ApiMobileCategoryAttributesRoute: typeof ApiMobileCategoryAttributesRoute
@@ -794,11 +846,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AyarlarIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/ayarlar/bildirimler': {
+      id: '/ayarlar/bildirimler'
+      path: '/ayarlar/bildirimler'
+      fullPath: '/ayarlar/bildirimler'
+      preLoaderRoute: typeof AyarlarBildirimlerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ayarlar/gizlilik': {
+      id: '/ayarlar/gizlilik'
+      path: '/ayarlar/gizlilik'
+      fullPath: '/ayarlar/gizlilik'
+      preLoaderRoute: typeof AyarlarGizlilikRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/ayarlar/guvenlik': {
       id: '/ayarlar/guvenlik'
       path: '/ayarlar/guvenlik'
       fullPath: '/ayarlar/guvenlik'
       preLoaderRoute: typeof AyarlarGuvenlikRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ayarlar/hesap': {
+      id: '/ayarlar/hesap'
+      path: '/ayarlar/hesap'
+      fullPath: '/ayarlar/hesap'
+      preLoaderRoute: typeof AyarlarHesapRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/ayarlar/magaza': {
@@ -890,6 +963,13 @@ declare module '@tanstack/react-router' {
       path: '/api/chat/stream'
       fullPath: '/api/chat/stream'
       preLoaderRoute: typeof ApiChatStreamRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/hesap/verilerim': {
+      id: '/api/hesap/verilerim'
+      path: '/api/hesap/verilerim'
+      fullPath: '/api/hesap/verilerim'
+      preLoaderRoute: typeof ApiHesapVerilerimRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/mobile/blocks': {
@@ -1119,7 +1199,10 @@ const rootRouteChildren: RootRouteChildren = {
   SifreSifirlaRoute: SifreSifirlaRoute,
   ApiAvatarRoute: ApiAvatarRouteWithChildren,
   ApiUploadRoute: ApiUploadRoute,
+  AyarlarBildirimlerRoute: AyarlarBildirimlerRoute,
+  AyarlarGizlilikRoute: AyarlarGizlilikRoute,
   AyarlarGuvenlikRoute: AyarlarGuvenlikRoute,
+  AyarlarHesapRoute: AyarlarHesapRoute,
   AyarlarMagazaRoute: AyarlarMagazaRoute,
   AyarlarProfilRoute: AyarlarProfilRoute,
   CategorySlugRoute: CategorySlugRoute,
@@ -1131,6 +1214,7 @@ const rootRouteChildren: RootRouteChildren = {
   AyarlarIndexRoute: AyarlarIndexRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiChatStreamRoute: ApiChatStreamRoute,
+  ApiHesapVerilerimRoute: ApiHesapVerilerimRoute,
   ApiMobileBlocksRoute: ApiMobileBlocksRoute,
   ApiMobileCategoriesRoute: ApiMobileCategoriesRoute,
   ApiMobileCategoryAttributesRoute: ApiMobileCategoryAttributesRoute,
