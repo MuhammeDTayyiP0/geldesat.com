@@ -49,3 +49,14 @@ export async function removeAvatar(): Promise<void> {
   const res = await fetch("/api/avatar", { method: "DELETE", headers: { [UPLOAD_HEADER]: "1" } });
   if (!res.ok) throw new Error("Fotoğraf kaldırılamadı.");
 }
+
+/** Send a photo into a chat; resolves to the created message. */
+export async function uploadChatPhoto(conversationId: string, file: Blob): Promise<unknown> {
+  const form = new FormData();
+  form.append("conversationId", conversationId);
+  form.append("file", file, "photo");
+  const res = await fetch("/api/chat/image", { method: "POST", headers: { [UPLOAD_HEADER]: "1" }, body: form });
+  const body = (await res.json().catch(() => ({}))) as { message?: unknown; error?: string };
+  if (!res.ok || !body.message) throw new Error(body.error || "Fotoğraf gönderilemedi.");
+  return body.message;
+}

@@ -82,18 +82,35 @@ export function ReportsTab({ panel }: { panel: AdminPanel }) {
                     </span>
                   </div>
 
-                  <div className="mt-2.5">
-                    <span className="text-xs text-muted">Şikayet Edilen İlan: </span>
-                    <Link
-                      to="/ilan/$slug"
-                      params={{ slug: r.slug }}
-                      target="_blank"
-                      className="font-medium hover:underline text-fg inline-flex items-center gap-1"
-                    >
-                      <span>{r.title}</span>
-                      <ExternalLink className="size-3 text-muted" />
-                    </Link>
-                  </div>
+                  {r.conversation_id ? (
+                    <p className="mt-2.5 text-xs font-semibold text-warn">Mesajlaşma şikayeti</p>
+                  ) : null}
+                  {r.slug ? (
+                    <div className="mt-2.5">
+                      <span className="text-xs text-muted">İlan: </span>
+                      <Link
+                        to="/ilan/$slug"
+                        params={{ slug: r.slug }}
+                        target="_blank"
+                        className="font-medium hover:underline text-fg inline-flex items-center gap-1"
+                      >
+                        <span>{r.title}</span>
+                        <ExternalLink className="size-3 text-muted" />
+                      </Link>
+                    </div>
+                  ) : r.title ? (
+                    <p className="mt-2.5 text-xs text-muted">{r.title}</p>
+                  ) : null}
+                  {r.details ? <p className="mt-1 text-xs">“{r.details}”</p> : null}
+                  {r.messages.length ? (
+                    <ul className="mt-2 max-w-xl space-y-1 rounded-lg bg-elevated/60 p-2 text-xs">
+                      {r.messages.map((m, i) => (
+                        <li key={i}>
+                          <span className="font-semibold">{m.who}:</span> <span className="whitespace-pre-wrap break-words">{m.text}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
 
                   <p className="text-xs text-muted mt-1">
                     Şikayet Eden: <span className="text-fg font-medium">{r.reporter_name}</span>

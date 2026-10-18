@@ -24,13 +24,13 @@ const PHONE_OPTIONS: Array<{ value: PhoneVisibility; title: string; body: string
 
 function PrivacySettings() {
   const { user, isPending } = useCurrentUserState();
-  const [state, setState] = useState<{ phone_visibility: PhoneVisibility; show_whatsapp: boolean } | null>(null);
+  const [state, setState] = useState<{ phone_visibility: PhoneVisibility; show_whatsapp: boolean; read_receipts: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!user) return;
     getAccountSettings()
-      .then((s) => setState({ phone_visibility: s.phone_visibility, show_whatsapp: s.show_whatsapp }))
+      .then((s) => setState({ phone_visibility: s.phone_visibility, show_whatsapp: s.show_whatsapp, read_receipts: s.read_receipts }))
       .catch(() => toast.error("Ayarlar yüklenemedi"));
   }, [user]);
 
@@ -100,6 +100,16 @@ function PrivacySettings() {
             disabled={busy || state.phone_visibility === "hidden"}
             onChange={(v) => void save({ ...state, show_whatsapp: v })}
           />
+        </section>
+
+        <section className="flex items-center justify-between gap-4 rounded-2xl border border-border bg-surface p-4 shadow-card sm:p-6">
+          <div>
+            <h2 className="text-base font-semibold">Okundu bilgisi</h2>
+            <p className="mt-1 text-sm text-muted">
+              Kapatırsanız mesajlarını okuduğunuz görülmez; karşılıklı olduğu için siz de başkalarının okuduğunu göremezsiniz.
+            </p>
+          </div>
+          <ToggleSwitch label="Okundu bilgisi" checked={state.read_receipts} disabled={busy} onChange={(v) => void save({ ...state, read_receipts: v })} />
         </section>
       </div>
     </AccountShell>

@@ -145,6 +145,23 @@ export async function processListingPhoto(input: Uint8Array): Promise<Buffer> {
   throw new Error("Fotoğraf işlenemedi. Daha küçük bir fotoğraf deneyin.");
 }
 
+/** Photo sent in a chat: upright, long edge 1600px, WebP, metadata (GPS) stripped, no watermark. */
+export async function processChatPhoto(input: Uint8Array): Promise<Buffer> {
+  const base = isHeif(input)
+    ? (await openHeif(input)).image
+    : sharp(input, { failOn: "error", limitInputPixels: MAX_INPUT_PIXELS }).rotate();
+  for (const quality of [80, 70]) {
+    const out = await base
+      .clone()
+      .resize({ width: 1600, height: 1600, fit: "inside", withoutEnlargement: true })
+      .flatten({ background: "#ffffff" })
+      .webp({ quality })
+      .toBuffer();
+    if (out.byteLength <= 2 * 1024 * 1024) return out;
+  }
+  throw new Error("Fotoğraf işlenemedi. Daha küçük bir fotoğraf deneyin.");
+}
+
 /** Square 400px WebP profile photo (centre crop, EXIF-oriented, metadata stripped, no watermark). */
 export async function processAvatar(input: Uint8Array): Promise<Buffer> {
   const base = isHeif(input)

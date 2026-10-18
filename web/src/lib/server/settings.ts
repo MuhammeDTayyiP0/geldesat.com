@@ -12,8 +12,8 @@ export const getAccountSettings = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const sql = await getSql();
     await ensureProfile(context.userId);
-    const rows = await sql.query<{ phone_visibility: string; show_whatsapp: boolean; notify_prefs: unknown; push_devices: number }>(
-      `select p.phone_visibility, p.show_whatsapp, p.notify_prefs,
+    const rows = await sql.query<{ phone_visibility: string; show_whatsapp: boolean; read_receipts: boolean; notify_prefs: unknown; push_devices: number }>(
+      `select p.phone_visibility, p.show_whatsapp, p.read_receipts, p.notify_prefs,
               (select count(*)::int from mobile_push_tokens t where t.user_id = p.user_id) as push_devices
        from profiles p where p.user_id = $1`,
       [context.userId],
@@ -22,6 +22,7 @@ export const getAccountSettings = createServerFn({ method: "GET" })
     return {
       phone_visibility: (r?.phone_visibility ?? "members") as PhoneVisibility,
       show_whatsapp: r?.show_whatsapp ?? true,
+      read_receipts: r?.read_receipts ?? true,
       notify_prefs: resolveNotifyPrefs(asJson(r?.notify_prefs, {})),
       /** Push only reaches the mobile app; the page says so when no device is registered. */
       push_devices: r?.push_devices ?? 0,
@@ -30,14 +31,15 @@ export const getAccountSettings = createServerFn({ method: "GET" })
 
 export const updatePrivacySettings = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator(z.object({ phone_visibility: z.enum(["everyone", "members", "hidden"]), show_whatsapp: z.boolean() }))
+  .validator(z.object({ phone_visibility: z.enum(["everyone", "members", "hidden"]), show_whatsapp: z.boolean(), read_receipts: z.boolean() }))
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     await ensureProfile(context.userId);
-    await sql.query("update profiles set phone_visibility=$2, show_whatsapp=$3 where user_id=$1", [
+    await sql.query("update profiles set phone_visibility=$2, show_whatsapp=$3, read_receipts=$4 where user_id=$1", [
       context.userId,
       data.phone_visibility,
       data.show_whatsapp,
+      data.read_receipts,
     ]);
     return { ok: true };
   });

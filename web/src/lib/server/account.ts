@@ -503,20 +503,37 @@ export const adminReports = createServerFn({ method: "GET" })
     const rows = await sql.query<Record<string, unknown>>(
       `select r.*, l.title, l.slug, p.display_name as reporter_name
        from reports r
-       join listings l on l.id = r.listing_id
+       left join listings l on l.id = r.listing_id
        left join profiles p on p.user_id = r.reporter_id
        order by r.created_at desc limit 80`,
     );
+    // Conversation reports carry the reported message, or the last messages, so
+    // moderators can judge them; the reporter chose to share that chat.
+    const excerpts = new Map<string, Array<{ who: string; text: string; at: string }>>();
+    for (const r of rows.filter((x) => x.conversation_id)) {
+      const msgs = await sql.query<{ sender_id: string; content: string; created_at: string }>(
+        r.message_id
+          ? "select sender_id, content, created_at from messages where id=$2 and conversation_id=$1"
+          : "select * from (select sender_id, content, created_at from messages where conversation_id=$1 order by created_at desc limit 10) m order by created_at",
+        r.message_id ? [r.conversation_id, r.message_id] : [r.conversation_id],
+      );
+      excerpts.set(
+        String(r.id),
+        msgs.map((m) => ({ who: m.sender_id === r.reporter_id ? "Şikayet eden" : "Karşı taraf", text: m.content, at: String(m.created_at) })),
+      );
+    }
     return rows.map((r) => ({
       id: String(r.id),
-      listing_id: String(r.listing_id),
+      listing_id: r.listing_id ? String(r.listing_id) : "",
       reason: String(r.reason),
       details: r.details ? String(r.details) : "",
       status: String(r.status),
-      title: String(r.title ?? ""),
+      title: r.title ? String(r.title) : r.conversation_id ? "" : "İlan kaldırıldı",
       slug: String(r.slug ?? ""),
       reporter_name: String(r.reporter_name ?? "Üye"),
       created_at: String(r.created_at),
+      conversation_id: r.conversation_id ? String(r.conversation_id) : null,
+      messages: excerpts.get(String(r.id)) ?? [],
     }));
   });
 

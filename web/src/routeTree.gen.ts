@@ -27,6 +27,7 @@ import { Route as ApiAvatarRouteImport } from './routes/api/avatar'
 import { Route as ApiUploadRouteImport } from './routes/api/upload'
 import { Route as AyarlarIndexRouteImport } from './routes/ayarlar/index'
 import { Route as AyarlarBildirimlerRouteImport } from './routes/ayarlar/bildirimler'
+import { Route as AyarlarEngellenenlerRouteImport } from './routes/ayarlar/engellenenler'
 import { Route as AyarlarGizlilikRouteImport } from './routes/ayarlar/gizlilik'
 import { Route as AyarlarGuvenlikRouteImport } from './routes/ayarlar/guvenlik'
 import { Route as AyarlarHesapRouteImport } from './routes/ayarlar/hesap'
@@ -42,6 +43,7 @@ import { Route as SayfaSlugRouteImport } from './routes/sayfa/$slug'
 import { Route as UploadsSplatRouteImport } from './routes/uploads/$'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiAvatarIdRouteImport } from './routes/api/avatar/$id'
+import { Route as ApiChatImageRouteImport } from './routes/api/chat/image'
 import { Route as ApiChatStreamRouteImport } from './routes/api/chat/stream'
 import { Route as ApiHesapVerilerimRouteImport } from './routes/api/hesap/verilerim'
 import { Route as ApiMobileBlocksRouteImport } from './routes/api/mobile/blocks'
@@ -57,6 +59,7 @@ import { Route as ApiMobileNotificationsRouteImport } from './routes/api/mobile/
 import { Route as ApiMobileProfileRouteImport } from './routes/api/mobile/profile'
 import { Route as ApiMobileReportsRouteImport } from './routes/api/mobile/reports'
 import { Route as ApiMobileReviewsRouteImport } from './routes/api/mobile/reviews'
+import { Route as ApiChatImageIdRouteImport } from './routes/api/chat/image/$id'
 import { Route as ApiMobileConversationsIdRouteImport } from './routes/api/mobile/conversations/$id'
 import { Route as ApiMobileImagesIdRouteImport } from './routes/api/mobile/images/$id'
 import { Route as ApiMobileListingsIdRouteImport } from './routes/api/mobile/listings/$id'
@@ -154,6 +157,11 @@ const AyarlarBildirimlerRoute = AyarlarBildirimlerRouteImport.update({
   path: '/ayarlar/bildirimler',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AyarlarEngellenenlerRoute = AyarlarEngellenenlerRouteImport.update({
+  id: '/ayarlar/engellenenler',
+  path: '/ayarlar/engellenenler',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AyarlarGizlilikRoute = AyarlarGizlilikRouteImport.update({
   id: '/ayarlar/gizlilik',
   path: '/ayarlar/gizlilik',
@@ -228,6 +236,11 @@ const ApiAvatarIdRoute = ApiAvatarIdRouteImport.update({
   id: '/$id',
   path: '/$id',
   getParentRoute: () => ApiAvatarRoute,
+} as any)
+const ApiChatImageRoute = ApiChatImageRouteImport.update({
+  id: '/api/chat/image',
+  path: '/api/chat/image',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ApiChatStreamRoute = ApiChatStreamRouteImport.update({
   id: '/api/chat/stream',
@@ -305,6 +318,11 @@ const ApiMobileReviewsRoute = ApiMobileReviewsRouteImport.update({
   path: '/api/mobile/reviews',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiChatImageIdRoute = ApiChatImageIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => ApiChatImageRoute,
+} as any)
 const ApiMobileConversationsIdRoute =
   ApiMobileConversationsIdRouteImport.update({
     id: '/$id',
@@ -355,6 +373,7 @@ export interface FileRoutesByFullPath {
   '/api/avatar': typeof ApiAvatarRouteWithChildren
   '/api/upload': typeof ApiUploadRoute
   '/ayarlar/bildirimler': typeof AyarlarBildirimlerRoute
+  '/ayarlar/engellenenler': typeof AyarlarEngellenenlerRoute
   '/ayarlar/gizlilik': typeof AyarlarGizlilikRoute
   '/ayarlar/guvenlik': typeof AyarlarGuvenlikRoute
   '/ayarlar/hesap': typeof AyarlarHesapRoute
@@ -371,6 +390,7 @@ export interface FileRoutesByFullPath {
   '/mesajlar/': typeof MesajlarIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/avatar/$id': typeof ApiAvatarIdRoute
+  '/api/chat/image': typeof ApiChatImageRouteWithChildren
   '/api/chat/stream': typeof ApiChatStreamRoute
   '/api/hesap/verilerim': typeof ApiHesapVerilerimRoute
   '/api/mobile/blocks': typeof ApiMobileBlocksRoute
@@ -386,6 +406,7 @@ export interface FileRoutesByFullPath {
   '/api/mobile/profile': typeof ApiMobileProfileRoute
   '/api/mobile/reports': typeof ApiMobileReportsRoute
   '/api/mobile/reviews': typeof ApiMobileReviewsRoute
+  '/api/chat/image/$id': typeof ApiChatImageIdRoute
   '/api/mobile/conversations/$id': typeof ApiMobileConversationsIdRoute
   '/api/mobile/images/$id': typeof ApiMobileImagesIdRoute
   '/api/mobile/listings/$id': typeof ApiMobileListingsIdRoute
@@ -410,6 +431,7 @@ export interface FileRoutesByTo {
   '/api/avatar': typeof ApiAvatarRouteWithChildren
   '/api/upload': typeof ApiUploadRoute
   '/ayarlar/bildirimler': typeof AyarlarBildirimlerRoute
+  '/ayarlar/engellenenler': typeof AyarlarEngellenenlerRoute
   '/ayarlar/gizlilik': typeof AyarlarGizlilikRoute
   '/ayarlar/guvenlik': typeof AyarlarGuvenlikRoute
   '/ayarlar/hesap': typeof AyarlarHesapRoute
@@ -426,6 +448,7 @@ export interface FileRoutesByTo {
   '/mesajlar': typeof MesajlarIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/avatar/$id': typeof ApiAvatarIdRoute
+  '/api/chat/image': typeof ApiChatImageRouteWithChildren
   '/api/chat/stream': typeof ApiChatStreamRoute
   '/api/hesap/verilerim': typeof ApiHesapVerilerimRoute
   '/api/mobile/blocks': typeof ApiMobileBlocksRoute
@@ -441,6 +464,7 @@ export interface FileRoutesByTo {
   '/api/mobile/profile': typeof ApiMobileProfileRoute
   '/api/mobile/reports': typeof ApiMobileReportsRoute
   '/api/mobile/reviews': typeof ApiMobileReviewsRoute
+  '/api/chat/image/$id': typeof ApiChatImageIdRoute
   '/api/mobile/conversations/$id': typeof ApiMobileConversationsIdRoute
   '/api/mobile/images/$id': typeof ApiMobileImagesIdRoute
   '/api/mobile/listings/$id': typeof ApiMobileListingsIdRoute
@@ -467,6 +491,7 @@ export interface FileRoutesById {
   '/api/avatar': typeof ApiAvatarRouteWithChildren
   '/api/upload': typeof ApiUploadRoute
   '/ayarlar/bildirimler': typeof AyarlarBildirimlerRoute
+  '/ayarlar/engellenenler': typeof AyarlarEngellenenlerRoute
   '/ayarlar/gizlilik': typeof AyarlarGizlilikRoute
   '/ayarlar/guvenlik': typeof AyarlarGuvenlikRoute
   '/ayarlar/hesap': typeof AyarlarHesapRoute
@@ -483,6 +508,7 @@ export interface FileRoutesById {
   '/mesajlar/': typeof MesajlarIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/avatar/$id': typeof ApiAvatarIdRoute
+  '/api/chat/image': typeof ApiChatImageRouteWithChildren
   '/api/chat/stream': typeof ApiChatStreamRoute
   '/api/hesap/verilerim': typeof ApiHesapVerilerimRoute
   '/api/mobile/blocks': typeof ApiMobileBlocksRoute
@@ -498,6 +524,7 @@ export interface FileRoutesById {
   '/api/mobile/profile': typeof ApiMobileProfileRoute
   '/api/mobile/reports': typeof ApiMobileReportsRoute
   '/api/mobile/reviews': typeof ApiMobileReviewsRoute
+  '/api/chat/image/$id': typeof ApiChatImageIdRoute
   '/api/mobile/conversations/$id': typeof ApiMobileConversationsIdRoute
   '/api/mobile/images/$id': typeof ApiMobileImagesIdRoute
   '/api/mobile/listings/$id': typeof ApiMobileListingsIdRoute
@@ -525,6 +552,7 @@ export interface FileRouteTypes {
     | '/api/avatar'
     | '/api/upload'
     | '/ayarlar/bildirimler'
+    | '/ayarlar/engellenenler'
     | '/ayarlar/gizlilik'
     | '/ayarlar/guvenlik'
     | '/ayarlar/hesap'
@@ -541,6 +569,7 @@ export interface FileRouteTypes {
     | '/mesajlar/'
     | '/api/auth/$'
     | '/api/avatar/$id'
+    | '/api/chat/image'
     | '/api/chat/stream'
     | '/api/hesap/verilerim'
     | '/api/mobile/blocks'
@@ -556,6 +585,7 @@ export interface FileRouteTypes {
     | '/api/mobile/profile'
     | '/api/mobile/reports'
     | '/api/mobile/reviews'
+    | '/api/chat/image/$id'
     | '/api/mobile/conversations/$id'
     | '/api/mobile/images/$id'
     | '/api/mobile/listings/$id'
@@ -580,6 +610,7 @@ export interface FileRouteTypes {
     | '/api/avatar'
     | '/api/upload'
     | '/ayarlar/bildirimler'
+    | '/ayarlar/engellenenler'
     | '/ayarlar/gizlilik'
     | '/ayarlar/guvenlik'
     | '/ayarlar/hesap'
@@ -596,6 +627,7 @@ export interface FileRouteTypes {
     | '/mesajlar'
     | '/api/auth/$'
     | '/api/avatar/$id'
+    | '/api/chat/image'
     | '/api/chat/stream'
     | '/api/hesap/verilerim'
     | '/api/mobile/blocks'
@@ -611,6 +643,7 @@ export interface FileRouteTypes {
     | '/api/mobile/profile'
     | '/api/mobile/reports'
     | '/api/mobile/reviews'
+    | '/api/chat/image/$id'
     | '/api/mobile/conversations/$id'
     | '/api/mobile/images/$id'
     | '/api/mobile/listings/$id'
@@ -636,6 +669,7 @@ export interface FileRouteTypes {
     | '/api/avatar'
     | '/api/upload'
     | '/ayarlar/bildirimler'
+    | '/ayarlar/engellenenler'
     | '/ayarlar/gizlilik'
     | '/ayarlar/guvenlik'
     | '/ayarlar/hesap'
@@ -652,6 +686,7 @@ export interface FileRouteTypes {
     | '/mesajlar/'
     | '/api/auth/$'
     | '/api/avatar/$id'
+    | '/api/chat/image'
     | '/api/chat/stream'
     | '/api/hesap/verilerim'
     | '/api/mobile/blocks'
@@ -667,6 +702,7 @@ export interface FileRouteTypes {
     | '/api/mobile/profile'
     | '/api/mobile/reports'
     | '/api/mobile/reviews'
+    | '/api/chat/image/$id'
     | '/api/mobile/conversations/$id'
     | '/api/mobile/images/$id'
     | '/api/mobile/listings/$id'
@@ -693,6 +729,7 @@ export interface RootRouteChildren {
   ApiAvatarRoute: typeof ApiAvatarRouteWithChildren
   ApiUploadRoute: typeof ApiUploadRoute
   AyarlarBildirimlerRoute: typeof AyarlarBildirimlerRoute
+  AyarlarEngellenenlerRoute: typeof AyarlarEngellenenlerRoute
   AyarlarGizlilikRoute: typeof AyarlarGizlilikRoute
   AyarlarGuvenlikRoute: typeof AyarlarGuvenlikRoute
   AyarlarHesapRoute: typeof AyarlarHesapRoute
@@ -706,6 +743,7 @@ export interface RootRouteChildren {
   UploadsSplatRoute: typeof UploadsSplatRoute
   AyarlarIndexRoute: typeof AyarlarIndexRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiChatImageRoute: typeof ApiChatImageRouteWithChildren
   ApiChatStreamRoute: typeof ApiChatStreamRoute
   ApiHesapVerilerimRoute: typeof ApiHesapVerilerimRoute
   ApiMobileBlocksRoute: typeof ApiMobileBlocksRoute
@@ -853,6 +891,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AyarlarBildirimlerRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/ayarlar/engellenenler': {
+      id: '/ayarlar/engellenenler'
+      path: '/ayarlar/engellenenler'
+      fullPath: '/ayarlar/engellenenler'
+      preLoaderRoute: typeof AyarlarEngellenenlerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/ayarlar/gizlilik': {
       id: '/ayarlar/gizlilik'
       path: '/ayarlar/gizlilik'
@@ -957,6 +1002,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/avatar/$id'
       preLoaderRoute: typeof ApiAvatarIdRouteImport
       parentRoute: typeof ApiAvatarRoute
+    }
+    '/api/chat/image': {
+      id: '/api/chat/image'
+      path: '/api/chat/image'
+      fullPath: '/api/chat/image'
+      preLoaderRoute: typeof ApiChatImageRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/chat/stream': {
       id: '/api/chat/stream'
@@ -1063,6 +1115,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiMobileReviewsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/chat/image/$id': {
+      id: '/api/chat/image/$id'
+      path: '/$id'
+      fullPath: '/api/chat/image/$id'
+      preLoaderRoute: typeof ApiChatImageIdRouteImport
+      parentRoute: typeof ApiChatImageRoute
+    }
     '/api/mobile/conversations/$id': {
       id: '/api/mobile/conversations/$id'
       path: '/$id'
@@ -1134,6 +1193,18 @@ const ApiAvatarRouteWithChildren = ApiAvatarRoute._addFileChildren(
   ApiAvatarRouteChildren,
 )
 
+interface ApiChatImageRouteChildren {
+  ApiChatImageIdRoute: typeof ApiChatImageIdRoute
+}
+
+const ApiChatImageRouteChildren: ApiChatImageRouteChildren = {
+  ApiChatImageIdRoute: ApiChatImageIdRoute,
+}
+
+const ApiChatImageRouteWithChildren = ApiChatImageRoute._addFileChildren(
+  ApiChatImageRouteChildren,
+)
+
 interface ApiMobileConversationsRouteChildren {
   ApiMobileConversationsIdRoute: typeof ApiMobileConversationsIdRoute
 }
@@ -1200,6 +1271,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAvatarRoute: ApiAvatarRouteWithChildren,
   ApiUploadRoute: ApiUploadRoute,
   AyarlarBildirimlerRoute: AyarlarBildirimlerRoute,
+  AyarlarEngellenenlerRoute: AyarlarEngellenenlerRoute,
   AyarlarGizlilikRoute: AyarlarGizlilikRoute,
   AyarlarGuvenlikRoute: AyarlarGuvenlikRoute,
   AyarlarHesapRoute: AyarlarHesapRoute,
@@ -1213,6 +1285,7 @@ const rootRouteChildren: RootRouteChildren = {
   UploadsSplatRoute: UploadsSplatRoute,
   AyarlarIndexRoute: AyarlarIndexRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiChatImageRoute: ApiChatImageRouteWithChildren,
   ApiChatStreamRoute: ApiChatStreamRoute,
   ApiHesapVerilerimRoute: ApiHesapVerilerimRoute,
   ApiMobileBlocksRoute: ApiMobileBlocksRoute,

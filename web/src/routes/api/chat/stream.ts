@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { auth } from "@/lib/auth/server";
-import { chatBus, type ChatEvent, type UserInboxEvent } from "@/lib/server/chat-bus";
+import { chatBus, trackPresence, type ChatEvent, type UserInboxEvent } from "@/lib/server/chat-bus";
 import { getSql } from "@/lib/db";
 
 export const Route = createFileRoute("/api/chat/stream")({
@@ -16,8 +16,8 @@ export const Route = createFileRoute("/api/chat/stream")({
           return new Response("Unauthorized", { status: 401 });
         }
 
+        const sql = await getSql();
         if (conversationId) {
-          const sql = await getSql();
           const conv = await sql.query<{ buyer_id: string; seller_id: string }>(
             "select buyer_id, seller_id from conversations where id=$1",
             [conversationId],
@@ -28,6 +28,11 @@ export const Route = createFileRoute("/api/chat/stream")({
         }
 
         let cleanup: (() => void) | null = null;
+        // "Son görülme": stamped when a stream opens, every few minutes while open, and when it closes.
+        const touchLastSeen = () =>
+          void sql.query("update profiles set last_seen_at = now() where user_id = $1", [user.id]).catch(() => undefined);
+        touchLastSeen();
+        const untrack = trackPresence(user.id, conversationId);
 
         const stream = new ReadableStream({
           start(controller) {
@@ -56,9 +61,11 @@ export const Route = createFileRoute("/api/chat/stream")({
             }
 
             // Heartbeat every 20 seconds to keep connection alive through proxies
+            let beats = 0;
             const heartbeat = setInterval(() => {
               try {
                 controller.enqueue(encoder.encode(": heartbeat\n\n"));
+                if (++beats % 9 === 0) touchLastSeen(); // every ~3 minutes
               } catch {
                 cleanup?.();
               }
@@ -70,6 +77,8 @@ export const Route = createFileRoute("/api/chat/stream")({
                 chatBus.off(chatEventName, chatHandler);
               }
               clearInterval(heartbeat);
+              untrack();
+              touchLastSeen();
               try {
                 controller.close();
               } catch {
