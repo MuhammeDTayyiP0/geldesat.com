@@ -17,8 +17,9 @@ ENV HOST=0.0.0.0
 ENV PORT=3000
 ENV NITRO_HOST=0.0.0.0
 ENV NITRO_PORT=3000
+# fonts-dejavu-core: sharp/librsvg needs a real font for the photo watermark text.
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates \
+  && apt-get install -y --no-install-recommends ca-certificates fonts-dejavu-core \
   && rm -rf /var/lib/apt/lists/*
 COPY --from=build /app/package.json /app/package-lock.json ./
 COPY --from=build /app/node_modules ./node_modules

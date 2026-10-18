@@ -1,6 +1,7 @@
 import * as React from "react";
 import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, Maximize2, X, ImageIcon } from "lucide-react";
+import { photoSrc } from "@/lib/images";
 
 interface ListingImageGalleryProps {
   images: string[];
@@ -155,10 +156,17 @@ export function ListingImageGallery({ images, title, categoryName }: ListingImag
         onTouchMove={handleTouchMove}
         onTouchEnd={() => handleTouchEnd(false)}
       >
+        {/* Photos keep their own ratio; a blurred copy fills the frame instead of empty bars. */}
+        <img
+          src={photoSrc(validImages[currentIdx], 240)}
+          alt=""
+          aria-hidden="true"
+          className="absolute inset-0 size-full scale-125 object-cover opacity-70 blur-2xl"
+        />
         <img
           src={validImages[currentIdx]}
           alt={`${title} - Görsel ${currentIdx + 1}`}
-          className="size-full cursor-zoom-in object-contain transition-transform duration-300 group-hover:scale-[1.01]"
+          className="relative size-full cursor-zoom-in object-contain transition-transform duration-300 group-hover:scale-[1.01]"
           loading="eager"
         />
 
@@ -233,7 +241,7 @@ export function ListingImageGallery({ images, title, categoryName }: ListingImag
                 }`}
                 title={`Görsel ${i + 1}`}
               >
-                <img src={img} alt="" className="size-full object-cover" loading="lazy" />
+                <img src={photoSrc(img, 240)} alt="" className="size-full object-cover" loading="lazy" />
               </button>
             );
           })}
@@ -334,7 +342,7 @@ export function ListingImageGallery({ images, title, categoryName }: ListingImag
                           : "opacity-40 hover:opacity-80"
                       }`}
                     >
-                      <img src={img} alt="" className="size-full object-cover" />
+                      <img src={photoSrc(img, 240)} alt="" className="size-full object-cover" />
                     </button>
                   ))}
                 </div>

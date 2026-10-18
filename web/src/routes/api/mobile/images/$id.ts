@@ -1,11 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getSql } from "@/lib/db";
 import { getMobileUserId } from "@/lib/server/mobile-auth";
+import { storedImageResponse } from "@/lib/server/image-serve.server";
 
 export const Route = createFileRoute("/api/mobile/images/$id")({
   server: {
     handlers: {
-      GET: async ({ params }) => {
+      GET: async ({ request, params }) => {
         if (!/^[0-9a-f-]{36}$/i.test(params.id)) return new Response(null, { status: 404 });
         try {
           const sql = await getSql();
@@ -15,14 +16,7 @@ export const Route = createFileRoute("/api/mobile/images/$id")({
           );
           const image = rows[0];
           if (!image) return new Response(null, { status: 404 });
-          return new Response(new Uint8Array(image.data), {
-            headers: {
-              "Content-Type": image.mime_type,
-              "Content-Length": String(image.data.byteLength),
-              "Cache-Control": "public, max-age=31536000, immutable",
-              "X-Content-Type-Options": "nosniff",
-            },
-          });
+          return await storedImageResponse(request, params.id, image.mime_type, image.data);
         } catch {
           return new Response(null, { status: 500 });
         }

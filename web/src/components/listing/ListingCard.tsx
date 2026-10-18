@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { toggleFavorite } from "@/lib/server/social";
 import { toast } from "sonner";
+import { photoSrc } from "@/lib/images";
 
 export function ListingCard({
   listing,
@@ -55,7 +56,7 @@ export function ListingCard({
     >
       {img ? (
         <img
-          src={img}
+          src={photoSrc(img, 480)}
           alt={listing.title}
           loading="lazy"
           decoding="async"

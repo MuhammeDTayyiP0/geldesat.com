@@ -33,8 +33,9 @@ export async function assertUploadAllowed(sql: Sql, userId: string): Promise<voi
 }
 
 export const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
+/** Raw web uploads may be larger; the pipeline shrinks them before storage. */
+export const MAX_UPLOAD_BYTES = 12 * 1024 * 1024;
 export type ImageMime = "image/jpeg" | "image/png" | "image/webp";
-const EXT: Record<ImageMime, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
 
 /** Real image type from the file's leading bytes; the client-declared type is not trusted. */
 export function sniffImageMime(bytes: Uint8Array): ImageMime | null {
@@ -46,26 +47,37 @@ export function sniffImageMime(bytes: Uint8Array): ImageMime | null {
 }
 
 /** Validate size and content of an uploaded photo, returning its sniffed type. */
-export function assertImageBytes(bytes: Uint8Array): ImageMime {
+export function assertImageBytes(bytes: Uint8Array, maxBytes = MAX_IMAGE_BYTES): ImageMime {
   if (bytes.byteLength < 1) throw new Error("Fotoğraf boş.");
-  if (bytes.byteLength > MAX_IMAGE_BYTES) throw new Error("Fotoğraf en fazla 2 MB olabilir.");
+  if (bytes.byteLength > maxBytes) throw new Error(`Fotoğraf en fazla ${Math.round(maxBytes / 1024 / 1024)} MB olabilir.`);
   const mime = sniffImageMime(bytes);
   if (!mime) throw new Error("Geçersiz görsel. JPEG, PNG veya WebP fotoğraf yükleyin.");
   return mime;
 }
 
 /**
- * Store a web upload in Postgres so image URLs survive redeploys.
- * The public URL path stays `/uploads/<filename>` for existing web clients.
+ * Process a web upload (orient, resize, watermark, strip metadata) and store the
+ * WebP master in Postgres so URLs survive redeploys. The public path stays
+ * `/uploads/<filename>` for existing web clients.
  */
 export async function saveListingImage(bytes: Uint8Array, userId: string): Promise<string> {
-  const mimeType = assertImageBytes(bytes);
-  const filename = `${Date.now()}_${randomUUID().replace(/-/g, "").slice(0, 10)}.${EXT[mimeType]}`;
+  assertImageBytes(bytes, MAX_UPLOAD_BYTES);
   const sql = await getSql();
   await assertUploadAllowed(sql, userId);
+  const { processListingPhoto } = await import("./image-pipeline.server");
+  let master: Buffer;
+  try {
+    master = await processListingPhoto(bytes);
+  } catch (err) {
+    // sharp's own errors carry decoder detail; give the user something actionable.
+    if (err instanceof Error && /^Fotoğraf/.test(err.message)) throw err;
+    console.error("[upload] processing failed", err);
+    throw new Error("Fotoğraf işlenemedi. Farklı bir fotoğraf deneyin.");
+  }
+  const filename = `${Date.now()}_${randomUUID().replace(/-/g, "").slice(0, 10)}.webp`;
   await sql.query(
-    "insert into mobile_listing_images (id,user_id,storage_key,mime_type,data) values ($1,$2,$3,$4,$5)",
-    [randomUUID(), userId, filename, mimeType, Buffer.from(bytes)],
+    "insert into mobile_listing_images (id,user_id,storage_key,mime_type,data) values ($1,$2,$3,'image/webp',$4)",
+    [randomUUID(), userId, filename, master],
   );
   return `/uploads/${filename}`;
 }

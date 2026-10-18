@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getSql } from "@/lib/db";
-import { deleteUnusedListingImages, MAX_IMAGE_BYTES, saveListingImage } from "@/lib/server/upload.server";
+import { deleteUnusedListingImages, MAX_UPLOAD_BYTES, saveListingImage } from "@/lib/server/upload.server";
 import { getSessionUser } from "@/lib/auth/verify.server";
 import { publicErrorMessage } from "@/lib/server/errors";
 import { UPLOAD_HEADER } from "@/lib/listing-photos";
@@ -25,11 +25,11 @@ export const Route = createFileRoute("/api/upload")({
         const auth = await authorize(request);
         if (auth instanceof Response) return auth;
         const length = Number(request.headers.get("content-length") ?? 0);
-        if (length > MAX_IMAGE_BYTES + 64 * 1024) return json({ error: "Fotoğraf en fazla 2 MB olabilir." }, 413);
+        if (length > MAX_UPLOAD_BYTES + 64 * 1024) return json({ error: "Fotoğraf en fazla 12 MB olabilir." }, 413);
         try {
           const file = (await request.formData()).get("file");
           if (!(file instanceof File)) return json({ error: "Fotoğraf bulunamadı." }, 400);
-          if (file.size > MAX_IMAGE_BYTES) return json({ error: "Fotoğraf en fazla 2 MB olabilir." }, 413);
+          if (file.size > MAX_UPLOAD_BYTES) return json({ error: "Fotoğraf en fazla 12 MB olabilir." }, 413);
           const url = await saveListingImage(new Uint8Array(await file.arrayBuffer()), auth.userId);
           return json({ url });
         } catch (err) {

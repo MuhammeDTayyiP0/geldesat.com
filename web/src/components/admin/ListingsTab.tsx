@@ -1,3 +1,4 @@
+import { photoSrc } from "@/lib/images";
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -129,7 +130,7 @@ export function ListingsTab({ panel }: { panel: AdminPanel }) {
                     <div className="flex items-center gap-3">
                       {l.images && l.images[0] ? (
                         <img
-                          src={l.images[0]}
+                          src={photoSrc(l.images[0], 240)}
                           alt=""
                           className="size-11 shrink-0 rounded-lg object-cover border border-border"
                         />

@@ -1,3 +1,4 @@
+import { photoSrc } from "@/lib/images";
 import { Button } from "@/components/ui/button";
 import { formatPrice } from "@/lib/utils";
 import { ShieldAlert, Check, X, Package, Users, CreditCard, Eye, Clock } from "lucide-react";
@@ -171,7 +172,7 @@ export function OverviewTab({ panel }: { panel: AdminPanel }) {
                   <div className="flex items-center gap-3 min-w-0">
                     {l.images && l.images[0] ? (
                       <img
-                        src={l.images[0]}
+                        src={photoSrc(l.images[0], 240)}
                         alt=""
                         className="size-11 rounded-lg object-cover border border-border shrink-0"
                       />
