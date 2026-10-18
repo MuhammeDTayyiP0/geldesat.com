@@ -4,9 +4,7 @@ import { tanstackStartCookies } from "better-auth/tanstack-start";
 import { getCookie } from "@tanstack/react-start/server";
 import { randomBytes } from "node:crypto";
 import { Pool } from "pg";
-import { ensureDbReady, getPglite, getSql } from "../db";
-import { APIError } from "better-auth/api";
-import { purgeUserData } from "../server/account-purge";
+import { ensureDbReady, getPglite } from "../db";
 import { mailConfigured, sendActionMail } from "../server/mail";
 import { pgliteDialect } from "./pglite-dialect";
 
@@ -125,22 +123,6 @@ export const auth = betterAuth({
       session_data: { name: "__Host-geldesat-auth.session_data" },
       account_data: { name: "__Host-geldesat-auth.account_data" },
       dont_remember: { name: "__Host-geldesat-auth.dont_remember" },
-    },
-  },
-  user: {
-    // Self-service account deletion (KVKK). Better Auth checks the password, or a
-    // recent sign-in for Google-only accounts, then removes its own rows; the app
-    // data goes first in beforeDelete.
-    deleteUser: {
-      enabled: true,
-      beforeDelete: async (user) => {
-        const sql = await getSql();
-        const role = await sql.query<{ role: string }>("select role from profiles where user_id=$1", [user.id]);
-        if (role[0]?.role === "ADMIN") {
-          throw new APIError("BAD_REQUEST", { message: "Yönetici hesapları silinemez. Önce yönetici rolünü kaldırın." });
-        }
-        await purgeUserData(sql, user.id, { includeAuth: false });
-      },
     },
   },
   plugins: [tanstackStartCookies()],

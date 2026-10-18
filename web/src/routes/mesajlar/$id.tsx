@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
   Ban,
   Check,
@@ -10,11 +10,13 @@ import {
   Send,
   ShieldAlert,
   ShieldCheck,
+  Trash2,
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
   blockUser,
+  deleteConversation,
   unblockUser,
   getThread,
   markThreadRead,
@@ -79,6 +81,8 @@ function Thread() {
   const [otherId, setOtherId] = useState("");
   const [blockedByMe, setBlockedByMe] = useState(false);
   const [blockedByOther, setBlockedByOther] = useState(false);
+  const [otherClosed, setOtherClosed] = useState(false);
+  const navigate = useNavigate();
   const [messages, setMessages] = useState<Msg[]>([]);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -154,6 +158,7 @@ function Thread() {
         );
         setBlockedByMe(Boolean(t.blockedByMe));
         setBlockedByOther(Boolean(t.blockedByOther));
+        setOtherClosed(Boolean(t.conversation.other_closed));
         setMessages(t.messages);
         lastRef.current = t.messages.at(-1)?.created_at;
         stickRef.current = true;
@@ -279,6 +284,24 @@ function Thread() {
     }
   }
 
+  /** Remove the chat from my inbox only; the other person keeps their copy. */
+  async function handleDeleteChat() {
+    if (
+      !confirm(
+        "Bu sohbet sizin mesaj kutunuzdan silinsin mi? Karşı taraf kendi kopyasını görmeye devam eder.",
+      )
+    )
+      return;
+    try {
+      await deleteConversation({ data: { conversationId: id } });
+      pingInbox();
+      toast.success("Sohbet silindi");
+      void navigate({ to: "/mesajlar" });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Sohbet silinemedi");
+    }
+  }
+
   async function handleToggleBlock() {
     if (!otherId || busy) return;
     if (blockedByMe) {
@@ -309,7 +332,7 @@ function Thread() {
 
   async function submit(raw?: string) {
     const content = (raw ?? text).trim();
-    if (!content || busy || !user || blockedByMe || blockedByOther) return;
+    if (!content || busy || !user || blockedByMe || blockedByOther || otherClosed) return;
     const tempId = `tmp_${crypto.randomUUID().slice(0, 12)}`;
     const optimistic: Msg = {
       id: tempId,
@@ -391,15 +414,21 @@ function Thread() {
                   {other.slice(0, 1).toLocaleUpperCase("tr")}
                 </div>
               )}
-              <span
-                className="absolute bottom-0 right-0 size-2.5 rounded-full border-2 border-surface bg-ok"
-                title="Aktif"
-              />
+              {otherClosed ? null : (
+                <span
+                  className="absolute bottom-0 right-0 size-2.5 rounded-full border-2 border-surface bg-ok"
+                  title="Aktif"
+                />
+              )}
             </div>
             <div className="min-w-0">
               <p className="truncate text-sm font-bold text-fg">{other}</p>
               <p className="truncate text-[11px] text-muted">
-                {otherLastSeen ? `Son görülme: ${timeAgo(otherLastSeen)}` : "GeldeSat Üyesi"}
+                {otherClosed
+                  ? "Hesap kapatıldı"
+                  : otherLastSeen
+                    ? `Son görülme: ${timeAgo(otherLastSeen)}`
+                    : "GeldeSat Üyesi"}
               </p>
             </div>
           </div>
@@ -425,15 +454,26 @@ function Thread() {
             ) : null}
             <button
               type="button"
-              className={`grid size-9 place-items-center rounded-lg transition-colors hover:bg-elevated ${
-                blockedByMe ? "text-danger" : "text-muted hover:text-fg"
-              }`}
-              aria-label={blockedByMe ? "Engeli kaldır" : "Engelle"}
-              title={blockedByMe ? "Engeli kaldır" : "Engelle"}
-              onClick={() => void handleToggleBlock()}
+              className="grid size-9 place-items-center rounded-lg text-muted transition-colors hover:bg-elevated hover:text-danger"
+              aria-label="Sohbeti sil"
+              title="Sohbeti sil"
+              onClick={() => void handleDeleteChat()}
             >
-              {blockedByMe ? <ShieldCheck className="size-4" /> : <Ban className="size-4" />}
+              <Trash2 className="size-4" />
             </button>
+            {otherClosed ? null : (
+              <button
+                type="button"
+                className={`grid size-9 place-items-center rounded-lg transition-colors hover:bg-elevated ${
+                  blockedByMe ? "text-danger" : "text-muted hover:text-fg"
+                }`}
+                aria-label={blockedByMe ? "Engeli kaldır" : "Engelle"}
+                title={blockedByMe ? "Engeli kaldır" : "Engelle"}
+                onClick={() => void handleToggleBlock()}
+              >
+                {blockedByMe ? <ShieldCheck className="size-4" /> : <Ban className="size-4" />}
+              </button>
+            )}
           </div>
         ) : null}
       </div>
@@ -637,7 +677,13 @@ function Thread() {
       ) : null}
 
       {/* 6. Mesaj Gönderme Formu & Klavye / Safe-Area Desteği */}
-      {blockedByMe ? (
+      {otherClosed ? (
+        <div className="border-t border-border bg-surface px-4 py-4 text-center">
+          <p className="text-sm font-medium text-muted">
+            Bu kullanıcı hesabını kapattı. Yeni mesaj gönderilemez.
+          </p>
+        </div>
+      ) : blockedByMe ? (
         <div className="flex flex-col items-center justify-center gap-2 border-t border-border bg-surface px-4 py-4 text-center">
           <p className="text-sm font-medium text-muted">Bu kullanıcıyı engellediniz.</p>
           <Button

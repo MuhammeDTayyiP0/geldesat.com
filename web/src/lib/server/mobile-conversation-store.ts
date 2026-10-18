@@ -34,7 +34,11 @@ export async function insertConversationMessage(
     "insert into messages (id,conversation_id,sender_id,content) values ($1,$2,$3,$4) returning id,sender_id,content,created_at,read_at",
     [id, conversationId, senderId, content],
   );
-  await sql.query("update conversations set updated_at=now() where id=$1", [conversationId]);
+  // A new message brings a deleted chat back to both inboxes.
+  await sql.query(
+    "update conversations set updated_at=now(), buyer_hidden_at=null, seller_hidden_at=null, purge_after=null where id=$1",
+    [conversationId],
+  );
   return rows[0];
 }
 

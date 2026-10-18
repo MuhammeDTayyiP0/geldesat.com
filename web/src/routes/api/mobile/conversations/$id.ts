@@ -7,6 +7,7 @@ import { broadcastChatMessage, broadcastChatRead, broadcastUserInbox } from "@/l
 import { hasUserBlock } from "@/lib/server/user-blocks";
 import { insertConversationMessage, loadConversationThread } from "@/lib/server/mobile-conversation-store";
 import { publicErrorMessage } from "@/lib/server/errors";
+import { DELETED_USER_NAME, hideConversationFor, isClosedAccount } from "@/lib/server/retention";
 
 export const Route = createFileRoute("/api/mobile/conversations/$id")({
   server: {
@@ -32,7 +33,7 @@ export const Route = createFileRoute("/api/mobile/conversations/$id")({
               listing_title: String(convo.listing_title ?? "İlan kaldırıldı"),
               listing_image: convo.images ? (asJson<string[]>(convo.images, [])[0] ?? null) : null,
               listing_price: convo.price == null ? null : Number(convo.price),
-              other_user_name: String(convo.other_name ?? "Üye"), other_user_id: String(convo.other_id),
+              other_user_name: convo.other_name == null ? DELETED_USER_NAME : String(convo.other_name), other_user_id: String(convo.other_id),
               blocked: blockedByMe || blockedByOther,
               blockedByMe,
               blockedByOther,
@@ -57,6 +58,7 @@ export const Route = createFileRoute("/api/mobile/conversations/$id")({
           if (conv[0].buyer_id !== userId && conv[0].seller_id !== userId) return Response.json({ success: false, error: "Yetkisiz işlem." }, { status: 403 });
           const receiver = conv[0].buyer_id === userId ? conv[0].seller_id : conv[0].buyer_id;
           if (await hasUserBlock(sql, userId, receiver)) return Response.json({ success: false, error: "Bu kullanıcıyla mesajlaşamazsınız." }, { status: 403 });
+          if (await isClosedAccount(sql, receiver)) return Response.json({ success: false, error: "Bu kullanıcı hesabını kapattı. Mesaj gönderilemez." }, { status: 410 });
           const id = newId("msg");
           const row = await insertConversationMessage(sql, id, params.id, userId, body.content.trim());
           const message = { id: String(row.id), sender_id: String(row.sender_id), content: String(row.content), created_at: asIso(row.created_at), read_at: row.read_at ? asIso(row.read_at) : null };
@@ -69,6 +71,16 @@ export const Route = createFileRoute("/api/mobile/conversations/$id")({
           const message = publicErrorMessage(error, "Mesaj gönderilemedi.");
           return Response.json({ success: false, error: message }, { status: 500 });
         }
+      },
+      /** Delete the chat from this user's inbox; the other person keeps it. */
+      DELETE: async ({ request, params }) => {
+        const userId = await getMobileUserId(request);
+        if (!userId) return Response.json({ success: false, error: "Giriş yapmanız gerekiyor." }, { status: 401 });
+        const sql = await getSql();
+        const ok = await hideConversationFor(sql, params.id, userId);
+        return ok
+          ? Response.json({ success: true })
+          : Response.json({ success: false, error: "Konuşma bulunamadı." }, { status: 404 });
       },
     },
   },

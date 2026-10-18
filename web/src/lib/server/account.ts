@@ -30,6 +30,15 @@ export const isAdminSession = createServerFn({ method: "GET" }).handler(async ()
   return profile.role === "ADMIN";
 });
 
+/** Listings stay hidden while their owner's account waits for deletion. */
+async function assertNotClosing(sql: Awaited<ReturnType<typeof getSql>>, userId: string) {
+  const rows = await sql.query<{ pending: boolean }>(
+    "select deletion_requested_at is not null as pending from profiles where user_id=$1",
+    [userId],
+  );
+  if (rows[0]?.pending) throw new Error("Hesabınız silinme sürecinde. Önce hesabınızı geri alın.");
+}
+
 export const getMe = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
@@ -137,6 +146,7 @@ export const setListingStatus = createServerFn({ method: "POST" })
     const isAdmin = me.role === "ADMIN";
     if (row[0].user_id !== context.userId && !isAdmin) throw new Error("Yetkisiz işlem");
     if (!isAdmin) {
+      if (data.status === "ACTIVE") await assertNotClosing(sql, context.userId);
       // Owners only toggle visibility; moderation states belong to admins.
       if (data.status === "PENDING" || data.status === "REJECTED") throw new Error("Yetkisiz işlem");
       if (data.status === "ACTIVE" && (row[0].status === "PENDING" || row[0].status === "REJECTED" || !row[0].approved_at)) {
@@ -187,6 +197,7 @@ export const renewListing = createServerFn({ method: "POST" })
     );
     if (!row[0] || row[0].user_id !== context.userId) throw new Error("İlan bulunamadı");
     if (row[0].status === "REJECTED") throw new Error("Reddedilen ilan yenilenemez.");
+    await assertNotClosing(sql, context.userId);
     const nextStatus = renewedStatus(row[0].status, row[0].approved_at);
     await sql.query(
       `update listings set expires_at = now() + interval '30 days', status=$2, updated_at=now() where id=$1`,
@@ -386,7 +397,7 @@ export const getSeller = createServerFn({ method: "POST" })
         (select count(*)::int from listings where user_id=p.user_id and status='ACTIVE') as listing_count,
         (select coalesce(avg(rating),0) from reviews where seller_id=p.user_id) as rating_avg,
         (select count(*)::int from reviews where seller_id=p.user_id) as rating_count
-       from profiles p where p.user_id=$1`,
+       from profiles p where p.user_id=$1 and p.deletion_requested_at is null`,
       [data.id],
     );
     if (!p[0]) return null;
@@ -414,7 +425,7 @@ export const getSeller = createServerFn({ method: "POST" })
         id: String(r.id),
         rating: num(r.rating),
         comment: r.comment ? String(r.comment) : "",
-        reviewer: String(r.reviewer_name ?? "Üye"),
+        reviewer: r.reviewer_name == null ? "Silinmiş kullanıcı" : String(r.reviewer_name),
         at: String(r.created_at),
       })),
     };
@@ -424,7 +435,12 @@ export const getStore = createServerFn({ method: "POST" })
   .validator(z.object({ slug: z.string() }))
   .handler(async ({ data }) => {
     const sql = await getSql();
-    const rows = await sql.query<Record<string, unknown>>("select * from stores where lower(slug)=lower($1)", [data.slug]);
+    // A store disappears while its owner's account is waiting for deletion.
+    const rows = await sql.query<Record<string, unknown>>(
+      `select s.* from stores s join profiles p on p.user_id = s.user_id
+       where lower(s.slug)=lower($1) and p.deletion_requested_at is null`,
+      [data.slug],
+    );
     if (!rows[0]) return null;
     return {
       id: String(rows[0].id),

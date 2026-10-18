@@ -34,10 +34,11 @@ export async function saveListingRecord(userId: string, data: ListingInputData) 
   const sql = await getSql();
   const me = await ensureProfile(userId);
   if (!me) throw new Error("Profil yok");
-  const profile = await sql.query<{ phone: string | null; role: string }>(
-    "select phone, role from profiles where user_id = $1",
+  const profile = await sql.query<{ phone: string | null; role: string; deletion_requested_at: string | null }>(
+    "select phone, role, deletion_requested_at from profiles where user_id = $1",
     [userId],
   );
+  if (profile[0]?.deletion_requested_at) throw new Error("Hesabınız silinme sürecinde. İlan vermek için önce hesabınızı geri alın.");
   if (!profile[0]?.phone && !data.phone) throw new Error("İlan vermek için profilinize telefon ekleyin.");
   // Only an explicit per-listing number is stored; otherwise the listing shows
   // the seller's current profile phone (revealPhone falls back to it).

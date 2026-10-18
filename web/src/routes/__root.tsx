@@ -6,6 +6,7 @@ import { BottomNav } from "@/components/layout/BottomNav";
 import { CookieBanner } from "@/components/layout/CookieBanner";
 import { TopProgressBar } from "@/components/layout/TopProgressBar";
 import { NotFound } from "@/components/common/NotFound";
+import { DeletionBanner } from "@/components/account/DeletionBanner";
 import { Toaster } from "sonner";
 import appCss from "../styles.css?url";
 import { jsonLd } from "@/lib/seo";
@@ -122,6 +123,7 @@ function Shell() {
     <div className={isChatThread ? "flex app-chat-shell flex-col overflow-hidden" : isChat ? "flex h-dvh flex-col overflow-hidden" : "flex min-h-dvh flex-1 flex-col"}>
       <TopProgressBar />
       <Header className={isChatThread ? "hidden md:block" : undefined} />
+      {isChatThread ? null : <DeletionBanner />}
       <main className={isChat ? "flex min-h-0 flex-1 flex-col overflow-hidden" : "flex-1 mobile-content-space md:pb-12"}>
         <Outlet />
       </main>

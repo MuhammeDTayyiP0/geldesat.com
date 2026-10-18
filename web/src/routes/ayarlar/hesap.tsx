@@ -3,6 +3,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Download, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { authClient } from "@/lib/auth/client";
+import { requestMyAccountDeletion } from "@/lib/server/settings";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { BrandSpinner } from "@/components/brand/BrandSpinner";
@@ -52,13 +53,36 @@ function AccountData() {
 
         <section className="rounded-2xl border border-danger/30 bg-surface p-4 shadow-card sm:p-6">
           <h2 className="text-base font-semibold text-danger">Hesabı sil</h2>
-          <p className="mt-1 text-sm text-muted">Hesabınız ve ona bağlı her şey kalıcı olarak silinir:</p>
-          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted">
-            <li>Tüm ilanlarınız ve fotoğrafları</li>
-            <li>Mesajlaşmalarınız (karşı taraftaki kopyalar dahil)</li>
-            <li>Favorileriniz, değerlendirmeleriniz, bildirimleriniz ve mağazanız</li>
-          </ul>
-          <p className="mt-3 text-sm text-muted">Bu işlem geri alınamaz. Silmeden önce verilerinizi indirmenizi öneririz.</p>
+          <ol className="mt-3 space-y-3 text-sm">
+            <li className="flex gap-3">
+              <span className="grid size-6 shrink-0 place-items-center rounded-full bg-elevated text-xs font-semibold">1</span>
+              <span>
+                <span className="font-medium">Hemen:</span> <span className="text-muted">oturumunuz kapanır, profiliniz, ilanlarınız ve mağazanız gizlenir.</span>
+              </span>
+            </li>
+            <li className="flex gap-3">
+              <span className="grid size-6 shrink-0 place-items-center rounded-full bg-elevated text-xs font-semibold">2</span>
+              <span>
+                <span className="font-medium">30 gün içinde:</span>{" "}
+                <span className="text-muted">tekrar giriş yapıp “Hesabımı geri al” derseniz her şey eski haline döner.</span>
+              </span>
+            </li>
+            <li className="flex gap-3">
+              <span className="grid size-6 shrink-0 place-items-center rounded-full bg-elevated text-xs font-semibold">3</span>
+              <span>
+                <span className="font-medium">30 gün sonra:</span>{" "}
+                <span className="text-muted">
+                  hesabınız, ilanlarınız, fotoğraflarınız, favorileriniz, bildirimleriniz ve mağazanız kalıcı olarak silinir.
+                </span>
+              </span>
+            </li>
+          </ol>
+          <p className="mt-4 rounded-xl bg-elevated/70 p-3 text-xs leading-relaxed text-muted">
+            <span className="font-semibold text-fg">Mesajlar:</span> yazıştığınız kişiler kendi sohbet geçmişlerini görmeye devam eder; siz
+            “Silinmiş kullanıcı” olarak görünürsünüz. Bir sohbet iki taraftan da kalktığında (silindiğinde veya hesaplar kapandığında) 60 gün daha
+            kimseye gösterilmeden saklanır, ardından tamamen silinir. Yazdığınız satıcı değerlendirmeleri de “Silinmiş kullanıcı” adıyla kalır.
+          </p>
+          <p className="mt-3 text-sm text-muted">Silmeden önce verilerinizi indirmenizi öneririz.</p>
           <Button type="button" variant="danger" className="mt-4" onClick={() => setOpen(true)}>
             <Trash2 className="size-4" /> Hesabımı sil
           </Button>
@@ -81,18 +105,11 @@ function DeleteDialog({ open, onOpenChange, needsPassword }: { open: boolean; on
     if (!ready) return;
     setBusy(true);
     try {
-      const { error } = await authClient.deleteUser(needsPassword ? { password } : {});
-      if (error) {
-        const msg =
-          error.code === "INVALID_PASSWORD"
-            ? "Şifre hatalı."
-            : error.code === "SESSION_EXPIRED"
-              ? "Güvenliğiniz için tekrar giriş yapıp yeniden deneyin."
-              : error.message || "Hesap silinemedi.";
-        throw new Error(msg);
-      }
-      toast.success("Hesabınız silindi. Görüşmek üzere.");
-      window.location.href = "/";
+      await requestMyAccountDeletion({ data: needsPassword ? { password } : {} });
+      // The server already ended every session; clear this browser's cookies too.
+      await authClient.signOut().catch(() => undefined);
+      toast.success("Hesabınız 30 gün içinde silinecek. Bu sürede giriş yaparak geri alabilirsiniz.");
+      setTimeout(() => (window.location.href = "/"), 1200);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Hesap silinemedi");
       setBusy(false);
@@ -104,8 +121,8 @@ function DeleteDialog({ open, onOpenChange, needsPassword }: { open: boolean; on
       <DialogContent className="border-border bg-surface">
         <form onSubmit={submit} className="space-y-4">
           <DialogHeader>
-            <DialogTitle>Hesabınız kalıcı olarak silinsin mi?</DialogTitle>
-            <DialogDescription>Tüm ilanlarınız, mesajlarınız ve verileriniz silinir. Bu işlem geri alınamaz.</DialogDescription>
+            <DialogTitle>Hesabınız silinsin mi?</DialogTitle>
+            <DialogDescription>Hesabınız hemen gizlenir ve 30 gün sonra kalıcı olarak silinir. Bu süre içinde giriş yaparak geri alabilirsiniz.</DialogDescription>
           </DialogHeader>
           {needsPassword ? (
             <div>
@@ -124,7 +141,7 @@ function DeleteDialog({ open, onOpenChange, needsPassword }: { open: boolean; on
               Vazgeç
             </Button>
             <Button type="submit" variant="danger" disabled={!ready || busy}>
-              {busy ? "Siliniyor…" : "Hesabımı kalıcı olarak sil"}
+              {busy ? "İşleniyor…" : "Hesabımı sil"}
             </Button>
           </DialogFooter>
         </form>

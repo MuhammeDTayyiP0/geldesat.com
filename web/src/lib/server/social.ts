@@ -14,6 +14,7 @@ import {
   REVIEW_NOT_ELIGIBLE,
 } from "./helpers";
 import { sweepExpiryReminders } from "./ops";
+import { chatVisibleTo, DELETED_USER_NAME, hideConversationFor, isClosedAccount, reopenConversation, sweepRetention } from "./retention";
 import { broadcastChatMessage, broadcastChatRead, broadcastUserInbox } from "./chat-bus";
 
 const THREAD_PAGE = 200;
@@ -116,6 +117,7 @@ export const startConversation = createServerFn({ method: "POST" })
     if (await blockedBetween(context.userId, listing[0].user_id)) {
       throw new Error("Bu kullanıcıyla mesajlaşamazsınız.");
     }
+    if (await isClosedAccount(sql, listing[0].user_id)) throw new Error("Bu kullanıcı hesabını kapattı.");
     const id = newId("cnv");
     await sql.query(
       `insert into conversations (id, listing_id, buyer_id, seller_id)
@@ -134,6 +136,7 @@ export const startConversation = createServerFn({ method: "POST" })
       [msgId, convId, context.userId, data.content.trim()],
     );
     await sql.query("update conversations set updated_at=now() where id=$1", [convId]);
+    await reopenConversation(sql, convId);
     const msg = mapMsg(inserted[0] ?? { id: msgId, sender_id: context.userId, content: data.content.trim(), created_at: new Date().toISOString(), read_at: null });
     broadcastChatMessage(convId, msg);
     broadcastUserInbox(listing[0].user_id, {
@@ -170,12 +173,14 @@ export const sendMessage = createServerFn({ method: "POST" })
     if (await blockedBetween(context.userId, receiver)) {
       throw new Error("Bu kullanıcıyla mesajlaşamazsınız.");
     }
+    if (await isClosedAccount(sql, receiver)) throw new Error("Bu kullanıcı hesabını kapattı. Mesaj gönderilemez.");
     const id = newId("msg");
     const inserted = await sql.query<{ id: string; sender_id: string; content: string; created_at: string; read_at: string | null }>(
       "insert into messages (id, conversation_id, sender_id, content) values ($1,$2,$3,$4) returning id, sender_id, content, created_at, read_at",
       [id, data.conversationId, context.userId, data.content.trim()],
     );
     await sql.query("update conversations set updated_at=now() where id=$1", [data.conversationId]);
+    await reopenConversation(sql, data.conversationId);
     const msg = mapMsg(inserted[0] ?? { id, sender_id: context.userId, content: data.content.trim(), created_at: new Date().toISOString(), read_at: null });
     broadcastChatMessage(data.conversationId, msg);
     broadcastUserInbox(receiver, {
@@ -205,6 +210,7 @@ export const listConversations = createServerFn({ method: "GET" })
               case when cv.buyer_id = $1 then cv.seller_id else cv.buyer_id end as other_id,
               case when cv.buyer_id = $1 then sp.avatar_url else bp.avatar_url end as other_avatar,
               case when cv.buyer_id = $1 then sp.last_seen_at else bp.last_seen_at end as other_last_seen,
+              case when cv.buyer_id = $1 then sp.deletion_requested_at else bp.deletion_requested_at end as other_closing,
               (select content from messages m where m.conversation_id=cv.id order by created_at desc limit 1) as last_content,
               (select sender_id from messages m where m.conversation_id=cv.id order by created_at desc limit 1) as last_sender_id,
               (select count(*)::int from messages m where m.conversation_id=cv.id and m.sender_id <> $1 and m.read_at is null) as unread
@@ -212,7 +218,7 @@ export const listConversations = createServerFn({ method: "GET" })
        left join listings l on l.id = cv.listing_id
        left join profiles bp on bp.user_id = cv.buyer_id
        left join profiles sp on sp.user_id = cv.seller_id
-       where cv.buyer_id=$1 or cv.seller_id=$1
+       where (cv.buyer_id=$1 or cv.seller_id=$1) and ${chatVisibleTo("$1")}
        order by cv.updated_at desc`,
       [context.userId],
     );
@@ -222,7 +228,9 @@ export const listConversations = createServerFn({ method: "GET" })
       listing_title: r.listing_title ? String(r.listing_title) : "İlan kaldırıldı",
       listing_slug: r.listing_slug ? String(r.listing_slug) : "",
       listing_image: r.images ? (asJson<string[]>(r.images, [])[0] ?? null) : null,
-      other_name: String(r.other_name ?? "Üye"),
+      other_name: r.other_name == null ? DELETED_USER_NAME : String(r.other_name),
+      /** The other person closed (or is closing) their account: read-only chat. */
+      other_closed: r.other_name == null || r.other_closing != null,
       other_id: String(r.other_id),
       other_avatar: r.other_avatar ? String(r.other_avatar) : null,
       other_last_seen: r.other_last_seen ? asIso(r.other_last_seen) : null,
@@ -248,7 +256,8 @@ export const getThread = createServerFn({ method: "POST" })
       `select cv.*, l.title, l.slug, l.images, l.price,
               case when cv.buyer_id = $2 then sp.display_name else bp.display_name end as other_name,
               case when cv.buyer_id = $2 then sp.avatar_url else bp.avatar_url end as other_avatar,
-              case when cv.buyer_id = $2 then sp.last_seen_at else bp.last_seen_at end as other_last_seen
+              case when cv.buyer_id = $2 then sp.last_seen_at else bp.last_seen_at end as other_last_seen,
+              case when cv.buyer_id = $2 then sp.deletion_requested_at else bp.deletion_requested_at end as other_closing
        from conversations cv
        left join listings l on l.id = cv.listing_id
        left join profiles bp on bp.user_id = cv.buyer_id
@@ -300,7 +309,8 @@ export const getThread = createServerFn({ method: "POST" })
         listing_slug: conv[0].slug ? String(conv[0].slug) : "",
         listing_image: conv[0].images ? (asJson<string[]>(conv[0].images, [])[0] ?? null) : null,
         listing_price: conv[0].price ? num(conv[0].price) : null,
-        other_name: String(conv[0].other_name ?? "Üye"),
+        other_name: conv[0].other_name == null ? DELETED_USER_NAME : String(conv[0].other_name),
+        other_closed: conv[0].other_name == null || conv[0].other_closing != null,
         other_avatar: conv[0].other_avatar ? String(conv[0].other_avatar) : null,
         other_last_seen: conv[0].other_last_seen ? asIso(conv[0].other_last_seen) : null,
         buyer_id: String(conv[0].buyer_id),
@@ -503,6 +513,7 @@ export const unreadCount = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     void sweepExpiryReminders().catch(() => undefined);
+    void sweepRetention().catch((err) => console.warn("[retention] sweep failed", err));
     const sql = await getSql();
     const a = await sql.query<{ n: number }>(
       "select count(*)::int as n from notifications where user_id=$1 and read_at is null",
@@ -510,11 +521,22 @@ export const unreadCount = createServerFn({ method: "GET" })
     );
     const b = await sql.query<{ n: number }>(
       `select count(*)::int as n from messages m
-       join conversations c on c.id = m.conversation_id
-       where m.read_at is null and m.sender_id <> $1 and (c.buyer_id=$1 or c.seller_id=$1)`,
+       join conversations cv on cv.id = m.conversation_id
+       where m.read_at is null and m.sender_id <> $1 and (cv.buyer_id=$1 or cv.seller_id=$1) and ${chatVisibleTo("$1")}`,
       [context.userId],
     );
     return { notifications: a[0]?.n ?? 0, messages: b[0]?.n ?? 0 };
+  });
+
+/** Delete a chat from my inbox only; the other person keeps it. */
+export const deleteConversation = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ conversationId: z.string().max(100) }))
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    if (!(await hideConversationFor(sql, data.conversationId, context.userId))) throw new Error("Konuşma bulunamadı");
+    broadcastUserInbox(context.userId, { type: "inbox_ping", conversationId: data.conversationId });
+    return { ok: true };
   });
 
 export const blockUser = createServerFn({ method: "POST" })

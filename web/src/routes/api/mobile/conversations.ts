@@ -7,6 +7,7 @@ import { broadcastChatMessage, broadcastUserInbox } from "@/lib/server/chat-bus"
 import { createOrGetConversation, insertConversationMessage } from "@/lib/server/mobile-conversation-store";
 import { hasUserBlock } from "@/lib/server/user-blocks";
 import { publicErrorMessage } from "@/lib/server/errors";
+import { chatVisibleTo, DELETED_USER_NAME, isClosedAccount } from "@/lib/server/retention";
 
 export const Route = createFileRoute("/api/mobile/conversations")({
   server: {
@@ -26,7 +27,7 @@ export const Route = createFileRoute("/api/mobile/conversations")({
                     (select count(*)::int from messages m where m.conversation_id=cv.id and m.sender_id<>$1 and m.read_at is null) as unread
              from conversations cv left join listings l on l.id=cv.listing_id
              left join profiles bp on bp.user_id=cv.buyer_id left join profiles sp on sp.user_id=cv.seller_id
-             where cv.buyer_id=$1 or cv.seller_id=$1 order by cv.updated_at desc`,
+             where (cv.buyer_id=$1 or cv.seller_id=$1) and ${chatVisibleTo("$1")} order by cv.updated_at desc`,
             [userId],
           );
           const conversations = rows.map((r) => ({
@@ -35,7 +36,7 @@ export const Route = createFileRoute("/api/mobile/conversations")({
             listing_slug: r.listing_slug ? String(r.listing_slug) : "",
             listing_image: r.images ? (asJson<string[]>(r.images, [])[0] ?? null) : null,
             listing_price: r.price == null ? 0 : num(r.price), currency: String(r.currency ?? "TRY"),
-            other_user_name: String(r.other_name ?? "Üye"), other_user_id: String(r.other_id),
+            other_user_name: r.other_name == null ? DELETED_USER_NAME : String(r.other_name), other_user_id: String(r.other_id),
             other_avatar: r.other_avatar ? String(r.other_avatar) : null,
             last_message: r.last_content == null ? "" : String(r.last_content) === LISTING_PHOTO_MSG ? "İlan görseli" : String(r.last_content),
             last_sender_id: r.last_sender_id ? String(r.last_sender_id) : "", unread_count: num(r.unread),
@@ -65,6 +66,7 @@ export const Route = createFileRoute("/api/mobile/conversations")({
           if (!listing[0]) return Response.json({ success: false, error: "İlan bulunamadı." }, { status: 404 });
           if (listing[0].user_id === userId) return Response.json({ success: false, error: "Kendi ilanınıza mesaj gönderemezsiniz." }, { status: 400 });
           if (await hasUserBlock(sql, userId, listing[0].user_id)) return Response.json({ success: false, error: "Bu kullanıcıyla mesajlaşamazsınız." }, { status: 403 });
+          if (await isClosedAccount(sql, listing[0].user_id)) return Response.json({ success: false, error: "Bu kullanıcı hesabını kapattı." }, { status: 410 });
           const conversationId = await createOrGetConversation(sql, body.listingId, userId, listing[0].user_id, newId("cnv"));
           const messageId = newId("msg");
           const inserted = await insertConversationMessage(sql, messageId, conversationId, userId, body.content.trim()) as { id: string; sender_id: string; content: string; created_at: string; read_at: string | null };
