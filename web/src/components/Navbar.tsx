@@ -41,6 +41,23 @@ export function Navbar({ className }: NavbarProps) {
   const [allCategoriesHovered, setAllCategoriesHovered] = useState(false);
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Kategori şeridi taşıyorsa sağ kenarda solma efekti göster
+  const stripRef = useRef<HTMLDivElement>(null);
+  const [stripOverflows, setStripOverflows] = useState(false);
+  useEffect(() => {
+    const el = stripRef.current;
+    if (!el) return;
+    const update = () => setStripOverflows(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    el.addEventListener("scroll", update, { passive: true });
+    return () => {
+      ro.disconnect();
+      el.removeEventListener("scroll", update);
+    };
+  }, []);
+
   // Mobil drawer durumu
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
@@ -123,7 +140,7 @@ export function Navbar({ className }: NavbarProps) {
       {/* =========================================================================
           KATMAN 1: ÜST KATMAN (Logo, Arama, Mesajlar, Favoriler, Profil, İlan Ver)
           ========================================================================= */}
-      <div className="border-b border-border bg-surface/95 backdrop-blur-md">
+      <div className="relative z-20 border-b border-border bg-surface/95 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6">
           {/* Sol: Hamburger Butonu (Mobil) + Logo */}
           <div className="flex items-center gap-2 sm:gap-3">
@@ -220,7 +237,7 @@ export function Navbar({ className }: NavbarProps) {
               >
                 <Bell className="size-5" />
                 {noteUnread > 0 && (
-                  <span className="absolute 1.5 top-1.5 size-2 rounded-full bg-danger ring-2 ring-surface" />
+                  <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-danger ring-2 ring-surface" />
                 )}
               </Link>
             </SignedIn>
@@ -251,7 +268,7 @@ export function Navbar({ className }: NavbarProps) {
             {/* Masaüstü "İlan Ver" Butonu (Mobilde alt barda ortada havada duran yuvarlak buton olduğu için md:flex) */}
             <Link
               to="/ilan-ver"
-              className="ml-1 sm:ml-2 hidden md:flex items-center gap-1.5 h-10 px-3.5 sm:px-4.5 rounded-lg font-bold text-xs sm:text-sm text-ink bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 shadow-sm hover:shadow-md active:scale-95 transition-all duration-150 ring-1 ring-amber-400/50"
+              className="ml-1 sm:ml-2 hidden md:flex items-center gap-1.5 h-10 px-3.5 sm:px-4.5 rounded-lg font-bold text-xs sm:text-sm text-primary-fg bg-primary hover:bg-primary/90 shadow-sm hover:shadow-md active:scale-95 transition-all duration-150"
             >
               <Plus className="size-4 stroke-[2.8]" />
               <span className="tracking-tight">İlan Ver</span>
@@ -272,7 +289,7 @@ export function Navbar({ className }: NavbarProps) {
           ========================================================================= */}
       <nav
         aria-label="Ana kategoriler"
-        className="relative hidden md:block border-b border-border/80 bg-surface/98 backdrop-blur-md"
+        className="relative z-10 hidden md:block border-b border-border/80 bg-surface/98 backdrop-blur-md"
       >
         <div className="mx-auto flex h-11 max-w-7xl items-center px-4 sm:px-6">
           {/* 1. "Tüm Kategoriler" Butonu */}
@@ -296,7 +313,8 @@ export function Navbar({ className }: NavbarProps) {
           </div>
 
           {/* 2. Yatay Kategori Linkleri */}
-          <div className="flex-1 flex items-center gap-1 overflow-x-auto no-scrollbar pl-2">
+          <div className="relative flex-1 min-w-0 h-full">
+          <div ref={stripRef} className="h-full flex items-center gap-1 overflow-x-auto no-scrollbar pl-2">
             {MAIN_NAV_CATEGORIES.map((cat) => {
               const isHovered = hoveredCategory?.id === cat.id;
               return (
@@ -324,6 +342,10 @@ export function Navbar({ className }: NavbarProps) {
                 </div>
               );
             })}
+          </div>
+          {stripOverflows && (
+            <div className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-surface to-transparent" />
+          )}
           </div>
 
           {/* 3. Sağ Kısayollar (Harita, Vitrin vb.) */}

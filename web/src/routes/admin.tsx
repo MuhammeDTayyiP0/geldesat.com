@@ -1,7 +1,7 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { RedirectToSignIn } from "@/lib/auth/gates";
+import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { isAdminSession } from "@/lib/server/account";
+import { NotFound } from "@/components/common/NotFound";
 import { BrandSpinner } from "@/components/brand/BrandSpinner";
-import { Button } from "@/components/ui/button";
 import {
   ShieldAlert,
   CreditCard,
@@ -23,6 +23,10 @@ import { SiteSettingsTab } from "@/components/admin/SiteSettingsTab";
 import { AdminDialogs } from "@/components/admin/AdminDialogs";
 
 export const Route = createFileRoute("/admin")({
+  // Non-admins (including signed-out visitors) get a plain 404 so the panel's existence isn't revealed.
+  beforeLoad: async () => {
+    if (!(await isAdminSession())) throw notFound();
+  },
   head: () => ({
     meta: [
       { title: "Yönetici Paneli | GeldeSat" },
@@ -55,35 +59,7 @@ function Admin() {
     return <BrandSpinner fullPage text="Yönetim konsolu yükleniyor…" />;
   }
 
-  if (!user) return <RedirectToSignIn />;
-
-  if (err) {
-    return (
-      <div className="mx-auto max-w-md px-4 py-20 text-center">
-        <div className="rounded-2xl border border-border bg-surface p-8 shadow-card">
-          <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-danger/10 text-danger">
-            <ShieldAlert className="size-8" />
-          </div>
-          <h1 className="mt-4 text-xl font-bold tracking-tight">Yetkisiz Erişim</h1>
-          <p className="mt-2 text-sm text-muted">
-            {err || "Bu sayfaya yalnızca yönetici yetkisine sahip hesaplar erişebilir."}
-          </p>
-          <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
-            <Link to="/">
-              <Button variant="ink" className="w-full sm:w-auto">
-                Ana Sayfaya Dön
-              </Button>
-            </Link>
-            <Link to="/profil">
-              <Button variant="outline" className="w-full sm:w-auto">
-                Profilime Git
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  if (!user || err) return <NotFound />;
 
   return (
     <div className="min-h-screen bg-muted/20 flex flex-col md:flex-row text-fg">

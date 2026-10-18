@@ -81,10 +81,10 @@ export function MobileNavigationDrawer({
           <Link
             to="/ilan-ver"
             onClick={onClose}
-            className="w-full flex items-center justify-center gap-2 h-11 px-4 rounded-xl font-bold text-sm text-ink bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 shadow-md active:scale-98 transition-all"
+            className="w-full flex items-center justify-center gap-2 h-11 px-4 rounded-xl font-bold text-sm text-primary-fg bg-primary hover:bg-primary/90 shadow-md active:scale-98 transition-all"
           >
             <Plus className="size-5 stroke-[2.5]" />
-            <span>ÜCRETSİZ İLAN VER</span>
+            <span>Ücretsiz İlan Ver</span>
           </Link>
         </div>
 

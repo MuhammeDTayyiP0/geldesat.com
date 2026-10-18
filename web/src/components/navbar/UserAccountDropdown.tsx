@@ -25,8 +25,15 @@ export function UserAccountDropdown({ admin }: { admin: boolean }) {
         setOpen(false);
       }
     }
+    function handleEscape(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
   }, []);
 
   const displayName = user?.displayName || user?.primaryEmail?.split("@")[0] || "Kullanıcı";
@@ -111,7 +118,7 @@ export function UserAccountDropdown({ admin }: { admin: boolean }) {
               <Link
                 to="/admin"
                 onClick={() => setOpen(false)}
-                className="flex items-center gap-2.5 px-3 py-2 text-sm text-fg hover:bg-elevated rounded-lg transition-colors text-warn font-medium"
+                className="flex items-center gap-2.5 px-3 py-2 text-sm text-warn hover:bg-elevated rounded-lg transition-colors font-medium"
               >
                 <Shield className="size-4 text-warn shrink-0" />
                 <span>Yönetim Paneli</span>

@@ -17,6 +17,15 @@ import {
 } from "./helpers";
 import { ListingInput, renewedStatus, saveListingRecord } from "./listing-write";
 
+/** True only for a signed-in ADMIN; never throws, so routes can gate on it (e.g. 404 for everyone else). */
+export const isAdminSession = createServerFn({ method: "GET" }).handler(async () => {
+  const { getSessionUser } = await import("@/lib/auth/verify.server");
+  const user = await getSessionUser();
+  if (!user) return false;
+  const profile = await ensureProfile(user.id);
+  return profile.role === "ADMIN";
+});
+
 export const getMe = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {

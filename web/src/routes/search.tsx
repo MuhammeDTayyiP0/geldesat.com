@@ -536,7 +536,7 @@ function SearchPage() {
                   </Button>
                 ) : null}
                 <Link to="/ilan-ver">
-                  <Button variant="outline" className="rounded-xl">
+                  <Button className="rounded-xl">
                     İlan Ver
                   </Button>
                 </Link>

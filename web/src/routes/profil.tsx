@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { cleanPhone, maskPhone10 } from "@/lib/utils";
-import { Bell, CheckCircle2, Heart, LayoutGrid, Lock, LogOut, Mail, MapPin, MessageCircle, Settings2, Shield, Store, User as UserIcon } from "lucide-react";
+import { Bell, CheckCircle2, Heart, LayoutGrid, Lock, LogOut, Mail, MessageCircle, Settings2, Shield, Store, User as UserIcon } from "lucide-react";
 import { BrandSpinner } from "@/components/brand/BrandSpinner";
 import { toast } from "sonner";
 
@@ -141,12 +141,11 @@ function Profil() {
         </div>
       </div>
 
-      <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3">
+      <div className="mt-5 grid grid-cols-2 gap-2">
         <AccountShortcut to="/ilanlarim" icon={LayoutGrid} label="İlanlarım" />
         <AccountShortcut to="/favoriler" icon={Heart} label="Favorilerim" />
         <AccountShortcut to="/mesajlar" icon={MessageCircle} label="Mesajlarım" />
         <AccountShortcut to="/bildirimler" icon={Bell} label="Bildirimler" />
-        <AccountShortcut to="/harita" icon={MapPin} label="Haritada keşfet" />
       </div>
 
       {/* Profil Bilgileri Formu */}

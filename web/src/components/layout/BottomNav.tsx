@@ -78,12 +78,12 @@ export function BottomNav() {
           <Link
             to="/ilan-ver"
             className={cn(
-              "group relative -mt-6 flex size-12.5 items-center justify-center rounded-full bg-gradient-to-tr from-amber-400 via-amber-300 to-yellow-400 text-ink ring-4 ring-surface shadow-md shadow-amber-500/25 transition-transform active:scale-95",
-              isPost && "ring-primary",
+              "group relative -mt-6 flex size-12.5 items-center justify-center rounded-full bg-primary text-primary-fg ring-4 ring-surface shadow-md shadow-primary/25 transition-transform active:scale-95",
+              isPost && "ring-primary/30",
             )}
             aria-label="İlan Ver"
           >
-            <Plus className="size-6 stroke-[2.8] text-ink transition-transform group-hover:rotate-90 duration-200" />
+            <Plus className="size-6 stroke-[2.8] text-primary-fg transition-transform group-hover:rotate-90 duration-200" />
           </Link>
           <span className="mt-0.5 text-[10px] font-bold text-ink">İlan Ver</span>
         </div>

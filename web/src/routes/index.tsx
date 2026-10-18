@@ -1,5 +1,17 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { Building2, Car, GraduationCap, PawPrint, Search, ShoppingBag, Tractor, Users, Wrench } from "lucide-react";
+import {
+  Building2,
+  Car,
+  CheckCircle2,
+  GraduationCap,
+  PawPrint,
+  Plus,
+  Search,
+  ShoppingBag,
+  Tractor,
+  Users,
+  Wrench,
+} from "lucide-react";
 import { useState } from "react";
 import { featuredListings, listCategories, statsHome } from "@/lib/server/catalog";
 import { ListingCard } from "@/components/listing/ListingCard";
@@ -109,60 +121,83 @@ function Home() {
   return (
     <div>
       <section className="border-b border-border bg-surface">
-        <div className="mx-auto max-w-6xl px-4 py-10 md:py-14">
-          <p className="text-xs font-semibold uppercase tracking-wide text-primary">Türkiye ilan platformu</p>
-          <h1 className="mt-2 max-w-2xl text-3xl font-semibold leading-tight tracking-tight md:text-4xl">
-            GeldeSat — Emlak, Vasıta ve İkinci El İlanları
-          </h1>
-          <p className="mt-3 max-w-xl text-sm text-muted">
-            {stats.listings} yayındaki ilan
-            {stats.cities ? `, ${stats.cities} il` : ""}. Ücretsiz ilan verin, satıcıyla doğrudan konuşun.
-          </p>
-          <div className="mt-6 max-w-3xl rounded-xl border border-border bg-bg p-2 shadow-card">
-            <div className="mb-2 flex flex-wrap gap-1">
-              {[
-                { id: "all", label: "Tümü" },
-                { id: "emlak", label: "Emlak" },
-                { id: "vasita", label: "Vasıta" },
-                { id: "alisveris", label: "Alışveriş" },
-              ].map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => setTab(t.id)}
-                  className={`rounded-md px-3 py-2 text-sm ${tab === t.id ? "bg-ink text-primary-fg" : "text-muted hover:bg-elevated"}`}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-            <form onSubmit={search} className="flex flex-col gap-2 sm:flex-row">
-              <div className="relative flex-1">
-                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle" />
-                <Input value={q} onChange={(e) => setQ(e.target.value)} className="rounded-lg pl-9" placeholder="Örn. Civic, 3+1 kiralık, iPhone" />
+        <div className="mx-auto grid max-w-6xl items-center gap-8 px-4 py-10 md:py-14 lg:grid-cols-[1fr_320px]">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-primary">Türkiye ilan platformu</p>
+            <h1 className="mt-2 max-w-2xl text-3xl font-semibold leading-tight tracking-tight md:text-4xl">
+              GeldeSat — Emlak, Vasıta ve İkinci El İlanları
+            </h1>
+            <p className="mt-3 max-w-xl text-sm text-muted">
+              {stats.listings > 0 &&
+                `${stats.listings} yayındaki ilan${stats.cities ? `, ${stats.cities} il` : ""}. `}
+              Ücretsiz ilan verin, satıcıyla doğrudan konuşun.
+            </p>
+            <div className="mt-6 max-w-3xl rounded-xl border border-border bg-bg p-2 shadow-card">
+              <div className="mb-2 flex flex-wrap gap-1">
+                {[
+                  { id: "all", label: "Tümü" },
+                  { id: "emlak", label: "Emlak" },
+                  { id: "vasita", label: "Vasıta" },
+                  { id: "alisveris", label: "Alışveriş" },
+                ].map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setTab(t.id)}
+                    className={`rounded-md px-3 py-2 text-sm ${tab === t.id ? "bg-ink text-primary-fg" : "text-muted hover:bg-elevated"}`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
               </div>
-              <Button type="submit" size="lg">
-                Ara
-              </Button>
-            </form>
-            <div className="mt-2 flex flex-wrap gap-2 px-1">
-              {[
-                { q: "Civic", label: "Civic" },
-                { q: "3+1", label: "3+1" },
-                { q: "iPhone", label: "iPhone" },
-                { q: "kiralık", label: "Kiralık" },
-              ].map((c) => (
-                <button
-                  key={c.q}
-                  type="button"
-                  className="rounded-full border border-border bg-bg px-3 py-1.5 text-sm text-muted hover:border-primary hover:text-primary"
-                  onClick={() => void nav({ to: "/search", search: { q: c.q } })}
-                >
-                  {c.label}
-                </button>
-              ))}
+              <form onSubmit={search} className="flex flex-col gap-2 sm:flex-row">
+                <div className="relative flex-1">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle" />
+                  <Input value={q} onChange={(e) => setQ(e.target.value)} className="rounded-lg pl-9" placeholder="Örn. Civic, 3+1 kiralık, iPhone" />
+                </div>
+                <Button type="submit" size="lg">
+                  Ara
+                </Button>
+              </form>
+              <div className="mt-2 flex flex-wrap gap-2 px-1">
+                {[
+                  { q: "Civic", label: "Civic" },
+                  { q: "3+1", label: "3+1" },
+                  { q: "iPhone", label: "iPhone" },
+                  { q: "kiralık", label: "Kiralık" },
+                ].map((c) => (
+                  <button
+                    key={c.q}
+                    type="button"
+                    className="rounded-full border border-border bg-bg px-3 py-1.5 text-sm text-muted hover:border-primary hover:text-primary"
+                    onClick={() => void nav({ to: "/search", search: { q: c.q } })}
+                  >
+                    {c.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
+
+          <aside className="hidden rounded-2xl border border-border bg-bg p-6 shadow-card lg:block">
+            <p className="text-sm font-semibold text-fg">Satmak istediğiniz bir şey mi var?</p>
+            <p className="mt-1 text-sm text-muted">Birkaç adımda ilanınızı yayınlayın.</p>
+            <ul className="mt-4 space-y-2.5 text-sm text-fg">
+              {["Ücretsiz ilan verme", "Alıcıyla doğrudan mesajlaşma", "Haritada konuma göre listeleme"].map((t) => (
+                <li key={t} className="flex items-center gap-2">
+                  <CheckCircle2 className="size-4 shrink-0 text-primary" />
+                  {t}
+                </li>
+              ))}
+            </ul>
+            <Link
+              to="/ilan-ver"
+              className="mt-5 flex h-11 items-center justify-center gap-1.5 rounded-lg bg-primary text-sm font-bold text-primary-fg shadow-sm transition-colors hover:bg-primary/90"
+            >
+              <Plus className="size-4 stroke-[2.8]" />
+              Ücretsiz İlan Ver
+            </Link>
+          </aside>
         </div>
       </section>
 
