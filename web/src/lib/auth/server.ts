@@ -5,7 +5,7 @@ import { getCookie } from "@tanstack/react-start/server";
 import { randomBytes } from "node:crypto";
 import { Pool } from "pg";
 import { ensureDbReady, getPglite } from "../db";
-import { mailConfigured, sendActionMail } from "../server/mail";
+import { mailConfigured, sendPasswordResetMail, sendVerificationMail } from "../server/mail";
 import { pgliteDialect } from "./pglite-dialect";
 
 void ensureDbReady();
@@ -63,14 +63,8 @@ export const auth = betterAuth({
     // Without SMTP the reset endpoint reports that it is unavailable.
     ...(mailConfigured
       ? {
-          sendResetPassword: async ({ user, url }: { user: { email: string }; url: string }) => {
-            await sendActionMail({
-              to: user.email,
-              subject: "GeldeSat şifre sıfırlama",
-              intro: "GeldeSat hesabınız için şifre sıfırlama isteği aldık. Bağlantı 1 saat geçerlidir.",
-              actionLabel: "Yeni şifre belirle",
-              url,
-            });
+          sendResetPassword: async ({ user, url }: { user: { email: string; name?: string | null }; url: string }) => {
+            await sendPasswordResetMail({ to: user.email, name: user.name, url });
           },
         }
       : {}),
@@ -82,14 +76,8 @@ export const auth = betterAuth({
         emailVerification: {
           sendOnSignUp: true,
           autoSignInAfterVerification: true,
-          sendVerificationEmail: async ({ user, url }: { user: { email: string }; url: string }) => {
-            await sendActionMail({
-              to: user.email,
-              subject: "GeldeSat e-posta doğrulama",
-              intro: "GeldeSat hesabınızın e-posta adresini doğrulayın.",
-              actionLabel: "E-postamı doğrula",
-              url,
-            });
+          sendVerificationEmail: async ({ user, url }: { user: { email: string; name?: string | null }; url: string }) => {
+            await sendVerificationMail({ to: user.email, name: user.name, url });
           },
         },
       }

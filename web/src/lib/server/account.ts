@@ -289,6 +289,9 @@ export const getListingForEdit = createServerFn({ method: "POST" })
     };
   });
 
+export const STORE_BY_REQUEST = "Kurumsal mağazalar GeldeSat ekibi tarafından açılır. Başvuru için bizimle iletişime geçin.";
+
+/** Edit the signed-in user's store. Creating one is not self-service. */
 export const upsertStore = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(
@@ -317,14 +320,8 @@ export const upsertStore = createServerFn({ method: "POST" })
       ]);
       return { id: existing[0].id, slug: existing[0].slug };
     }
-    const id = newId("str");
-    const slug = `${slugify(data.name)}-${id.slice(-4)}`;
-    await sql.query(
-      `insert into stores (id, user_id, name, slug, description, city, phone, plan)
-       values ($1,$2,$3,$4,$5,$6,$7,'BASIC')`,
-      [id, context.userId, data.name, slug, data.description || null, data.city || null, storePhone],
-    );
-    return { id, slug };
+    // Stores are opened by the GeldeSat team after talking to the business; owners only edit theirs.
+    throw new Error(STORE_BY_REQUEST);
   });
 
 export const requestCreditOrder = createServerFn({ method: "POST" })

@@ -55,7 +55,7 @@ export const ACCOUNT_SECTIONS: Array<{ title: string; items: AccountNavItem[] }>
       { to: "/ayarlar/bildirimler", label: "Bildirim tercihleri", icon: BellRing, hint: "Mesaj, favori, ilan durumu" },
       { to: "/ayarlar/engellenenler", label: "Engellenenler", icon: Ban, hint: "Mesajlaşmayı engellediğiniz kişiler" },
       { to: "/ayarlar/guvenlik", label: "Hesap ve güvenlik", icon: ShieldCheck, hint: "E-posta, şifre, oturumlar" },
-      { to: "/ayarlar/magaza", label: "Mağazam", icon: Store, hint: "Kurumsal mağaza sayfası" },
+      { to: "/ayarlar/magaza", label: "Mağazam", icon: Store, hint: "Kurumsal mağaza bilgileri ve başvuru" },
       { to: "/ayarlar/hesap", label: "Verilerim ve hesabım", icon: FileDown, hint: "Verilerimi indir, hesabı sil" },
     ],
   },

@@ -3,7 +3,6 @@ import { z } from "zod";
 import { getSql } from "@/lib/db";
 import { auth } from "@/lib/auth/server";
 import { ensureProfile, normalizeTrPhone } from "@/lib/server/helpers";
-import { newId, slugify } from "@/lib/utils";
 import { publicErrorMessage } from "@/lib/server/errors";
 
 const ProfileInput = z.object({
@@ -110,14 +109,11 @@ export const Route = createFileRoute("/api/mobile/profile")({
               );
               return Response.json({ success: true, store: { id: existing[0].id, slug: existing[0].slug } });
             }
-            const id = newId("str");
-            const slug = `${slugify(parsedStore.data.name)}-${id.slice(-4)}`;
-            await sql.query(
-              `insert into stores (id, user_id, name, slug, description, city, phone, plan)
-               values ($1,$2,$3,$4,$5,$6,$7,'BASIC')`,
-              [id, userId, parsedStore.data.name, slug, parsedStore.data.description || null, parsedStore.data.city || null, storePhone],
+            // Stores are opened by the GeldeSat team; the app may only edit an existing one.
+            return Response.json(
+              { success: false, error: "Kurumsal mağazalar GeldeSat ekibi tarafından açılır. Başvuru için bizimle iletişime geçin." },
+              { status: 403 },
             );
-            return Response.json({ success: true, store: { id, slug } });
           }
 
           const parsed = ProfileInput.safeParse(body);
