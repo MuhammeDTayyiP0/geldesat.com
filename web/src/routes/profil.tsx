@@ -1,13 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { CalendarDays, ExternalLink, MapPin, Plus, Settings, Star } from "lucide-react";
+import { CalendarDays, ExternalLink, MapPin, Plus, Star } from "lucide-react";
 import { getMe, myListings } from "@/lib/server/account";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { BrandSpinner } from "@/components/brand/BrandSpinner";
 import { Button } from "@/components/ui/button";
 import { ListingCard } from "@/components/listing/ListingCard";
-import { AccountMenuList, AccountShell, UserAvatar } from "@/components/account/AccountShell";
+import { AccountSettingsMenu, AccountShell, UserAvatar } from "@/components/account/AccountShell";
 import type { ListingCard as Listing } from "@/lib/server/helpers";
 import { cn, formatNumber } from "@/lib/utils";
 
@@ -61,11 +61,7 @@ function ProfilePage() {
     <AccountShell
       title="Hesabım"
       hub
-      actions={
-        <Link to="/ayarlar/profil" aria-label="Ayarlar" className="grid size-10 place-items-center rounded-full hover:bg-elevated md:hidden">
-          <Settings className="size-5" />
-        </Link>
-      }
+      actions={<AccountSettingsMenu />}
     >
       <section className="rounded-2xl border border-border bg-surface p-4 shadow-card sm:p-6">
         <div className="flex items-center gap-4 sm:gap-6">
@@ -127,8 +123,6 @@ function ProfilePage() {
           </Link>
         ) : null}
       </section>
-
-      <AccountMenuList className="mt-6 md:hidden" />
 
       <section className="mt-6">
         <div className="mb-4 flex items-center justify-between gap-3">
