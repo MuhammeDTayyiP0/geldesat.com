@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { getSql } from "@/lib/db";
-import { num } from "@/lib/utils";
+import { listingNoFromSlug, num } from "@/lib/utils";
 import {
   inheritedAttributes,
   listingSelect,
@@ -76,8 +76,9 @@ export async function searchListings(f: SearchFilters): Promise<{
     const i = params.length;
     params.push(q);
     const j = params.length;
-    // ilan no (id/slug) + title/desc
-    conds.push(`(l.title ilike $${i} or l.description ilike $${i} or l.id ilike $${j} or l.slug ilike $${j} or coalesce(s.name,'') ilike $${i})`);
+    // ilan no (number/id/slug) + title/desc
+    conds.push(`(l.title ilike $${i} or l.description ilike $${i} or l.id ilike $${j} or l.slug ilike $${j} or l.listing_no::text = trim(both '#' from $${params.length + 1}) or coalesce(s.name,'') ilike $${i})`);
+    params.push(f.q.trim());
   }
   if (f.category) {
     const ids = await subtreeIds(f.category);
@@ -268,11 +269,19 @@ export const featuredListings = createServerFn({ method: "GET" }).handler(async 
 });
 
 export const getListing = createServerFn({ method: "POST" })
-  .validator(z.object({ slug: z.string() }))
+  .validator(z.object({ slug: z.string().max(200) }))
   .handler(async ({ data }) => {
     const sql = await getSql();
+    // New URLs end in the listing number, which alone identifies the listing (the
+    // text before it may be stale after a title edit). Older links used the
+    // pre-number slug or the raw id. The route redirects all of them to `slug`.
+    const listingNo = listingNoFromSlug(data.slug);
+    const where = listingNo
+      ? "l.listing_no = $1::bigint"
+      : "lower(l.slug) = lower($1) or lower(l.legacy_slug) = lower($1) or l.id = $1";
     const rows = await sql.query<Record<string, unknown>>(
       `select ${listingSelect()}, l.phone_override, p.phone as profile_phone, p.avatar_url as profile_avatar,
+         (l.approved_at is not null) as approved,
          (select count(*)::int from favorites where listing_id = l.id) as fav_count,
          (select count(*)::int from phone_reveals where listing_id = l.id) as phone_reveal_count,
          coalesce((select json_agg(b.kind) from boosts b where b.listing_id = l.id and b.ends_at > now()), '[]'::json) as boosts
@@ -280,8 +289,9 @@ export const getListing = createServerFn({ method: "POST" })
        join categories c on c.id = l.category_id
        left join profiles p on p.user_id = l.user_id
        left join stores s on s.id = l.store_id
-       where lower(l.slug) = lower($1) or l.id = $1`,
-      [data.slug],
+       where ${where}
+       limit 1`,
+      [listingNo ? String(listingNo) : data.slug],
     );
     if (!rows[0]) return null;
     const listing = mapListing(rows[0]);
@@ -372,6 +382,8 @@ export const getListing = createServerFn({ method: "POST" })
           }
         : null,
       has_phone: hasPhone,
+      /** Owner may put it back live without moderation (it was approved before). */
+      approved: Boolean(rows[0].approved),
       fav_count: num(rows[0].fav_count),
       phone_reveal_count: num(rows[0].phone_reveal_count),
     };

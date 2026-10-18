@@ -136,7 +136,7 @@ export function ListingImageGallery({ images, title, categoryName }: ListingImag
 
   if (total === 0) {
     return (
-      <div className="flex aspect-[16/10] w-full flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-elevated/60 p-6 text-center text-muted">
+      <div className="flex aspect-4/3 sm:aspect-[16/10] w-full flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-elevated/60 p-6 text-center text-muted">
         <div className="grid size-16 place-items-center rounded-2xl bg-surface shadow-2xs">
           <ImageIcon className="size-8 text-subtle" />
         </div>
@@ -150,7 +150,7 @@ export function ListingImageGallery({ images, title, categoryName }: ListingImag
     <div className="space-y-3">
       {/* Main Image Container */}
       <div
-        className="group relative aspect-[16/10] w-full overflow-hidden rounded-2xl border border-border bg-ink/90 shadow-card select-none cursor-pointer"
+        className="group relative aspect-4/3 sm:aspect-[16/10] w-full overflow-hidden rounded-2xl border border-border bg-ink/90 shadow-card select-none cursor-pointer"
         onClick={openFullscreen}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}

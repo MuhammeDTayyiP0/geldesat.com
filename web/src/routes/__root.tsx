@@ -102,7 +102,7 @@ function Shell() {
   const isListingDetail = useRouterState({
     select: (s) => s.matches.some((m) => m.routeId === "/ilan/$slug"),
   });
-  // BottomNav shows on inbox /mesajlar and general pages, but hides in individual chat thread and listing detail (which has StickyContactBar)
+  // BottomNav shows on inbox /mesajlar and general pages, but hides in individual chat thread and listing detail (which has its own contact bar)
   const hideBottomNav = isChatThread || isListingDetail;
 
   // Once client hydrates, smoothly remove initial splash overlay from DOM

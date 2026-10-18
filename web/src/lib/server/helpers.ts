@@ -13,6 +13,8 @@ export type CategoryRow = {
 
 export type ListingCard = {
   id: string;
+  /** Public listing number ("İlan No"), also the tail of the URL slug. */
+  listing_no: number;
   slug: string;
   user_id: string;
   store_id: string | null;
@@ -82,6 +84,7 @@ export function rateLimit(key: string, max: number, windowMs: number) {
 export function mapListing(row: Record<string, unknown>): ListingCard {
   return {
     id: String(row.id),
+    listing_no: num(row.listing_no),
     slug: String(row.slug),
     user_id: String(row.user_id),
     store_id: row.store_id ? String(row.store_id) : null,
@@ -346,7 +349,7 @@ export function listingSelect(extra = "", onlyCover = false) {
     ? "case when jsonb_array_length(l.images) > 0 then jsonb_build_array(l.images->0) else '[]'::jsonb end as images"
     : "l.images";
   return `
-    l.id, l.slug, l.user_id, l.store_id, l.category_id, l.title, l.description,
+    l.id, l.listing_no, l.slug, l.user_id, l.store_id, l.category_id, l.title, l.description,
     l.price, l.currency, l.status, l.city, l.district, l.neighborhood, l.lat, l.lng,
     ${imagesExpr}, l.attrs, l.view_count, l.featured_until, l.expires_at, l.created_at, l.updated_at,
     c.name as category_name, c.slug as category_slug,

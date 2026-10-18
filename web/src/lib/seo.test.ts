@@ -33,6 +33,7 @@ test("listing indexability matches the active, unexpired sitemap policy", () => 
 function listing(attrs: ListingCard["attrs"] = {}, expires_at: string | null = null): ListingCard {
   return {
     id: "listing-123456789",
+    listing_no: 1000123,
     slug: "apple-iphone-15-123",
     user_id: "seller-1",
     store_id: null,

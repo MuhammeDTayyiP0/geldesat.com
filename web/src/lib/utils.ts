@@ -47,18 +47,28 @@ export function listingStatusLabel(status: string, expired = false) {
   }
 }
 
+const TR_ASCII: Record<string, string> = { ı: "i", ğ: "g", ü: "u", ş: "s", ö: "o", ç: "c", â: "a", î: "i", û: "u" };
+
+/** URL-safe Turkish slug: transliterated, hyphenated, at most 72 chars and never ending in a hyphen. */
 export function slugify(input: string) {
   return input
     .toLocaleLowerCase("tr")
-    .replace(/ı/g, "i")
-    .replace(/ğ/g, "g")
-    .replace(/ü/g, "u")
-    .replace(/ş/g, "s")
-    .replace(/ö/g, "o")
-    .replace(/ç/g, "c")
+    .replace(/[ığüşöçâîû]/g, (ch) => TR_ASCII[ch])
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
-    .slice(0, 72);
+    .slice(0, 72)
+    .replace(/-+$/g, "");
+}
+
+/** Listing URL slug: readable title text plus the listing number that identifies it. */
+export function listingSlug(title: string, listingNo: number | string) {
+  return `${slugify(title) || "ilan"}-${listingNo}`;
+}
+
+/** Listing number at the end of a `/ilan/...` slug (7+ digits), or null for legacy/id URLs. */
+export function listingNoFromSlug(slug: string): number | null {
+  const m = slug.match(/(?:^|-)(\d{7,15})$/);
+  return m ? Number(m[1]) : null;
 }
 
 export function newId(prefix = "") {

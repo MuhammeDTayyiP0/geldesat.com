@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { getSql } from "@/lib/db";
 import { CITY_COORDS } from "@/lib/data/geo";
-import { asJson, newId, num, slugify } from "@/lib/utils";
+import { asJson, listingSlug, newId, num } from "@/lib/utils";
 import { inheritedAttributes, ensureProfile, rateLimit, assertImages, notify, normalizeTrPhone } from "./helpers";
 import { deleteUnusedListingImages } from "./upload.server";
 
@@ -46,9 +46,9 @@ export async function saveListingRecord(userId: string, data: ListingInputData) 
   const existing = data.id
     ? (
         await sql.query<{
-          user_id: string; slug: string; price: string | number; status: string; images: unknown;
+          user_id: string; slug: string; listing_no: string | number; price: string | number; status: string; images: unknown;
           title: string; description: string; category_id: string;
-        }>("select user_id, slug, price, status, images, title, description, category_id from listings where id = $1", [data.id])
+        }>("select user_id, slug, listing_no, price, status, images, title, description, category_id from listings where id = $1", [data.id])
       )[0]
     : undefined;
   if (data.id && !existing) throw new Error("İlan bulunamadı");
@@ -95,7 +95,6 @@ export async function saveListingRecord(userId: string, data: ListingInputData) 
   };
 
   const coords = CITY_COORDS[data.city];
-  const slugBase = slugify(data.title) || "ilan";
   if (data.id && existing) {
     await assertStoreOwner(ownerId);
     // An owner changing what the listing shows sends it back to moderation, so
@@ -107,35 +106,38 @@ export async function saveListingRecord(userId: string, data: ListingInputData) 
       added.length > 0;
     const reReview = !isAdmin && contentChanged && (existing.status === "ACTIVE" || existing.status === "INACTIVE");
     const nextStatus = existing.status === "REJECTED" || reReview ? "PENDING" : existing.status;
+    // The URL follows the title; old links still resolve by the trailing listing number.
+    const slug = listingSlug(data.title, existing.listing_no);
     await sql.query(
       `update listings set category_id=$2,title=$3,description=$4,price=$5,city=$6,district=$7,
         neighborhood=$8,lat=$9,lng=$10,images=$11::jsonb,attrs=$12::jsonb,phone_override=$13,
         store_id=$14,status=$15,approved_at=case when $16::boolean then null else approved_at end,
-        updated_at=now() where id=$1`,
+        slug=$17,updated_at=now() where id=$1`,
       [data.id,data.categoryId,data.title,data.description,data.price,data.city,data.district,data.neighborhood || null,
         coords?.lat ?? null,coords?.lng ?? null,JSON.stringify(data.images),JSON.stringify(data.attrs),
-        phoneOverride,data.storeId || null,nextStatus,reReview],
+        phoneOverride,data.storeId || null,nextStatus,reReview,slug],
     );
     await deleteUnusedListingImages(sql, ownerId, existingImages.filter((image) => !data.images.includes(image)));
     if (num(existing.price) !== data.price) await sql.query("insert into price_history (listing_id,price) values ($1,$2)", [data.id,data.price]);
     if (existing.status === "REJECTED" || reReview) {
-      await notify(ownerId,"listing","İlanınız tekrar incelemede","Düzenlenen ilan onay kuyruğuna alındı.",`/ilan/${existing.slug}`);
+      await notify(ownerId,"listing","İlanınız tekrar incelemede","Düzenlenen ilan onay kuyruğuna alındı.",`/ilan/${slug}`);
     }
-    return { id: data.id, slug: existing.slug, status: nextStatus };
+    return { id: data.id, slug, status: nextStatus };
   }
 
   await assertStoreOwner(userId);
   const id = newId("lst");
-  const slug = `${slugBase}-${id.slice(-6)}`;
+  const listingNo = (await sql.query<{ n: string }>("select nextval('listing_no_seq')::text as n"))[0].n;
+  const slug = listingSlug(data.title, listingNo);
   const prior = await sql.query<{ n: number }>("select count(*)::int as n from listings where user_id=$1", [userId]);
   const status = isAdmin || (prior[0]?.n ?? 0) === 0 ? "ACTIVE" : "PENDING";
   await sql.query(
     `insert into listings (id,slug,user_id,store_id,category_id,title,description,price,status,city,district,
-      neighborhood,lat,lng,images,attrs,phone_override,expires_at,approved_at)
+      neighborhood,lat,lng,images,attrs,phone_override,expires_at,approved_at,listing_no)
      values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::jsonb,$16::jsonb,$17,now()+interval '30 days',
-       case when $9::text = 'ACTIVE' then now() end)`,
+       case when $9::text = 'ACTIVE' then now() end,$18::bigint)`,
     [id,slug,userId,data.storeId || null,data.categoryId,data.title,data.description,data.price,status,data.city,data.district,
-      data.neighborhood || null,coords?.lat ?? null,coords?.lng ?? null,JSON.stringify(data.images),JSON.stringify(data.attrs),phoneOverride],
+      data.neighborhood || null,coords?.lat ?? null,coords?.lng ?? null,JSON.stringify(data.images),JSON.stringify(data.attrs),phoneOverride,listingNo],
   );
   await sql.query("insert into price_history (listing_id,price) values ($1,$2)", [id,data.price]);
   return { id, slug, status };
