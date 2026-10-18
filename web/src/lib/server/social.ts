@@ -3,9 +3,21 @@ import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { newId, num, asJson, asIso, LISTING_PHOTO_MSG } from "@/lib/utils";
-import { ensureProfile, mapListing, notify, rateLimit } from "./helpers";
+import {
+  assertSavedSearchQuota,
+  canReviewSeller,
+  ensureProfile,
+  firstInWindow,
+  hasOpenReport,
+  mapListing,
+  notify,
+  rateLimit,
+  REVIEW_NOT_ELIGIBLE,
+} from "./helpers";
 import { sweepExpiryReminders } from "./ops";
 import { broadcastChatMessage, broadcastChatRead, broadcastUserInbox } from "./chat-bus";
+
+const THREAD_PAGE = 200;
 
 function mapMsg(m: Record<string, unknown>) {
   return {
@@ -42,12 +54,15 @@ export const toggleFavorite = createServerFn({ method: "POST" })
       await sql.query("delete from favorites where user_id=$1 and listing_id=$2", [context.userId, data.listingId]);
       return { favorite: false };
     }
-    await sql.query("insert into favorites (user_id, listing_id) values ($1,$2)", [context.userId, data.listingId]);
     const owner = await sql.query<{ user_id: string; title: string; slug: string }>(
-      "select user_id, title, slug from listings where id=$1",
+      "select user_id, title, slug from listings where id=$1 and status='ACTIVE'",
       [data.listingId],
     );
-    if (owner[0] && owner[0].user_id !== context.userId) {
+    if (!owner[0]) throw new Error("İlan bulunamadı");
+    if (owner[0].user_id === context.userId) throw new Error("Kendi ilanınızı favorilere ekleyemezsiniz.");
+    await sql.query("insert into favorites (user_id, listing_id) values ($1,$2) on conflict do nothing", [context.userId, data.listingId]);
+    // Toggling on and off must not spam the seller: one notice per user and listing per day.
+    if (firstInWindow(`favnotify:${context.userId}:${data.listingId}`, 24 * 60 * 60_000)) {
       await notify(owner[0].user_id, "favorite", "İlanınız favorilendi", owner[0].title, `/ilan/${owner[0].slug}`);
     }
     return { favorite: true };
@@ -270,9 +285,13 @@ export const getThread = createServerFn({ method: "POST" })
       broadcastUserInbox(context.userId, { type: "read_update", conversationId: data.conversationId });
     }
 
+    // Newest THREAD_PAGE messages; a long-running chat must not load its whole history.
     const messages = await sql.query<Record<string, unknown>>(
-      "select id, sender_id, content, created_at, read_at from messages where conversation_id=$1 order by created_at asc",
-      [data.conversationId],
+      `select * from (
+         select id, sender_id, content, created_at, read_at from messages
+         where conversation_id=$1 order by created_at desc limit $2
+       ) recent order by created_at asc`,
+      [data.conversationId, THREAD_PAGE],
     );
     return {
       conversation: {
@@ -336,9 +355,12 @@ export const pollThread = createServerFn({ method: "POST" })
           "select id, sender_id, content, created_at, read_at from messages where conversation_id=$1 order by created_at asc",
           [data.conversationId],
         );
+    // Only receipts that changed since the client's last poll.
     const reads = await sql.query<{ id: string; read_at: string }>(
-      "select id, read_at from messages where conversation_id=$1 and sender_id=$2 and read_at is not null",
-      [data.conversationId, context.userId],
+      afterIso
+        ? "select id, read_at from messages where conversation_id=$1 and sender_id=$2 and read_at > $3::timestamptz - interval '30 seconds'"
+        : "select id, read_at from messages where conversation_id=$1 and sender_id=$2 and read_at is not null order by created_at desc limit 200",
+      afterIso ? [data.conversationId, context.userId, afterIso] : [data.conversationId, context.userId],
     );
     return {
       messages: messages.map((m) => mapMsg(m)),
@@ -393,6 +415,7 @@ export const reportListing = createServerFn({ method: "POST" })
     rateLimit(`report:${context.userId}`, 10, 60_000);
     const sql = await getSql();
     await ensureProfile(context.userId);
+    if (await hasOpenReport(sql, data.listingId, context.userId)) return { ok: true };
     await sql.query(
       "insert into reports (id, listing_id, reporter_id, reason, details) values ($1,$2,$3,$4,$5)",
       [newId("rep"), data.listingId, context.userId, data.reason, data.details || null],
@@ -414,13 +437,7 @@ export const leaveReview = createServerFn({ method: "POST" })
     if (data.sellerId === context.userId) throw new Error("Kendinizi puanlayamazsınız");
     const sql = await getSql();
     await ensureProfile(context.userId);
-    const talked = await sql.query<{ id: string }>(
-      `select id from conversations
-       where (buyer_id=$1 and seller_id=$2) or (buyer_id=$2 and seller_id=$1)
-       limit 1`,
-      [context.userId, data.sellerId],
-    );
-    if (!talked[0]) throw new Error("Yalnızca mesajlaştığınız satıcıları puanlayabilirsiniz.");
+    if (!(await canReviewSeller(sql, context.userId, data.sellerId))) throw new Error(REVIEW_NOT_ELIGIBLE);
     await sql.query("delete from reviews where seller_id=$1 and reviewer_id=$2 and listing_id is not distinct from $3", [
       data.sellerId,
       context.userId,
@@ -440,13 +457,9 @@ export const checkReviewEligibility = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     if (data.sellerId === context.userId) return { eligible: false, reason: "self", existing: null };
     const sql = await getSql();
-    const talked = await sql.query<{ id: string }>(
-      `select id from conversations
-       where (buyer_id=$1 and seller_id=$2) or (buyer_id=$2 and seller_id=$1)
-       limit 1`,
-      [context.userId, data.sellerId],
-    );
-    if (!talked[0]) return { eligible: false, reason: "not_contacted", existing: null };
+    if (!(await canReviewSeller(sql, context.userId, data.sellerId))) {
+      return { eligible: false, reason: "not_contacted", existing: null };
+    }
     const existing = await sql.query<{ rating: number; comment: string | null }>(
       `select rating, comment from reviews
        where seller_id=$1 and reviewer_id=$2 and listing_id is not distinct from $3
@@ -510,9 +523,12 @@ export const saveSearch = createServerFn({ method: "POST" })
   .validator(z.object({ label: z.string().max(60).optional(), query: z.string().optional(), filters: z.record(z.string(), z.unknown()) }))
   .handler(async ({ context, data }) => {
     const sql = await getSql();
+    const filters = JSON.stringify(data.filters);
+    if (filters.length > 12_000 || (data.query?.length ?? 0) > 200) throw new Error("Arama çok uzun.");
+    await assertSavedSearchQuota(sql, context.userId);
     await sql.query(
       "insert into saved_searches (id, user_id, label, query, filters) values ($1,$2,$3,$4,$5::jsonb)",
-      [newId("ss"), context.userId, data.label || data.query || "Kayıtlı arama", data.query || "", JSON.stringify(data.filters)],
+      [newId("ss"), context.userId, data.label || data.query || "Kayıtlı arama", data.query || "", filters],
     );
     return { ok: true };
   });

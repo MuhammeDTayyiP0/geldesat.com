@@ -5,7 +5,7 @@ import { getCookie } from "@tanstack/react-start/server";
 import { randomBytes } from "node:crypto";
 import { Pool } from "pg";
 import { ensureDbReady, getPglite } from "../db";
-import { emailAndPasswordEnabled } from "./email-password";
+import { mailConfigured, sendActionMail } from "../server/mail";
 import { pgliteDialect } from "./pglite-dialect";
 
 void ensureDbReady();
@@ -15,9 +15,6 @@ const env = (key: string): string | undefined => {
   return value || undefined;
 };
 
-const authDisabled = env("VITE_AUTH_ENABLED") === "false";
-export const authConfigured = !authDisabled;
-
 const globalAuthRef = globalThis as typeof globalThis & {
   __geldesatAuthSecret__?: string;
 };
@@ -25,29 +22,21 @@ function authSecret(): string {
   const configured = env("BETTER_AUTH_SECRET") ?? env("AUTH_SECRET");
   if (configured) return configured;
   // A per-process random secret invalidates every session on each restart and
-  // differs between serverless instances, so a production deploy with a real
-  // database must configure one (the in-memory PGLite preview may fall back).
-  if (process.env.NODE_ENV === "production" && authConfigured && databaseUrl) {
+  // breaks sessions across replicas, so production must configure one.
+  if (process.env.NODE_ENV === "production") {
     throw new Error("[auth] BETTER_AUTH_SECRET is not set; refusing to start with a random signing secret.");
   }
   globalAuthRef.__geldesatAuthSecret__ ??= randomBytes(32).toString("hex");
   return globalAuthRef.__geldesatAuthSecret__;
 }
 
-const localOrigins = [
-  "http://localhost:8080",
-  "http://127.0.0.1:8080",
-  "http://[::1]:8080",
-  "http://localhost:8081",
-  "http://127.0.0.1:8081",
-  "http://[::1]:8081",
-];
+const localOrigins = ["http://localhost:3000", "http://127.0.0.1:3000", "http://[::1]:3000"];
 const siteOrigins = ["https://geldesat.com", "https://www.geldesat.com"];
 const explicitBaseURL = env("BETTER_AUTH_URL");
 const baseURL = explicitBaseURL ?? {
   allowedHosts: ["localhost", "127.0.0.1", "[::1]", "geldesat.com", "www.geldesat.com"],
   protocol: "auto" as const,
-  fallback: "http://localhost:8080",
+  fallback: "http://localhost:3000",
 };
 const trustedOrigins = explicitBaseURL
   ? [...new Set([explicitBaseURL, ...localOrigins, ...siteOrigins])]
@@ -68,7 +57,43 @@ export const auth = betterAuth({
   secret: authSecret(),
   database,
   trustedOrigins,
-  emailAndPassword: { enabled: emailAndPasswordEnabled },
+  emailAndPassword: {
+    enabled: true,
+    revokeSessionsOnPasswordReset: true,
+    // Without SMTP the reset endpoint reports that it is unavailable.
+    ...(mailConfigured
+      ? {
+          sendResetPassword: async ({ user, url }: { user: { email: string }; url: string }) => {
+            await sendActionMail({
+              to: user.email,
+              subject: "GeldeSat şifre sıfırlama",
+              intro: "GeldeSat hesabınız için şifre sıfırlama isteği aldık. Bağlantı 1 saat geçerlidir.",
+              actionLabel: "Yeni şifre belirle",
+              url,
+            });
+          },
+        }
+      : {}),
+  },
+  // Verified addresses are what lets a Google sign-in join an existing password
+  // account (see accountLinking) and what ADMIN_EMAILS trusts.
+  ...(mailConfigured
+    ? {
+        emailVerification: {
+          sendOnSignUp: true,
+          autoSignInAfterVerification: true,
+          sendVerificationEmail: async ({ user, url }: { user: { email: string }; url: string }) => {
+            await sendActionMail({
+              to: user.email,
+              subject: "GeldeSat e-posta doğrulama",
+              intro: "GeldeSat hesabınızın e-posta adresini doğrulayın.",
+              actionLabel: "E-postamı doğrula",
+              url,
+            });
+          },
+        },
+      }
+    : {}),
   ...(googleAuthConfigured
     ? {
         socialProviders: {

@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { auth, authConfigured } from "@/lib/auth/server";
-import { getSessionUser } from "@/lib/auth/verify.server";
+import { auth } from "@/lib/auth/server";
 import { chatBus, type ChatEvent, type UserInboxEvent } from "@/lib/server/chat-bus";
 import { getSql } from "@/lib/db";
 
@@ -11,20 +10,8 @@ export const Route = createFileRoute("/api/chat/stream")({
         const url = new URL(request.url);
         const conversationId = url.searchParams.get("conversationId");
 
-        let user: { id: string; email?: string | null } | null = null;
-        try {
-          if (authConfigured) {
-            const session = await auth.api.getSession({ headers: request.headers });
-            if (session?.user) {
-              user = { id: session.user.id, email: session.user.email ?? null };
-            }
-          }
-        } catch {
-          // fallback to getSessionUser
-        }
-        if (!user) {
-          user = await getSessionUser();
-        }
+        const session = await auth.api.getSession({ headers: request.headers }).catch(() => null);
+        const user = session?.user ? { id: session.user.id } : null;
         if (!user) {
           return new Response("Unauthorized", { status: 401 });
         }

@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getAppConfig, calculateVariant } from "@/lib/server/config";
+import { publicErrorMessage } from "@/lib/server/errors";
 
 export const Route = createFileRoute("/api/mobile/config")({
   server: {
@@ -46,7 +47,7 @@ export const Route = createFileRoute("/api/mobile/config")({
             },
           );
         } catch (err) {
-          const msg = err instanceof Error ? err.message : "Konfigürasyon getirilemedi";
+          const msg = publicErrorMessage(err, "Konfigürasyon getirilemedi");
           return new Response(JSON.stringify({ success: false, error: msg }), {
             status: 500,
             headers: {

@@ -71,7 +71,7 @@ export async function loadConversationThread(
     );
   }
   const messages = await sql.query<Record<string, unknown>>(
-    "select id,sender_id,content,created_at,read_at from messages where conversation_id=$1 order by created_at asc",
+    `select * from (select id,sender_id,content,created_at,read_at from messages where conversation_id=$1 order by created_at desc limit 200) recent order by created_at asc`,
     [conversationId],
   );
   return { conversation, otherUserId, blockedByMe, blockedByOther, unread, messages };

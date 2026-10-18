@@ -4,7 +4,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: geldesat
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-geldesat}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD gerekli}
       POSTGRES_DB: geldesat
     volumes:
       - geldesat_pg:/var/lib/postgresql/data
@@ -15,7 +15,10 @@ services:
       retries: 20
 
   web:
-    build: .
+    build:
+      context: .
+      args:
+        VITE_GOOGLE_AUTH_ENABLED: ${VITE_GOOGLE_AUTH_ENABLED:-false}
     restart: unless-stopped
     depends_on:
       db:
@@ -23,11 +26,17 @@ services:
     ports:
       - "${GELDESAT_PORT:-3000}:3000"
     environment:
-      DATABASE_URL: postgres://geldesat:${POSTGRES_PASSWORD:-geldesat}@db:5432/geldesat
+      DATABASE_URL: postgres://geldesat:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD gerekli}@db:5432/geldesat
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://127.0.0.1:3000}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET gerekli}
       ADMIN_EMAILS: ${ADMIN_EMAILS:-}
-      VITE_AUTH_ENABLED: "true"
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
       HOST: "0.0.0.0"
       PORT: "3000"
       NITRO_HOST: "0.0.0.0"

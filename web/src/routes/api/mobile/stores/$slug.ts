@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getSql } from "@/lib/db";
 import { mapListing } from "@/lib/server/helpers";
+import { publicErrorMessage } from "@/lib/server/errors";
 
 export const Route = createFileRoute("/api/mobile/stores/$slug")({
   server: {
@@ -22,7 +23,7 @@ export const Route = createFileRoute("/api/mobile/stores/$slug")({
             description: String(store.description ?? ""), city: String(store.city ?? ""), plan: String(store.plan),
           }, listings: listings.map(mapListing) }, { headers: { "Cache-Control": "public, max-age=30" } });
         } catch (error) {
-          const message = error instanceof Error ? error.message : "Mağaza yüklenemedi.";
+          const message = publicErrorMessage(error, "Mağaza yüklenemedi.");
           return Response.json({ success: false, error: message }, { status: 500 });
         }
       },

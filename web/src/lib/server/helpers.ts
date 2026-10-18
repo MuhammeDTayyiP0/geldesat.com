@@ -51,13 +51,26 @@ export type AttrDef = {
   required: boolean;
 };
 
-const buckets = new Map<string, { n: number; t: number }>();
+const buckets = new Map<string, { n: number; t: number; w: number }>();
+let lastPrune = 0;
 
+/** Drop expired windows so the map does not grow with every visitor ever seen. */
+function pruneBuckets(now: number) {
+  if (now - lastPrune < 60_000) return;
+  lastPrune = now;
+  for (const [key, hit] of buckets) if (now - hit.t > hit.w) buckets.delete(key);
+}
+
+/**
+ * Fixed-window, in-process limiter. Correct for the single Node process this
+ * app runs as on Coolify; several replicas would each keep their own counts.
+ */
 export function rateLimit(key: string, max: number, windowMs: number) {
   const now = Date.now();
+  pruneBuckets(now);
   const hit = buckets.get(key);
   if (!hit || now - hit.t > windowMs) {
-    buckets.set(key, { n: 1, t: now });
+    buckets.set(key, { n: 1, t: now, w: windowMs });
     return;
   }
   if (hit.n >= max) {
@@ -157,11 +170,7 @@ function bootstrapAdminEmails(): Set<string> {
   );
 }
 
-/** The local preview's shared account when auth is off (see verify.server.ts). */
-const DEV_USER_ID = "dev-user";
-
 async function isBootstrapAdmin(sql: Awaited<ReturnType<typeof getSql>>, userId: string): Promise<boolean> {
-  if (userId === DEV_USER_ID) return true;
   const emails = bootstrapAdminEmails();
   if (!emails.size) return false;
   try {
@@ -303,10 +312,8 @@ export async function notify(userId: string, type: string, title: string, body: 
   }
 }
 
-const ALLOWED_DATA = /^data:image\/(jpeg|png|webp);base64,/i;
 const ALLOWED_UPLOAD_PATH = /^\/uploads\/[-a-zA-Z0-9_.]+\.(webp|jpg|jpeg|png)$/i;
 const ALLOWED_MOBILE_IMAGE_PATH = /^\/api\/mobile\/images\/[0-9a-f-]{36}$/i;
-const ALLOWED_HTTP_URL = /^https?:\/\/[^\s]+$/i;
 
 /** Normalize a TR mobile number to 05XXXXXXXXX. */
 export function normalizeTrPhone(raw: string): string {
@@ -320,13 +327,17 @@ export function normalizeTrPhone(raw: string): string {
   return n;
 }
 
-export function assertImages(images: string[]) {
+/**
+ * Listing photos must be files uploaded to this site. `existing` (the photos a
+ * listing already has) is accepted unchanged so older listings that still carry
+ * external or inline images can be edited without re-uploading.
+ */
+export function assertImages(images: string[], existing: string[] = []) {
   if (images.length > 10) throw new Error("En fazla 10 fotoğraf yükleyebilirsiniz.");
   for (const img of images) {
     if (ALLOWED_UPLOAD_PATH.test(img) || ALLOWED_MOBILE_IMAGE_PATH.test(img)) continue;
-    if (ALLOWED_HTTP_URL.test(img) && img.length <= 2048) continue;
-    if (ALLOWED_DATA.test(img) && img.length <= 450_000) continue;
-    throw new Error("Geçersiz görsel. Yalnızca JPEG/PNG/WebP formatı kabul edilir.");
+    if (existing.includes(img)) continue;
+    throw new Error("Geçersiz görsel. Lütfen fotoğrafı yeniden yükleyin.");
   }
 }
 
@@ -343,4 +354,59 @@ export function listingSelect(extra = "", onlyCover = false) {
     s.name as store_name, s.slug as store_slug
     ${extra}
   `;
+}
+
+/** True the first time `key` is seen within `windowMs` (in-process, like `rateLimit`). */
+export function firstInWindow(key: string, windowMs: number): boolean {
+  try {
+    rateLimit(key, 1, windowMs);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+type QuerySql = { query<T = Record<string, unknown>>(text: string, params?: unknown[]): Promise<T[]> };
+
+/**
+ * A buyer may review a seller only after a real exchange: both of them have
+ * written in a conversation, so one unanswered message is not enough.
+ */
+export async function canReviewSeller(sql: QuerySql, reviewerId: string, sellerId: string): Promise<boolean> {
+  const rows = await sql.query<{ ok: number }>(
+    `select 1 as ok from conversations c
+     where ((c.buyer_id=$1 and c.seller_id=$2) or (c.buyer_id=$2 and c.seller_id=$1))
+       and exists (select 1 from messages m where m.conversation_id=c.id and m.sender_id=$1)
+       and exists (select 1 from messages m where m.conversation_id=c.id and m.sender_id=$2)
+     limit 1`,
+    [reviewerId, sellerId],
+  );
+  return Boolean(rows[0]);
+}
+
+export const REVIEW_NOT_ELIGIBLE = "Yalnızca karşılıklı mesajlaştığınız satıcıları puanlayabilirsiniz.";
+
+const SAVED_SEARCH_LIMIT = 30;
+
+export async function assertSavedSearchQuota(sql: QuerySql, userId: string): Promise<void> {
+  const rows = await sql.query<{ n: number }>("select count(*)::int as n from saved_searches where user_id=$1", [userId]);
+  if ((rows[0]?.n ?? 0) >= SAVED_SEARCH_LIMIT) {
+    throw new Error(`En fazla ${SAVED_SEARCH_LIMIT} kayıtlı arama tutabilirsiniz. Eskilerden birini silin.`);
+  }
+}
+
+/** A user's still-open report on a listing; repeats are dropped instead of queued again. */
+export async function hasOpenReport(sql: QuerySql, listingId: string, reporterId: string): Promise<boolean> {
+  const rows = await sql.query<{ id: string }>(
+    "select id from reports where listing_id=$1 and reporter_id=$2 and status='OPEN' limit 1",
+    [listingId, reporterId],
+  );
+  return Boolean(rows[0]);
+}
+
+/** Best-effort visitor identity for de-duplicating counters (behind Coolify's proxy). */
+export function viewerKey(headers: Headers, userId?: string | null): string {
+  if (userId) return `u:${userId}`;
+  const forwarded = headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  return `ip:${forwarded || headers.get("x-real-ip") || "unknown"}`;
 }

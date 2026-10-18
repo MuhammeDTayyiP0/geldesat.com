@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getSql } from "@/lib/db";
 import { auth } from "@/lib/auth/server";
-import { mapListing } from "@/lib/server/helpers";
-import { rateLimit } from "@/lib/server/helpers";
+import { canReviewSeller, firstInWindow, mapListing, rateLimit, viewerKey } from "@/lib/server/helpers";
+import { publicErrorMessage } from "@/lib/server/errors";
 
 async function sessionUserId(request: Request) {
   const session = await auth.api.getSession({ headers: request.headers });
@@ -58,19 +58,17 @@ export const Route = createFileRoute("/api/mobile/listings/$id")({
                 (select count(*)::int from reviews where seller_id=$2) as rating_count`, [listing.id, listing.user_id],
             ),
           ]);
-          const sellerReviewEligibility = userId && userId !== listing.user_id
-            ? await sql.query<{ id: string }>(
-                `select id from conversations where (buyer_id=$1 and seller_id=$2) or (buyer_id=$2 and seller_id=$1) limit 1`, [userId, listing.user_id],
-              )
-            : [];
+          const sellerReviewEligible = Boolean(userId && userId !== listing.user_id && (await canReviewSeller(sql, userId, listing.user_id)));
           const existingReview = userId && userId !== listing.user_id
             ? await sql.query<{ rating: number; comment: string | null }>(
                 "select rating,comment from reviews where seller_id=$1 and reviewer_id=$2 and listing_id=$3 limit 1", [listing.user_id, userId, listing.id],
               )
             : [];
           const metric = stats[0];
-          const enrichedListing = { ...listing, view_count: Number(listing.view_count || 0) + (userId === listing.user_id ? 0 : 1) };
-          if (userId !== listing.user_id) await sql.query("update listings set view_count=view_count+1 where id=$1", [listing.id]);
+          // One view per visitor and listing every 30 minutes; owners do not count.
+          const countView = userId !== listing.user_id && firstInWindow(`view:${listing.id}:${viewerKey(request.headers, userId)}`, 30 * 60_000);
+          const enrichedListing = { ...listing, view_count: Number(listing.view_count || 0) + (countView ? 1 : 0) };
+          if (countView) await sql.query("update listings set view_count=view_count+1 where id=$1", [listing.id]);
           return Response.json({
             success: true,
             listing: enrichedListing,
@@ -82,10 +80,10 @@ export const Route = createFileRoute("/api/mobile/listings/$id")({
             sellerStats: { rating_avg: Number(metric?.rating_avg || 0), rating_count: Number(metric?.rating_count || 0) },
             favoriteCount: Number(metric?.favorite_count || 0),
             phoneRevealCount: Number(metric?.phone_reveal_count || 0),
-            reviewEligibility: { eligible: sellerReviewEligibility.length > 0, existing: existingReview[0] ? { rating: Number(existingReview[0].rating), comment: existingReview[0].comment } : null },
+            reviewEligibility: { eligible: sellerReviewEligible, existing: existingReview[0] ? { rating: Number(existingReview[0].rating), comment: existingReview[0].comment } : null },
           });
         } catch (error) {
-          const message = error instanceof Error ? error.message : "İlan yüklenemedi.";
+          const message = publicErrorMessage(error, "İlan yüklenemedi.");
           return Response.json({ success: false, error: message }, { status: 500 });
         }
       },
@@ -108,7 +106,7 @@ export const Route = createFileRoute("/api/mobile/listings/$id")({
           await sql.query("insert into phone_reveals (listing_id, viewer_id) values ($1,$2)", [rows[0].id, userId]);
           return Response.json({ success: true, phone });
         } catch (error) {
-          const message = error instanceof Error ? error.message : "Telefon numarası alınamadı.";
+          const message = publicErrorMessage(error, "Telefon numarası alınamadı.");
           return Response.json({ success: false, error: message }, { status: 500 });
         }
       },

@@ -6,7 +6,6 @@ import {
   Car,
   ChevronDown,
   ChevronRight,
-  GraduationCap,
   Heart,
   HelpCircle,
   History,
@@ -21,8 +20,6 @@ import {
   Settings,
   Shield,
   ShoppingBag,
-  Sparkles,
-  Tractor,
   TrendingUp,
   User,
   Wrench,
@@ -30,7 +27,8 @@ import {
 } from "lucide-react";
 import React, { useEffect, useId, useRef, useState } from "react";
 import { SignedIn, SignedOut } from "@/lib/auth/gates";
-import { authEnabled, signOut } from "@/lib/auth/client";
+import { signOut } from "@/lib/auth/client";
+import { subscribeChatStream } from "@/lib/chat-stream";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { unreadCount } from "@/lib/server/social";
 import { getMe } from "@/lib/server/account";
@@ -343,7 +341,6 @@ function AutocompleteSearchBar({
   const [isOpen, setIsOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
-  const [highlightIndex, setHighlightIndex] = useState<number>(-1);
 
   // localStorage'dan geçmiş aramaları yükle
   useEffect(() => {
@@ -429,15 +426,6 @@ function AutocompleteSearchBar({
   const filteredPopular = trimmedQ
     ? POPULAR_SEARCH_TERMS.filter((t) => t.toLocaleLowerCase("tr").includes(trimmedQ))
     : POPULAR_SEARCH_TERMS.slice(0, 6);
-
-  // Eşleşen kategoriler
-  const matchedCategories = trimmedQ
-    ? MAIN_NAV_CATEGORIES.filter(
-        (c) =>
-          c.name.toLocaleLowerCase("tr").includes(trimmedQ) ||
-          c.groups.some((g) => g.items.some((i) => i.name.toLocaleLowerCase("tr").includes(trimmedQ))),
-      ).slice(0, 3)
-    : [];
 
   return (
     <div ref={containerRef} className={cn("relative w-full", className)}>
@@ -752,8 +740,7 @@ function UserAccountDropdown({ admin }: { admin: boolean }) {
             )}
           </div>
 
-          {authEnabled && (
-            <div className="pt-1 border-t border-border/70">
+          <div className="pt-1 border-t border-border/70">
               <button
                 type="button"
                 disabled={signingOut}
@@ -767,7 +754,6 @@ function UserAccountDropdown({ admin }: { admin: boolean }) {
                 <span>{signingOut ? "Çıkış Yapılıyor…" : "Güvenli Çıkış"}</span>
               </button>
             </div>
-          )}
         </div>
       )}
     </div>
@@ -1133,7 +1119,7 @@ function MobileNavigationDrawer({
               <span>Yönetici Paneli</span>
             </Link>
           )}
-          {user && authEnabled && (
+          {user && (
             <button
               type="button"
               onClick={() => {
@@ -1198,50 +1184,24 @@ export function Navbar({ className }: NavbarProps) {
       .then((m) => setAdmin(m.profile?.role === "ADMIN"))
       .catch(() => undefined);
 
-    let es: EventSource | null = null;
-    let stop = false;
-    let retryTimer: ReturnType<typeof setTimeout> | null = null;
-
-    function connectSSE() {
-      if (stop) return;
-      try {
-        es = new EventSource("/api/chat/stream");
-        es.onmessage = (e) => {
-          if (stop) return;
-          try {
-            const data = JSON.parse(e.data);
-            if (data.type === "new_message") {
-              setMsgUnread((prev) => prev + 1);
-              window.dispatchEvent(new CustomEvent("geldesat:inbox", { detail: data }));
-            } else if (data.type === "read_update" || data.type === "inbox_ping") {
-              loadStats();
-              window.dispatchEvent(new CustomEvent("geldesat:inbox", { detail: data }));
-            }
-          } catch {
-            // keepalive
-          }
-        };
-        es.onerror = () => {
-          es?.close();
-          if (!stop) {
-            retryTimer = setTimeout(connectSSE, 5000);
-          }
-        };
-      } catch {
-        // SSE unsupported
+    // The header owns the inbox side of the shared chat stream and re-broadcasts
+    // it as a window event for the inbox page.
+    const unsubscribe = subscribeChatStream((data) => {
+      if (data.type === "new_message") {
+        setMsgUnread((prev) => prev + 1);
+        window.dispatchEvent(new CustomEvent("geldesat:inbox", { detail: data }));
+      } else if (data.type === "read_update" || data.type === "inbox_ping") {
+        loadStats();
+        window.dispatchEvent(new CustomEvent("geldesat:inbox", { detail: data }));
       }
-    }
-
-    connectSSE();
+    });
     window.addEventListener("geldesat:inbox", loadStats);
     const tick = window.setInterval(() => {
       if (document.visibilityState === "visible") loadStats();
     }, 20000);
 
     return () => {
-      stop = true;
-      if (retryTimer) clearTimeout(retryTimer);
-      es?.close();
+      unsubscribe();
       window.removeEventListener("geldesat:inbox", loadStats);
       window.clearInterval(tick);
     };

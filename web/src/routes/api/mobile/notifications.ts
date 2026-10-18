@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getSql } from "@/lib/db";
 import { getMobileUserId } from "@/lib/server/mobile-auth";
+import { publicErrorMessage } from "@/lib/server/errors";
 
 export const Route = createFileRoute("/api/mobile/notifications")({
   server: {
@@ -17,7 +18,7 @@ export const Route = createFileRoute("/api/mobile/notifications")({
           const notifications = rows.map((n) => ({ id: String(n.id), type: String(n.type), title: String(n.title), body: String(n.body ?? ""), link: String(n.link ?? "/"), read: Boolean(n.read_at), created_at: new Date(String(n.created_at)).toISOString() }));
           return Response.json({ success: true, notifications, unread: count[0]?.n ?? 0 }, { headers: { "Cache-Control": "private, no-store" } });
         } catch (error) {
-          const message = error instanceof Error ? error.message : "Bildirimler yüklenemedi.";
+          const message = publicErrorMessage(error, "Bildirimler yüklenemedi.");
           return Response.json({ success: false, error: message }, { status: 500 });
         }
       },
@@ -49,7 +50,7 @@ export const Route = createFileRoute("/api/mobile/notifications")({
           await sql.query("update notifications set read_at=now() where user_id=$1 and read_at is null", [userId]);
           return Response.json({ success: true });
         } catch (error) {
-          const message = error instanceof Error ? error.message : "Bildirimler güncellenemedi.";
+          const message = publicErrorMessage(error, "Bildirimler güncellenemedi.");
           return Response.json({ success: false, error: message }, { status: 500 });
         }
       },

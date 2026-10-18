@@ -1,12 +1,15 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { authClient, authEnabled, googleAuthEnabled } from "@/lib/auth/client";
+import { authClient, googleAuthEnabled } from "@/lib/auth/client";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { toast } from "sonner";
 import { LogoMark } from "@/components/brand/LogoMark";
+import { safeRedirect } from "@/lib/auth/sign-in-gate";
 
 export const Route = createFileRoute("/login")({
+  validateSearch: (search: Record<string, unknown>): { redirect?: string } =>
+    typeof search.redirect === "string" ? { redirect: safeRedirect(search.redirect) } : {},
   head: () => ({
     meta: [
       { title: "Giriş Yap / Kayıt Ol | GeldeSat" },
@@ -17,6 +20,8 @@ export const Route = createFileRoute("/login")({
 });
 
 function Login() {
+  const { redirect } = Route.useSearch();
+  const next = safeRedirect(redirect);
   const [mode, setMode] = useState<"in" | "up">("in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -40,7 +45,7 @@ function Login() {
         const { error } = await authClient.signIn.email({ email, password });
         if (error) throw new Error(error.message);
       }
-      window.location.href = "/";
+      window.location.href = next;
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Giriş başarısız");
     } finally {
@@ -58,13 +63,13 @@ function Login() {
             <p className="text-sm text-muted">İlan, mesaj ve favori için giriş yapın.</p>
           </div>
         </div>
-        {authEnabled && googleAuthEnabled ? (
+        {googleAuthEnabled ? (
           <>
             <Button
               type="button"
               variant="outline"
               className="mt-6 w-full"
-              onClick={() => void authClient.signIn.social({ provider: "google", callbackURL: "/" })}
+              onClick={() => void authClient.signIn.social({ provider: "google", callbackURL: next })}
             >
               Google ile devam et
             </Button>
@@ -75,9 +80,6 @@ function Login() {
             </div>
           </>
         ) : <div className="mt-6" />}
-        {!authEnabled ? (
-          <p className="mt-4 text-sm text-muted">Giriş şu an kapalı.</p>
-        ) : null}
         <div className="mb-4 flex rounded-lg bg-elevated p-1 text-sm">
           <button type="button" className={`flex-1 rounded-md py-2 ${mode === "in" ? "bg-surface font-medium shadow-card" : "text-muted"}`} onClick={() => setMode("in")}>
             Giriş
@@ -108,6 +110,11 @@ function Login() {
           <div>
             <Label htmlFor="auth-password">Şifre</Label>
             <Input id="auth-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} autoComplete={mode === "up" ? "new-password" : "current-password"} />
+            {mode === "in" ? (
+              <Link to="/sifre-sifirla" className="mt-1 inline-block text-xs text-primary hover:underline">
+                Şifremi unuttum
+              </Link>
+            ) : null}
           </div>
           {mode === "up" ? (
             <label className="flex items-start gap-2 text-xs text-muted">

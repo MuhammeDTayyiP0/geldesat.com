@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { Camera, Check, ImagePlus, X } from "lucide-react";
-import { cleanPhone, formatPhone, formatPrice, maskPhone10 } from "@/lib/utils";
+import { cleanPhone, formatPrice, maskPhone10 } from "@/lib/utils";
 import { toast } from "sonner";
 import type { AttrDef, CategoryRow } from "@/lib/server/helpers";
 import { CategoryButtons } from "@/components/listing/CategoryPicker";

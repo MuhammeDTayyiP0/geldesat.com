@@ -2,7 +2,8 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
-import { newId, num, slugify } from "@/lib/utils";
+import { asJson, newId, num, slugify } from "@/lib/utils";
+import { deleteUnusedListingImages } from "./upload.server";
 import {
   inheritedAttributes,
   mapListing,
@@ -159,10 +160,11 @@ export const deleteListing = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     const me = await ensureProfile(context.userId);
-    const row = await sql.query<{ user_id: string }>("select user_id from listings where id=$1", [data.id]);
+    const row = await sql.query<{ user_id: string; images: string[] }>("select user_id, images from listings where id=$1", [data.id]);
     if (!row[0]) throw new Error("İlan bulunamadı");
     if (row[0].user_id !== context.userId && me.role !== "ADMIN") throw new Error("Yetkisiz işlem");
     await sql.query("delete from listings where id=$1", [data.id]);
+    await deleteUnusedListingImages(sql, row[0].user_id, asJson<string[]>(row[0].images, []));
     return { ok: true };
   });
 
@@ -281,6 +283,7 @@ export const upsertStore = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     await ensureProfile(context.userId);
+    const storePhone = data.phone?.trim() ? normalizeTrPhone(data.phone) : null;
     const existing = await sql.query<{ id: string; slug: string }>(
       "select id, slug from stores where user_id=$1",
       [context.userId],
@@ -291,7 +294,7 @@ export const upsertStore = createServerFn({ method: "POST" })
         data.name,
         data.description || null,
         data.city || null,
-        data.phone || null,
+        storePhone,
       ]);
       return { id: existing[0].id, slug: existing[0].slug };
     }
@@ -300,7 +303,7 @@ export const upsertStore = createServerFn({ method: "POST" })
     await sql.query(
       `insert into stores (id, user_id, name, slug, description, city, phone, plan)
        values ($1,$2,$3,$4,$5,$6,$7,'BASIC')`,
-      [id, context.userId, data.name, slug, data.description || null, data.city || null, data.phone || null],
+      [id, context.userId, data.name, slug, data.description || null, data.city || null, storePhone],
     );
     return { id, slug };
   });
@@ -572,37 +575,47 @@ export const adminDeleteUser = createServerFn({ method: "POST" })
       throw new Error("Yönetici rolündeki bir kullanıcıyı silemezsiniz. Lütfen önce rolünü 'USER' olarak değiştirin.");
     }
 
-    // Safely delete all related data
-    await sql.query("delete from notifications where user_id=$1", [data.userId]);
-    await sql.query("delete from mobile_push_tokens where user_id=$1", [data.userId]);
-    await sql.query("delete from mobile_listing_images where user_id=$1", [data.userId]);
-    await sql.query("delete from saved_searches where user_id=$1", [data.userId]);
-    await sql.query("delete from credit_ledger where user_id=$1", [data.userId]);
-    await sql.query("delete from credit_orders where user_id=$1", [data.userId]);
-    await sql.query("delete from boosts where user_id=$1", [data.userId]);
-    await sql.query("delete from phone_reveals where viewer_id=$1", [data.userId]);
-    await sql.query("delete from favorites where user_id=$1", [data.userId]);
-    await sql.query("delete from reviews where seller_id=$1 or reviewer_id=$1", [data.userId]);
-    await sql.query("delete from reports where reporter_id=$1", [data.userId]);
-    await sql.query(
-      `delete from messages where sender_id=$1 or conversation_id in (
-         select id from conversations where buyer_id=$1 or seller_id=$1
-       )`,
-      [data.userId],
-    );
-    await sql.query("delete from conversations where buyer_id=$1 or seller_id=$1", [data.userId]);
+    // All or nothing: a failure part-way must not leave a half-deleted account.
+    await sql.transaction(async (tx) => {
+      await tx.query("delete from notifications where user_id=$1", [data.userId]);
+      await tx.query("delete from mobile_push_tokens where user_id=$1", [data.userId]);
+      await tx.query("delete from saved_searches where user_id=$1", [data.userId]);
+      await tx.query("delete from credit_ledger where user_id=$1", [data.userId]);
+      await tx.query("delete from credit_orders where user_id=$1", [data.userId]);
+      await tx.query("delete from boosts where user_id=$1", [data.userId]);
+      await tx.query("delete from phone_reveals where viewer_id=$1", [data.userId]);
+      await tx.query("delete from favorites where user_id=$1", [data.userId]);
+      await tx.query("delete from reviews where seller_id=$1 or reviewer_id=$1", [data.userId]);
+      await tx.query("delete from reports where reporter_id=$1", [data.userId]);
+      await tx.query(
+        `delete from messages where sender_id=$1 or conversation_id in (
+           select id from conversations where buyer_id=$1 or seller_id=$1
+         )`,
+        [data.userId],
+      );
+      await tx.query("delete from conversations where buyer_id=$1 or seller_id=$1", [data.userId]);
 
-    if (data.deleteListings) {
-      await sql.query("delete from listings where user_id=$1", [data.userId]);
-    } else {
-      await sql.query("update listings set status='INACTIVE' where user_id=$1", [data.userId]);
-    }
+      if (data.deleteListings) {
+        await tx.query("delete from listings where user_id=$1", [data.userId]);
+        await tx.query("delete from mobile_listing_images where user_id=$1", [data.userId]);
+      } else {
+        // Kept listings still reference the user's photos, so those stay.
+        await tx.query("update listings set status='INACTIVE' where user_id=$1", [data.userId]);
+        await tx.query(
+          `delete from mobile_listing_images i where i.user_id=$1 and not exists (
+             select 1 from listings l where l.user_id=$1 and (
+               l.images @> jsonb_build_array('/api/mobile/images/' || i.id) or
+               l.images @> jsonb_build_array('/uploads/' || i.storage_key)))`,
+          [data.userId],
+        );
+      }
 
-    await sql.query("delete from stores where user_id=$1", [data.userId]);
-    await sql.query("delete from profiles where user_id=$1", [data.userId]);
-    await sql.query('delete from "session" where "userId"=$1', [data.userId]);
-    await sql.query('delete from "account" where "userId"=$1', [data.userId]);
-    await sql.query('delete from "user" where id=$1', [data.userId]);
+      await tx.query("delete from stores where user_id=$1", [data.userId]);
+      await tx.query("delete from profiles where user_id=$1", [data.userId]);
+      await tx.query('delete from "session" where "userId"=$1', [data.userId]);
+      await tx.query('delete from "account" where "userId"=$1', [data.userId]);
+      await tx.query('delete from "user" where id=$1', [data.userId]);
+    });
 
     return { ok: true };
   });

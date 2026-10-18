@@ -5,7 +5,6 @@ export const authClient = createAuthClient({
   fetchOptions: { credentials: "include" },
 });
 
-export const authEnabled = import.meta.env.VITE_AUTH_ENABLED !== "false";
 export const googleAuthEnabled = import.meta.env.VITE_GOOGLE_AUTH_ENABLED === "true";
 
 export async function signOut(redirectTo = "/"): Promise<void> {

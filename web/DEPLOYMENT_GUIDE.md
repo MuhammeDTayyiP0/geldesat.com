@@ -1,87 +1,58 @@
-# GeldeSat 2 - aaPanel Kurulum Kılavuzu
+# Coolify ile yayına alma
 
-Bu kılavuz, GeldeSat projesini aaPanel yüklü bir sunucuda nasıl yayına alacağınızı adım adım anlatır.
+GeldeSat, Coolify'da tek bir Node konteyneri ve bir Postgres veritabanı olarak
+çalışır. Uygulama tek süreçtir: anlık mesajlaşma, hız sınırlama ve önbellekler
+süreç belleğinde tutulur, bu yüzden **tek replika** çalıştırın.
 
-## 1. Ön Hazırlık (aaPanel)
+## 1. Veritabanı
 
-1.  **Node.js Yükleyin:**
-    *   aaPanel'de **App Store** > **Node.js version manager**'a gidin.
-    *   **Node.js v20** veya üzeri bir sürümü (Stable/LTS) yükleyin.
-2.  **Veritabanı:**
-    *   Bu proje varsayılan olarak **PostgreSQL** kullanır.
-    *   Eğer sunucunuzda PostgreSQL yoksa, ya Docker ile kurun ya da projenizi MySQL'e çevirin (Aşağıda açıklanmıştır).
-    *   Veritabanı oluşturun ve bağlantı adresini (Connection String) not edin.
-    *   Örnek: `postgresql://kullanici:sifre@localhost:5432/veritabani_adi`
+Coolify'da **New Resource → Database → PostgreSQL 16** oluşturun ve iç
+bağlantı adresini (`postgres://...`) kopyalayın.
 
-## 2. Dosyaların Yüklenmesi
+## 2. Uygulama
 
-1.  aaPanel **Files** menüsüne gidin.
-2.  `/www/wwwroot/` altında projeniz için bir klasör oluşturun (örn: `geldesat`).
-3.  Bilgisayarınızdaki proje dosyalarını **ZIP** yapın (`node_modules` ve `.next` klasörlerini **HARIÇ** tutun).
-4.  ZIP dosyasını sunucuya yükleyin ve klasör içine çıkarın (Unzip).
+1. **New Resource → Application**, bu depoyu seçin.
+2. **Base Directory:** `/web` (uygulama artık `web/` klasöründe).
+3. **Build Pack:** `Dockerfile` (önerilen) ya da `Nixpacks`. İkisi de
+   `npm run build` ile derler ve açılışta migration'ları uygular.
+4. **Port:** `3000`.
+5. Alan adını (`https://www.geldesat.com`) ekleyin; Coolify HTTPS sertifikasını
+   kendisi alır. `geldesat.com` adresine gelenler otomatik olarak `www`'ya
+   yönlendirilir.
 
-## 3. Yapılandırma (.env)
+## 3. Ortam değişkenleri
 
-Proje ana dizininde `.env` isminde bir dosya oluşturun ve aşağıdaki ayarları girin:
+`.env.example` dosyasındakileri Coolify'da **Environment Variables**'a girin.
+En az şunlar gerekli:
 
-```env
-# Veritabanı Bağlantısı (Kendi bilgilerinizle değiştirin)
-DATABASE_URL="postgresql://kullanici:sifre@localhost:5432/veritabani_adi"
+| Değişken | Açıklama |
+|---|---|
+| `DATABASE_URL` | 1. adımdaki Postgres adresi. Yoksa uygulama başlamaz. |
+| `BETTER_AUTH_URL` | `https://www.geldesat.com` (sonunda `/` yok) |
+| `BETTER_AUTH_SECRET` | `openssl rand -hex 32` çıktısı. Yoksa uygulama başlamaz. |
+| `ADMIN_EMAILS` | Yönetici e-postası (doğrulanmış hesap olmalı) |
 
-# Güvenlik Anahtarı (Rastgele uzun bir şifre belirleyin)
-AUTH_SECRET="buraya-cok-gizli-uzun-ve-karmasik-bir-sifre-yazin"
+`VITE_GOOGLE_AUTH_ENABLED` derleme sırasında okunur: Coolify'da **Build
+Variable** olarak işaretleyin.
 
-# Site Adresi (Domaininiz)
-NEXTAUTH_URL="https://siteniz.com"
+## 4. Yönetici hesabı
 
-# Google Auth (Opsiyonel - Google ile giriş için)
-GOOGLE_CLIENT_ID=""
-GOOGLE_CLIENT_SECRET=""
-```
+Yöneticilik kayıt sırasına göre verilmez. İki yol var:
 
-*> **Not:** Eğer MySQL kullanacaksanız, `prisma/schema.prisma` dosyasında `provider = "postgresql"` yazan yeri `provider = "mysql"` yapın.*
+- `ADMIN_EMAILS` değişkenine e-postanızı yazın ve o adresle **Google ile** giriş
+  yapın (ya da SMTP ayarlıysa e-postanızı doğrulayın).
+- Ya da veritabanında: `update profiles set role='ADMIN' where user_id='...';`
 
-## 4. Kurulum ve Derleme (Terminal)
+## 5. Güncelleme
 
-aaPanel'de **Terminal**i açın veya SSH ile bağlanıp proje klasörüne gidin:
+Depoya push sonrası Coolify'da **Redeploy**. Yeni migration dosyaları
+konteyner açılırken otomatik uygulanır.
 
-```bash
-cd /www/wwwroot/geldesat
-```
+## Sorun giderme
 
-Sırasıyla şu komutları çalıştırın:
-
-1.  **Paketleri Yükleyin:** `npm install`
-2.  **Veritabanını Eşitleyin:** `npx prisma db push`
-3.  **Başlangıç Verilerini Ekleyin (Kategoriler vb.):** `npx prisma db seed`
-4.  **Projeyi Derleyin (Build):** `npm run build`
-
-## 5. Projeyi Başlatma (Node Project Manager)
-
-aaPanel'in "Website" özelliğini kullanarak projeyi başlatmak en kolayıdır.
-
-1.  aaPanel **Website** > **Node Project** sekmesine gelin.
-2.  **Add Node Project** butonuna tıklayın.
-    *   **Project Directory:** `/www/wwwroot/geldesat` (Proje klasörünüz)
-    *   **Run Command:** `start` (veya `npm start`)
-    *   **Port:** `3000` (Otomatik bulmazsa elle yazın)
-    *   **Domain:** Domain adınızı yazın (örn: `geldesat.com`).
-3.  **Submit** diyerek projeyi başlatın.
-
-Eğer Node Project Manager kullanmıyorsanız, PM2 ile manuel başlatın:
-```bash
-npx pm2 start npm --name "geldesat" -- start
-```
-
-## 6. Erişim ve Son Kontroller
-
-*   Tarayıcıdan domain adresinize (veya sunucu IP:3000) gidin.
-*   Site açılmalıdır.
-*   İlk girişte "Giriş Yap" diyerek bir hesap oluşturun. Yönetici yetkisi kayıt sırasına göre verilmez: `ADMIN_EMAILS` ortam değişkenine doğrulanmış (ör. Google ile giriş yapılmış) e-postanızı yazın ya da veritabanında `update profiles set role='ADMIN' where user_id='...';` çalıştırın.
-
-## Sık Karşılaşılan Sorunlar
-
-*   **Resim Yükleme Hatası:** `public/uploads` klasörünün yazma izni olduğundan emin olun. (Sağ tık > Permission > 755 veya 777).
-*   **502 Bad Gateway:** Node.js servisi çalışmıyor demektir. Terminalden loglara bakın (`pm2 logs` veya aaPanel logları).
-*   **Veritabanı Hatası:** `.env` dosyasındaki şifrede özel karakterler varsa URL encode yapmanız gerekebilir.
-*   **MySQL Hatası:** Eğer MySQL kullanıyorsanız `schema.prisma`'yı değiştirdikten sonra `prisma generate` komutunu çalıştırmayı unutmayın.
+- **Uygulama hemen kapanıyor:** Logda `DATABASE_URL` ya da
+  `BETTER_AUTH_SECRET` uyarısı varsa değişkeni ekleyin.
+- **Girişten sonra oturum düşüyor:** `BETTER_AUTH_URL` sitenin gerçek HTTPS
+  adresi olmalı.
+- **Şifre sıfırlama "etkin değil" diyor:** `SMTP_HOST` ve `SMTP_FROM`
+  tanımlanmamış.

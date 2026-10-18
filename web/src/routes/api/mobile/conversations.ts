@@ -6,6 +6,7 @@ import { ensureProfile, notify, rateLimit } from "@/lib/server/helpers";
 import { broadcastChatMessage, broadcastUserInbox } from "@/lib/server/chat-bus";
 import { createOrGetConversation, insertConversationMessage } from "@/lib/server/mobile-conversation-store";
 import { hasUserBlock } from "@/lib/server/user-blocks";
+import { publicErrorMessage } from "@/lib/server/errors";
 
 export const Route = createFileRoute("/api/mobile/conversations")({
   server: {
@@ -42,7 +43,7 @@ export const Route = createFileRoute("/api/mobile/conversations")({
           }));
           return Response.json({ success: true, conversations }, { headers: { "Cache-Control": "private, no-store" } });
         } catch (error) {
-          const message = error instanceof Error ? error.message : "Konuşmalar yüklenemedi.";
+          const message = publicErrorMessage(error, "Konuşmalar yüklenemedi.");
           return Response.json({ success: false, error: message }, { status: 500 });
         }
       },
@@ -74,7 +75,7 @@ export const Route = createFileRoute("/api/mobile/conversations")({
           await notify(listing[0].user_id, "message", "Yeni mesaj", body.content.trim().slice(0, 80), `/mesajlar/${conversationId}`);
           return Response.json({ success: true, conversationId, message: msg });
         } catch (error) {
-          const message = error instanceof Error ? error.message : "Mesaj gönderilemedi.";
+          const message = publicErrorMessage(error, "Mesaj gönderilemedi.");
           return Response.json({ success: false, error: message }, { status: 500 });
         }
       },

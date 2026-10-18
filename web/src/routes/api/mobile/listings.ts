@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { searchListings } from "@/lib/server/catalog";
+import { publicErrorMessage } from "@/lib/server/errors";
 
 export const Route = createFileRoute("/api/mobile/listings")({
   server: {
@@ -83,7 +84,7 @@ export const Route = createFileRoute("/api/mobile/listings")({
             },
           );
         } catch (err) {
-          const msg = err instanceof Error ? err.message : "İlanlar getirilemedi";
+          const msg = publicErrorMessage(err, "İlanlar getirilemedi");
           return Response.json(
             { success: false, error: msg },
             {

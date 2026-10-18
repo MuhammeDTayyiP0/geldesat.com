@@ -47,11 +47,6 @@ function brandId(prefix, brand) {
   return `${prefix}-${bslug(brand)}`;
 }
 
-function modelId(prefix, brand, model) {
-  const raw = `${prefix}-${bslug(brand)}-${slugify(model)}`;
-  return ID_ALIAS[raw] ?? raw;
-}
-
 function cid(...parts) {
   const raw = parts.map((p) => slugify(p)).filter(Boolean).join("-");
   return ID_ALIAS[raw] ?? raw;

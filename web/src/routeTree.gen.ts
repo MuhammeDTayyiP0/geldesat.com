@@ -22,6 +22,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as MesajlarRouteImport } from './routes/mesajlar'
 import { Route as ProfilRouteImport } from './routes/profil'
 import { Route as SearchRouteImport } from './routes/search'
+import { Route as SifreSifirlaRouteImport } from './routes/sifre-sifirla'
 import { Route as ApiUploadRouteImport } from './routes/api/upload'
 import { Route as CategorySlugRouteImport } from './routes/category/$slug'
 import { Route as IlanSlugRouteImport } from './routes/ilan/$slug'
@@ -116,6 +117,11 @@ const ProfilRoute = ProfilRouteImport.update({
 const SearchRoute = SearchRouteImport.update({
   id: '/search',
   path: '/search',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SifreSifirlaRoute = SifreSifirlaRouteImport.update({
+  id: '/sifre-sifirla',
+  path: '/sifre-sifirla',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiUploadRoute = ApiUploadRouteImport.update({
@@ -285,6 +291,7 @@ export interface FileRoutesByFullPath {
   '/mesajlar': typeof MesajlarRouteWithChildren
   '/profil': typeof ProfilRoute
   '/search': typeof SearchRoute
+  '/sifre-sifirla': typeof SifreSifirlaRoute
   '/api/upload': typeof ApiUploadRoute
   '/category/$slug': typeof CategorySlugRoute
   '/ilan/$slug': typeof IlanSlugRoute
@@ -329,6 +336,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/profil': typeof ProfilRoute
   '/search': typeof SearchRoute
+  '/sifre-sifirla': typeof SifreSifirlaRoute
   '/api/upload': typeof ApiUploadRoute
   '/category/$slug': typeof CategorySlugRoute
   '/ilan/$slug': typeof IlanSlugRoute
@@ -375,6 +383,7 @@ export interface FileRoutesById {
   '/mesajlar': typeof MesajlarRouteWithChildren
   '/profil': typeof ProfilRoute
   '/search': typeof SearchRoute
+  '/sifre-sifirla': typeof SifreSifirlaRoute
   '/api/upload': typeof ApiUploadRoute
   '/category/$slug': typeof CategorySlugRoute
   '/ilan/$slug': typeof IlanSlugRoute
@@ -422,6 +431,7 @@ export interface FileRouteTypes {
     | '/mesajlar'
     | '/profil'
     | '/search'
+    | '/sifre-sifirla'
     | '/api/upload'
     | '/category/$slug'
     | '/ilan/$slug'
@@ -466,6 +476,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/profil'
     | '/search'
+    | '/sifre-sifirla'
     | '/api/upload'
     | '/category/$slug'
     | '/ilan/$slug'
@@ -511,6 +522,7 @@ export interface FileRouteTypes {
     | '/mesajlar'
     | '/profil'
     | '/search'
+    | '/sifre-sifirla'
     | '/api/upload'
     | '/category/$slug'
     | '/ilan/$slug'
@@ -557,6 +569,7 @@ export interface RootRouteChildren {
   MesajlarRoute: typeof MesajlarRouteWithChildren
   ProfilRoute: typeof ProfilRoute
   SearchRoute: typeof SearchRoute
+  SifreSifirlaRoute: typeof SifreSifirlaRoute
   ApiUploadRoute: typeof ApiUploadRoute
   CategorySlugRoute: typeof CategorySlugRoute
   IlanSlugRoute: typeof IlanSlugRoute
@@ -674,6 +687,13 @@ declare module '@tanstack/react-router' {
       path: '/search'
       fullPath: '/search'
       preLoaderRoute: typeof SearchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sifre-sifirla': {
+      id: '/sifre-sifirla'
+      path: '/sifre-sifirla'
+      fullPath: '/sifre-sifirla'
+      preLoaderRoute: typeof SifreSifirlaRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/upload': {
@@ -965,6 +985,7 @@ const rootRouteChildren: RootRouteChildren = {
   MesajlarRoute: MesajlarRouteWithChildren,
   ProfilRoute: ProfilRoute,
   SearchRoute: SearchRoute,
+  SifreSifirlaRoute: SifreSifirlaRoute,
   ApiUploadRoute: ApiUploadRoute,
   CategorySlugRoute: CategorySlugRoute,
   IlanSlugRoute: IlanSlugRoute,

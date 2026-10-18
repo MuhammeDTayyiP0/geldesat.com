@@ -4,6 +4,7 @@ import { getMobileUserId } from "@/lib/server/mobile-auth";
 import { mapListing, notify } from "@/lib/server/helpers";
 import { deleteUnusedListingImages } from "@/lib/server/upload.server";
 import { renewedStatus } from "@/lib/server/listing-write";
+import { publicErrorMessage } from "@/lib/server/errors";
 
 export const Route = createFileRoute("/api/mobile/my-listings/$id")({
   server: {
@@ -23,7 +24,7 @@ export const Route = createFileRoute("/api/mobile/my-listings/$id")({
           if (!rows[0]) return Response.json({ success: false, error: "İlan bulunamadı." }, { status: 404 });
           return Response.json({ success: true, listing: { ...mapListing(rows[0]), phone: rows[0].phone_override ?? rows[0].profile_phone ?? "" } }, { headers: { "Cache-Control": "private, no-store" } });
         } catch (error) {
-          const message = error instanceof Error ? error.message : "İlan yüklenemedi.";
+          const message = publicErrorMessage(error, "İlan yüklenemedi.");
           return Response.json({ success: false, error: message }, { status: 500 });
         }
       },
@@ -54,7 +55,7 @@ export const Route = createFileRoute("/api/mobile/my-listings/$id")({
           }
           return Response.json({ success: false, error: "İşlem tanınmadı." }, { status: 400 });
         } catch (error) {
-          const message = error instanceof Error ? error.message : "İlan güncellenemedi.";
+          const message = publicErrorMessage(error, "İlan güncellenemedi.");
           return Response.json({ success: false, error: message }, { status: 500 });
         }
       },

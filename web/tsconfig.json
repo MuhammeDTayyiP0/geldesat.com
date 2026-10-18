@@ -34,7 +34,6 @@
     "server"
   ],
   "exclude": [
-    "node_modules",
-    "src/lib/data/transform*.js"
+    "node_modules"
   ]
 }

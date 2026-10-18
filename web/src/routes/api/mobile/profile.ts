@@ -2,8 +2,9 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { getSql } from "@/lib/db";
 import { auth } from "@/lib/auth/server";
-import { ensureProfile, normalizeTrPhone } from "@/lib/server/helpers";
+import { assertSavedSearchQuota, ensureProfile, normalizeTrPhone } from "@/lib/server/helpers";
 import { newId, slugify } from "@/lib/utils";
+import { publicErrorMessage } from "@/lib/server/errors";
 
 const ProfileInput = z.object({
   display_name: z.string().trim().min(2).max(60),
@@ -87,7 +88,7 @@ export const Route = createFileRoute("/api/mobile/profile")({
             })),
           }, { headers: { "Cache-Control": "private, no-store" } });
         } catch (err) {
-          const message = err instanceof Error ? err.message : "Profil yüklenemedi.";
+          const message = publicErrorMessage(err, "Profil yüklenemedi.");
           return Response.json({ success: false, error: message }, { status: 500 });
         }
       },
@@ -108,6 +109,7 @@ export const Route = createFileRoute("/api/mobile/profile")({
             const filtersJson = JSON.stringify(input.data.filters);
             if (filtersJson.length > 12_000) return Response.json({ success: false, error: "Filtreler çok uzun." }, { status: 400 });
             const sql = await getSql();
+            await assertSavedSearchQuota(sql, userId);
             const query = input.data.query || "";
             const label = input.data.label || query || "Kayıtlı arama";
             const id = newId("ss");
@@ -122,6 +124,7 @@ export const Route = createFileRoute("/api/mobile/profile")({
             if (!parsedStore.success) return Response.json({ success: false, error: "Mağaza bilgilerini kontrol edin." }, { status: 400 });
             const sql = await getSql();
             await ensureProfile(userId);
+            const storePhone = parsedStore.data.phone?.trim() ? normalizeTrPhone(parsedStore.data.phone) : null;
             const existing = await sql.query<{ id: string; slug: string }>(
               "select id, slug from stores where user_id=$1",
               [userId],
@@ -129,7 +132,7 @@ export const Route = createFileRoute("/api/mobile/profile")({
             if (existing[0]) {
               await sql.query(
                 "update stores set name=$2, description=$3, city=$4, phone=$5 where id=$1",
-                [existing[0].id, parsedStore.data.name, parsedStore.data.description || null, parsedStore.data.city || null, parsedStore.data.phone || null],
+                [existing[0].id, parsedStore.data.name, parsedStore.data.description || null, parsedStore.data.city || null, storePhone],
               );
               return Response.json({ success: true, store: { id: existing[0].id, slug: existing[0].slug } });
             }
@@ -138,7 +141,7 @@ export const Route = createFileRoute("/api/mobile/profile")({
             await sql.query(
               `insert into stores (id, user_id, name, slug, description, city, phone, plan)
                values ($1,$2,$3,$4,$5,$6,$7,'BASIC')`,
-              [id, userId, parsedStore.data.name, slug, parsedStore.data.description || null, parsedStore.data.city || null, parsedStore.data.phone || null],
+              [id, userId, parsedStore.data.name, slug, parsedStore.data.description || null, parsedStore.data.city || null, storePhone],
             );
             return Response.json({ success: true, store: { id, slug } });
           }
@@ -164,7 +167,7 @@ export const Route = createFileRoute("/api/mobile/profile")({
           );
           return Response.json({ success: true });
         } catch (err) {
-          const message = err instanceof Error ? err.message : "Profil kaydedilemedi.";
+          const message = publicErrorMessage(err, "Profil kaydedilemedi.");
           return Response.json({ success: false, error: message }, { status: 500 });
         }
       },
@@ -178,7 +181,7 @@ export const Route = createFileRoute("/api/mobile/profile")({
           await sql.query("delete from saved_searches where id=$1 and user_id=$2", [id, userId]);
           return Response.json({ success: true });
         } catch (err) {
-          const message = err instanceof Error ? err.message : "Kayıtlı arama silinemedi.";
+          const message = publicErrorMessage(err, "Kayıtlı arama silinemedi.");
           return Response.json({ success: false, error: message }, { status: 500 });
         }
       },

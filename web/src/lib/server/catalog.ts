@@ -7,11 +7,14 @@ import {
   listingSelect,
   mapListing,
   subtreeIds,
+  firstInWindow,
+  viewerKey,
   type CategoryRow,
   type ListingCard,
 } from "./helpers";
 import { CITY_COORDS } from "@/lib/data/geo";
 import { getSessionUser } from "@/lib/auth/verify.server";
+import { getRequest } from "@tanstack/react-start/server";
 
 const Filters = z.object({
   q: z.string().optional(),
@@ -377,6 +380,11 @@ export const getListing = createServerFn({ method: "POST" })
 export const incrementView = createServerFn({ method: "POST" })
   .validator(z.object({ id: z.string() }))
   .handler(async ({ data }) => {
+    // One view per visitor and listing every 30 minutes, so reloads or a script
+    // cannot inflate the "most viewed" ordering.
+    const request = getRequest();
+    const viewer = request ? viewerKey(request.headers) : "unknown";
+    if (!firstInWindow(`view:${data.id}:${viewer}`, 30 * 60_000)) return { ok: true };
     const sql = await getSql();
     await sql.query("update listings set view_count = view_count + 1 where id = $1", [data.id]);
     return { ok: true };

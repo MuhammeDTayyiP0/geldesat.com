@@ -1,5 +1,5 @@
 -- Public listing media lives in the configured Postgres database, not the
--- ephemeral function filesystem used by Vercel.
+-- container filesystem, so photos survive redeploys.
 CREATE TABLE IF NOT EXISTS mobile_listing_images (
   id text PRIMARY KEY,
   user_id text NOT NULL,

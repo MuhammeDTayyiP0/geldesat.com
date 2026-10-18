@@ -28,10 +28,17 @@ import { Button } from "@/components/ui/button";
 import { BrandSpinner } from "@/components/brand/BrandSpinner";
 import { formatPrice, LISTING_PHOTO_MSG, pingInbox, timeAgo } from "@/lib/utils";
 import { toast } from "sonner";
+import { subscribeChatStream } from "@/lib/chat-stream";
 
 export const Route = createFileRoute("/mesajlar/$id")({ component: Thread });
 
-type Msg = { id: string; sender_id: string; content: string; created_at: string; read_at: string | null };
+type Msg = {
+  id: string;
+  sender_id: string;
+  content: string;
+  created_at: string;
+  read_at: string | null;
+};
 
 const QUICK_REPLIES = [
   "Merhaba, ilan hâlâ güncel mi?",
@@ -89,8 +96,14 @@ function Thread() {
 
     const initialHeight = window.innerHeight;
     const syncViewport = () => {
-      document.documentElement.style.setProperty("--chat-viewport-height", `${Math.round(viewport.height)}px`);
-      document.documentElement.style.setProperty("--chat-viewport-offset", `${Math.round(viewport.offsetTop)}px`);
+      document.documentElement.style.setProperty(
+        "--chat-viewport-height",
+        `${Math.round(viewport.height)}px`,
+      );
+      document.documentElement.style.setProperty(
+        "--chat-viewport-offset",
+        `${Math.round(viewport.offsetTop)}px`,
+      );
       const inputFocused = document.activeElement === box.current;
       const keyboardOpen = inputFocused && viewport.height < initialHeight - 100;
       document.documentElement.style.setProperty(
@@ -132,9 +145,13 @@ function Thread() {
         setPrice(t.conversation.listing_price);
         setOther(t.conversation.other_name);
         setOtherAvatar((t.conversation as { other_avatar?: string | null }).other_avatar ?? null);
-        setOtherLastSeen((t.conversation as { other_last_seen?: string | null }).other_last_seen ?? null);
+        setOtherLastSeen(
+          (t.conversation as { other_last_seen?: string | null }).other_last_seen ?? null,
+        );
         setListingId(t.conversation.listing_id);
-        setOtherId(t.conversation.buyer_id === userId ? t.conversation.seller_id : t.conversation.buyer_id);
+        setOtherId(
+          t.conversation.buyer_id === userId ? t.conversation.seller_id : t.conversation.buyer_id,
+        );
         setBlockedByMe(Boolean(t.blockedByMe));
         setBlockedByOther(Boolean(t.blockedByOther));
         setMessages(t.messages);
@@ -144,7 +161,10 @@ function Thread() {
         pingInbox();
 
         // Mobilde zorla klavye açılmasını engelle; sadece masaüstünde otomatik odaklan
-        if (typeof window !== "undefined" && window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
+        if (
+          typeof window !== "undefined" &&
+          window.matchMedia("(hover: hover) and (pointer: fine)").matches
+        ) {
           requestAnimationFrame(() => box.current?.focus());
         }
       })
@@ -155,46 +175,39 @@ function Thread() {
         toast.error(e instanceof Error ? e.message : "Açılamadı");
       });
 
-    // Real-time SSE connection for sub-10ms instant message push & read updates
-    let es: EventSource | null = null;
-    try {
-      es = new EventSource(`/api/chat/stream?conversationId=${encodeURIComponent(id)}`);
-      es.onmessage = (event) => {
-        if (stop) return;
-        try {
-          const data = JSON.parse(event.data);
-          if (data.type === "message" && data.message) {
-            const m = data.message as Msg;
-            setMessages((prev) => {
-              if (prev.some((x) => x.id === m.id)) return prev;
-              const cleaned = prev.filter((x) => {
-                if (x.id.startsWith("tmp_") && x.sender_id === m.sender_id && x.content === m.content) {
-                  return false;
-                }
-                return true;
-              });
-              return [...cleaned, m];
-            });
-            lastRef.current = m.created_at;
-            pingInbox();
+    // Live messages and read receipts for this thread, over the tab's shared stream.
+    const unsubscribe = subscribeChatStream((data) => {
+      if (stop) return;
+      if (data.type === "message" && data.message) {
+        const m = data.message as Msg;
+        setMessages((prev) => {
+          if (prev.some((x) => x.id === m.id)) return prev;
+          const cleaned = prev.filter((x) => {
+            if (x.id.startsWith("tmp_") && x.sender_id === m.sender_id && x.content === m.content) {
+              return false;
+            }
+            return true;
+          });
+          return [...cleaned, m];
+        });
+        lastRef.current = m.created_at;
+        pingInbox();
 
-            if (m.sender_id !== userId && document.visibilityState === "visible") {
-              void markThreadRead({ data: { conversationId: id, messageIds: [m.id] } }).catch(() => undefined);
-            }
-          } else if (data.type === "read" && Array.isArray(data.reads)) {
-            const reads = data.reads as { id: string; read_at: string }[];
-            if (reads.length > 0) {
-              const map = new Map(reads.map((r) => [r.id, r.read_at]));
-              setMessages((prev) => prev.map((m) => (map.has(m.id) ? { ...m, read_at: map.get(m.id)! } : m)));
-            }
-          }
-        } catch {
-          // ignore keepalive or parse error
+        if (m.sender_id !== userId && document.visibilityState === "visible") {
+          void markThreadRead({ data: { conversationId: id, messageIds: [m.id] } }).catch(
+            () => undefined,
+          );
         }
-      };
-    } catch {
-      // EventSource failed to create
-    }
+      } else if (data.type === "read" && Array.isArray(data.reads)) {
+        const reads = data.reads as { id: string; read_at: string }[];
+        if (reads.length > 0) {
+          const map = new Map(reads.map((r) => [r.id, r.read_at]));
+          setMessages((prev) =>
+            prev.map((m) => (map.has(m.id) ? { ...m, read_at: map.get(m.id)! } : m)),
+          );
+        }
+      }
+    }, id);
 
     const onVisibilityOrFocus = () => {
       if (document.visibilityState === "visible") {
@@ -218,7 +231,10 @@ function Thread() {
             let next = fresh.length ? [...prev, ...fresh] : prev;
             if (fresh.length > 0) {
               const freshContents = new Set(fresh.map((m) => `${m.sender_id}:${m.content}`));
-              next = next.filter((m) => !m.id.startsWith("tmp_") || !freshContents.has(`${m.sender_id}:${m.content}`));
+              next = next.filter(
+                (m) =>
+                  !m.id.startsWith("tmp_") || !freshContents.has(`${m.sender_id}:${m.content}`),
+              );
             }
             if (reads.length) {
               const map = new Map(reads.map((r) => [r.id, r.read_at]));
@@ -235,9 +251,7 @@ function Thread() {
 
     return () => {
       stop = true;
-      if (es) {
-        es.close();
-      }
+      unsubscribe();
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisibilityOrFocus);
       window.removeEventListener("focus", onVisibilityOrFocus);
@@ -325,7 +339,10 @@ function Thread() {
       toast.error(err instanceof Error ? err.message : "Gönderilemedi");
     } finally {
       setBusy(false);
-      if (typeof window !== "undefined" && window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
+      if (
+        typeof window !== "undefined" &&
+        window.matchMedia("(hover: hover) and (pointer: fine)").matches
+      ) {
         requestAnimationFrame(() => box.current?.focus());
       }
     }
@@ -338,7 +355,10 @@ function Thread() {
   let lastSender = "";
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-bg" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
+    <div
+      className="flex min-h-0 flex-1 flex-col bg-bg"
+      style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
+    >
       {/* 1. Üst Başlık: Kullanıcı Profili ve Eylemler */}
       <div className="flex items-center gap-2 border-b border-border bg-surface px-3 py-2.5 shadow-2xs">
         <Link
@@ -491,7 +511,9 @@ function Thread() {
         ) : messages.length === 0 ? (
           <div className="py-12 text-center">
             <p className="text-sm font-medium text-muted">Henüz mesaj yok.</p>
-            <p className="mt-1 text-xs text-subtle">Aşağıdaki hazır sorulardan birini seçebilir veya yazmaya başlayabilirsiniz.</p>
+            <p className="mt-1 text-xs text-subtle">
+              Aşağıdaki hazır sorulardan birini seçebilir veya yazmaya başlayabilirsiniz.
+            </p>
           </div>
         ) : (
           messages.map((m) => {
@@ -576,7 +598,10 @@ function Thread() {
                             className="flex items-center text-primary-fg/70"
                             title={pending ? "Gönderiliyor" : "İletildi"}
                           >
-                            <Check className="size-3.5" aria-label={pending ? "Gönderiliyor" : "İletildi"} />
+                            <Check
+                              className="size-3.5"
+                              aria-label={pending ? "Gönderiliyor" : "İletildi"}
+                            />
                           </span>
                         )
                       ) : null}
@@ -665,7 +690,10 @@ function Thread() {
               // Klavyenin açılma animasyonunu bekleyip mesaj listesini en alta kaydır
               setTimeout(() => {
                 if (scroller.current) {
-                  scroller.current.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" });
+                  scroller.current.scrollTo({
+                    top: scroller.current.scrollHeight,
+                    behavior: "smooth",
+                  });
                 }
               }, 180);
             }}

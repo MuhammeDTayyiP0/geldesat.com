@@ -29,32 +29,26 @@ Sitenize "Google ile Giriş Yap" özelliğini eklemek için Google'dan bir servi
 2.  Üstteki **"+ CREATE CREDENTIALS"** butonuna basıp **"OAuth client ID"**yi seçin.
 3.  **Application type** olarak **"Web application"** seçin.
 4.  **Authorized JavaScript origins** kısmına sitenizin ana adresini ekleyin:
-    *   `https://siteniz.com` (veya `http://localhost:3000` geliştirme için)
+    *   `https://www.geldesat.com` (geliştirme için ayrıca `http://localhost:3000`)
 5.  **Authorized redirect URIs** (Yönlendirme URL'leri) kısmına şunu EKLEMEK ZORUNDASINIZ:
-    *   `https://siteniz.com/api/auth/callback/google`
-    *   *(Eğer sunucu IP'si ile girecekseniz: `http://IP_ADRESI:3000/api/auth/callback/google`)*
+    *   `https://www.geldesat.com/api/auth/callback/google`
+    *   `http://localhost:3000/api/auth/callback/google` (geliştirme için)
 6.  **"Create"** butonuna basın.
 
-## 5. Bilgileri Kaydetme
-Karşınıza **Client ID** ve **Client Secret** çıkacak. Bunları kopyalayın.
-
-Sunucunuzdaki `.env` dosyasını açın ve şu satırları ekleyin (veya düzenleyin):
-
-```env
-GOOGLE_CLIENT_ID="buraya_client_id_yapistirin"
-GOOGLE_CLIENT_SECRET="buraya_client_secret_yapistirin"
-```
-
-Ve dosyanın en üstündeki `NEXTAUTH_URL` ayarının `Authorized redirect URIs` ile uyumlu olduğundan emin olun.
-
+## 5. Bilgileri Coolify'a Girme
+Karşınıza **Client ID** ve **Client Secret** çıkacak. Bunları Coolify'da
+uygulamanın **Environment Variables** bölümüne ekleyin:
 
 ```env
-# Geliştirme ortamı (Localhost) için:
-NEXTAUTH_URL="http://localhost:3000"
-
-# Canlı sunucu için (yayına aldığınızda):
-# NEXTAUTH_URL="https://siteniz.com"
+GOOGLE_CLIENT_ID=buraya_client_id
+GOOGLE_CLIENT_SECRET=buraya_client_secret
+# Google butonunu göstermek için; Coolify'da "Build Variable" olarak işaretleyin
+VITE_GOOGLE_AUTH_ENABLED=true
 ```
 
+`BETTER_AUTH_URL` değeri Google'a girdiğiniz adresle aynı olmalıdır
+(ör. `https://www.geldesat.com`). Ardından Coolify'da **Redeploy** yapın.
 
-Artık sitenizde Google ile giriş çalışacaktır.
+Not: Şifreyle açılmış bir hesap, e-postası doğrulanmadıysa Google girişiyle
+otomatik birleştirilmez (hesap ele geçirmeyi önlemek için). SMTP ayarlıysa yeni
+kayıtlar doğrulama e-postası alır.

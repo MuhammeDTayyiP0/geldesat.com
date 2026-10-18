@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { saveImageToDisk } from "@/lib/server/upload.server";
 import { getSessionUser } from "@/lib/auth/verify.server";
+import { publicErrorMessage } from "@/lib/server/errors";
 
 export const Route = createFileRoute("/api/upload")({
   server: {
@@ -29,7 +30,7 @@ export const Route = createFileRoute("/api/upload")({
             headers: { "Content-Type": "application/json" },
           });
         } catch (err) {
-          const msg = err instanceof Error ? err.message : "Yükleme başarısız";
+          const msg = publicErrorMessage(err, "Yükleme başarısız");
           return new Response(JSON.stringify({ error: msg }), {
             status: 500,
             headers: { "Content-Type": "application/json" },

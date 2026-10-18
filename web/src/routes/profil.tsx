@@ -9,7 +9,7 @@ import { TURKEY_CITIES } from "@/lib/data/locations";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import { PhoneInput } from "@/components/ui/phone-input";
-import { cleanPhone, formatPhone, maskPhone10 } from "@/lib/utils";
+import { cleanPhone, maskPhone10 } from "@/lib/utils";
 import { Bell, CheckCircle2, Heart, LayoutGrid, Lock, LogOut, Mail, MapPin, MessageCircle, Settings2, Shield, Store, User as UserIcon } from "lucide-react";
 import { BrandSpinner } from "@/components/brand/BrandSpinner";
 import { toast } from "sonner";

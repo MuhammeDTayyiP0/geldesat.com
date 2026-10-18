@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getMobileUserId } from "@/lib/server/mobile-auth";
 import { getSql } from "@/lib/db";
+import { publicErrorMessage } from "@/lib/server/errors";
 
 export const Route = createFileRoute("/api/mobile/blocks")({
   server: {
@@ -16,7 +17,7 @@ export const Route = createFileRoute("/api/mobile/blocks")({
           else await sql.query("insert into user_blocks (blocker_id,blocked_id) values ($1,$2) on conflict (blocker_id,blocked_id) do nothing", [userId, body.userId]);
           return Response.json({ success: true, blocked: body.blocked !== false });
         } catch (error) {
-          const message = error instanceof Error ? error.message : "Engelleme işlemi tamamlanamadı.";
+          const message = publicErrorMessage(error, "Engelleme işlemi tamamlanamadı.");
           return Response.json({ success: false, error: message }, { status: 500 });
         }
       },

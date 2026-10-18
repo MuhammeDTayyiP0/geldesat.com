@@ -104,7 +104,6 @@ test("robots allows Google to read noindex on search pages in every serving conf
   const files = [
     new URL("../../public/robots.txt", import.meta.url),
     new URL("../../server/middleware/seo.ts", import.meta.url),
-    new URL("../../vite.config.ts", import.meta.url),
   ];
   const contents = await Promise.all(files.map((url) => readFile(url, "utf8")));
   for (const content of contents) {
@@ -114,10 +113,9 @@ test("robots allows Google to read noindex on search pages in every serving conf
   }
 });
 
-test("both sitemap implementations include every real category route", async () => {
+test("the sitemap includes every real category route", async () => {
   const files = [
     new URL("../../server/middleware/seo.ts", import.meta.url),
-    new URL("../../vite.config.ts", import.meta.url),
   ];
   const contents = await Promise.all(files.map((url) => readFile(url, "utf8")));
   for (const content of contents) {

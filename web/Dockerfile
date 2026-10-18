@@ -1,13 +1,13 @@
-# GeldeSat — kendi sunucunuzda çalıştırma
+# GeldeSat — Coolify / Docker ile kendi sunucunuzda çalıştırma
 FROM node:22-bookworm-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
-ENV NITRO_PRESET=node-server
-ENV VITE_AUTH_ENABLED=true
-ENV VITE_SELF_HOST=true
-RUN npm run build:node
+# Coolify passes build variables as build args; Vite inlines VITE_* at build time.
+ARG VITE_GOOGLE_AUTH_ENABLED=false
+ENV VITE_GOOGLE_AUTH_ENABLED=$VITE_GOOGLE_AUTH_ENABLED
+RUN npm run build && npm prune --omit=dev
 
 FROM node:22-bookworm-slim
 WORKDIR /app
@@ -16,7 +16,6 @@ ENV HOST=0.0.0.0
 ENV PORT=3000
 ENV NITRO_HOST=0.0.0.0
 ENV NITRO_PORT=3000
-ENV VITE_AUTH_ENABLED=true
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates \
   && rm -rf /var/lib/apt/lists/*
@@ -28,4 +27,5 @@ COPY --from=build /app/scripts ./scripts
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 EXPOSE 3000
+USER node
 ENTRYPOINT ["/docker-entrypoint.sh"]

@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getSql } from "@/lib/db";
 import { getMobileUserId } from "@/lib/server/mobile-auth";
-import { ensureProfile, mapListing, notify } from "@/lib/server/helpers";
+import { ensureProfile, firstInWindow, mapListing, notify } from "@/lib/server/helpers";
+import { publicErrorMessage } from "@/lib/server/errors";
 
 export const Route = createFileRoute("/api/mobile/favorites")({
   server: {
@@ -21,7 +22,7 @@ export const Route = createFileRoute("/api/mobile/favorites")({
           );
           return Response.json({ success: true, listings: rows.map(mapListing) }, { headers: { "Cache-Control": "private, no-store" } });
         } catch (error) {
-          const message = error instanceof Error ? error.message : "Favoriler yüklenemedi.";
+          const message = publicErrorMessage(error, "Favoriler yüklenemedi.");
           return Response.json({ success: false, error: message }, { status: 500 });
         }
       },
@@ -47,10 +48,10 @@ export const Route = createFileRoute("/api/mobile/favorites")({
             return Response.json({ success: false, error: "Kendi ilanınızı favorilere ekleyemezsiniz." }, { status: 400 });
           }
           await sql.query("insert into favorites (user_id,listing_id) values ($1,$2) on conflict do nothing", [userId, body.listingId]);
-          if (listing[0].user_id !== userId) await notify(listing[0].user_id, "favorite", "İlanınız favorilendi", listing[0].title, `/ilan/${listing[0].slug}`);
+          if (firstInWindow(`favnotify:${userId}:${body.listingId}`, 24 * 60 * 60_000)) await notify(listing[0].user_id, "favorite", "İlanınız favorilendi", listing[0].title, `/ilan/${listing[0].slug}`);
           return Response.json({ success: true, favorite: true });
         } catch (error) {
-          const message = error instanceof Error ? error.message : "Favori güncellenemedi.";
+          const message = publicErrorMessage(error, "Favori güncellenemedi.");
           return Response.json({ success: false, error: message }, { status: 500 });
         }
       },

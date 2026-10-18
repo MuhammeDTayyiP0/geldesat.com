@@ -1,6 +1,6 @@
-import { describe, it } from "node:test";
+import { describe, it, test } from "node:test";
 import assert from "node:assert/strict";
-import { resolveSignInGateState } from "./sign-in-gate.ts";
+import { resolveSignInGateState, safeRedirect } from "./sign-in-gate.ts";
 
 describe("resolveSignInGateState", () => {
   it("is pending while the session check is in flight, user or not", () => {
@@ -27,4 +27,12 @@ describe("resolveSignInGateState", () => {
       "signed_out",
     );
   });
+});
+
+test("login redirects stay on this site", () => {
+  assert.equal(safeRedirect("/ilanlarim?tab=1"), "/ilanlarim?tab=1");
+  assert.equal(safeRedirect("https://evil.example"), "/");
+  assert.equal(safeRedirect("//evil.example"), "/");
+  assert.equal(safeRedirect("/\\evil.example"), "/");
+  assert.equal(safeRedirect(undefined), "/");
 });

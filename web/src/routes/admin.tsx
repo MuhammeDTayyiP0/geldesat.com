@@ -51,7 +51,6 @@ import {
   AlertTriangle,
   Check,
   X,
-  Filter,
   LayoutDashboard,
   Package,
   Users,
@@ -65,13 +64,9 @@ import {
   Menu,
   Clock,
   ShieldCheck,
-  MapPin,
   Phone,
   Mail,
-  Calendar,
-  Layers,
   ChevronRight,
-  Info,
 } from "lucide-react";
 
 export const Route = createFileRoute("/admin")({

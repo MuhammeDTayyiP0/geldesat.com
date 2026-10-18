@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getSql } from "@/lib/db";
 import { CategoryRow } from "@/lib/server/helpers";
+import { publicErrorMessage } from "@/lib/server/errors";
 
 export const Route = createFileRoute("/api/mobile/categories")({
   server: {
@@ -41,7 +42,7 @@ export const Route = createFileRoute("/api/mobile/categories")({
             },
           );
         } catch (err) {
-          const msg = err instanceof Error ? err.message : "Kategoriler getirilemedi";
+          const msg = publicErrorMessage(err, "Kategoriler getirilemedi");
           return new Response(JSON.stringify({ success: false, error: msg }), {
             status: 500,
             headers: {

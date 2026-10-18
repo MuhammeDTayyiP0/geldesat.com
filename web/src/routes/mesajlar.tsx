@@ -79,23 +79,8 @@ function MessagesLayout() {
 
     window.addEventListener("geldesat:inbox", on);
 
-    let es: EventSource | null = null;
-    try {
-      es = new EventSource("/api/chat/stream");
-      es.onmessage = (e) => {
-        if (stop) return;
-        try {
-          const data = JSON.parse(e.data);
-          if (data.type === "new_message" || data.type === "read_update" || data.type === "inbox_ping") {
-            on(new CustomEvent("geldesat:inbox", { detail: data }));
-          }
-        } catch {
-          // ignore non-json
-        }
-      };
-    } catch {
-      // SSE fallback to polling
-    }
+    // Live updates arrive as "geldesat:inbox" events re-broadcast by the header's
+    // shared chat stream (see lib/chat-stream.ts); no second connection here.
 
     const tick = window.setInterval(() => {
       if (document.visibilityState === "visible") void load();
@@ -103,7 +88,6 @@ function MessagesLayout() {
 
     return () => {
       stop = true;
-      es?.close();
       window.removeEventListener("geldesat:inbox", on);
       window.clearInterval(tick);
     };

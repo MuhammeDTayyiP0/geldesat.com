@@ -3,6 +3,7 @@ import { getSql } from "@/lib/db";
 import { getMobileUserId } from "@/lib/server/mobile-auth";
 import { mapListing } from "@/lib/server/helpers";
 import { ListingInput, saveListingRecord } from "@/lib/server/listing-write";
+import { publicErrorMessage } from "@/lib/server/errors";
 
 export const Route = createFileRoute("/api/mobile/my-listings")({
   server: {
@@ -20,7 +21,7 @@ export const Route = createFileRoute("/api/mobile/my-listings")({
           );
           return Response.json({ success: true, listings: rows.map(mapListing) }, { headers: { "Cache-Control": "private, no-store" } });
         } catch (error) {
-          const message = error instanceof Error ? error.message : "İlanlarınız yüklenemedi.";
+          const message = publicErrorMessage(error, "İlanlarınız yüklenemedi.");
           return Response.json({ success: false, error: message }, { status: 500 });
         }
       },
@@ -33,7 +34,7 @@ export const Route = createFileRoute("/api/mobile/my-listings")({
           const result = await saveListingRecord(userId, parsed.data);
           return Response.json({ success: true, ...result });
         } catch (error) {
-          const message = error instanceof Error ? error.message : "İlan kaydedilemedi.";
+          const message = publicErrorMessage(error, "İlan kaydedilemedi.");
           return Response.json({ success: false, error: message }, { status: 400 });
         }
       },

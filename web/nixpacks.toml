@@ -1,8 +1,5 @@
 [variables]
 NIXPACKS_NODE_VERSION = "22"
-NITRO_PRESET = "node-server"
-VITE_AUTH_ENABLED = "true"
-VITE_SELF_HOST = "true"
 HOST = "0.0.0.0"
 
 [phases.setup]
@@ -12,7 +9,7 @@ nixPkgs = ["nodejs_22"]
 cmds = ["npm ci"]
 
 [phases.build]
-cmds = ["npm run build:node"]
+cmds = ["npm run build"]
 
 [start]
-cmd = "node scripts/migrate.mjs && node .output/server/index.mjs"
+cmd = "npm run start:prod"
