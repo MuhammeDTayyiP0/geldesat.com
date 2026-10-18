@@ -43,3 +43,40 @@ export async function sendActionMail(input: {
 <p style="color:#666;font-size:13px">Bu isteği siz yapmadıysanız bu e-postayı yok sayabilirsiniz.<br>— GeldeSat</p>`;
   await getTransporter().sendMail({ from: env("SMTP_FROM"), to: input.to, subject: input.subject, text, html });
 }
+
+export type DigestItem = { from: string; listing: string; preview: string; count: number };
+
+/** "You have N unread messages" summary with up to a few chats and a link to the inbox. */
+export async function sendMessageDigestMail(input: {
+  to: string;
+  name: string;
+  total: number;
+  items: DigestItem[];
+  inboxUrl: string;
+  settingsUrl: string;
+}): Promise<void> {
+  if (!mailConfigured) throw new Error("E-posta gönderimi yapılandırılmamış.");
+  const subject = input.total === 1 ? "GeldeSat'ta 1 okunmamış mesajınız var" : `GeldeSat'ta ${input.total} okunmamış mesajınız var`;
+  const lines = input.items.map(
+    (i) => `• ${i.from} (${i.listing})${i.count > 1 ? ` — ${i.count} mesaj` : ""}: ${i.preview}`,
+  );
+  const text = `Merhaba ${input.name},\n\n${subject.replace("GeldeSat'ta ", "")}:\n\n${lines.join("\n")}\n\nMesajlarınızı okuyun: ${input.inboxUrl}\n\nBu e-postaları almak istemiyorsanız: ${input.settingsUrl}\n— GeldeSat`;
+  const rows = input.items
+    .map(
+      (i) => `<tr><td style="padding:10px 0;border-bottom:1px solid #eee">
+  <div style="font-weight:600">${escapeHtml(i.from)}${i.count > 1 ? ` <span style="color:#1a4fd8">· ${i.count} mesaj</span>` : ""}</div>
+  <div style="color:#666;font-size:13px">${escapeHtml(i.listing)}</div>
+  <div style="margin-top:4px">${escapeHtml(i.preview)}</div>
+</td></tr>`,
+    )
+    .join("");
+  const html = `<div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:520px;color:#12151c">
+<p>Merhaba ${escapeHtml(input.name)},</p>
+<p>Siz yokken yeni mesajlar geldi:</p>
+<table style="width:100%;border-collapse:collapse">${rows}</table>
+<p style="margin:20px 0"><a href="${escapeHtml(input.inboxUrl)}" style="background:#1a4fd8;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600">Mesajları oku</a></p>
+<p style="color:#888;font-size:12px">Güvenliğiniz için ürünü görmeden kapora göndermeyin.<br>
+Bu e-postaları almak istemiyorsanız <a href="${escapeHtml(input.settingsUrl)}" style="color:#888">bildirim tercihlerinizden</a> kapatabilirsiniz.<br>— GeldeSat</p>
+</div>`;
+  await getTransporter().sendMail({ from: env("SMTP_FROM"), to: input.to, subject, text, html });
+}

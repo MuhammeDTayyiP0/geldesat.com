@@ -15,6 +15,7 @@ import {
 } from "./helpers";
 import { sweepExpiryReminders } from "./ops";
 import { sweepRetention } from "./retention";
+import { sweepMessageDigests } from "./message-digest";
 import { unreadMessageCount } from "./chat";
 
 export const toggleFavorite = createServerFn({ method: "POST" })
@@ -170,6 +171,7 @@ export const unreadCount = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     void sweepExpiryReminders().catch(() => undefined);
     void sweepRetention().catch((err) => console.warn("[retention] sweep failed", err));
+    void sweepMessageDigests().catch((err) => console.warn("[digest] sweep failed", err));
     const sql = await getSql();
     const a = await sql.query<{ n: number }>(
       "select count(*)::int as n from notifications where user_id=$1 and read_at is null",

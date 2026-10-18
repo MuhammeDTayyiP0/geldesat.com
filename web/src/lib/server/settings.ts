@@ -5,6 +5,7 @@ import { getSql } from "@/lib/db";
 import { asJson } from "@/lib/utils";
 import { NOTIFY_TYPES, resolveNotifyPrefs, type PhoneVisibility } from "@/lib/notification-prefs";
 import { ensureProfile } from "./helpers";
+import { mailConfigured } from "./mail";
 
 /** Privacy and notification settings for the signed-in user. */
 export const getAccountSettings = createServerFn({ method: "GET" })
@@ -12,8 +13,9 @@ export const getAccountSettings = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const sql = await getSql();
     await ensureProfile(context.userId);
-    const rows = await sql.query<{ phone_visibility: string; show_whatsapp: boolean; read_receipts: boolean; notify_prefs: unknown; push_devices: number }>(
-      `select p.phone_visibility, p.show_whatsapp, p.read_receipts, p.notify_prefs,
+    const rows = await sql.query<{ phone_visibility: string; show_whatsapp: boolean; read_receipts: boolean; notify_prefs: unknown; push_devices: number; message_email: boolean; email_verified: boolean }>(
+      `select p.phone_visibility, p.show_whatsapp, p.read_receipts, p.notify_prefs, p.message_email,
+              coalesce((select u."emailVerified" from "user" u where u.id = p.user_id), false) as email_verified,
               (select count(*)::int from mobile_push_tokens t where t.user_id = p.user_id) as push_devices
        from profiles p where p.user_id = $1`,
       [context.userId],
@@ -26,6 +28,10 @@ export const getAccountSettings = createServerFn({ method: "GET" })
       notify_prefs: resolveNotifyPrefs(asJson(r?.notify_prefs, {})),
       /** Push only reaches the mobile app; the page says so when no device is registered. */
       push_devices: r?.push_devices ?? 0,
+      message_email: r?.message_email ?? true,
+      /** Digests go only to verified addresses on a server with SMTP configured. */
+      email_ready: mailConfigured && Boolean(r?.email_verified),
+      email_configured: mailConfigured,
     };
   });
 
@@ -41,6 +47,17 @@ export const updatePrivacySettings = createServerFn({ method: "POST" })
       data.show_whatsapp,
       data.read_receipts,
     ]);
+    return { ok: true };
+  });
+
+/** Unread-message e-mail digest on/off. */
+export const updateMessageEmail = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ enabled: z.boolean() }))
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    await ensureProfile(context.userId);
+    await sql.query("update profiles set message_email=$2 where user_id=$1", [context.userId, data.enabled]);
     return { ok: true };
   });
 

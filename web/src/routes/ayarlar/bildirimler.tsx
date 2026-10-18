@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Info } from "lucide-react";
 import { toast } from "sonner";
-import { getAccountSettings, updateNotifyPrefs } from "@/lib/server/settings";
+import { getAccountSettings, updateMessageEmail, updateNotifyPrefs } from "@/lib/server/settings";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { NOTIFY_TYPES, type NotifyPrefs } from "@/lib/notification-prefs";
@@ -19,6 +19,7 @@ function NotificationSettings() {
   const { user, isPending } = useCurrentUserState();
   const [prefs, setPrefs] = useState<NotifyPrefs | null>(null);
   const [pushDevices, setPushDevices] = useState(0);
+  const [email, setEmail] = useState<{ on: boolean; ready: boolean; configured: boolean }>({ on: true, ready: false, configured: false });
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -27,6 +28,7 @@ function NotificationSettings() {
       .then((s) => {
         setPrefs(s.notify_prefs);
         setPushDevices(s.push_devices);
+        setEmail({ on: s.message_email, ready: s.email_ready, configured: s.email_configured });
       })
       .catch(() => toast.error("Tercihler yüklenemedi"));
   }, [user]);
@@ -92,6 +94,38 @@ function NotificationSettings() {
               );
             })}
           </ul>
+        </section>
+
+        <section className="rounded-2xl border border-border bg-surface p-4 shadow-card sm:p-6">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h2 className="text-sm font-semibold">Okunmamış mesaj e-postası</h2>
+              <p className="mt-0.5 text-xs text-muted">
+                Siz sitede yokken gelen ve 15 dakika okunmayan mesajlar için özet e-posta. En fazla 6 saatte bir gönderilir.
+              </p>
+            </div>
+            <ToggleSwitch
+              label="Okunmamış mesaj e-postası"
+              checked={email.on}
+              disabled={busy || !email.configured}
+              onChange={async (v) => {
+                setEmail((e) => ({ ...e, on: v }));
+                try {
+                  await updateMessageEmail({ data: { enabled: v } });
+                } catch {
+                  setEmail((e) => ({ ...e, on: !v }));
+                  toast.error("Kaydedilemedi");
+                }
+              }}
+            />
+          </div>
+          {!email.configured ? (
+            <p className="mt-3 text-xs text-muted">E-posta gönderimi şu an kapalı.</p>
+          ) : !email.ready ? (
+            <p className="mt-3 text-xs text-warn">
+              E-posta adresiniz doğrulanmadığı için gönderilmez. Hesap ve güvenlik sayfasından doğrulayabilirsiniz.
+            </p>
+          ) : null}
         </section>
 
         <div className="flex gap-3 rounded-2xl bg-elevated/60 p-4 text-xs leading-relaxed text-muted">
