@@ -48,11 +48,15 @@ export function sniffImageMime(bytes: Uint8Array): ImageMime | null {
 
 /** Validate size and content of an uploaded photo, returning its sniffed type. */
 export function assertImageBytes(bytes: Uint8Array, maxBytes = MAX_IMAGE_BYTES): ImageMime {
+  assertSize(bytes, maxBytes);
+  const mime = sniffImageMime(bytes);
+  if (!mime) throw new Error("Geçersiz görsel. Lütfen bir fotoğraf dosyası yükleyin.");
+  return mime;
+}
+
+function assertSize(bytes: Uint8Array, maxBytes: number) {
   if (bytes.byteLength < 1) throw new Error("Fotoğraf boş.");
   if (bytes.byteLength > maxBytes) throw new Error(`Fotoğraf en fazla ${Math.round(maxBytes / 1024 / 1024)} MB olabilir.`);
-  const mime = sniffImageMime(bytes);
-  if (!mime) throw new Error("Geçersiz görsel. JPEG, PNG veya WebP fotoğraf yükleyin.");
-  return mime;
 }
 
 /**
@@ -61,10 +65,12 @@ export function assertImageBytes(bytes: Uint8Array, maxBytes = MAX_IMAGE_BYTES):
  * `/uploads/<filename>` for existing web clients.
  */
 export async function saveListingImage(bytes: Uint8Array, userId: string): Promise<string> {
-  assertImageBytes(bytes, MAX_UPLOAD_BYTES);
+  const { isHeif, processListingPhoto } = await import("./image-pipeline.server");
+  // Web uploads may also be HEIC; the pipeline converts everything to WebP.
+  if (isHeif(bytes)) assertSize(bytes, MAX_UPLOAD_BYTES);
+  else assertImageBytes(bytes, MAX_UPLOAD_BYTES);
   const sql = await getSql();
   await assertUploadAllowed(sql, userId);
-  const { processListingPhoto } = await import("./image-pipeline.server");
   let master: Buffer;
   try {
     master = await processListingPhoto(bytes);

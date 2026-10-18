@@ -26,7 +26,7 @@ import {
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { checkPhotoFile, photoSrc, preparePhoto, type PhotoRotation } from "@/lib/images";
+import { checkPhotoFile, isHeicFile, PHOTO_ACCEPT, photoSrc, preparePhoto, type PhotoRotation } from "@/lib/images";
 import { discardPhoto, uploadPhoto } from "@/lib/listing-photos";
 import { cn } from "@/lib/utils";
 
@@ -273,7 +273,7 @@ export function PhotoUploader({ images, setImages, originals, onBusyChange, requ
       <input
         ref={inputRef}
         type="file"
-        accept="image/jpeg,image/png,image/webp"
+        accept={PHOTO_ACCEPT}
         multiple
         className="hidden"
         onChange={(e) => {
@@ -347,7 +347,7 @@ export function PhotoUploader({ images, setImages, originals, onBusyChange, requ
               <Camera className="size-4" /> Fotoğraf çek
             </Button>
           </div>
-          <p className="mt-4 text-xs text-subtle">JPEG, PNG veya WebP · fotoğraf başına en fazla 30 MB · en fazla {MAX_PHOTOS} fotoğraf</p>
+          <p className="mt-4 text-xs text-subtle">JPEG, PNG, WebP veya iPhone HEIC · fotoğraf başına en fazla 30 MB · en fazla {MAX_PHOTOS} fotoğraf</p>
         </div>
       ) : (
         <ul className="mt-5 grid touch-pan-y grid-cols-2 gap-2.5 sm:grid-cols-4 sm:gap-3" onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={() => setDrag(null)}>
@@ -413,7 +413,7 @@ export function PhotoUploader({ images, setImages, originals, onBusyChange, requ
                       </TileButton>
                     </div>
                     <div className="flex gap-1">
-                      {originals.has(url) ? (
+                      {originals.has(url) && !isHeicFile(originals.get(url)!.file) ? (
                         <TileButton label="Döndür" onClick={() => setRotateTarget(url)}>
                           <RotateCw className="size-4" />
                         </TileButton>
@@ -434,7 +434,13 @@ export function PhotoUploader({ images, setImages, originals, onBusyChange, requ
           {pending.map((p) => (
             <li key={p.key} className="relative overflow-hidden rounded-xl border border-border bg-elevated">
               <div className="relative aspect-4/3">
-                <img src={p.preview} alt="" className="size-full object-cover" />
+                {/* Browsers other than Safari cannot show HEIC; hide the broken preview. */}
+                <img
+                  src={p.preview}
+                  alt=""
+                  className="size-full object-cover"
+                  onError={(e) => (e.currentTarget.style.visibility = "hidden")}
+                />
                 <div className="absolute inset-0 grid place-items-center bg-ink/55 p-3 text-center text-white">
                   {p.status === "error" ? (
                     <div className="space-y-2">
