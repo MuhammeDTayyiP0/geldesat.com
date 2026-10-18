@@ -1,0 +1,37 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: geldesat
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-geldesat}
+      POSTGRES_DB: geldesat
+    volumes:
+      - geldesat_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U geldesat -d geldesat"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  web:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${GELDESAT_PORT:-3000}:3000"
+    environment:
+      DATABASE_URL: postgres://geldesat:${POSTGRES_PASSWORD:-geldesat}@db:5432/geldesat
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://127.0.0.1:3000}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET gerekli}
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+      VITE_AUTH_ENABLED: "true"
+      HOST: "0.0.0.0"
+      PORT: "3000"
+      NITRO_HOST: "0.0.0.0"
+      NITRO_PORT: "3000"
+
+volumes:
+  geldesat_pg:
