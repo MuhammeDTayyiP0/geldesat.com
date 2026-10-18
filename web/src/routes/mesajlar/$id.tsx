@@ -48,7 +48,7 @@ import { BUYER_QUICK_REPLIES, SELLER_QUICK_REPLIES, type ChatMessage } from "@/l
 import { checkPhotoFile, PHOTO_ACCEPT, photoSrc, preparePhoto } from "@/lib/images";
 import { uploadChatPhoto } from "@/lib/listing-photos";
 import { subscribeChatStream } from "@/lib/chat-stream";
-import { cn, formatNumber, formatPrice, LISTING_PHOTO_MSG, pingInbox, timeAgo } from "@/lib/utils";
+import { cn, formatNumber, formatPrice, pingInbox, timeAgo } from "@/lib/utils";
 
 export const Route = createFileRoute("/mesajlar/$id")({ component: Thread });
 
@@ -676,11 +676,6 @@ function Thread() {
               <MenuItem onSelect={() => fileRef.current?.click()}>
                 <ImagePlus /> Fotoğraf gönder
               </MenuItem>
-              {info.listing_image ? (
-                <MenuItem onSelect={() => void send(LISTING_PHOTO_MSG)}>
-                  <ImageIcon /> İlan fotoğrafını gönder
-                </MenuItem>
-              ) : null}
               {!isSeller && info.listing_status === "ACTIVE" ? (
                 <MenuItem onSelect={() => setDialog("offer")}>
                   <HandCoins /> Fiyat teklifi ver
