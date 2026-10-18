@@ -4,19 +4,19 @@ import { listCategories } from "@/lib/server/catalog";
 import { getCategoryAttrs, getListingForEdit, getMe, saveListing } from "@/lib/server/account";
 import { TURKEY_CITIES } from "@/lib/data/locations";
 import { NEIGHBORHOODS } from "@/lib/data/geo";
-import { compressImage } from "@/lib/images";
-import { uploadImageFn } from "@/lib/server/upload";
+import type { PhotoEdit } from "@/lib/images";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import { PhoneInput } from "@/components/ui/phone-input";
-import { Camera, Check, ImagePlus, X } from "lucide-react";
+import { Check } from "lucide-react";
 import { cleanPhone, formatPrice, maskPhone10 } from "@/lib/utils";
 import { toast } from "sonner";
 import type { AttrDef, CategoryRow } from "@/lib/server/helpers";
 import { CategoryButtons } from "@/components/listing/CategoryPicker";
 import { BrandSpinner } from "@/components/brand/BrandSpinner";
+import { PhotoUploader } from "@/components/listing/PhotoUploader";
 
 const evetHayir = ["Evet", "Hayır"];
 
@@ -103,7 +103,7 @@ function PostForm() {
   const [storeId, setStoreId] = useState<string | undefined>();
   const [loaded, setLoaded] = useState(!editId);
   const keepValuesFor = useRef<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const photoOriginals = useRef(new Map<string, { file: File; edit: PhotoEdit }>());
   const userId = user?.id;
 
   const selected = path[path.length - 1];
@@ -171,29 +171,8 @@ function PostForm() {
   if (isPending || (user && !loaded)) return <BrandSpinner fullPage text="İlan formu hazırlanıyor…" />;
   if (!user) return <RedirectToSignIn />;
 
-  async function onFiles(files: FileList | null) {
-    if (!files) return;
-    setUploading(true);
-    const toastId = toast.loading("Fotoğraflar işleniyor ve sunucuya kaydediliyor…");
-    try {
-      const queue = Array.from(files).slice(0, 10 - images.length);
-      for (const file of queue) {
-        try {
-          const compressed = await compressImage(file);
-          const res = await uploadImageFn({ data: { image: compressed } });
-          setImages((prev) => [...prev, res.url]);
-        } catch (e) {
-          toast.error(e instanceof Error ? e.message : "Görsel yüklenemedi");
-        }
-      }
-      toast.dismiss(toastId);
-    } finally {
-      setUploading(false);
-    }
-  }
-
   async function publish() {
-    if (!selected) return;
+    if (!selected || uploading) return;
     if (needsPhoto && images.length < 1) {
       toast.error("Emlak ve vasıta ilanlarında en az 1 fotoğraf zorunludur.");
       return;
@@ -431,98 +410,21 @@ function PostForm() {
 
       {step === 2 ? (
         <div className="mt-8 rounded-xl border border-border bg-surface p-5">
-          <div className="flex items-center justify-between">
-            <Label className="text-base font-semibold">Fotoğraflar</Label>
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-elevated text-muted">
-              {images.length}/10 fotoğraf
-            </span>
-          </div>
-          <p className="mt-1 text-xs text-muted">
-            Görseller 4:3 oranına göre optimize edilir ve GeldeSat filigranı eklenir.
-          </p>
-          {needsPhoto ? (
-            <p className="mt-1 text-xs font-semibold text-warn">Emlak ve vasıta ilanlarında en az 1 fotoğraf zorunludur.</p>
-          ) : null}
-
-          {/* Gizli file input */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            multiple
-            disabled={uploading || images.length >= 10}
-            className="hidden"
-            onChange={(e) => void onFiles(e.target.files)}
+          <PhotoUploader
+            images={images}
+            setImages={setImages}
+            originals={photoOriginals.current}
+            onBusyChange={setUploading}
+            required={needsPhoto}
+            editing={Boolean(editId)}
           />
-
-          {/* Mobil Uyumlu Büyük Dokunmatik Yükleme Kutusu */}
-          {images.length < 10 ? (
-            <button
-              type="button"
-              disabled={uploading}
-              onClick={() => fileInputRef.current?.click()}
-              className="mt-4 flex w-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-primary/35 bg-primary/4 p-6 text-center transition-all hover:bg-primary/8 active:scale-[0.99] disabled:opacity-50"
-            >
-              <div className="grid size-12 place-items-center rounded-full bg-primary/10 text-primary">
-                <Camera className="size-6" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-primary">Fotoğraf Çek veya Galeriden Seç</p>
-                <p className="mt-0.5 text-xs text-muted">
-                  {10 - images.length} fotoğraf daha ekleyebilirsiniz
-                </p>
-              </div>
-            </button>
-          ) : (
-            <div className="mt-3 rounded-xl bg-elevated/70 p-3 text-center text-xs font-medium text-muted">
-              Maksimum 10 fotoğraf sınırına ulaştınız.
-            </div>
-          )}
-
-          {uploading ? (
-            <div className="mt-3 flex items-center justify-center gap-2 rounded-xl bg-primary/10 p-3 text-xs font-semibold text-primary animate-pulse">
-              <ImagePlus className="size-4 animate-spin" />
-              <span>Fotoğraflar optimize edilip yükleniyor, lütfen bekleyin…</span>
-            </div>
-          ) : null}
-
-          {/* Yüklenen Fotoğraflar Grid */}
-          {images.length > 0 ? (
-            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-              {images.map((im, i) => (
-                <div key={i} className="group relative aspect-4/3 overflow-hidden rounded-xl border border-border bg-elevated shadow-xs">
-                  <img src={im} alt="" className="size-full object-cover" />
-                  {i === 0 ? (
-                    <span className="absolute bottom-0 inset-x-0 bg-primary/95 py-1 text-center text-[11px] font-bold text-primary-fg shadow-xs">
-                      Ana Kapak
-                    </span>
-                  ) : (
-                    <button
-                      type="button"
-                      className="absolute bottom-0 inset-x-0 bg-ink/75 py-1 text-center text-[10px] font-semibold text-primary-fg backdrop-blur-xs transition-colors hover:bg-primary"
-                      onClick={() => setImages((prev) => [prev[i], ...prev.filter((_, j) => j !== i)])}
-                    >
-                      Kapak Yap
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    className="absolute right-1.5 top-1.5 grid size-7 place-items-center rounded-full bg-ink/80 text-primary-fg shadow-md backdrop-blur-xs transition-colors hover:bg-danger"
-                    onClick={() => setImages(images.filter((_, j) => j !== i))}
-                    aria-label="Fotoğrafı sil"
-                  >
-                    <X className="size-4" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : null}
-
-          <div className="mt-6 flex justify-between">
-            <Button variant="ghost" onClick={() => setStep(1)}>
+          <div className="mt-6 flex items-center justify-between gap-3">
+            <Button variant="ghost" disabled={uploading} onClick={() => setStep(1)}>
               Geri
             </Button>
+            {uploading ? <p className="text-xs text-muted">Yüklemeler bitince devam edebilirsiniz…</p> : null}
             <Button
+              disabled={uploading}
               onClick={() => {
                 if (needsPhoto && images.length < 1) {
                   toast.error("Emlak ve vasıta ilanlarında en az 1 fotoğraf zorunludur.");
@@ -555,7 +457,23 @@ function PostForm() {
               ))}
             </dl>
           ) : null}
-          {images[0] ? <img src={images[0]} alt="" className="max-h-64 rounded-lg object-cover" /> : null}
+          {images.length ? (
+            <div>
+              <img src={images[0]} alt="Kapak fotoğrafı" className="aspect-4/3 w-full rounded-lg object-cover" />
+              {images.length > 1 ? (
+                <div className="mt-2 grid grid-cols-5 gap-2 sm:grid-cols-9">
+                  {images.slice(1).map((im, i) => (
+                    <img key={im} src={im} alt={`Fotoğraf ${i + 2}`} className="aspect-4/3 w-full rounded-md object-cover" />
+                  ))}
+                </div>
+              ) : null}
+              <button type="button" className="mt-2 text-xs font-medium text-primary hover:underline" onClick={() => setStep(2)}>
+                Fotoğrafları düzenle ({images.length})
+              </button>
+            </div>
+          ) : (
+            <p className="rounded-lg bg-elevated px-3 py-2 text-sm text-muted">Fotoğraf eklenmedi.</p>
+          )}
           <div className="flex justify-between">
             <Button variant="ghost" onClick={() => setStep(2)}>
               Geri
