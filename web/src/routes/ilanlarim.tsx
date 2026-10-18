@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatDate, listingStatusLabel } from "@/lib/utils";
 import { BrandSpinner } from "@/components/brand/BrandSpinner";
+import { AccountShell } from "@/components/account/AccountShell";
 import { toast } from "sonner";
 import type { ListingCard as Listing } from "@/lib/server/helpers";
 
@@ -31,6 +32,16 @@ function Mine() {
   const [pendingDel, setPendingDel] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
+  /** Run an owner action, report the server's answer and refresh the list. */
+  function act(run: () => Promise<unknown>, done: string) {
+    run()
+      .then(() => {
+        toast.success(done);
+        reload();
+      })
+      .catch((e) => toast.error(e instanceof Error ? e.message : "İşlem başarısız oldu"));
+  }
+
   function reload() {
     setLoading(true);
     myListings()
@@ -48,13 +59,15 @@ function Mine() {
   if (!user) return <RedirectToSignIn />;
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-10">
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-xl font-semibold tracking-tight">İlanlarım</h1>
+    <AccountShell
+      title="İlanlarım"
+      description="Yayındaki, onay bekleyen ve pasif ilanlarınızı yönetin."
+      actions={
         <Link to="/ilan-ver">
-          <Button>Yeni ilan</Button>
+          <Button size="sm">Yeni ilan</Button>
         </Link>
-      </div>
+      }
+    >
       {rows.length === 0 ? (
         <p className="rounded-xl border border-dashed border-border bg-surface p-12 text-center text-muted">Henüz ilanınız yok.</p>
       ) : (
@@ -86,17 +99,17 @@ function Mine() {
                       </Button>
                     </Link>
                     {l.status === "ACTIVE" && !expired ? (
-                      <Button size="sm" variant="outline" className="min-h-9 font-medium" onClick={() => setListingStatus({ data: { id: l.id, status: "SOLD" } }).then(reload)}>
+                      <Button size="sm" variant="outline" className="min-h-9 font-medium" onClick={() => act(() => setListingStatus({ data: { id: l.id, status: "SOLD" } }), "Satıldı olarak işaretlendi")}>
                         Satıldı
                       </Button>
                     ) : null}
                     {l.status === "ACTIVE" && !expired ? (
-                      <Button size="sm" variant="outline" className="min-h-9 font-medium" onClick={() => setListingStatus({ data: { id: l.id, status: "INACTIVE" } }).then(reload)}>
+                      <Button size="sm" variant="outline" className="min-h-9 font-medium" onClick={() => act(() => setListingStatus({ data: { id: l.id, status: "INACTIVE" } }), "Yayından kaldırıldı")}>
                         Yayından kaldır
                       </Button>
                     ) : null}
                     {(l.status === "INACTIVE" || l.status === "SOLD") && !expired ? (
-                      <Button size="sm" variant="outline" className="min-h-9 font-medium" onClick={() => setListingStatus({ data: { id: l.id, status: "ACTIVE" } }).then(reload)}>
+                      <Button size="sm" variant="outline" className="min-h-9 font-medium" onClick={() => act(() => setListingStatus({ data: { id: l.id, status: "ACTIVE" } }), "Tekrar yayında")}>
                         Yayına al
                       </Button>
                     ) : null}
@@ -105,14 +118,7 @@ function Mine() {
                         size="sm"
                         variant="outline"
                         className="min-h-9 font-medium"
-                        onClick={() =>
-                          renewListing({ data: { id: l.id } })
-                            .then(() => {
-                              toast.success("Süre 30 gün uzatıldı");
-                              reload();
-                            })
-                            .catch((e) => toast.error(e instanceof Error ? e.message : "Yenilenemedi"))
-                        }
+                        onClick={() => act(() => renewListing({ data: { id: l.id } }), "Süre 30 gün uzatıldı")}
                       >
                         {expired ? "Yenile ve yayına al" : "30 gün yenile"}
                       </Button>
@@ -125,12 +131,10 @@ function Mine() {
                           size="sm"
                           variant="danger"
                           className="min-h-9"
-                          onClick={() =>
-                            void deleteListing({ data: { id: l.id } }).then(() => {
-                              setPendingDel(null);
-                              reload();
-                            })
-                          }
+                          onClick={() => {
+                            setPendingDel(null);
+                            act(() => deleteListing({ data: { id: l.id } }), "İlan silindi");
+                          }}
                         >
                           Evet, sil
                         </Button>
@@ -150,6 +154,6 @@ function Mine() {
           })}
         </div>
       )}
-    </div>
+    </AccountShell>
   );
 }

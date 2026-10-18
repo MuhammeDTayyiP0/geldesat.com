@@ -12,7 +12,6 @@ import {
   ShieldAlert,
   Star,
   Trash2,
-  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 import { NotFound } from "@/components/common/NotFound";
@@ -405,13 +404,6 @@ function ListingPage() {
                     <Pencil className="size-4" /> İlanı düzenle
                   </Button>
                 </Link>
-                {isLive ? (
-                  <Link to="/doping" search={{ id: listing.id }} className="block">
-                    <Button variant="outline" className="w-full border-amber-500/40 text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-500/10">
-                      <Zap className="size-4" /> Öne çıkar
-                    </Button>
-                  </Link>
-                ) : null}
                 {isLive ? (
                   <div className="grid grid-cols-2 gap-2">
                     <Button variant="outline" size="sm" disabled={ownerBusy} onClick={() => void setStatus("SOLD", "İlan satıldı olarak işaretlendi")}>

@@ -286,11 +286,13 @@ export function ListingImageGallery({ images, title, categoryName }: ListingImag
               </div>
 
               {/* Main Viewer Area (Clicking empty background closes lightbox) */}
-              <div className="relative flex flex-1 items-center justify-center p-2 sm:p-6 overflow-hidden">
+              <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden px-2 py-2 sm:px-20 sm:py-4">
+                {/* Fill the viewer box and let object-contain fit the photo, so smaller
+                    photos are scaled up to the screen instead of sitting at their pixel size. */}
                 <img
                   src={validImages[currentIdx]}
                   alt={`${title} - Büyük Görsel ${currentIdx + 1}`}
-                  className="max-h-[82dvh] max-w-full object-contain transition-all duration-200 cursor-default shadow-2xl"
+                  className="size-full cursor-default object-contain"
                   onClick={(e) => e.stopPropagation()}
                 />
 

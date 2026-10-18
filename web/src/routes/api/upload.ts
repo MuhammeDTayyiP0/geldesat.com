@@ -1,21 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getSql } from "@/lib/db";
 import { deleteUnusedListingImages, MAX_UPLOAD_BYTES, saveListingImage } from "@/lib/server/upload.server";
-import { getSessionUser } from "@/lib/auth/verify.server";
 import { publicErrorMessage } from "@/lib/server/errors";
-import { UPLOAD_HEADER } from "@/lib/listing-photos";
-
-const json = (body: unknown, status = 200) => Response.json(body, { status });
-
-/** Session user for a same-site upload request, or an error response. */
-async function authorize(request: Request): Promise<{ userId: string } | Response> {
-  if (request.headers.get(UPLOAD_HEADER) !== "1" || request.headers.get("sec-fetch-site") === "cross-site") {
-    return json({ error: "Geçersiz istek" }, 403);
-  }
-  const user = await getSessionUser();
-  if (!user) return json({ error: "Giriş yapmalısınız" }, 401);
-  return { userId: user.id };
-}
+import { authorizeUpload as authorize, json } from "@/lib/server/upload-auth.server";
 
 export const Route = createFileRoute("/api/upload")({
   server: {

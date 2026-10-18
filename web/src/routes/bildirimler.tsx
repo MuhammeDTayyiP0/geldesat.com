@@ -6,6 +6,7 @@ import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { BrandSpinner } from "@/components/brand/BrandSpinner";
 import { timeAgo } from "@/lib/utils";
+import { AccountShell } from "@/components/account/AccountShell";
 
 export const Route = createFileRoute("/bildirimler")({
   head: () => ({
@@ -38,15 +39,14 @@ function Notes() {
   if (!user) return <RedirectToSignIn />;
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-10">
-      <h1 className="text-xl font-semibold tracking-tight">Bildirimler</h1>
+    <AccountShell title="Bildirimler">
       {rows.length === 0 ? (
-        <div className="mt-8 rounded-xl border border-dashed border-border bg-surface p-12 text-center">
+        <div className="rounded-xl border border-dashed border-border bg-surface p-12 text-center">
           <Bell className="mx-auto size-8 text-subtle" />
           <p className="mt-3 text-muted">Bildirim yok.</p>
         </div>
       ) : (
-        <ul className="mt-6 divide-y divide-border rounded-xl border border-border bg-surface">
+        <ul className="divide-y divide-border rounded-xl border border-border bg-surface">
           {rows.map((n) => (
             <li key={n.id}>
               <a href={n.link} className="block p-4 hover:bg-elevated">
@@ -58,6 +58,6 @@ function Notes() {
           ))}
         </ul>
       )}
-    </div>
+    </AccountShell>
   );
 }

@@ -6,6 +6,7 @@ import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { BrandSpinner } from "@/components/brand/BrandSpinner";
 import { ListingCard } from "@/components/listing/ListingCard";
+import { AccountShell } from "@/components/account/AccountShell";
 import type { ListingCard as Listing } from "@/lib/server/helpers";
 
 export const Route = createFileRoute("/favoriler")({
@@ -39,10 +40,9 @@ function Favs() {
   if (!user) return <RedirectToSignIn />;
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-10">
-      <h1 className="text-xl font-semibold tracking-tight">Favoriler</h1>
+    <AccountShell title="Favorilerim" description="Kaydettiğiniz ilanlar.">
       {rows.length === 0 ? (
-        <div className="mt-8 rounded-xl border border-dashed border-border bg-surface p-12 text-center">
+        <div className="rounded-xl border border-dashed border-border bg-surface p-12 text-center">
           <Heart className="mx-auto size-8 text-subtle" />
           <p className="mt-3 text-muted">Henüz favori yok.</p>
           <Link to="/search" className="mt-3 inline-block text-sm font-medium text-primary hover:underline">
@@ -50,12 +50,12 @@ function Favs() {
           </Link>
         </div>
       ) : (
-        <div className="mt-6 grid gap-3">
+        <div className="grid gap-3">
           {rows.map((l) => (
             <ListingCard key={l.id} listing={l} variant="list" />
           ))}
         </div>
       )}
-    </div>
+    </AccountShell>
   );
 }

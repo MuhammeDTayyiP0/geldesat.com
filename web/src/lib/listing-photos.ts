@@ -33,3 +33,19 @@ export function discardPhoto(url: string): void {
     body: JSON.stringify({ url }),
   }).catch(() => {});
 }
+
+/** Upload a new profile photo; resolves to its versioned URL. */
+export async function uploadAvatar(file: Blob): Promise<string> {
+  const form = new FormData();
+  form.append("file", file, "avatar");
+  const res = await fetch("/api/avatar", { method: "POST", headers: { [UPLOAD_HEADER]: "1" }, body: form });
+  const body = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
+  if (!res.ok || !body.url) throw new Error(body.error || "Fotoğraf yüklenemedi.");
+  return body.url;
+}
+
+/** Remove the profile photo. */
+export async function removeAvatar(): Promise<void> {
+  const res = await fetch("/api/avatar", { method: "DELETE", headers: { [UPLOAD_HEADER]: "1" } });
+  if (!res.ok) throw new Error("Fotoğraf kaldırılamadı.");
+}

@@ -4,6 +4,7 @@ import {
   ChevronDown,
   Heart,
   HelpCircle,
+  LayoutGrid,
   LogOut,
   MapPin,
   MessageCircle,
@@ -91,23 +92,37 @@ export function MobileNavigationDrawer({
         {/* Kullanıcı Giriş / Profil Kartı */}
         <div className="p-3 border-b border-border bg-elevated/20">
           {user ? (
-            <div className="flex items-center gap-3">
-              {user.profileImageUrl ? (
-                <img src={user.profileImageUrl} alt="" className="size-10 rounded-full object-cover ring-1 ring-border" />
-              ) : (
-                <div className="size-10 rounded-full bg-primary text-primary-fg font-bold grid place-items-center text-sm shadow-xs">
-                  {(user.displayName || user.primaryEmail || "U").slice(0, 1).toLocaleUpperCase("tr")}
-                </div>
-              )}
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold text-fg truncate">{user.displayName || "Hesabım"}</p>
-                <p className="text-xs text-muted truncate">{user.primaryEmail}</p>
-              </div>
+            <div className="flex items-center gap-1">
               <Link
                 to="/profil"
                 onClick={onClose}
+                className="flex min-w-0 flex-1 items-center gap-3 rounded-lg"
+              >
+                {user.profileImageUrl ? (
+                  <img
+                    src={user.profileImageUrl}
+                    alt=""
+                    className="size-10 rounded-full object-cover ring-1 ring-border"
+                  />
+                ) : (
+                  <div className="size-10 rounded-full bg-primary text-primary-fg font-bold grid place-items-center text-sm shadow-xs">
+                    {(user.displayName || user.primaryEmail || "U")
+                      .slice(0, 1)
+                      .toLocaleUpperCase("tr")}
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-fg truncate">
+                    {user.displayName || "Hesabım"}
+                  </p>
+                  <p className="text-xs text-muted truncate">Profili görüntüle</p>
+                </div>
+              </Link>
+              <Link
+                to="/ayarlar/profil"
+                onClick={onClose}
                 className="p-2 text-muted hover:text-primary rounded-lg hover:bg-elevated transition-colors"
-                aria-label="Profil ayarları"
+                aria-label="Ayarlar"
               >
                 <Settings className="size-4" />
               </Link>
@@ -133,7 +148,15 @@ export function MobileNavigationDrawer({
         </div>
 
         {/* Hızlı İşlem Linkleri */}
-        <div className="grid grid-cols-3 gap-1 p-2 border-b border-border text-center">
+        <div className="grid grid-cols-4 gap-1 p-2 border-b border-border text-center">
+          <Link
+            to={user ? "/ilanlarim" : "/login"}
+            onClick={onClose}
+            className="flex flex-col items-center gap-1 py-2 px-1 rounded-lg hover:bg-elevated transition-colors text-xs font-medium text-fg"
+          >
+            <LayoutGrid className="size-5 text-muted" />
+            <span>İlanlarım</span>
+          </Link>
           <Link
             to={user ? "/mesajlar" : "/login"}
             onClick={onClose}
@@ -168,7 +191,9 @@ export function MobileNavigationDrawer({
 
         {/* Kategoriler Akordeonu */}
         <div className="flex-1 overflow-y-auto p-3 space-y-1">
-          <p className="px-2 py-1 text-xs font-bold text-muted uppercase tracking-wider">Kategoriler</p>
+          <p className="px-2 py-1 text-xs font-bold text-muted uppercase tracking-wider">
+            Kategoriler
+          </p>
           {MAIN_NAV_CATEGORIES.map((cat) => {
             const isExpanded = expandedCategoryId === cat.id;
             return (
@@ -186,7 +211,10 @@ export function MobileNavigationDrawer({
                     <span>{cat.name}</span>
                   </div>
                   <ChevronDown
-                    className={cn("size-4 text-muted transition-transform duration-200", isExpanded && "rotate-180")}
+                    className={cn(
+                      "size-4 text-muted transition-transform duration-200",
+                      isExpanded && "rotate-180",
+                    )}
                   />
                 </button>
 
@@ -227,16 +255,29 @@ export function MobileNavigationDrawer({
 
         {/* Alt Kısım Ek Linkler */}
         <div className="p-3 border-t border-border bg-elevated/40 space-y-1 text-xs text-muted">
-          <Link to="/harita" onClick={onClose} className="flex items-center gap-2 p-2 hover:text-fg rounded-lg">
+          <Link
+            to="/harita"
+            onClick={onClose}
+            className="flex items-center gap-2 p-2 hover:text-fg rounded-lg"
+          >
             <MapPin className="size-4" />
             <span>Haritada İlan Ara</span>
           </Link>
-          <Link to="/sayfa/$slug" params={{ slug: "yardim" }} onClick={onClose} className="flex items-center gap-2 p-2 hover:text-fg rounded-lg">
+          <Link
+            to="/sayfa/$slug"
+            params={{ slug: "yardim" }}
+            onClick={onClose}
+            className="flex items-center gap-2 p-2 hover:text-fg rounded-lg"
+          >
             <HelpCircle className="size-4" />
             <span>Yardım & Destek</span>
           </Link>
           {admin && (
-            <Link to="/admin" onClick={onClose} className="flex items-center gap-2 p-2 text-warn font-semibold">
+            <Link
+              to="/admin"
+              onClick={onClose}
+              className="flex items-center gap-2 p-2 text-warn font-semibold"
+            >
               <Shield className="size-4" />
               <span>Yönetici Paneli</span>
             </Link>

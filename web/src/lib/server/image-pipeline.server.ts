@@ -7,7 +7,8 @@ import sharp from "sharp";
  * store one WebP master. Smaller sizes are derived on request (see `resizeVariant`).
  */
 
-const MASTER_LONG_EDGE = 1600;
+/** Sharp enough for a full-screen view on large and high-DPI monitors. */
+const MASTER_LONG_EDGE = 2048;
 const MIN_SHORT_EDGE = 240;
 /** Stored masters must fit the 2 MB column check in mobile_listing_images. */
 const MAX_STORED_BYTES = 2 * 1024 * 1024;
@@ -142,6 +143,18 @@ export async function processListingPhoto(input: Uint8Array): Promise<Buffer> {
     if (out.byteLength <= MAX_STORED_BYTES) return out;
   }
   throw new Error("Fotoğraf işlenemedi. Daha küçük bir fotoğraf deneyin.");
+}
+
+/** Square 400px WebP profile photo (centre crop, EXIF-oriented, metadata stripped, no watermark). */
+export async function processAvatar(input: Uint8Array): Promise<Buffer> {
+  const base = isHeif(input)
+    ? (await openHeif(input)).image
+    : sharp(input, { failOn: "error", limitInputPixels: MAX_INPUT_PIXELS }).rotate();
+  return base
+    .resize({ width: 400, height: 400, fit: "cover", position: "attention" })
+    .flatten({ background: "#ffffff" })
+    .webp({ quality: 82 })
+    .toBuffer();
 }
 
 /** Smaller copy of a stored photo for cards and thumbnails. */

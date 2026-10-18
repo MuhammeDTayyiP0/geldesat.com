@@ -1,10 +1,12 @@
 import { Link } from "@tanstack/react-router";
 import {
+  Bell,
   ChevronDown,
   Heart,
   LayoutGrid,
   LogOut,
   MessageCircle,
+  Settings,
   Shield,
   User,
 } from "lucide-react";
@@ -79,6 +81,15 @@ export function UserAccountDropdown({ admin }: { admin: boolean }) {
 
           <div className="py-1">
             <Link
+              to="/profil"
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-2.5 px-3 py-2 text-sm text-fg hover:bg-elevated rounded-lg transition-colors"
+            >
+              <User className="size-4 text-muted shrink-0" />
+              <span>Profilim</span>
+            </Link>
+
+            <Link
               to="/ilanlarim"
               onClick={() => setOpen(false)}
               className="flex items-center gap-2.5 px-3 py-2 text-sm text-fg hover:bg-elevated rounded-lg transition-colors"
@@ -106,12 +117,21 @@ export function UserAccountDropdown({ admin }: { admin: boolean }) {
             </Link>
 
             <Link
-              to="/profil"
+              to="/bildirimler"
               onClick={() => setOpen(false)}
               className="flex items-center gap-2.5 px-3 py-2 text-sm text-fg hover:bg-elevated rounded-lg transition-colors"
             >
-              <User className="size-4 text-muted shrink-0" />
-              <span>Hesabım & Profil</span>
+              <Bell className="size-4 text-muted shrink-0" />
+              <span>Bildirimler</span>
+            </Link>
+
+            <Link
+              to="/ayarlar/profil"
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-2.5 px-3 py-2 text-sm text-fg hover:bg-elevated rounded-lg transition-colors"
+            >
+              <Settings className="size-4 text-muted shrink-0" />
+              <span>Ayarlar</span>
             </Link>
 
             {admin && (

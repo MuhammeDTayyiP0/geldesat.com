@@ -73,6 +73,8 @@ export const getMe = createServerFn({ method: "GET" })
             slug: String(store[0].slug),
             plan: String(store[0].plan),
             city: store[0].city ? String(store[0].city) : null,
+            description: store[0].description ? String(store[0].description) : "",
+            phone: store[0].phone ? String(store[0].phone) : null,
           }
         : null,
       credits,

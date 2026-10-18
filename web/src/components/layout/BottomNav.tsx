@@ -40,7 +40,7 @@ export function BottomNav() {
   const isCategories = pathname.startsWith("/search") || pathname.startsWith("/category");
   const isPost = pathname.startsWith("/ilan-ver");
   const isMessages = pathname.startsWith("/mesajlar");
-  const isProfile = pathname.startsWith("/profil") || pathname.startsWith("/login") || pathname.startsWith("/ilanlarim");
+  const isProfile = ["/profil", "/login", "/ilanlarim", "/ayarlar", "/favoriler", "/bildirimler"].some((p) => pathname.startsWith(p));
 
   return (
     <nav

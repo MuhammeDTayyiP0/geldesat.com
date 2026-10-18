@@ -1,350 +1,191 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
-import { getMe, updateProfile, upsertStore } from "@/lib/server/account";
+import { useEffect, useState } from "react";
+import { CalendarDays, ExternalLink, MapPin, Plus, Settings, Star } from "lucide-react";
+import { getMe, myListings } from "@/lib/server/account";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { authClient, signOut } from "@/lib/auth/client";
-import { TURKEY_CITIES } from "@/lib/data/locations";
-import { Button } from "@/components/ui/button";
-import { Input, Label, Select, Textarea } from "@/components/ui/input";
-import { PhoneInput } from "@/components/ui/phone-input";
-import { cleanPhone, maskPhone10 } from "@/lib/utils";
-import { Bell, CheckCircle2, Heart, LayoutGrid, Lock, LogOut, Mail, MessageCircle, Settings2, Shield, Store, User as UserIcon } from "lucide-react";
 import { BrandSpinner } from "@/components/brand/BrandSpinner";
-import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { ListingCard } from "@/components/listing/ListingCard";
+import { AccountMenuList, AccountShell, UserAvatar } from "@/components/account/AccountShell";
+import type { ListingCard as Listing } from "@/lib/server/helpers";
+import { cn, formatNumber } from "@/lib/utils";
 
 export const Route = createFileRoute("/profil")({
-  head: () => ({
-    meta: [
-      { title: "Profilim | GeldeSat" },
-      { name: "robots", content: "noindex,nofollow" },
-    ],
-  }),
-  component: Profil,
+  head: () => ({ meta: [{ title: "Hesabım | GeldeSat" }, { name: "robots", content: "noindex,nofollow" }] }),
+  component: ProfilePage,
 });
 
-function Profil() {
+type Me = Awaited<ReturnType<typeof getMe>>;
+
+function memberSince(iso: string) {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("tr-TR", { month: "long", year: "numeric" });
+}
+
+function isLive(l: Listing) {
+  return l.status === "ACTIVE" && !(l.expires_at && new Date(l.expires_at).getTime() <= Date.now());
+}
+
+/** Your own profile, as others would see it, plus the account menu on phones. */
+function ProfilePage() {
   const { user, isPending } = useCurrentUserState();
-  const [me, setMe] = useState<Awaited<ReturnType<typeof getMe>> | null>(null);
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [bio, setBio] = useState("");
-  const [city, setCity] = useState("");
-  const [storeName, setStoreName] = useState("");
-  const [storeDesc, setStoreDesc] = useState("");
-
-  // Password change state
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [pwdBusy, setPwdBusy] = useState(false);
-  const [profileBusy, setProfileBusy] = useState(false);
-
-  const initializedRef = useRef(false);
-  const userId = user?.id;
+  const [me, setMe] = useState<Me | null>(null);
+  const [listings, setListings] = useState<Listing[] | null>(null);
+  const [tab, setTab] = useState<"live" | "other">("live");
 
   useEffect(() => {
-    if (!userId) return;
-    void getMe().then((m) => {
-      setMe(m);
-      if (!initializedRef.current) {
-        setName(m.profile?.display_name ?? "");
-        setPhone(maskPhone10(m.profile?.phone ?? ""));
-        setBio(m.profile?.bio ?? "");
-        setCity(m.profile?.city ?? "");
-        setStoreName(m.store?.name ?? "");
-        initializedRef.current = true;
-      }
-    });
-  }, [userId]);
+    if (!user) return;
+    let alive = true;
+    getMe()
+      .then((m) => alive && setMe(m))
+      .catch(() => undefined);
+    myListings()
+      .then((rows) => alive && setListings(rows))
+      .catch(() => alive && setListings([]));
+    return () => {
+      alive = false;
+    };
+  }, [user]);
 
-  if (isPending || (!me && user)) return <BrandSpinner fullPage text="Profiliniz yükleniyor…" />;
-  if (!user) return <RedirectToSignIn />;
+  if (isPending || (user && !me)) return <BrandSpinner fullPage text="Hesabınız yükleniyor…" />;
+  if (!user || !me) return <RedirectToSignIn />;
 
-  async function handleSaveProfile(e: React.FormEvent) {
-    e.preventDefault();
-    setProfileBusy(true);
-    try {
-      await updateProfile({ data: { display_name: name, phone: cleanPhone(phone), bio, city } });
-      toast.success("Profil bilgileri kaydedildi");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Profil kaydedilemedi");
-    } finally {
-      setProfileBusy(false);
-    }
-  }
-
-  async function handleChangePassword(e: React.FormEvent) {
-    e.preventDefault();
-    if (newPassword.length < 8) {
-      toast.error("Yeni şifre en az 8 karakter olmalıdır.");
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      toast.error("Yeni şifreler eşleşmiyor.");
-      return;
-    }
-    setPwdBusy(true);
-    try {
-      const { error } = await authClient.changePassword({
-        currentPassword,
-        newPassword,
-        revokeOtherSessions: false,
-      });
-      if (error) throw new Error(error.message || "Şifre değiştirilemedi");
-      toast.success("Şifreniz başarıyla güncellendi");
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Şifre değiştirilemedi");
-    } finally {
-      setPwdBusy(false);
-    }
-  }
+  const p = me.profile;
+  const name = p?.display_name || user.displayName || "Üye";
+  const live = (listings ?? []).filter(isLive);
+  const other = (listings ?? []).filter((l) => !isLive(l));
+  const shown = tab === "live" ? live : other;
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-6 md:py-10">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Hesabım</h1>
-          <p className="mt-1 text-sm text-muted">{user.primaryEmail}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <a href="#account-settings" className="inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-surface px-3 text-sm font-medium text-fg hover:bg-elevated">
-            <Settings2 className="size-4 text-primary" /> Ayarlar
-          </a>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="gap-2 text-muted hover:text-danger hover:border-danger/30"
-            onClick={() => {
-              if (confirm("Çıkış yapmak istediğinize emin misiniz?")) {
-                void signOut("/");
-              }
-            }}
-          >
-            <LogOut className="size-4" /> Çıkış Yap
-          </Button>
-        </div>
-      </div>
-
-      <div className="mt-6 grid grid-cols-2 gap-3 text-center">
-        <div className="rounded-xl border border-border bg-surface p-4 shadow-sm">
-          <p className="text-2xl font-semibold text-fg">{me?.profile?.active_count ?? 0}</p>
-          <p className="text-xs text-muted">Aktif İlan</p>
-        </div>
-        <div className="rounded-xl border border-border bg-surface p-4 shadow-sm">
-          <p className="text-2xl font-semibold text-fg">{me?.profile?.rating_avg ? me.profile.rating_avg.toFixed(1) : "—"}</p>
-          <p className="text-xs text-muted">Satıcı Puanı</p>
-        </div>
-      </div>
-
-      <div className="mt-5 grid grid-cols-2 gap-2">
-        <AccountShortcut to="/ilanlarim" icon={LayoutGrid} label="İlanlarım" />
-        <AccountShortcut to="/favoriler" icon={Heart} label="Favorilerim" />
-        <AccountShortcut to="/mesajlar" icon={MessageCircle} label="Mesajlarım" />
-        <AccountShortcut to="/bildirimler" icon={Bell} label="Bildirimler" />
-      </div>
-
-      {/* Profil Bilgileri Formu */}
-      <form
-        id="account-settings"
-        className="mt-8 scroll-mt-24 space-y-4 rounded-xl border border-border bg-surface p-4 shadow-sm md:p-6"
-        onSubmit={handleSaveProfile}
-      >
-        <div className="flex items-center gap-2 border-b border-border pb-3">
-          <UserIcon className="size-5 text-primary" />
-          <h2 className="font-semibold text-fg">Kişisel Bilgiler</h2>
+    <AccountShell
+      title="Hesabım"
+      hub
+      actions={
+        <Link to="/ayarlar/profil" aria-label="Ayarlar" className="grid size-10 place-items-center rounded-full hover:bg-elevated md:hidden">
+          <Settings className="size-5" />
+        </Link>
+      }
+    >
+      <section className="rounded-2xl border border-border bg-surface p-4 shadow-card sm:p-6">
+        <div className="flex items-center gap-4 sm:gap-6">
+          <UserAvatar src={p?.avatar_url ?? user.profileImageUrl} name={name} className="size-20 text-2xl sm:size-24 sm:text-3xl" />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-lg font-semibold sm:text-xl">{name}</p>
+            <dl className="mt-3 grid grid-cols-3 gap-2 text-center sm:max-w-sm sm:text-left">
+              <Stat label="Yayında" value={formatNumber(p?.active_count ?? 0)} />
+              <Stat label="Toplam ilan" value={formatNumber(p?.listing_count ?? 0)} />
+              <Stat
+                label={p?.rating_count ? `${p.rating_count} değerlendirme` : "Puan"}
+                value={
+                  p?.rating_count ? (
+                    <span className="inline-flex items-center gap-1">
+                      <Star className="size-4 fill-amber-400 text-amber-400" /> {p.rating_avg.toFixed(1)}
+                    </span>
+                  ) : (
+                    "—"
+                  )
+                }
+              />
+            </dl>
+          </div>
         </div>
 
-        <div>
-          <Label htmlFor="profile-name">Ad Soyad</Label>
-          <Input
-            id="profile-name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Adınız ve soyadınız"
-            required
-          />
-        </div>
-
-        <div>
-          <Label htmlFor="profile-phone">Telefon Numarası</Label>
-          <PhoneInput
-            id="profile-phone"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-          />
-          <p className="mt-1 text-xs text-muted">İlanlarınızda ve alıcılarla iletişimde kullanılır (5xx xxx xx xx).</p>
-        </div>
-
-        <div>
-          <Label htmlFor="profile-city">Şehir</Label>
-          <Select id="profile-city" value={city} onChange={(e) => setCity(e.target.value)}>
-            <option value="">Şehir Seçin</option>
-            {TURKEY_CITIES.map((c) => (
-              <option key={c.name} value={c.name}>{c.name}</option>
-            ))}
-          </Select>
-        </div>
-
-        <div>
-          <Label htmlFor="profile-bio">Hakkında</Label>
-          <Textarea
-            id="profile-bio"
-            value={bio}
-            onChange={(e) => setBio(e.target.value)}
-            placeholder="Satıcı profilinizde görünecek kısa bir tanıtım yazın..."
-            rows={3}
-          />
-        </div>
-
-        <Button type="submit" disabled={profileBusy}>
-          {profileBusy ? "Kaydediliyor…" : "Bilgileri Kaydet"}
-        </Button>
-      </form>
-
-      {/* Hesap & Güvenlik Ayarları */}
-      <div className="mt-8 space-y-6 rounded-xl border border-border bg-surface p-4 shadow-sm md:p-6">
-        <div className="flex items-center gap-2 border-b border-border pb-3">
-          <Shield className="size-5 text-primary" />
-          <h2 className="font-semibold text-fg">E-posta ve Güvenlik Ayarları</h2>
-        </div>
-
-        {/* E-posta Bilgisi */}
-        <div className="rounded-lg border border-border bg-bg/50 p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Mail className="size-5 text-muted" />
-              <div>
-                <p className="text-xs text-muted">Kayıtlı Giriş E-postası</p>
-                <p className="text-sm font-medium text-fg">{user.primaryEmail}</p>
-              </div>
-            </div>
-            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
-              <CheckCircle2 className="size-3.5" /> Doğrulanmış Hesap
+        {p?.bio ? <p className="mt-4 whitespace-pre-wrap text-sm leading-relaxed">{p.bio}</p> : null}
+        <p className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+          {p?.city ? (
+            <span className="inline-flex items-center gap-1">
+              <MapPin className="size-3.5" /> {[p.district, p.city].filter(Boolean).join(", ")}
             </span>
-          </div>
-        </div>
-
-        {/* Şifre Değiştirme */}
-        <form onSubmit={handleChangePassword} className="space-y-3 pt-2">
-          <div className="flex items-center gap-2">
-            <Lock className="size-4 text-muted" />
-            <h3 className="text-sm font-medium text-fg">Şifre Değiştir</h3>
-          </div>
-
-          <div>
-            <Label htmlFor="curr-pwd">Mevcut Şifre</Label>
-            <Input
-              id="curr-pwd"
-              type="password"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              placeholder="Mevcut şifreniz"
-              required
-            />
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <Label htmlFor="new-pwd">Yeni Şifre</Label>
-              <Input
-                id="new-pwd"
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="En az 8 karakter"
-                required
-                minLength={8}
-              />
-            </div>
-            <div>
-              <Label htmlFor="confirm-pwd">Yeni Şifre (Tekrar)</Label>
-              <Input
-                id="confirm-pwd"
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Yeni şifrenizi doğrulayın"
-                required
-                minLength={8}
-              />
-            </div>
-          </div>
-
-          <Button type="submit" variant="outline" disabled={pwdBusy || !currentPassword || !newPassword}>
-            {pwdBusy ? "Değiştiriliyor…" : "Şifreyi Güncelle"}
-          </Button>
-        </form>
-      </div>
-
-      {/* Mağaza Ayarları */}
-      <form
-        className="mt-8 space-y-4 rounded-xl border border-border bg-surface p-4 shadow-sm md:p-6"
-        onSubmit={async (e) => {
-          e.preventDefault();
-          try {
-            const s = await upsertStore({ data: { name: storeName, description: storeDesc, city, phone: cleanPhone(phone) } });
-            toast.success("Mağaza bilgileri güncellendi");
-            setMe((m) =>
-              m ? { ...m, store: { id: s.id, name: storeName, slug: s.slug, plan: m.store?.plan ?? "BASIC", city } } : m,
-            );
-          } catch (err) {
-            toast.error(err instanceof Error ? err.message : "Hata oluştu");
-          }
-        }}
-      >
-        <div className="flex items-center gap-2 border-b border-border pb-3">
-          <Store className="size-5 text-primary" />
-          <h2 className="font-semibold text-fg">Kurumsal Mağaza</h2>
-        </div>
-        <p className="text-sm text-muted">İlanlarınız mağaza sayfanızda özel bir vitrinde toplanır.</p>
-
-        <div>
-          <Label htmlFor="store-name">Mağaza Adı</Label>
-          <Input
-            id="store-name"
-            value={storeName}
-            onChange={(e) => setStoreName(e.target.value)}
-            placeholder="Mağaza adı"
-            required
-          />
-        </div>
-
-        <div>
-          <Label htmlFor="store-desc">Mağaza Açıklaması</Label>
-          <Textarea
-            id="store-desc"
-            value={storeDesc}
-            onChange={(e) => setStoreDesc(e.target.value)}
-            placeholder="Müşterilerinize işletmeniz hakkında bilgi verin..."
-            rows={2}
-          />
-        </div>
-
-        <div className="flex items-center gap-3 pt-1">
-          <Button type="submit" variant="outline">
-            {me?.store ? "Mağazayı Güncelle" : "Mağaza Aç"}
-          </Button>
-          {me?.store ? (
-            <Link to="/magaza/$slug" params={{ slug: me.store.slug }} className="text-sm text-primary hover:underline">
-              Mağazayı Gör →
-            </Link>
           ) : null}
+          {p?.created_at ? (
+            <span className="inline-flex items-center gap-1">
+              <CalendarDays className="size-3.5" /> {memberSince(p.created_at)} tarihinden beri üye
+            </span>
+          ) : null}
+        </p>
+
+        <div className="mt-4 grid grid-cols-2 gap-2 sm:flex">
+          <Link to="/ayarlar/profil" className="sm:w-auto">
+            <Button variant="outline" size="sm" className="w-full">
+              Profili düzenle
+            </Button>
+          </Link>
+          <Link to="/satici/$id" params={{ id: me.userId }} className="sm:w-auto">
+            <Button variant="outline" size="sm" className="w-full">
+              <ExternalLink className="size-3.5" /> Herkese açık profil
+            </Button>
+          </Link>
         </div>
-      </form>
-    </div>
+
+        {!p?.phone ? (
+          <Link
+            to="/ayarlar/profil"
+            className="mt-4 block rounded-xl border border-warn/30 bg-warn/8 px-3 py-2.5 text-sm text-warn hover:bg-warn/12"
+          >
+            İlan verebilmek için profilinize telefon numarası ekleyin →
+          </Link>
+        ) : null}
+      </section>
+
+      <AccountMenuList className="mt-6 md:hidden" />
+
+      <section className="mt-6">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div className="inline-flex rounded-lg bg-elevated p-1" role="tablist" aria-label="İlanlar">
+            {(
+              [
+                ["live", `Yayında (${live.length})`],
+                ["other", `Diğer (${other.length})`],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                role="tab"
+                aria-selected={tab === key}
+                onClick={() => setTab(key)}
+                className={cn("h-8 rounded-md px-3 text-sm", tab === key ? "bg-surface font-semibold shadow-xs" : "text-muted hover:text-fg")}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <Link to="/ilanlarim" className="text-sm font-medium text-primary hover:underline">
+            İlanlarımı yönet
+          </Link>
+        </div>
+
+        {listings === null ? (
+          <p className="py-10 text-center text-sm text-muted">İlanlar yükleniyor…</p>
+        ) : shown.length ? (
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3">
+            {shown.map((l) => (
+              <ListingCard key={l.id} listing={l} />
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-border bg-surface px-6 py-12 text-center">
+            <p className="text-sm text-muted">{tab === "live" ? "Yayında ilanınız yok." : "Bekleyen, pasif veya satılmış ilanınız yok."}</p>
+            {tab === "live" ? (
+              <Link to="/ilan-ver" className="mt-4 inline-block">
+                <Button size="sm">
+                  <Plus className="size-4" /> Ücretsiz ilan ver
+                </Button>
+              </Link>
+            ) : null}
+          </div>
+        )}
+      </section>
+    </AccountShell>
   );
 }
 
-function AccountShortcut({ to, icon: Icon, label }: { to: "/ilanlarim" | "/favoriler" | "/mesajlar" | "/bildirimler" | "/harita"; icon: typeof LayoutGrid; label: string }) {
+function Stat({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <Link to={to} className="flex min-h-12 items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-sm font-medium text-fg shadow-sm transition-colors hover:border-primary/30 hover:bg-elevated">
-      <Icon className="size-4 shrink-0 text-primary" />
-      <span className="truncate">{label}</span>
-    </Link>
+    <div className="flex flex-col-reverse">
+      <dt className="truncate text-xs text-muted">{label}</dt>
+      <dd className="text-base font-semibold tabular-nums sm:text-lg">{value}</dd>
+    </div>
   );
 }
