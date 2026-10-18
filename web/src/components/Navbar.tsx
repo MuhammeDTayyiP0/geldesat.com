@@ -128,6 +128,15 @@ export function Navbar({ className }: NavbarProps) {
     setAllCategoriesHovered(true);
   }
 
+  // Şeritten ve açılan panelden tamamen çıkınca (örn. üst navbara) her iki menüyü de kapat
+  function handleStripMouseLeave() {
+    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    hoverTimeoutRef.current = setTimeout(() => {
+      setHoveredCategory(null);
+      setAllCategoriesHovered(false);
+    }, 150);
+  }
+
   function handleAllCategoriesMouseLeave() {
     if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
     hoverTimeoutRef.current = setTimeout(() => {
@@ -289,6 +298,7 @@ export function Navbar({ className }: NavbarProps) {
           ========================================================================= */}
       <nav
         aria-label="Ana kategoriler"
+        onMouseLeave={handleStripMouseLeave}
         className="relative z-10 hidden md:block border-b border-border/80 bg-surface/98 backdrop-blur-md"
       >
         <div className="mx-auto flex h-11 max-w-7xl items-center px-4 sm:px-6">
