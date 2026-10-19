@@ -8,6 +8,7 @@ import {
   Lock,
   LayoutGrid,
   MessageCircle,
+  Palette,
   ShieldCheck,
   Store,
   UserPen,
@@ -24,7 +25,9 @@ type NavTo =
   | "/favoriler"
   | "/mesajlar"
   | "/bildirimler"
+  | "/ayarlar"
   | "/ayarlar/profil"
+  | "/ayarlar/gorunum"
   | "/ayarlar/guvenlik"
   | "/ayarlar/magaza"
   | "/ayarlar/gizlilik"
@@ -35,31 +38,41 @@ type NavTo =
 
 export type AccountNavItem = { to: NavTo; label: string; icon: LucideIcon; badge?: "messages" | "notifications"; hint?: string };
 
-/** The account area's menu, shared by the desktop sidebar and the mobile profile page. */
-export const ACCOUNT_SECTIONS: Array<{ title: string; items: AccountNavItem[] }> = [
+/** "Hesabım": the person's own things (desktop sidebar and the account hub). */
+export const ACCOUNT_ITEMS: AccountNavItem[] = [
+  { to: "/profil", label: "Hesabım", icon: UserRound },
+  { to: "/ilanlarim", label: "İlanlarım", icon: LayoutGrid, hint: "Yayındaki, bekleyen ve pasif ilanlar" },
+  { to: "/favoriler", label: "Favorilerim", icon: Heart, hint: "Kaydettiğiniz ilanlar" },
+  { to: "/mesajlar", label: "Mesajlar", icon: MessageCircle, badge: "messages", hint: "Alıcı ve satıcılarla yazışmalar" },
+  { to: "/bildirimler", label: "Bildirimler", icon: Bell, badge: "notifications", hint: "Mesaj, favori ve ilan durumu" },
+];
+
+/** The settings page (/ayarlar), grouped like a phone's settings app. */
+export const SETTINGS_SECTIONS: Array<{ title: string; items: AccountNavItem[] }> = [
   {
-    title: "Hesabım",
-    items: [
-      { to: "/profil", label: "Profilim", icon: UserRound },
-      { to: "/ilanlarim", label: "İlanlarım", icon: LayoutGrid, hint: "Yayındaki, bekleyen ve pasif ilanlar" },
-      { to: "/favoriler", label: "Favorilerim", icon: Heart },
-      { to: "/mesajlar", label: "Mesajlar", icon: MessageCircle, badge: "messages" },
-      { to: "/bildirimler", label: "Bildirimler", icon: Bell, badge: "notifications" },
-    ],
-  },
-  {
-    title: "Ayarlar",
+    title: "Hesap",
     items: [
       { to: "/ayarlar/profil", label: "Profil bilgileri", icon: UserPen, hint: "Fotoğraf, ad, telefon, konum" },
-      { to: "/ayarlar/gizlilik", label: "Gizlilik", icon: Lock, hint: "Telefonumu kimler görebilir, WhatsApp" },
-      { to: "/ayarlar/bildirimler", label: "Bildirim tercihleri", icon: BellRing, hint: "Mesaj, favori, ilan durumu" },
-      { to: "/ayarlar/engellenenler", label: "Engellenenler", icon: Ban, hint: "Mesajlaşmayı engellediğiniz kişiler" },
-      { to: "/ayarlar/guvenlik", label: "Hesap ve güvenlik", icon: ShieldCheck, hint: "E-posta, şifre, oturumlar" },
-      { to: "/ayarlar/magaza", label: "Mağazam", icon: Store, hint: "Kurumsal mağaza bilgileri ve başvuru" },
+      { to: "/ayarlar/guvenlik", label: "Şifre ve güvenlik", icon: ShieldCheck, hint: "E-posta, şifre, oturumlar" },
       { to: "/ayarlar/hesap", label: "Verilerim ve hesabım", icon: FileDown, hint: "Verilerimi indir, hesabı sil" },
     ],
   },
+  {
+    title: "Tercihler",
+    items: [
+      { to: "/ayarlar/gorunum", label: "Görünüm", icon: Palette, hint: "Açık, koyu veya cihaz ayarı" },
+      { to: "/ayarlar/bildirimler", label: "Bildirimler", icon: BellRing, hint: "Mesaj, favori, ilan durumu" },
+      { to: "/ayarlar/gizlilik", label: "Gizlilik", icon: Lock, hint: "Telefonumu kimler görebilir, WhatsApp" },
+      { to: "/ayarlar/engellenenler", label: "Engellenenler", icon: Ban, hint: "Mesajlaşmayı engellediğiniz kişiler" },
+    ],
+  },
+  {
+    title: "İşletme",
+    items: [{ to: "/ayarlar/magaza", label: "Mağazam", icon: Store, hint: "Kurumsal mağaza bilgileri ve başvuru" }],
+  },
 ];
+
+export const SETTINGS_ITEMS: AccountNavItem[] = SETTINGS_SECTIONS.flatMap((s) => s.items);
 
 /** Unread counters and admin flag for the account menu. */
 export function useAccountMeta() {

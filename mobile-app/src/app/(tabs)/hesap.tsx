@@ -1,33 +1,15 @@
-import { Linking, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useState } from 'react';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Constants from 'expo-constants';
-import {
-  Ban,
-  Bell,
-  ChevronRight,
-  FileText,
-  Heart,
-  HelpCircle,
-  KeyRound,
-  LayoutGrid,
-  LogOut,
-  Mail,
-  MessageSquareText,
-  Rocket,
-  Shield,
-  SlidersHorizontal,
-  Store,
-  UserRound,
-} from 'lucide-react-native';
-import { errorMessage } from '@/api/client';
+import { useQuery } from '@tanstack/react-query';
+import { Bell, ExternalLink, Heart, LayoutGrid, MessageCircle, Pencil, Rocket, Settings, Store, type LucideIcon } from 'lucide-react-native';
+import { myListings } from '@/api/endpoints';
 import { keys, queryClient, useCounts, useMe } from '@/api/queries';
-import { signOut } from '@/auth/auth';
 import { useSession } from '@/auth/session';
-import { SUPPORT_EMAIL } from '@/lib/config';
+import { ListingRail } from '@/features/listing/ListingRail';
 import { formatNumber, memberSince } from '@/lib/format';
-import { unregisterPush } from '@/lib/push';
-import { Avatar, Button, CountDot, ListRow, LogoMark, RowGroup, Stars, Text, confirm, hairline, radius, space, toast, useTheme } from '@/ui';
+import { Avatar, Button, IconButton, BrandIcon, Stars, Text, hairline, radius, space, useTheme } from '@/ui';
 
 export default function AccountScreen() {
   const { c } = useTheme();
@@ -36,26 +18,33 @@ export default function AccountScreen() {
   const session = useSession();
   const me = useMe();
   const { data: counts } = useCounts();
+  const signedIn = session.status === 'signedIn';
+  const [now] = useState(() => Date.now());
+  const mine = useQuery({ queryKey: keys.myListings, queryFn: myListings.list, enabled: signedIn });
 
-  if (session.status !== 'signedIn') {
+  const topBar = (
+    <View style={[styles.top, { paddingTop: insets.top + space.sm }]}>
+      <Text variant="title">Hesabım</Text>
+      <IconButton icon={Settings} label="Ayarlar" filled onPress={() => router.push('/ayarlar' as Href)} />
+    </View>
+  );
+
+  if (!signedIn) {
     return (
-      <ScrollView style={{ backgroundColor: c.bg }} contentContainerStyle={[styles.guest, { paddingTop: insets.top + space.xxl }]}>
-        <View style={[styles.guestLogo, { backgroundColor: c.primarySoft }]}>
-          <LogoMark size={40} color={c.primary} />
-        </View>
-        <Text variant="title" center>
-          GeldeSat’a hoş geldiniz
-        </Text>
-        <Text tone="muted" center>
-          Ücretsiz ilan verin, satıcılarla mesajlaşın, favorilerinizi kaydedin.
-        </Text>
-        <Button title="Giriş yap" size="lg" block onPress={() => router.push('/giris')} />
-        <Button title="Üye ol" size="lg" variant="outline" block onPress={() => router.push('/giris')} />
-        <View style={styles.guestLinks}>
-          <RowGroup>
-            <ListRow icon={HelpCircle} label="Yardım" onPress={() => router.push({ pathname: '/sayfa/[slug]', params: { slug: 'yardim' } })} />
-            <ListRow icon={FileText} label="Yasal bilgiler" onPress={() => router.push('/ayarlar/yasal')} />
-          </RowGroup>
+      <ScrollView style={{ backgroundColor: c.bg }} contentContainerStyle={styles.guestWrap}>
+        {topBar}
+        <View style={styles.guest}>
+          <View style={[styles.guestLogo, { borderColor: c.border }]}>
+            <BrandIcon size={80} />
+          </View>
+          <Text variant="title" center>
+            GeldeSat’a hoş geldiniz
+          </Text>
+          <Text tone="muted" center>
+            Ücretsiz ilan verin, satıcılarla mesajlaşın, favorilerinizi kaydedin.
+          </Text>
+          <Button title="Giriş yap" size="lg" block onPress={() => router.push('/giris')} />
+          <Button title="Üye ol" size="lg" variant="outline" block onPress={() => router.push('/giris')} />
         </View>
       </ScrollView>
     );
@@ -63,57 +52,71 @@ export default function AccountScreen() {
 
   const profile = me.data?.profile;
   const name = profile?.display_name || session.user.name;
-
-  const doSignOut = async () => {
-    const ok = await confirm({ title: 'Çıkış yapılsın mı?', message: 'Bu cihazdaki oturumunuz kapanacak.', confirmText: 'Çıkış yap', destructive: true });
-    if (!ok) return;
-    try {
-      await signOut(unregisterPush);
-      router.navigate('/');
-    } catch (e) {
-      toast.error(errorMessage(e));
-    }
-  };
+  const live = (mine.data ?? []).filter((l) => l.status === 'ACTIVE' && !(l.expires_at && new Date(l.expires_at).getTime() < now));
 
   return (
     <ScrollView
       style={{ backgroundColor: c.bg }}
-      contentContainerStyle={[styles.content, { paddingTop: insets.top + space.md }]}
+      contentContainerStyle={styles.content}
       refreshControl={
         <RefreshControl
           refreshing={me.isRefetching}
           onRefresh={() => {
             void me.refetch();
+            void mine.refetch();
             void queryClient.invalidateQueries({ queryKey: keys.counts });
           }}
           tintColor={c.primary}
         />
       }
     >
-      <Pressable onPress={() => router.push('/ayarlar/profil')} style={[styles.profile, { backgroundColor: c.surface, borderColor: c.border }]}>
-        <Avatar name={name} uri={profile?.avatar_url} size={64} />
-        <View style={styles.flex}>
-          <Text variant="heading" numberOfLines={1}>
-            {name}
-          </Text>
-          <Text variant="caption" tone="muted" numberOfLines={1}>
-            {session.user.email}
-          </Text>
-          {profile?.rating_count ? (
-            <View style={styles.rating}>
-              <Stars value={profile.rating_avg} size={12} />
-              <Text variant="small" tone="muted">
-                {profile.rating_avg.toFixed(1)} ({profile.rating_count})
-              </Text>
-            </View>
-          ) : profile?.created_at ? (
-            <Text variant="small" tone="subtle">
-              {memberSince(profile.created_at)}
+      {topBar}
+
+      <View style={[styles.card, { backgroundColor: c.surface, borderColor: c.border }]}>
+        <View style={styles.profileRow}>
+          <Avatar name={name} uri={profile?.avatar_url} size={72} />
+          <View style={styles.flex}>
+            <Text variant="heading" numberOfLines={1}>
+              {name}
             </Text>
-          ) : null}
+            <Text variant="caption" tone="muted" numberOfLines={1}>
+              {session.user.email}
+            </Text>
+            {profile?.rating_count ? (
+              <View style={styles.rating}>
+                <Stars value={profile.rating_avg} size={12} />
+                <Text variant="small" tone="muted">
+                  {profile.rating_avg.toFixed(1)} ({profile.rating_count})
+                </Text>
+              </View>
+            ) : profile?.created_at ? (
+              <Text variant="small" tone="subtle">
+                {memberSince(profile.created_at)}
+              </Text>
+            ) : null}
+          </View>
         </View>
-        <ChevronRight size={20} color={c.subtle} />
-      </Pressable>
+
+        <View style={[styles.stats, { borderColor: c.border }]}>
+          <Stat label="Yayında" value={profile?.active_count} />
+          <View style={[styles.statDivider, { backgroundColor: c.border }]} />
+          <Stat label="Toplam ilan" value={profile?.listing_count} />
+          <View style={[styles.statDivider, { backgroundColor: c.border }]} />
+          <Stat label="Favori" value={profile?.favorite_count} />
+        </View>
+
+        <View style={styles.actions}>
+          <Button title="Profili düzenle" icon={Pencil} size="sm" variant="outline" style={styles.flex} onPress={() => router.push('/ayarlar/profil')} />
+          <Button
+            title="Herkese açık"
+            icon={ExternalLink}
+            size="sm"
+            variant="outline"
+            style={styles.flex}
+            onPress={() => router.push({ pathname: '/satici/[id]', params: { id: session.user.id } })}
+          />
+        </View>
+      </View>
 
       {profile && !profile.phone ? (
         <Pressable onPress={() => router.push('/ayarlar/profil')} style={[styles.warn, { backgroundColor: c.warnSoft }]}>
@@ -126,75 +129,107 @@ export default function AccountScreen() {
         </Pressable>
       ) : null}
 
-      <View style={styles.stats}>
-        <Stat label="Yayında" value={profile?.active_count} onPress={() => router.push('/ilanlarim')} />
-        <Stat label="Tüm ilanlar" value={profile?.listing_count} onPress={() => router.push('/ilanlarim')} />
-        <Stat label="Favori" value={profile?.favorite_count} onPress={() => router.push('/favoriler')} />
-      </View>
-
-      <RowGroup title="İlanlarım">
-        <ListRow icon={LayoutGrid} label="İlanlarım" value={profile ? `${profile.listing_count}` : undefined} onPress={() => router.push('/ilanlarim')} />
-        <ListRow icon={Heart} label="Favorilerim" onPress={() => router.push('/favoriler')} />
-        <ListRow
+      <View style={styles.tiles}>
+        <Tile icon={LayoutGrid} label="İlanlarım" detail={`${formatNumber(profile?.listing_count ?? 0)} ilan`} to="/ilanlarim" />
+        <Tile icon={Heart} label="Favorilerim" detail={`${formatNumber(profile?.favorite_count ?? 0)} ilan`} to="/favoriler" />
+        <Tile
+          icon={MessageCircle}
+          label="Mesajlar"
+          detail={counts?.messages ? `${counts.messages} okunmamış` : 'Yazışmalar'}
+          badge={counts?.messages}
+          to="/mesajlar"
+        />
+        <Tile
           icon={Bell}
           label="Bildirimler"
-          right={counts?.notifications ? <View style={styles.dotWrap}><CountDot count={counts.notifications} /></View> : undefined}
-          onPress={() => router.push('/bildirimler')}
+          detail={counts?.notifications ? `${counts.notifications} yeni` : 'Güncellemeler'}
+          badge={counts?.notifications}
+          to="/bildirimler"
         />
-        <ListRow icon={Rocket} label="Doping" detail="İlanınızı öne çıkarın" onPress={() => router.push('/doping')} />
-        {me.data?.store ? (
-          <ListRow icon={Store} label="Mağazam" value={me.data.store.name} onPress={() => router.push('/ayarlar/magaza')} />
-        ) : null}
-      </RowGroup>
+        {me.data?.store ? <Tile icon={Store} label="Mağazam" detail={me.data.store.name} to="/ayarlar/magaza" /> : null}
+        <Tile icon={Rocket} label="Doping" detail="İlanı öne çıkar" to="/doping" />
+      </View>
 
-      <RowGroup title="Ayarlar">
-        <ListRow icon={UserRound} label="Profil bilgileri" onPress={() => router.push('/ayarlar/profil')} />
-        <ListRow icon={SlidersHorizontal} label="Bildirim tercihleri" onPress={() => router.push('/ayarlar/bildirimler')} />
-        <ListRow icon={Shield} label="Gizlilik" detail="Telefon görünürlüğü, okundu bilgisi" onPress={() => router.push('/ayarlar/gizlilik')} />
-        <ListRow icon={MessageSquareText} label="Hazır mesajlarım" onPress={() => router.push('/ayarlar/sablonlar')} />
-        <ListRow icon={Ban} label="Engellenen kullanıcılar" onPress={() => router.push('/ayarlar/engellenenler')} />
-        <ListRow icon={KeyRound} label="Şifre ve güvenlik" onPress={() => router.push('/ayarlar/guvenlik')} />
-      </RowGroup>
-
-      <RowGroup title="Destek">
-        <ListRow icon={HelpCircle} label="Yardım merkezi" onPress={() => router.push({ pathname: '/sayfa/[slug]', params: { slug: 'yardim' } })} />
-        <ListRow icon={Mail} label="Bize yazın" value={SUPPORT_EMAIL} onPress={() => void Linking.openURL(`mailto:${SUPPORT_EMAIL}`)} />
-        <ListRow icon={FileText} label="Yasal bilgiler" onPress={() => router.push('/ayarlar/yasal')} />
-      </RowGroup>
-
-      <RowGroup>
-        <ListRow icon={LogOut} label="Çıkış yap" danger onPress={() => void doSignOut()} />
-      </RowGroup>
-
-      <Text variant="small" tone="subtle" center>
-        GeldeSat {Constants.expoConfig?.version ?? ''}
-      </Text>
+      {live.length ? (
+        <View style={styles.rail}>
+          <ListingRail title="Yayındaki ilanlarım" items={live} onSeeAll={() => router.push('/ilanlarim')} />
+        </View>
+      ) : null}
     </ScrollView>
   );
 }
 
-function Stat({ label, value, onPress }: { label: string; value?: number; onPress: () => void }) {
-  const { c } = useTheme();
+function Stat({ label, value }: { label: string; value?: number }) {
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.stat, { backgroundColor: pressed ? c.elevated : c.surface, borderColor: c.border }]}>
-      <Text variant="heading">{value == null ? '–' : formatNumber(value)}</Text>
+    <View style={styles.stat}>
+      <Text variant="subheading">{value == null ? '–' : formatNumber(value)}</Text>
       <Text variant="small" tone="muted">
         {label}
       </Text>
+    </View>
+  );
+}
+
+function Tile({ icon: Icon, label, detail, to, badge = 0 }: { icon: LucideIcon; label: string; detail: string; to: Href; badge?: number }) {
+  const { c } = useTheme();
+  const router = useRouter();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={badge ? `${label}, ${badge} yeni` : label}
+      onPress={() => router.push(to)}
+      style={({ pressed }) => [styles.tile, { backgroundColor: pressed ? c.elevated : c.surface, borderColor: c.border }]}
+    >
+      <View style={[styles.tileIcon, { backgroundColor: c.primarySoft }]}>
+        <Icon size={20} color={c.primary} />
+      </View>
+      <View style={styles.flex}>
+        <Text variant="label" numberOfLines={1}>
+          {label}
+        </Text>
+        <Text variant="small" tone="muted" numberOfLines={1}>
+          {detail}
+        </Text>
+      </View>
+      {badge ? (
+        <View style={[styles.badge, { backgroundColor: c.urgent }]}>
+          <Text variant="small" style={styles.badgeText}>
+            {badge > 99 ? '99+' : badge}
+          </Text>
+        </View>
+      ) : null}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  guest: { padding: space.xl, gap: space.md, alignItems: 'stretch' },
-  guestLogo: { width: 80, height: 80, borderRadius: 26, alignItems: 'center', justifyContent: 'center', alignSelf: 'center', marginBottom: space.md },
-  guestLinks: { marginTop: space.xl },
-  content: { padding: space.lg, gap: space.xl, paddingBottom: space.xxxl },
-  profile: { flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.lg, borderRadius: radius.lg, borderWidth: hairline },
+  top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space.lg, paddingBottom: space.sm },
+  guestWrap: { flexGrow: 1 },
+  guest: { padding: space.xl, gap: space.md, alignItems: 'stretch', marginTop: space.xl },
+  guestLogo: { borderRadius: 18, borderWidth: hairline, overflow: 'hidden', alignSelf: 'center', marginBottom: space.md },
+  content: { gap: space.lg, paddingBottom: space.xxxl },
+  card: { marginHorizontal: space.lg, borderRadius: radius.xl, borderWidth: hairline, padding: space.lg, gap: space.lg },
+  profileRow: { flexDirection: 'row', alignItems: 'center', gap: space.lg },
   rating: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginTop: 2 },
-  warn: { flexDirection: 'row', alignItems: 'center', gap: space.sm, padding: space.md, borderRadius: radius.md, marginTop: -space.md },
-  stats: { flexDirection: 'row', gap: space.sm },
-  stat: { flex: 1, alignItems: 'center', paddingVertical: space.md, borderRadius: radius.lg, borderWidth: hairline, gap: 2 },
-  dotWrap: { width: 24, height: 20 },
+  stats: { flexDirection: 'row', alignItems: 'center', borderTopWidth: hairline, borderBottomWidth: hairline, paddingVertical: space.md },
+  stat: { flex: 1, alignItems: 'center', gap: 2 },
+  statDivider: { width: hairline, alignSelf: 'stretch' },
+  actions: { flexDirection: 'row', gap: space.sm },
+  warn: { flexDirection: 'row', alignItems: 'center', gap: space.sm, padding: space.md, borderRadius: radius.md, marginHorizontal: space.lg },
+  tiles: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, paddingHorizontal: space.lg },
+  tile: {
+    width: '48.6%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    padding: space.md,
+    borderRadius: radius.lg,
+    borderWidth: hairline,
+    minHeight: 64,
+  },
+  tileIcon: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  badge: { position: 'absolute', top: 6, right: 6, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4, alignItems: 'center', justifyContent: 'center' },
+  badgeText: { color: '#fff', fontSize: 10, lineHeight: 12, fontWeight: '700' },
+  rail: { marginTop: space.sm },
 });

@@ -2,6 +2,7 @@ import { getSql } from "@/lib/db";
 import { asJson, num } from "@/lib/utils";
 import { resolveNotifyPrefs, type NotifyChannelPrefs, type PhoneVisibility } from "@/lib/notification-prefs";
 import { findCategory, getCategoryTree, subtreeOf } from "./category-cache";
+import { broadcastUserInbox } from "./chat-bus";
 
 export type CategoryRow = {
   id: string;
@@ -274,6 +275,7 @@ export async function notify(userId: string, type: string, title: string, body: 
        values ($1, $2, $3, $4, $5, $6)`,
       [`ntf_${crypto.randomUUID().slice(0, 12)}`, userId, type, title, body, link],
     );
+    broadcastUserInbox(userId, { type: "notification" });
   }
   if (!channel.push) return;
 
@@ -285,6 +287,14 @@ export async function notify(userId: string, type: string, title: string, body: 
       [userId],
     );
     if (devices.length) {
+      // App icon badge: unread bell notifications plus unread chat messages.
+      const badgeRows = await sql.query<{ n: number }>(
+        `select (select count(*)::int from notifications where user_id=$1 and read_at is null)
+              + (select count(*)::int from messages m join conversations cv on cv.id = m.conversation_id
+                 where m.read_at is null and m.sender_id <> $1 and (cv.buyer_id = $1 or cv.seller_id = $1)) as n`,
+        [userId],
+      );
+      const badge = badgeRows[0]?.n ?? 0;
       const response = await fetch("https://exp.host/--/api/v2/push/send", {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -293,6 +303,7 @@ export async function notify(userId: string, type: string, title: string, body: 
           title,
           body,
           sound: "default",
+          badge,
           data: { link },
           channelId: "default",
         }))),

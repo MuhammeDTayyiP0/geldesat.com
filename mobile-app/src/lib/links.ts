@@ -38,6 +38,8 @@ export function appRouteForWebPath(path: string): Href | null {
       return second ? { pathname: '/sayfa/[slug]', params: { slug: second } } : null;
     case 'ilan-ver':
       return '/ilan-ver';
+    case 'doping':
+      return '/doping';
     case 'search':
       return '/sonuclar';
     case 'profil':

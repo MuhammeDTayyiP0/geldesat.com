@@ -26,18 +26,50 @@ const OUTLINED_MARK = `<g stroke="#0d1117" stroke-opacity="0.55">${markPaths(11)
 
 const FONT = "DejaVu Sans, Arial, Helvetica, sans-serif";
 
-/**
- * Diagonal "logo + GeldeSat" pattern tiled over the whole photo, so the mark
- * cannot be cropped or cloned out, plus a solid corner badge. White text with a
- * thin dark outline stays visible on both light and dark photos.
- */
-function watermarkSvg(w: number, h: number): Buffer {
+/** Solid "logo + GeldeSat" badge in the bottom-right corner, with a soft shadow. */
+function cornerBadge(w: number, h: number, scale = 1): string {
   const short = Math.min(w, h);
-  const font = Math.max(16, Math.round(short / 15));
+  const badgeH = Math.max(20, Math.round(short * 0.05 * scale));
+  const pad = Math.round(badgeH * 0.6);
+  const badgeFont = Math.round(badgeH * 0.62);
+  const badgeW = badgeH + Math.round(badgeH * 0.25) + Math.round(badgeFont * 4.6) + pad;
+  const bx = w - badgeW - pad;
+  const by = h - badgeH - pad;
+  const badgeIcon = badgeH * 0.72;
+  return `
+  <defs>
+    <filter id="s" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="1" stdDeviation="${Math.max(1, badgeH / 14)}" flood-color="#000" flood-opacity="0.45"/>
+    </filter>
+  </defs>
+  <g filter="url(#s)">
+    <g transform="translate(${bx} ${by + (badgeH - badgeIcon) / 2}) scale(${badgeIcon / 64})" stroke="#ffffff" opacity="0.92">${MARK_PATHS}</g>
+    <text x="${bx + badgeH + badgeH * 0.1}" y="${by + badgeH * 0.72}" font-family="${FONT}"
+          font-weight="700" font-size="${badgeFont}" fill="#ffffff" fill-opacity="0.92">GeldeSat</text>
+  </g>`;
+}
+
+/** One "logo + GeldeSat" unit with its left edge at x=0 and text baseline at y=0. */
+function markUnit(font: number): { svg: string; width: number } {
   const icon = font * 1.05;
-  const unitW = icon + font * 0.35 + font * 4.6; // logo + gap + "GeldeSat"
-  const gapX = unitW + font * 2.6;
-  const gapY = font * 3.6;
+  const width = icon + font * 0.35 + font * 4.6; // logo + gap + "GeldeSat"
+  const svg =
+    `<g transform="translate(0 ${(-icon * 0.78).toFixed(1)}) scale(${(icon / 64).toFixed(4)})">${OUTLINED_MARK}</g>` +
+    `<text x="${(icon + font * 0.35).toFixed(1)}" y="0">GeldeSat</text>`;
+  return { svg, width };
+}
+
+/**
+ * Listing photos: a sparse diagonal "logo + GeldeSat" pattern over the whole
+ * photo (so the mark cannot be cropped or cloned out) plus the corner badge.
+ * White with a thin dark outline stays visible on light and dark photos.
+ */
+function listingWatermarkSvg(w: number, h: number): Buffer {
+  const short = Math.min(w, h);
+  const font = Math.max(15, Math.round(short / 17));
+  const unit = markUnit(font);
+  const gapX = unit.width + font * 3.4;
+  const gapY = font * 4.6;
   const diag = Math.ceil(Math.hypot(w, h) / 2) + gapX;
   const stroke = Math.max(1, font / 22);
 
@@ -45,38 +77,36 @@ function watermarkSvg(w: number, h: number): Buffer {
   for (let row = 0, y = -diag; y <= diag; y += gapY, row++) {
     const shift = row % 2 ? gapX / 2 : 0;
     for (let x = -diag - shift; x <= diag; x += gapX) {
-      tiles.push(
-        `<g transform="translate(${(x - unitW / 2).toFixed(1)} ${y.toFixed(1)})">` +
-          `<g transform="translate(0 ${(-icon * 0.78).toFixed(1)}) scale(${(icon / 64).toFixed(4)})">${OUTLINED_MARK}</g>` +
-          `<text x="${(icon + font * 0.35).toFixed(1)}" y="0">GeldeSat</text></g>`,
-      );
+      tiles.push(`<g transform="translate(${(x - unit.width / 2).toFixed(1)} ${y.toFixed(1)})">${unit.svg}</g>`);
     }
   }
 
-  const badgeH = Math.max(22, Math.round(short * 0.055));
-  const pad = Math.round(badgeH * 0.6);
-  const badgeFont = Math.round(badgeH * 0.62);
-  const badgeW = badgeH + Math.round(badgeH * 0.25) + Math.round(badgeFont * 4.6) + pad;
-  const bx = w - badgeW - pad;
-  const by = h - badgeH - pad;
-  const badgeIcon = badgeH * 0.72;
-
   return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
-  <defs>
-    <filter id="s" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="1" stdDeviation="${Math.max(1, badgeH / 14)}" flood-color="#000" flood-opacity="0.45"/>
-    </filter>
-  </defs>
-  <g transform="translate(${w / 2} ${h / 2}) rotate(-30)" opacity="0.3"
+  <g transform="translate(${w / 2} ${h / 2}) rotate(-30)" opacity="0.22"
      font-family="${FONT}" font-weight="700" font-size="${font}"
-     fill="#ffffff" stroke="#0d1117" stroke-opacity="0.55" stroke-width="${stroke.toFixed(2)}" paint-order="stroke">
+     fill="#ffffff" stroke="#0d1117" stroke-opacity="0.5" stroke-width="${stroke.toFixed(2)}" paint-order="stroke">
     ${tiles.join("")}
   </g>
-  <g filter="url(#s)">
-    <g transform="translate(${bx} ${by + (badgeH - badgeIcon) / 2}) scale(${badgeIcon / 64})" stroke="#ffffff" opacity="0.95">${MARK_PATHS}</g>
-    <text x="${bx + badgeH + badgeH * 0.1}" y="${by + badgeH * 0.72}" font-family="${FONT}"
-          font-weight="700" font-size="${badgeFont}" fill="#ffffff" fill-opacity="0.95">GeldeSat</text>
+  ${cornerBadge(w, h)}
+</svg>`);
+}
+
+/**
+ * Chat photos: just two marks, so the photo stays easy to look at: one large,
+ * faint mark across the centre and the small corner badge.
+ */
+function chatWatermarkSvg(w: number, h: number): Buffer {
+  const short = Math.min(w, h);
+  const font = Math.max(18, Math.round(short / 9));
+  const unit = markUnit(font);
+  const stroke = Math.max(1, font / 24);
+  return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
+  <g transform="translate(${w / 2} ${h / 2}) rotate(-24) translate(${(-unit.width / 2).toFixed(1)} ${(font * 0.35).toFixed(1)})" opacity="0.16"
+     font-family="${FONT}" font-weight="700" font-size="${font}"
+     fill="#ffffff" stroke="#0d1117" stroke-opacity="0.5" stroke-width="${stroke.toFixed(2)}" paint-order="stroke">
+    ${unit.svg}
   </g>
+  ${cornerBadge(w, h, 0.85)}
 </svg>`);
 }
 
@@ -135,7 +165,7 @@ export async function processListingPhoto(input: Uint8Array): Promise<Buffer> {
   const resized = await base
     .resize({ width: w, height: h, fit: "fill" })
     .flatten({ background: "#ffffff" }) // transparent PNGs get white, not black
-    .composite([{ input: watermarkSvg(w, h) }])
+    .composite([{ input: listingWatermarkSvg(w, h) }])
     .toBuffer();
 
   for (const quality of [80, 72, 64]) {
@@ -145,19 +175,39 @@ export async function processListingPhoto(input: Uint8Array): Promise<Buffer> {
   throw new Error("Fotoğraf işlenemedi. Daha küçük bir fotoğraf deneyin.");
 }
 
-/** Photo sent in a chat: upright, long edge 1600px, WebP, metadata (GPS) stripped, no watermark. */
+/** Long edge of chat photos: sharp on any phone, small enough to send quickly. */
+const CHAT_LONG_EDGE = 1600;
+
+/**
+ * Photo sent in a chat, through the same steps as listing photos: upright,
+ * metadata (GPS) stripped, long edge capped, WebP sized to fit, plus a light
+ * two-mark watermark.
+ */
 export async function processChatPhoto(input: Uint8Array): Promise<Buffer> {
-  const base = isHeif(input)
-    ? (await openHeif(input)).image
-    : sharp(input, { failOn: "error", limitInputPixels: MAX_INPUT_PIXELS }).rotate();
-  for (const quality of [80, 70]) {
-    const out = await base
-      .clone()
-      .resize({ width: 1600, height: 1600, fit: "inside", withoutEnlargement: true })
-      .flatten({ background: "#ffffff" })
-      .webp({ quality })
-      .toBuffer();
-    if (out.byteLength <= 2 * 1024 * 1024) return out;
+  let base: sharp.Sharp;
+  let srcW: number;
+  let srcH: number;
+  if (isHeif(input)) {
+    ({ image: base, width: srcW, height: srcH } = await openHeif(input));
+  } else {
+    base = sharp(input, { failOn: "error", limitInputPixels: MAX_INPUT_PIXELS }).rotate();
+    const meta = await base.metadata();
+    const oriented = (meta.orientation ?? 1) >= 5;
+    srcW = (oriented ? meta.height : meta.width) ?? 0;
+    srcH = (oriented ? meta.width : meta.height) ?? 0;
+  }
+  if (!srcW || !srcH) throw new Error("Fotoğraf okunamadı.");
+
+  const scale = Math.min(1, CHAT_LONG_EDGE / Math.max(srcW, srcH));
+  const w = Math.max(1, Math.round(srcW * scale));
+  const h = Math.max(1, Math.round(srcH * scale));
+  const prepared = base.resize({ width: w, height: h, fit: "fill" }).flatten({ background: "#ffffff" });
+  // Very small images (stickers, screenshots of a few lines) skip the watermark.
+  const resized = await (Math.min(w, h) >= 200 ? prepared.composite([{ input: chatWatermarkSvg(w, h) }]) : prepared).toBuffer();
+
+  for (const quality of [78, 70, 62]) {
+    const out = await sharp(resized).webp({ quality, effort: 4, smartSubsample: true }).toBuffer();
+    if (out.byteLength <= MAX_STORED_BYTES) return out;
   }
   throw new Error("Fotoğraf işlenemedi. Daha küçük bir fotoğraf deneyin.");
 }

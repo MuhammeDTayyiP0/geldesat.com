@@ -8,7 +8,7 @@ import Svg, { Path } from 'react-native-svg';
 import { errorMessage } from '@/api/client';
 import { keys, queryClient, useConfig } from '@/api/queries';
 import { requestPasswordReset, signInWithEmail, signInWithGoogle, signUpWithEmail } from '@/auth/auth';
-import { Button, IconButton, Input, LogoMark, Segmented, Text, hairline, radius, space, toast, useTheme, type TextInputRef } from '@/ui';
+import { Button, IconButton, Input, BrandIcon, Segmented, Text, hairline, radius, space, toast, useTheme, type TextInputRef } from '@/ui';
 
 type Mode = 'signin' | 'signup' | 'forgot';
 
@@ -91,8 +91,8 @@ export default function SignInScreen() {
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + space.xxl }]}
       >
         <View style={styles.brand}>
-          <View style={[styles.logo, { backgroundColor: c.primarySoft }]}>
-            <LogoMark size={36} color={c.primary} />
+          <View style={[styles.logo, { borderColor: c.border }]}>
+            <BrandIcon size={68} />
           </View>
           <Text variant="title" center>
             {mode === 'signup' ? 'Hesap oluşturun' : mode === 'forgot' ? 'Şifrenizi mi unuttunuz?' : 'GeldeSat’a giriş yapın'}
@@ -250,7 +250,7 @@ const styles = StyleSheet.create({
   close: { alignItems: 'flex-end', paddingHorizontal: space.sm },
   content: { paddingHorizontal: space.xl, gap: space.xl },
   brand: { alignItems: 'center', gap: space.sm, marginTop: space.sm },
-  logo: { width: 68, height: 68, borderRadius: 22, alignItems: 'center', justifyContent: 'center', marginBottom: space.sm },
+  logo: { borderRadius: 16, borderWidth: hairline, overflow: 'hidden', alignSelf: 'center', marginBottom: space.sm },
   notice: { padding: space.md, borderRadius: radius.md },
   form: { gap: space.lg },
   link: { alignSelf: 'center' },

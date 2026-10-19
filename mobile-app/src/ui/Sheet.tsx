@@ -1,7 +1,10 @@
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { GestureDetector, GestureHandlerRootView, usePanGesture } from 'react-native-gesture-handler';
+import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import { scheduleOnRN } from 'react-native-worklets';
 import { X } from 'lucide-react-native';
 import { IconButton } from './Button';
 import { Text } from './Text';
@@ -20,54 +23,114 @@ export type SheetProps = {
   scroll?: boolean;
 };
 
-/** Bottom sheet built on a native modal: backdrop tap, back button and the close icon dismiss it. */
+/** Pull further than this (or flick faster than DISMISS_VELOCITY) and the sheet closes. */
+const DISMISS_DISTANCE = 110;
+const DISMISS_VELOCITY = 900;
+
+/**
+ * Bottom sheet on a native modal. Drag the handle or header down to dismiss;
+ * the backdrop, back button and close icon dismiss it too. It slides out
+ * before unmounting, whoever closes it.
+ */
 export function Sheet({ visible, onClose, title, subtitle, children, footer, tall, scroll = true }: SheetProps) {
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const maxHeight = height - insets.top - 24;
+
+  // Stay mounted while the closing animation runs.
+  const [mounted, setMounted] = useState(visible);
+  if (visible && !mounted) setMounted(true);
+
+  const offset = useSharedValue(height);
+
+  useEffect(() => {
+    if (visible) {
+      offset.set(withTiming(0, { duration: 280, easing: Easing.out(Easing.cubic) }));
+    } else {
+      offset.set(
+        withTiming(height, { duration: 220, easing: Easing.in(Easing.cubic) }, (finished) => {
+          if (finished) scheduleOnRN(setMounted, false);
+        }),
+      );
+    }
+  }, [visible, height, offset]);
+
+  const drag = usePanGesture({
+    activeOffsetY: 6,
+    onUpdate: (e) => {
+      'worklet';
+      // Follow the finger down; resist a little when pulled up.
+      offset.set(e.translationY > 0 ? e.translationY : e.translationY / 6);
+    },
+    onDeactivate: (e) => {
+      'worklet';
+      if (e.translationY > DISMISS_DISTANCE || e.velocityY > DISMISS_VELOCITY) {
+        scheduleOnRN(onClose);
+      } else {
+        offset.set(withSpring(0, { damping: 22, stiffness: 260 }));
+      }
+    },
+  });
+
+  const sheetStyle = useAnimatedStyle(() => ({ transform: [{ translateY: offset.get() }] }));
+  const backdropStyle = useAnimatedStyle(() => ({ opacity: interpolate(offset.get(), [0, height * 0.6], [1, 0], 'clamp') }));
+
+  if (!mounted) return null;
+
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent navigationBarTranslucent>
-      <KeyboardAvoidingView behavior="padding" style={styles.flex}>
-        <Pressable accessibilityLabel="Kapat" style={[styles.backdrop, { backgroundColor: c.overlay }]} onPress={onClose} />
-        <View
-          style={[
-            styles.sheet,
-            { backgroundColor: c.surface, maxHeight, paddingBottom: footer ? 0 : insets.bottom + space.md },
-            tall && { height: maxHeight },
-          ]}
-        >
-          <View style={[styles.grabber, { backgroundColor: c.borderStrong }]} />
-          {title ? (
-            <View style={styles.header}>
-              <View style={styles.flex}>
-                <Text variant="subheading">{title}</Text>
-                {subtitle ? (
-                  <Text variant="caption" tone="muted">
-                    {subtitle}
-                  </Text>
+    <Modal visible transparent animationType="none" onRequestClose={onClose} statusBarTranslucent navigationBarTranslucent>
+      <GestureHandlerRootView style={styles.flex}>
+        <KeyboardAvoidingView behavior="padding" style={styles.flex}>
+          <Animated.View style={[styles.backdrop, { backgroundColor: c.overlay }, backdropStyle]}>
+            <Pressable accessibilityLabel="Kapat" style={styles.flex} onPress={onClose} />
+          </Animated.View>
+          <Animated.View
+            style={[
+              styles.sheet,
+              { backgroundColor: c.surface, maxHeight, paddingBottom: footer ? 0 : insets.bottom + space.md },
+              tall && { height: maxHeight },
+              sheetStyle,
+            ]}
+          >
+            <GestureDetector gesture={drag}>
+              <View accessibilityHint="Kapatmak için aşağı kaydırın">
+                <View style={styles.handleArea}>
+                  <View style={[styles.grabber, { backgroundColor: c.borderStrong }]} />
+                </View>
+                {title ? (
+                  <View style={styles.header}>
+                    <View style={styles.flex}>
+                      <Text variant="subheading">{title}</Text>
+                      {subtitle ? (
+                        <Text variant="caption" tone="muted">
+                          {subtitle}
+                        </Text>
+                      ) : null}
+                    </View>
+                    <IconButton icon={X} label="Kapat" onPress={onClose} size={36} />
+                  </View>
                 ) : null}
               </View>
-              <IconButton icon={X} label="Kapat" onPress={onClose} size={36} />
-            </View>
-          ) : null}
-          {scroll ? (
-            <ScrollView
-              style={tall ? styles.flex : undefined}
-              contentContainerStyle={styles.body}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-            >
-              {children}
-            </ScrollView>
-          ) : (
-            <View style={[styles.flex, styles.bodyFixed]}>{children}</View>
-          )}
-          {footer ? (
-            <View style={[styles.footer, { borderTopColor: c.border, paddingBottom: insets.bottom + space.md }]}>{footer}</View>
-          ) : null}
-        </View>
-      </KeyboardAvoidingView>
+            </GestureDetector>
+            {scroll ? (
+              <ScrollView
+                style={tall ? styles.flex : undefined}
+                contentContainerStyle={styles.body}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
+                {children}
+              </ScrollView>
+            ) : (
+              <View style={[styles.flex, styles.bodyFixed]}>{children}</View>
+            )}
+            {footer ? (
+              <View style={[styles.footer, { borderTopColor: c.border, paddingBottom: insets.bottom + space.md }]}>{footer}</View>
+            ) : null}
+          </Animated.View>
+        </KeyboardAvoidingView>
+      </GestureHandlerRootView>
     </Modal>
   );
 }
@@ -84,7 +147,8 @@ const styles = StyleSheet.create({
     borderTopRightRadius: radius.xl,
     overflow: 'hidden',
   },
-  grabber: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, marginTop: space.sm, marginBottom: space.xs },
+  handleArea: { alignItems: 'center', paddingTop: space.sm, paddingBottom: space.xs },
+  grabber: { width: 40, height: 5, borderRadius: 3 },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: space.lg, paddingVertical: space.sm, gap: space.sm },
   body: { paddingHorizontal: space.lg, paddingBottom: space.lg, gap: space.md },
   bodyFixed: { paddingHorizontal: space.lg },

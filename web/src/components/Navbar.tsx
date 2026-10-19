@@ -99,6 +99,8 @@ export function Navbar({ className }: NavbarProps) {
       } else if (data.type === "read_update" || data.type === "inbox_ping") {
         loadStats();
         window.dispatchEvent(new CustomEvent("geldesat:inbox", { detail: data }));
+      } else if (data.type === "notification") {
+        loadStats();
       }
     });
     window.addEventListener("geldesat:inbox", loadStats);
@@ -172,7 +174,7 @@ export function Navbar({ className }: NavbarProps) {
             </button>
 
             <Link to="/" className="flex items-center gap-2 group">
-              <LogoMark className="size-8 transition-transform group-hover:scale-105" />
+              <LogoMark className="size-8 text-brand transition-transform group-hover:scale-105" />
               <span className="text-xl font-bold tracking-tight text-ink">GeldeSat</span>
             </Link>
           </div>

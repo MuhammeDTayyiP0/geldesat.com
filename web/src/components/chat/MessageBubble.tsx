@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useRef, useState, type TouchEvent } from "react";
 import { AlertTriangle, Check, CheckCheck, Clock3, Copy, Flag, HandCoins, MapPin, MoreHorizontal, Reply, Trash2 } from "lucide-react";
 import { DropdownMenu, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { MenuContent, MenuItem } from "@/components/chat/ChatUi";
 import { chatImageUrl, DELETE_WINDOW_MS, linkify, mapsUrl, messageRisk, previewText, type ChatMessage } from "@/lib/chat-shared";
+import { MapThumb } from "./MapThumb";
 import { cn, formatPrice, LISTING_PHOTO_MSG } from "@/lib/utils";
 
 function clock(iso: string) {
@@ -17,6 +18,54 @@ const OFFER_STATE: Record<string, { label: string; tone: string }> = {
   withdrawn: { label: "Geri çekildi", tone: "text-muted" },
   countered: { label: "Karşı teklif verildi", tone: "text-muted" },
 };
+
+const SWIPE_TRIGGER = 64;
+
+/**
+ * Touch "swipe right to reply", like WhatsApp. `touch-action: pan-y` leaves
+ * vertical scrolling to the browser; horizontal drags move the bubble.
+ */
+function useSwipeToReply(onReply: () => void, enabled: boolean) {
+  const [dx, setDx] = useState(0);
+  const start = useRef<{ x: number; y: number; axis: "x" | "y" | null } | null>(null);
+  const armed = useRef(false);
+  return {
+    dx,
+    handlers: enabled
+      ? {
+          onTouchStart: (e: TouchEvent) => {
+            const t = e.touches[0];
+            start.current = { x: t.clientX, y: t.clientY, axis: null };
+          },
+          onTouchMove: (e: TouchEvent) => {
+            const s0 = start.current;
+            if (!s0) return;
+            const t = e.touches[0];
+            const mx = t.clientX - s0.x;
+            const my = t.clientY - s0.y;
+            if (!s0.axis && (Math.abs(mx) > 10 || Math.abs(my) > 10)) s0.axis = Math.abs(mx) > Math.abs(my) ? "x" : "y";
+            if (s0.axis !== "x") return;
+            const x = Math.max(0, mx > 96 ? 96 + (mx - 96) * 0.15 : mx);
+            setDx(x);
+            const over = x >= SWIPE_TRIGGER;
+            if (over && !armed.current) navigator.vibrate?.(10);
+            armed.current = over;
+          },
+          onTouchEnd: () => {
+            if (armed.current) onReply();
+            armed.current = false;
+            start.current = null;
+            setDx(0);
+          },
+          onTouchCancel: () => {
+            armed.current = false;
+            start.current = null;
+            setDx(0);
+          },
+        }
+      : {},
+  };
+}
 
 /**
  * One chat message: text (links clickable, scam patterns flagged), photo,
@@ -82,12 +131,15 @@ export function MessageBubble({
       <p className="italic opacity-80">İlan görseli</p>
     )
   ) : location ? (
-    <a href={mapsUrl(location)} target="_blank" rel="noopener noreferrer" className="flex min-w-52 items-center gap-3">
-      <span className={cn("grid size-11 shrink-0 place-items-center rounded-xl", mine ? "bg-white/20" : "bg-primary/10 text-primary")}>
-        <MapPin className="size-5" />
-      </span>
-      <span className="min-w-0">
-        <span className="block text-xs font-semibold uppercase tracking-wide opacity-80">Buluşma noktası</span>
+    <a href={mapsUrl(location)} target="_blank" rel="noopener noreferrer" className="-mx-1.5 -mt-1 block min-w-52 max-w-64">
+      {location.lat != null && location.lng != null ? (
+        <MapThumb lat={location.lat} lng={location.lng} width={256} height={150} />
+      ) : (
+        <span className={cn("grid h-24 place-items-center rounded-xl", mine ? "bg-white/15" : "bg-primary/10 text-primary")}>
+          <MapPin className="size-7" />
+        </span>
+      )}
+      <span className="block px-1.5 pt-2">
         <span className="block break-words font-semibold">{location.label}</span>
         <span className="block text-xs underline underline-offset-2 opacity-80">Haritada aç</span>
       </span>
@@ -144,8 +196,23 @@ export function MessageBubble({
     </p>
   );
 
+  const swipe = useSwipeToReply(onReply, !m.deleted && !pending);
+
   return (
-    <div className={cn("group/msg flex items-center gap-1", mine ? "flex-row-reverse" : "flex-row")}>
+    <div
+      {...swipe.handlers}
+      className={cn("group/msg relative flex items-center gap-1 touch-pan-y", mine ? "flex-row-reverse" : "flex-row")}
+      style={swipe.dx ? { transform: `translateX(${swipe.dx}px)` } : { transition: "transform 180ms ease-out" }}
+    >
+      {swipe.dx ? (
+        <span
+          aria-hidden="true"
+          className="absolute -left-10 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-full bg-elevated text-muted"
+          style={{ opacity: Math.min(1, swipe.dx / SWIPE_TRIGGER), transform: `translateY(-50%) scale(${0.6 + 0.4 * Math.min(1, swipe.dx / SWIPE_TRIGGER)})` }}
+        >
+          <Reply className="size-4" />
+        </span>
+      ) : null}
       <div className={cn("flex max-w-[min(82%,28rem)] flex-col", mine ? "items-end" : "items-start")}>
         <div
           className={cn(

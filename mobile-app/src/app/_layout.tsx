@@ -10,10 +10,11 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { restoreSession } from '@/auth/auth';
 import { useSession } from '@/auth/session';
-import { clearPrivateQueries, queryClient } from '@/api/queries';
+import { clearPrivateQueries, queryClient, useCounts } from '@/api/queries';
 import { resetChatStream, subscribeChatStream } from '@/features/chat/stream';
 import { appRouteForWebPath } from '@/lib/links';
 import { notificationLink, registerForPush } from '@/lib/push';
+import { loadThemePref } from '@/lib/themePref';
 import { ToastHost, useTheme } from '@/ui';
 
 void SplashScreen.preventAutoHideAsync();
@@ -23,7 +24,7 @@ export default function RootLayout() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    void restoreSession().finally(() => {
+    void Promise.all([loadThemePref(), restoreSession()]).finally(() => {
       setReady(true);
       SplashScreen.hide();
     });
@@ -77,6 +78,9 @@ function SessionEffects() {
       if (event.type === 'new_message' || event.type === 'read_update' || event.type === 'inbox_ping') {
         void queryClient.invalidateQueries({ queryKey: ['counts'] });
         void queryClient.invalidateQueries({ queryKey: ['inbox'] });
+      } else if (event.type === 'notification') {
+        void queryClient.invalidateQueries({ queryKey: ['counts'] });
+        void queryClient.invalidateQueries({ queryKey: ['notifications'] });
       }
     });
   }, [userId]);
@@ -88,6 +92,7 @@ function SessionEffects() {
       const link = notificationLink(response);
       const route = link ? appRouteForWebPath(link) : null;
       router.push(route ?? '/bildirimler');
+      void queryClient.invalidateQueries({ queryKey: ['counts'] });
     };
     const last = Notifications.getLastNotificationResponse();
     if (last) {
@@ -106,5 +111,16 @@ function SessionEffects() {
     };
   }, [router]);
 
+  return <AppBadge signedIn={!!userId} />;
+}
+
+/** Keep the app icon badge equal to unread notifications + messages (0 when signed out). */
+function AppBadge({ signedIn }: { signedIn: boolean }) {
+  const { data } = useCounts();
+  const total = signedIn ? (data?.notifications ?? 0) + (data?.messages ?? 0) : 0;
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    void Notifications.setBadgeCountAsync(total).catch(() => undefined);
+  }, [total]);
   return null;
 }

@@ -23,7 +23,7 @@
       "package": "com.geldesat.app",
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
-        "backgroundColor": "#1a4fd8",
+        "backgroundColor": "#F7F8FC",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
@@ -57,9 +57,13 @@
         "expo-splash-screen",
         {
           "image": "./assets/splash-icon.png",
-          "imageWidth": 160,
+          "imageWidth": 140,
           "resizeMode": "contain",
-          "backgroundColor": "#1a4fd8"
+          "backgroundColor": "#F7F8FC",
+          "dark": {
+            "image": "./assets/splash-icon-dark.png",
+            "backgroundColor": "#0b0e13"
+          }
         }
       ],
       [
@@ -80,7 +84,7 @@
         "expo-notifications",
         {
           "icon": "./assets/notification-icon.png",
-          "color": "#1a4fd8"
+          "color": "#0A2342"
         }
       ]
     ],

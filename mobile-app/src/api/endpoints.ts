@@ -144,6 +144,19 @@ export const chat = {
   saveTemplates: (templates: string[]) => rpc<string[]>('saveChatTemplates', { templates }),
 };
 
+// ─── Places (meeting-point picker; the site proxies OpenStreetMap Nominatim) ──
+
+export type GeoPlace = { label: string; lat: number; lng: number };
+
+export const geo = {
+  search: (q: string, near?: { lat: number; lng: number }) =>
+    request<{ results: GeoPlace[] }>(`/api/geo${toQuery({ q, near: near ? `${near.lat},${near.lng}` : undefined })}`, { auth: false }).then(
+      (r) => r.results,
+    ),
+  reverse: (lat: number, lng: number) =>
+    request<{ label: string }>(`/api/geo${toQuery({ lat: lat.toFixed(6), lng: lng.toFixed(6) })}`, { auth: false }).then((r) => r.label),
+};
+
 // ─── Uploads ────────────────────────────────────────────────────────────────
 
 type LocalImage = { uri: string; mimeType?: string | null; fileName?: string | null };

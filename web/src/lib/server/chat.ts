@@ -472,6 +472,11 @@ export const markThreadRead = createServerFn({ method: "POST" })
       const showReads = (await readsVisible(sql, context.userId)) && (await readsVisible(sql, otherOf(conv, context.userId)));
       if (showReads) broadcastChatRead(conv.id, read.map((r) => ({ id: r.id, read_at: nowIso })));
     }
+    // The chat is read, so its "Yeni mesaj" bell notifications are too.
+    await sql.query("update notifications set read_at=now() where user_id=$1 and link=$2 and read_at is null", [
+      context.userId,
+      `/mesajlar/${conv.id}`,
+    ]);
     broadcastUserInbox(context.userId, { type: "read_update", conversationId: conv.id });
     return { ok: true, readCount: read.length };
   });

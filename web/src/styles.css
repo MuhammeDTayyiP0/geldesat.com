@@ -25,6 +25,8 @@
   --color-primary: #1a4fd8;
   --color-primary-fg: #f7f8fc;
   --color-ink: #0d1117;
+  /* Logo navy, as in favicon.svg (light in dark mode). */
+  --color-brand: #0a2342;
   --color-danger: #b42318;
   --color-ok: #1f7a4d;
   --color-warn: #9a6700;
@@ -39,6 +41,54 @@
 
   --ease-sheet: cubic-bezier(0.22, 1, 0.36, 1);
   --header-h: 4rem;
+}
+
+/*
+ * Dark theme: the same tokens with dark values. `data-theme` on <html> comes
+ * from the saved choice (lib/theme.ts); without it the device setting decides.
+ * The two blocks must stay identical.
+ */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-bg: #0b0e13;
+  --color-fg: #eef1f6;
+  --color-muted: #a3abb8;
+  --color-subtle: #7a8392;
+  --color-surface: #141922;
+  --color-elevated: #1d2430;
+  --color-border: #2a3341;
+  --color-primary: #4f7cff;
+  --color-primary-fg: #ffffff;
+  --color-ink: #05070a;
+  --color-brand: #f7f8fc;
+  --color-danger: #f97066;
+  --color-ok: #47cd89;
+  --color-warn: #fdb022;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px -16px rgb(0 0 0 / 0.7);
+  --shadow-lift: 0 1px 2px rgb(0 0 0 / 0.5), 0 16px 32px -18px rgb(0 0 0 / 0.8);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --color-bg: #0b0e13;
+    --color-fg: #eef1f6;
+    --color-muted: #a3abb8;
+    --color-subtle: #7a8392;
+    --color-surface: #141922;
+    --color-elevated: #1d2430;
+    --color-border: #2a3341;
+    --color-primary: #4f7cff;
+    --color-primary-fg: #ffffff;
+    --color-ink: #05070a;
+    --color-brand: #f7f8fc;
+  --color-brand: #f7f8fc;
+    --color-danger: #f97066;
+    --color-ok: #47cd89;
+    --color-warn: #fdb022;
+    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px -16px rgb(0 0 0 / 0.7);
+    --shadow-lift: 0 1px 2px rgb(0 0 0 / 0.5), 0 16px 32px -18px rgb(0 0 0 / 0.8);
+  }
 }
 
 @layer base {

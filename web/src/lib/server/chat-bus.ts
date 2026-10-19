@@ -49,6 +49,10 @@ export type UserInboxEvent =
   | {
       type: "inbox_ping";
       conversationId?: string;
+    }
+  | {
+      /** A new in-app notification: refresh the bell badge. */
+      type: "notification";
     };
 
 // Global event bus surviving HMR in development

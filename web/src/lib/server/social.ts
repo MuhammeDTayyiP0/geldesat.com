@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
-import { newId } from "@/lib/utils";
+import { asIso, newId } from "@/lib/utils";
 import {
   canReviewSeller,
   ensureProfile,
@@ -154,7 +154,7 @@ export const myNotifications = createServerFn({ method: "GET" })
       body: n.body ? String(n.body) : "",
       link: n.link ? String(n.link) : "/",
       read: Boolean(n.read_at),
-      created_at: String(n.created_at),
+      created_at: asIso(n.created_at),
     }));
   });
 

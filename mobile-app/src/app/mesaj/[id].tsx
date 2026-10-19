@@ -5,11 +5,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
-import * as Location from 'expo-location';
 import { Image } from 'expo-image';
 import { useQuery } from '@tanstack/react-query';
 import {
   Ban,
+  Check,
+  CheckCheck,
+  ChevronDown,
   ChevronLeft,
   Copy,
   Flag,
@@ -31,11 +33,13 @@ import { keys, queryClient } from '@/api/queries';
 import type { ChatMessage } from '@/api/types';
 import { getToken, useSession } from '@/auth/session';
 import { Bubble } from '@/features/chat/Bubble';
+import { SwipeToReply } from '@/features/chat/SwipeToReply';
+import { LocationPicker } from '@/features/chat/LocationPicker';
 import { BUYER_QUICK_REPLIES, CHAT_REPORT_REASONS, DELETE_WINDOW_MS, SELLER_QUICK_REPLIES } from '@/features/chat/shared';
 import { onStreamResume, subscribeChatStream } from '@/features/chat/stream';
 import { PhotoViewer } from '@/features/listing/Gallery';
 import { mediaUrl } from '@/lib/config';
-import { dayLabel, formatPrice, lastSeenLabel, maskThousands, parseMasked } from '@/lib/format';
+import { dayLabel, formatPrice, formatTime, lastSeenLabel, maskThousands, parseMasked } from '@/lib/format';
 import { pickPhotos, preparePhoto } from '@/lib/photos';
 import {
   Avatar,
@@ -57,10 +61,11 @@ import {
   space,
   toast,
   useTheme,
+  type TextInputRef,
 } from '@/ui';
 
 type Row = { type: 'message'; message: ChatMessage; grouped: boolean } | { type: 'day'; key: string; label: string };
-type SheetName = 'attach' | 'offer' | 'location' | 'menu' | 'report' | 'search' | 'actions' | null;
+type SheetName = 'attach' | 'offer' | 'location' | 'menu' | 'report' | 'search' | 'actions' | 'info' | null;
 
 function sortMessages(list: ChatMessage[]): ChatMessage[] {
   const byId = new Map<string, ChatMessage>();
@@ -94,6 +99,10 @@ export default function ChatScreen() {
   const [sheet, setSheet] = useState<SheetName>(null);
   const [selected, setSelected] = useState<ChatMessage | null>(null);
   const [selectedDeletable, setSelectedDeletable] = useState(false);
+  const [away, setAway] = useState(false);
+  const [unseen, setUnseen] = useState(0);
+  const awayRef = useRef(false);
+  const inputRef = useRef<TextInputRef>(null);
   const [counterTo, setCounterTo] = useState<ChatMessage | null>(null);
   const [viewer, setViewer] = useState<string | null>(null);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -139,6 +148,7 @@ export default function ChatScreen() {
       if (event.type === 'message' || event.type === 'message_update') {
         const msg = event.message as ChatMessage;
         setMessages((list) => sortMessages([...list, { ...msg, kind: msg.kind ?? 'text', meta: msg.meta ?? null, deleted: !!msg.deleted, reply: msg.reply ?? null }]));
+        if (event.type === 'message' && msg.sender_id !== me && awayRef.current) setUnseen((n) => n + 1);
         if (event.type === 'message' && msg.sender_id !== me) {
           setTyping(false);
           markRead();
@@ -387,6 +397,16 @@ export default function ChatScreen() {
           keyboardDismissMode="interactive"
           keyboardShouldPersistTaps="handled"
           onScrollToIndexFailed={() => undefined}
+          scrollEventThrottle={64}
+          onScroll={(e) => {
+            // Inverted list: offset 0 is the newest message.
+            const isAway = e.nativeEvent.contentOffset.y > 320;
+            if (isAway !== awayRef.current) {
+              awayRef.current = isAway;
+              setAway(isAway);
+              if (!isAway) setUnseen(0);
+            }
+          }}
           ListFooterComponent={loadingOlder ? <ActivityIndicator color={c.primary} style={styles.older} /> : undefined}
           ListEmptyComponent={
             <View style={styles.emptyChat}>
@@ -405,6 +425,21 @@ export default function ChatScreen() {
                 </View>
               </View>
             ) : (
+              <SwipeToReply
+                disabled={blocked || item.message.deleted}
+                onReply={() => {
+                  setReplyTo(item.message);
+                  inputRef.current?.focus();
+                }}
+                onInfo={
+                  item.message.sender_id === me && !item.message.deleted
+                    ? () => {
+                        setSelected(item.message);
+                        setSheet('info');
+                      }
+                    : undefined
+                }
+              >
               <Bubble
                 message={item.message}
                 mine={item.message.sender_id === me}
@@ -424,9 +459,31 @@ export default function ChatScreen() {
                 onQuotePress={(mid) => void jumpTo(mid)}
                 onOffer={(m, a) => void respondOffer(m, a)}
               />
+              </SwipeToReply>
             )
           }
         />
+
+        {away && !jumped ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={unseen ? `En alta git, ${unseen} yeni mesaj` : 'En alta git'}
+            onPress={() => {
+              listRef.current?.scrollToOffset({ offset: 0, animated: true });
+              setUnseen(0);
+            }}
+            style={[styles.toBottom, { backgroundColor: c.surface, borderColor: c.border }]}
+          >
+            <ChevronDown size={22} color={c.fg} />
+            {unseen ? (
+              <View style={[styles.toBottomBadge, { backgroundColor: c.primary }]}>
+                <Text variant="small" style={styles.toBottomText}>
+                  {unseen > 99 ? '99+' : unseen}
+                </Text>
+              </View>
+            ) : null}
+          </Pressable>
+        ) : null}
 
         {jumped ? (
           <Pressable onPress={() => void thread.refetch()} style={[styles.latest, { backgroundColor: c.ink }]}>
@@ -496,6 +553,7 @@ export default function ChatScreen() {
               <IconButton icon={Plus} label="Ekle" onPress={() => setSheet('attach')} />
               <View style={[styles.inputWrap, { backgroundColor: c.elevated }]}>
                 <TextInput
+                  ref={inputRef}
                   value={text}
                   onChangeText={onChangeText}
                   placeholder="Mesaj yazın"
@@ -561,7 +619,31 @@ export default function ChatScreen() {
         }}
       />
 
-      <LocationComposer visible={sheet === 'location'} onClose={() => setSheet(null)} onSend={async (label, lat, lng) => appendOwn(await chat.sendLocation(id, label, lat, lng))} />
+      <LocationPicker visible={sheet === 'location'} onClose={() => setSheet(null)} onSend={async (label, lat, lng) => appendOwn(await chat.sendLocation(id, label, lat, lng))} />
+
+      <Sheet visible={sheet === 'info'} onClose={() => setSheet(null)} title="Mesaj bilgisi">
+        {selected ? (
+          <>
+            <View style={[styles.infoPreview, { backgroundColor: c.elevated }]}>
+              <Text numberOfLines={4}>{selected.kind === 'image' ? '📷 Fotoğraf' : selected.content}</Text>
+            </View>
+            <RowGroup>
+              <ListRow icon={Check} label="Gönderildi" value={`${dayLabel(selected.created_at)} ${formatTime(selected.created_at)}`} />
+              <ListRow
+                icon={CheckCheck}
+                label="Okundu"
+                value={
+                  !data.showReads
+                    ? 'Okundu bilgisi kapalı'
+                    : selected.read_at
+                      ? `${dayLabel(selected.read_at)} ${formatTime(selected.read_at)}`
+                      : 'Henüz okunmadı'
+                }
+              />
+            </RowGroup>
+          </>
+        ) : null}
+      </Sheet>
 
       <Sheet visible={sheet === 'actions'} onClose={() => setSheet(null)} title="Mesaj">
         {selected ? (
@@ -742,77 +824,6 @@ function OfferComposer({
   );
 }
 
-function LocationComposer({
-  visible,
-  onClose,
-  onSend,
-}: {
-  visible: boolean;
-  onClose: () => void;
-  onSend: (label: string, lat?: number, lng?: number) => Promise<void>;
-}) {
-  const [label, setLabel] = useState('');
-  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
-  const [locating, setLocating] = useState(false);
-  const [busy, setBusy] = useState(false);
-
-  const locate = async () => {
-    setLocating(true);
-    try {
-      const perm = await Location.requestForegroundPermissionsAsync();
-      if (!perm.granted) {
-        toast.info('Konum izni verilmedi. Yer adını yazabilirsiniz.');
-        return;
-      }
-      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-      const [place] = await Location.reverseGeocodeAsync({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
-      if (place && !label) setLabel([place.street ?? place.name, place.district ?? place.subregion, place.region].filter(Boolean).join(', '));
-    } catch {
-      toast.error('Konum alınamadı.');
-    } finally {
-      setLocating(false);
-    }
-  };
-
-  return (
-    <Sheet
-      visible={visible}
-      onClose={onClose}
-      title="Buluşma noktası"
-      footer={
-        <Button
-          title="Paylaş"
-          icon={MapPin}
-          block
-          style={styles.flex}
-          disabled={label.trim().length < 2}
-          loading={busy}
-          onPress={async () => {
-            setBusy(true);
-            try {
-              await onSend(label.trim(), coords?.lat, coords?.lng);
-              setLabel('');
-              setCoords(null);
-              onClose();
-            } catch (e) {
-              toast.error(errorMessage(e));
-            } finally {
-              setBusy(false);
-            }
-          }}
-        />
-      }
-    >
-      <Button title={coords ? 'Konum eklendi' : 'Mevcut konumumu kullan'} icon={MapPin} variant="soft" loading={locating} onPress={() => void locate()} />
-      <Input label="Yer adı" placeholder="Örn. Kadıköy Boğa heykeli önü" value={label} onChangeText={setLabel} maxLength={120} />
-      <Text variant="caption" tone="subtle">
-        Kalabalık ve aydınlık, herkese açık bir yer seçin. Konum yaklaşık 10 metre hassasiyetle paylaşılır.
-      </Text>
-    </Sheet>
-  );
-}
-
 function ReportComposer({ visible, onClose, onSend }: { visible: boolean; onClose: () => void; onSend: (reason: string, details?: string) => Promise<void> }) {
   const [reason, setReason] = useState<string | null>(null);
   const [details, setDetails] = useState('');
@@ -900,6 +911,20 @@ const styles = StyleSheet.create({
   emptyChat: { padding: space.xxl, transform: [{ scaleY: -1 }] },
   day: { alignItems: 'center', marginVertical: space.md },
   dayPill: { paddingHorizontal: space.md, paddingVertical: 4, borderRadius: radius.pill },
+  toBottom: {
+    position: 'absolute',
+    right: space.md,
+    bottom: 96,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  toBottomBadge: { position: 'absolute', top: -6, right: -4, minWidth: 20, height: 20, borderRadius: 10, paddingHorizontal: 5, alignItems: 'center', justifyContent: 'center' },
+  toBottomText: { color: '#fff', fontWeight: '700' },
+  infoPreview: { padding: space.md, borderRadius: radius.md },
   latest: { position: 'absolute', alignSelf: 'center', bottom: 90, paddingHorizontal: space.lg, paddingVertical: space.sm, borderRadius: radius.pill },
   blocked: { padding: space.lg, gap: space.sm, alignItems: 'center', borderTopWidth: hairline },
   composer: { borderTopWidth: hairline, paddingTop: space.sm, gap: space.sm },

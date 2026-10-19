@@ -10,6 +10,7 @@ import { DeletionBanner } from "@/components/account/DeletionBanner";
 import { Toaster } from "sonner";
 import { appCss, criticalFonts } from "@/lib/critical-assets";
 import { jsonLd } from "@/lib/seo";
+import { getThemePref, useThemePref } from "@/lib/theme";
 
 const APP_NAME = "GeldeSat";
 
@@ -19,11 +20,14 @@ const APP_NAME = "GeldeSat";
  * and fades it out after hydrating. Server-rendered content stays visible throughout.
  * If hydration never happens the bar fades out on its own.
  */
-const CRITICAL_CSS = `*,::before,::after{box-sizing:border-box}html{overflow-x:hidden;-webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent;touch-action:manipulation;scroll-behavior:smooth}body{background-color:#f3f5f8;color:#12151c;margin:0;min-height:100dvh;font-family:"IBM Plex Sans Variable",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}#boot-progress{position:fixed;top:0;left:0;z-index:9999;height:2.5px;width:0;pointer-events:none;background:linear-gradient(90deg,#1a4fd8,#3b82f6 50%,#60a5fa);box-shadow:0 0 10px #1a4fd8,0 0 4px #3b82f6;animation:boot-grow 4s cubic-bezier(.08,.6,.3,1) forwards,boot-fade .4s ease 12s forwards}#boot-progress.done{width:100%!important;opacity:0;animation:none;transition:width .2s ease-out,opacity .3s ease .2s}@keyframes boot-grow{0%{width:0}100%{width:88%}}@keyframes boot-fade{to{opacity:0}}`;
+const CRITICAL_CSS = `*,::before,::after{box-sizing:border-box}html{overflow-x:hidden;-webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent;touch-action:manipulation;scroll-behavior:smooth}body{background-color:var(--color-bg,#f3f5f8);color:var(--color-fg,#12151c);margin:0;min-height:100dvh;font-family:"IBM Plex Sans Variable",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}#boot-progress{position:fixed;top:0;left:0;z-index:9999;height:2.5px;width:0;pointer-events:none;background:linear-gradient(90deg,#1a4fd8,#3b82f6 50%,#60a5fa);box-shadow:0 0 10px #1a4fd8,0 0 4px #3b82f6;animation:boot-grow 4s cubic-bezier(.08,.6,.3,1) forwards,boot-fade .4s ease 12s forwards}#boot-progress.done{width:100%!important;opacity:0;animation:none;transition:width .2s ease-out,opacity .3s ease .2s}@keyframes boot-grow{0%{width:0}100%{width:88%}}@keyframes boot-fade{to{opacity:0}}html[data-theme=dark]{color-scheme:dark;background:#0b0e13}@media (prefers-color-scheme:dark){html:not([data-theme=light]){color-scheme:dark;background:#0b0e13}}`;
 
 const BASE = "https://www.geldesat.com";
 
 export const Route = createRootRoute({
+  // Theme cookie, read once while server rendering; later changes update the client store.
+  loader: () => getThemePref(),
+  shouldReload: false,
   head: () => ({
     meta: [
       { charSet: "utf-8" },
@@ -95,6 +99,7 @@ export const Route = createRootRoute({
 
 
 function Shell() {
+  const theme = useThemePref(Route.useLoaderData() ?? "system");
   const isAdmin = useRouterState({
     select: (s) => s.location.pathname === "/admin" || s.location.pathname.startsWith("/admin/"),
   });
@@ -121,7 +126,7 @@ function Shell() {
       <>
         <TopProgressBar />
         <Outlet />
-        <Toaster position="top-center" richColors />
+        <Toaster position="top-center" richColors theme={theme} />
       </>
     );
   }
@@ -137,14 +142,15 @@ function Shell() {
       {isChat ? null : <Footer />}
       {isChatThread ? null : <CookieBanner />}
       {hideBottomNav ? null : <BottomNav />}
-      <Toaster position="top-center" richColors />
+      <Toaster position="top-center" richColors theme={theme} />
     </div>
   );
 }
 
 function Root() {
+  const theme = useThemePref(Route.useLoaderData() ?? "system");
   return (
-    <html lang="tr" className="antialiased" suppressHydrationWarning>
+    <html lang="tr" className="antialiased" data-theme={theme === "system" ? undefined : theme} suppressHydrationWarning>
       <head>
         <style dangerouslySetInnerHTML={{ __html: CRITICAL_CSS }} />
         <noscript>

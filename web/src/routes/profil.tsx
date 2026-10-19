@@ -1,13 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { CalendarDays, ExternalLink, MapPin, Plus, Star } from "lucide-react";
+import { Bell, CalendarDays, ExternalLink, Heart, LayoutGrid, MapPin, MessageCircle, Plus, Rocket, Star, Store, type LucideIcon } from "lucide-react";
 import { getMe, myListings } from "@/lib/server/account";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { BrandSpinner } from "@/components/brand/BrandSpinner";
 import { Button } from "@/components/ui/button";
 import { ListingCard } from "@/components/listing/ListingCard";
-import { AccountSettingsMenu, AccountShell, UserAvatar } from "@/components/account/AccountShell";
+import { AccountShell, SettingsButton, UserAvatar } from "@/components/account/AccountShell";
+import { useAccountMeta } from "@/components/account/account-nav";
 import type { ListingCard as Listing } from "@/lib/server/helpers";
 import { cn, formatNumber } from "@/lib/utils";
 
@@ -33,6 +34,7 @@ function ProfilePage() {
   const [me, setMe] = useState<Me | null>(null);
   const [listings, setListings] = useState<Listing[] | null>(null);
   const [tab, setTab] = useState<"live" | "other">("live");
+  const { counts } = useAccountMeta();
 
   useEffect(() => {
     if (!user) return;
@@ -61,7 +63,7 @@ function ProfilePage() {
     <AccountShell
       title="Hesabım"
       hub
-      actions={<AccountSettingsMenu />}
+      actions={<SettingsButton />}
     >
       <section className="rounded-2xl border border-border bg-surface p-4 shadow-card sm:p-6">
         <div className="flex items-center gap-4 sm:gap-6">
@@ -124,6 +126,17 @@ function ProfilePage() {
         ) : null}
       </section>
 
+      <nav aria-label="Hesabım" className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
+        <Tile to="/ilanlarim" icon={LayoutGrid} label="İlanlarım" detail={`${formatNumber(p?.listing_count ?? 0)} ilan`} />
+        <Tile to="/favoriler" icon={Heart} label="Favorilerim" detail={`${formatNumber(p?.favorite_count ?? 0)} ilan`} />
+        <Tile to="/mesajlar" icon={MessageCircle} label="Mesajlar" badge={counts.messages} detail={counts.messages ? `${counts.messages} okunmamış` : "Yazışmalar"} />
+        <Tile to="/bildirimler" icon={Bell} label="Bildirimler" badge={counts.notifications} detail={counts.notifications ? `${counts.notifications} yeni` : "Güncellemeler"} />
+        {me.store ? (
+          <Tile to="/ayarlar/magaza" icon={Store} label="Mağazam" detail={me.store.name} />
+        ) : null}
+        <Tile to="/doping" icon={Rocket} label="Doping" detail="İlanı öne çıkar" />
+      </nav>
+
       <section className="mt-6">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div className="inline-flex rounded-lg bg-elevated p-1" role="tablist" aria-label="İlanlar">
@@ -172,6 +185,37 @@ function ProfilePage() {
         )}
       </section>
     </AccountShell>
+  );
+}
+
+function Tile({
+  to,
+  icon: Icon,
+  label,
+  detail,
+  badge = 0,
+}: {
+  to: "/ilanlarim" | "/favoriler" | "/mesajlar" | "/bildirimler" | "/ayarlar/magaza" | "/doping";
+  icon: LucideIcon;
+  label: string;
+  detail: string;
+  badge?: number;
+}) {
+  return (
+    <Link to={to} className="relative flex items-center gap-3 rounded-2xl border border-border bg-surface p-3 transition-colors hover:bg-elevated/60 sm:p-4">
+      <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+        <Icon className="size-5" />
+      </span>
+      <span className="min-w-0">
+        <span className="block truncate text-sm font-semibold">{label}</span>
+        <span className="block truncate text-xs text-muted">{detail}</span>
+      </span>
+      {badge > 0 ? (
+        <span className="absolute right-2 top-2 min-w-5 rounded-full bg-primary px-1.5 text-center text-[11px] font-bold leading-5 text-primary-fg">
+          {badge > 99 ? "99+" : badge}
+        </span>
+      ) : null}
+    </Link>
   );
 }
 

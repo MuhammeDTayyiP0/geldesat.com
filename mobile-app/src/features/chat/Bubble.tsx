@@ -5,6 +5,7 @@ import { Check, CheckCheck, HandCoins, MapPin, ShieldAlert } from 'lucide-react-
 import type { ChatMessage } from '@/api/types';
 import { API_BASE_URL, mediaUrl } from '@/lib/config';
 import { formatPrice, formatTime } from '@/lib/format';
+import { MapThumb } from '@/features/map/MapThumb';
 import { Button, Text, radius, space, useTheme } from '@/ui';
 import { LISTING_PHOTO_MSG, chatImagePath, linkify, mapsUrl, messageRisk } from './shared';
 
@@ -108,16 +109,19 @@ export const Bubble = memo(function Bubble({
       </View>
     );
   } else if (m.kind === 'location') {
+    const lat = m.meta?.lat;
+    const lng = m.meta?.lng;
     body = (
-      <Pressable onPress={() => void Linking.openURL(mapsUrl(m.meta ?? {}))} style={styles.location} accessibilityRole="link">
-        <View style={[styles.pin, { backgroundColor: mine ? 'rgba(255,255,255,0.18)' : c.primarySoft }]}>
-          <MapPin size={20} color={mine ? '#fff' : c.primary} />
-        </View>
-        <View style={styles.flex}>
-          <Text variant="label" style={{ color: fg }}>
-            Buluşma noktası
-          </Text>
-          <Text variant="caption" style={{ color: sub }} numberOfLines={2}>
+      <Pressable onPress={() => void Linking.openURL(mapsUrl(m.meta ?? {}))} style={styles.location} accessibilityRole="link" accessibilityLabel={`Konum: ${m.meta?.label ?? m.content}. Haritada aç`}>
+        {lat != null && lng != null ? (
+          <MapThumb lat={lat} lng={lng} width={232} height={136} />
+        ) : (
+          <View style={[styles.pin, { backgroundColor: mine ? 'rgba(255,255,255,0.18)' : c.primarySoft }]}>
+            <MapPin size={22} color={mine ? '#fff' : c.primary} />
+          </View>
+        )}
+        <View style={styles.locationText}>
+          <Text variant="label" style={{ color: fg }} numberOfLines={2}>
             {m.meta?.label ?? m.content}
           </Text>
           <Text variant="small" style={{ color: mine ? '#fff' : c.primary, fontWeight: '700' }}>
@@ -202,8 +206,9 @@ const styles = StyleSheet.create({
   offer: { borderRadius: radius.md, padding: space.md, gap: 4, minWidth: 210 },
   offerHead: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   offerActions: { flexDirection: 'row', gap: space.xs, marginTop: space.sm, flexWrap: 'wrap' },
-  location: { flexDirection: 'row', gap: space.sm, alignItems: 'center', minWidth: 210 },
-  pin: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  location: { gap: space.xs, width: 232, marginHorizontal: -space.sm + 2, marginTop: -2 },
+  locationText: { paddingHorizontal: space.xs, gap: 2 },
+  pin: { height: 96, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   link: { textDecorationLine: 'underline' },
   quote: { borderLeftWidth: 3, borderRadius: 8, paddingHorizontal: space.sm, paddingVertical: 4 },
   risk: { flexDirection: 'row', gap: 4, alignItems: 'center', marginTop: 4, paddingHorizontal: space.sm, paddingVertical: 4, borderRadius: 8 },

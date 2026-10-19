@@ -7,6 +7,8 @@ import { account } from '@/api/endpoints';
 import { keys, queryClient } from '@/api/queries';
 import type { AppNotification } from '@/api/types';
 import { useSession } from '@/auth/session';
+import * as WebBrowser from 'expo-web-browser';
+import { webUrl } from '@/lib/config';
 import { appRouteForWebPath } from '@/lib/links';
 import { timeAgo } from '@/lib/format';
 import { Button, Divider, EmptyState, ErrorState, Header, IconButton, Loading, Text, space, useTheme } from '@/ui';
@@ -40,6 +42,8 @@ export default function NotificationsScreen() {
   const open = (n: AppNotification) => {
     const route = appRouteForWebPath(n.link);
     if (route) router.push(route);
+    // A page the app has no screen for opens on the website.
+    else if (n.link && n.link !== '/') void WebBrowser.openBrowserAsync(webUrl(n.link));
   };
 
   return (

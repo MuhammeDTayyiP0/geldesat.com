@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { Platform, StyleSheet, useColorScheme } from 'react-native';
+import { useThemePref } from '@/lib/themePref';
 
 /** Brand palette, same tokens as the website (web/src/styles.css). */
 const light = {
@@ -84,7 +85,9 @@ export type Theme = { dark: boolean; c: Colors };
 
 export function useTheme(): Theme {
   const scheme = useColorScheme();
-  return scheme === 'dark' ? { dark: true, c: dark } : { dark: false, c: light };
+  const pref = useThemePref();
+  const isDark = pref === 'system' ? scheme === 'dark' : pref === 'dark';
+  return isDark ? { dark: true, c: dark } : { dark: false, c: light };
 }
 
 /**

@@ -1,10 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { FlatList, Pressable, RefreshControl, StyleSheet, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Image } from 'expo-image';
-import { Archive, ArchiveRestore, CheckCheck, MailOpen, MessageCircle, Search, Trash2 } from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
+import Swipeable, { type SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
+import { Archive, ArchiveRestore, CheckCheck, MailOpen, MessageCircle, Search, Trash2, type LucideIcon } from 'lucide-react-native';
 import { errorMessage } from '@/api/client';
 import { chat } from '@/api/endpoints';
 import { keys, queryClient } from '@/api/queries';
@@ -73,7 +75,7 @@ export default function InboxScreen() {
     onError: (e) => toast.error(errorMessage(e)),
   });
 
-  const run = async (cv: Conversation, action: 'archive' | 'unarchive' | 'unread' | 'read' | 'delete') => {
+  const run = async (cv: Conversation, action: InboxAction) => {
     setMenu(null);
     if (action === 'delete') {
       const ok = await confirm({
@@ -146,12 +148,14 @@ export default function InboxScreen() {
             />
           }
           renderItem={({ item }) => (
-            <InboxRow
-              cv={item}
-              me={session.user.id}
-              onPress={() => router.push({ pathname: '/mesaj/[id]', params: { id: item.id } })}
-              onLongPress={() => setMenu(item)}
-            />
+            <SwipeableInboxRow cv={item} onAction={(action) => void run(item, action)}>
+              <InboxRow
+                cv={item}
+                me={session.user.id}
+                onPress={() => router.push({ pathname: '/mesaj/[id]', params: { id: item.id } })}
+                onLongPress={() => setMenu(item)}
+              />
+            </SwipeableInboxRow>
           )}
         />
       )}
@@ -174,6 +178,63 @@ export default function InboxScreen() {
         ) : null}
       </Sheet>
     </View>
+  );
+}
+
+type InboxAction = 'archive' | 'unarchive' | 'unread' | 'read' | 'delete';
+
+/**
+ * Swipe left for Arşivle / Sil, swipe right to toggle read; long press still
+ * opens the full menu.
+ */
+function SwipeableInboxRow({ cv, onAction, children }: { cv: Conversation; onAction: (action: InboxAction) => void; children: ReactNode }) {
+  const { c } = useTheme();
+  const unread = cv.unread > 0 || cv.marked_unread;
+  const act = (methods: SwipeableMethods, action: InboxAction) => {
+    methods.close();
+    void Haptics.selectionAsync();
+    onAction(action);
+  };
+  return (
+    <Swipeable
+      friction={1.6}
+      leftThreshold={60}
+      rightThreshold={60}
+      overshootLeft={false}
+      overshootRight={false}
+      renderLeftActions={(_p, _t, methods) => (
+        <SwipeAction
+          color={c.primary}
+          icon={unread ? CheckCheck : MailOpen}
+          label={unread ? 'Okundu' : 'Okunmadı'}
+          onPress={() => act(methods, unread ? 'read' : 'unread')}
+        />
+      )}
+      renderRightActions={(_p, _t, methods) => (
+        <View style={styles.actions}>
+          <SwipeAction
+            color={c.muted}
+            icon={cv.archived ? ArchiveRestore : Archive}
+            label={cv.archived ? 'Çıkar' : 'Arşivle'}
+            onPress={() => act(methods, cv.archived ? 'unarchive' : 'archive')}
+          />
+          <SwipeAction color={c.danger} icon={Trash2} label="Sil" onPress={() => act(methods, 'delete')} />
+        </View>
+      )}
+    >
+      {children}
+    </Swipeable>
+  );
+}
+
+function SwipeAction({ color, icon: Icon, label, onPress }: { color: string; icon: LucideIcon; label: string; onPress: () => void }) {
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={[styles.swipeAction, { backgroundColor: color }]}>
+      <Icon size={22} color="#fff" />
+      <Text variant="small" style={styles.swipeLabel}>
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -237,6 +298,9 @@ function InboxRow({ cv, me, onPress, onLongPress }: { cv: Conversation; me: stri
 }
 
 const styles = StyleSheet.create({
+  actions: { flexDirection: 'row' },
+  swipeAction: { width: 82, alignItems: 'center', justifyContent: 'center', gap: 4 },
+  swipeLabel: { color: '#fff', fontWeight: '700' },
   flex: { flex: 1 },
   top: { paddingHorizontal: space.lg, paddingBottom: space.md, gap: space.md, borderBottomWidth: hairline },
   search: { flexDirection: 'row', alignItems: 'center', gap: space.sm, height: 42, borderRadius: radius.md, paddingHorizontal: space.md },

@@ -64,7 +64,7 @@ export function MobileNavigationDrawer({
         {/* Çekmece Başlığı */}
         <div className="flex items-center justify-between p-4 border-b border-border bg-elevated/40">
           <Link to="/" onClick={onClose} className="flex items-center gap-2">
-            <LogoMark className="size-7" />
+            <LogoMark className="size-7 text-brand" />
             <span className="text-lg font-bold tracking-tight text-ink">GeldeSat</span>
           </Link>
           <button

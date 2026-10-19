@@ -62,7 +62,7 @@ export function BottomNav() {
           >
             <Plus className="size-6 stroke-[2.8] text-primary-fg transition-transform group-hover:rotate-90 duration-200" />
           </Link>
-          <span className="mt-0.5 text-[10px] font-bold text-ink">İlan Ver</span>
+          <span className="mt-0.5 text-[10px] font-bold text-fg">İlan Ver</span>
         </div>
 
         {/* 4. Mesajlar */}

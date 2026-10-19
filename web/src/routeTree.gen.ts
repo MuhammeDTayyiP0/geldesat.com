@@ -39,11 +39,13 @@ import { Route as AdminSikayetlerRouteImport } from './routes/admin/sikayetler'
 import { Route as AdminSistemRouteImport } from './routes/admin/sistem'
 import { Route as AdminYorumlarRouteImport } from './routes/admin/yorumlar'
 import { Route as ApiAvatarRouteImport } from './routes/api/avatar'
+import { Route as ApiGeoRouteImport } from './routes/api/geo'
 import { Route as ApiUploadRouteImport } from './routes/api/upload'
 import { Route as AyarlarIndexRouteImport } from './routes/ayarlar/index'
 import { Route as AyarlarBildirimlerRouteImport } from './routes/ayarlar/bildirimler'
 import { Route as AyarlarEngellenenlerRouteImport } from './routes/ayarlar/engellenenler'
 import { Route as AyarlarGizlilikRouteImport } from './routes/ayarlar/gizlilik'
+import { Route as AyarlarGorunumRouteImport } from './routes/ayarlar/gorunum'
 import { Route as AyarlarGuvenlikRouteImport } from './routes/ayarlar/guvenlik'
 import { Route as AyarlarHesapRouteImport } from './routes/ayarlar/hesap'
 import { Route as AyarlarMagazaRouteImport } from './routes/ayarlar/magaza'
@@ -237,6 +239,11 @@ const ApiAvatarRoute = ApiAvatarRouteImport.update({
   path: '/api/avatar',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiGeoRoute = ApiGeoRouteImport.update({
+  id: '/api/geo',
+  path: '/api/geo',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiUploadRoute = ApiUploadRouteImport.update({
   id: '/api/upload',
   path: '/api/upload',
@@ -260,6 +267,11 @@ const AyarlarEngellenenlerRoute = AyarlarEngellenenlerRouteImport.update({
 const AyarlarGizlilikRoute = AyarlarGizlilikRouteImport.update({
   id: '/ayarlar/gizlilik',
   path: '/ayarlar/gizlilik',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AyarlarGorunumRoute = AyarlarGorunumRouteImport.update({
+  id: '/ayarlar/gorunum',
+  path: '/ayarlar/gorunum',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AyarlarGuvenlikRoute = AyarlarGuvenlikRouteImport.update({
@@ -505,10 +517,12 @@ export interface FileRoutesByFullPath {
   '/admin/sistem': typeof AdminSistemRoute
   '/admin/yorumlar': typeof AdminYorumlarRoute
   '/api/avatar': typeof ApiAvatarRouteWithChildren
+  '/api/geo': typeof ApiGeoRoute
   '/api/upload': typeof ApiUploadRoute
   '/ayarlar/bildirimler': typeof AyarlarBildirimlerRoute
   '/ayarlar/engellenenler': typeof AyarlarEngellenenlerRoute
   '/ayarlar/gizlilik': typeof AyarlarGizlilikRoute
+  '/ayarlar/gorunum': typeof AyarlarGorunumRoute
   '/ayarlar/guvenlik': typeof AyarlarGuvenlikRoute
   '/ayarlar/hesap': typeof AyarlarHesapRoute
   '/ayarlar/magaza': typeof AyarlarMagazaRoute
@@ -582,10 +596,12 @@ export interface FileRoutesByTo {
   '/admin/sistem': typeof AdminSistemRoute
   '/admin/yorumlar': typeof AdminYorumlarRoute
   '/api/avatar': typeof ApiAvatarRouteWithChildren
+  '/api/geo': typeof ApiGeoRoute
   '/api/upload': typeof ApiUploadRoute
   '/ayarlar/bildirimler': typeof AyarlarBildirimlerRoute
   '/ayarlar/engellenenler': typeof AyarlarEngellenenlerRoute
   '/ayarlar/gizlilik': typeof AyarlarGizlilikRoute
+  '/ayarlar/gorunum': typeof AyarlarGorunumRoute
   '/ayarlar/guvenlik': typeof AyarlarGuvenlikRoute
   '/ayarlar/hesap': typeof AyarlarHesapRoute
   '/ayarlar/magaza': typeof AyarlarMagazaRoute
@@ -662,10 +678,12 @@ export interface FileRoutesById {
   '/admin/sistem': typeof AdminSistemRoute
   '/admin/yorumlar': typeof AdminYorumlarRoute
   '/api/avatar': typeof ApiAvatarRouteWithChildren
+  '/api/geo': typeof ApiGeoRoute
   '/api/upload': typeof ApiUploadRoute
   '/ayarlar/bildirimler': typeof AyarlarBildirimlerRoute
   '/ayarlar/engellenenler': typeof AyarlarEngellenenlerRoute
   '/ayarlar/gizlilik': typeof AyarlarGizlilikRoute
+  '/ayarlar/gorunum': typeof AyarlarGorunumRoute
   '/ayarlar/guvenlik': typeof AyarlarGuvenlikRoute
   '/ayarlar/hesap': typeof AyarlarHesapRoute
   '/ayarlar/magaza': typeof AyarlarMagazaRoute
@@ -743,10 +761,12 @@ export interface FileRouteTypes {
     | '/admin/sistem'
     | '/admin/yorumlar'
     | '/api/avatar'
+    | '/api/geo'
     | '/api/upload'
     | '/ayarlar/bildirimler'
     | '/ayarlar/engellenenler'
     | '/ayarlar/gizlilik'
+    | '/ayarlar/gorunum'
     | '/ayarlar/guvenlik'
     | '/ayarlar/hesap'
     | '/ayarlar/magaza'
@@ -820,10 +840,12 @@ export interface FileRouteTypes {
     | '/admin/sistem'
     | '/admin/yorumlar'
     | '/api/avatar'
+    | '/api/geo'
     | '/api/upload'
     | '/ayarlar/bildirimler'
     | '/ayarlar/engellenenler'
     | '/ayarlar/gizlilik'
+    | '/ayarlar/gorunum'
     | '/ayarlar/guvenlik'
     | '/ayarlar/hesap'
     | '/ayarlar/magaza'
@@ -899,10 +921,12 @@ export interface FileRouteTypes {
     | '/admin/sistem'
     | '/admin/yorumlar'
     | '/api/avatar'
+    | '/api/geo'
     | '/api/upload'
     | '/ayarlar/bildirimler'
     | '/ayarlar/engellenenler'
     | '/ayarlar/gizlilik'
+    | '/ayarlar/gorunum'
     | '/ayarlar/guvenlik'
     | '/ayarlar/hesap'
     | '/ayarlar/magaza'
@@ -965,10 +989,12 @@ export interface RootRouteChildren {
   SearchRoute: typeof SearchRoute
   SifreSifirlaRoute: typeof SifreSifirlaRoute
   ApiAvatarRoute: typeof ApiAvatarRouteWithChildren
+  ApiGeoRoute: typeof ApiGeoRoute
   ApiUploadRoute: typeof ApiUploadRoute
   AyarlarBildirimlerRoute: typeof AyarlarBildirimlerRoute
   AyarlarEngellenenlerRoute: typeof AyarlarEngellenenlerRoute
   AyarlarGizlilikRoute: typeof AyarlarGizlilikRoute
+  AyarlarGorunumRoute: typeof AyarlarGorunumRoute
   AyarlarGuvenlikRoute: typeof AyarlarGuvenlikRoute
   AyarlarHesapRoute: typeof AyarlarHesapRoute
   AyarlarMagazaRoute: typeof AyarlarMagazaRoute
@@ -1218,6 +1244,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAvatarRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/geo': {
+      id: '/api/geo'
+      path: '/api/geo'
+      fullPath: '/api/geo'
+      preLoaderRoute: typeof ApiGeoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/upload': {
       id: '/api/upload'
       path: '/api/upload'
@@ -1251,6 +1284,13 @@ declare module '@tanstack/react-router' {
       path: '/ayarlar/gizlilik'
       fullPath: '/ayarlar/gizlilik'
       preLoaderRoute: typeof AyarlarGizlilikRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ayarlar/gorunum': {
+      id: '/ayarlar/gorunum'
+      path: '/ayarlar/gorunum'
+      fullPath: '/ayarlar/gorunum'
+      preLoaderRoute: typeof AyarlarGorunumRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/ayarlar/guvenlik': {
@@ -1690,10 +1730,12 @@ const rootRouteChildren: RootRouteChildren = {
   SearchRoute: SearchRoute,
   SifreSifirlaRoute: SifreSifirlaRoute,
   ApiAvatarRoute: ApiAvatarRouteWithChildren,
+  ApiGeoRoute: ApiGeoRoute,
   ApiUploadRoute: ApiUploadRoute,
   AyarlarBildirimlerRoute: AyarlarBildirimlerRoute,
   AyarlarEngellenenlerRoute: AyarlarEngellenenlerRoute,
   AyarlarGizlilikRoute: AyarlarGizlilikRoute,
+  AyarlarGorunumRoute: AyarlarGorunumRoute,
   AyarlarGuvenlikRoute: AyarlarGuvenlikRoute,
   AyarlarHesapRoute: AyarlarHesapRoute,
   AyarlarMagazaRoute: AyarlarMagazaRoute,

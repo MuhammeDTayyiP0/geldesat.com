@@ -9,7 +9,6 @@ import {
   HandCoins,
   ImageIcon,
   ImagePlus,
-  LocateFixed,
   Mail,
   MapPin,
   MessageSquareText,
@@ -63,6 +62,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { BrandSpinner } from "@/components/brand/BrandSpinner";
 import { ChatAvatar, ConfirmDialog, MenuContent, MenuItem } from "@/components/chat/ChatUi";
+import { LocationPicker } from "@/components/chat/LocationPicker";
 import { MessageBubble } from "@/components/chat/MessageBubble";
 import {
   BUYER_QUICK_REPLIES,
@@ -1096,7 +1096,7 @@ function Thread() {
         />
       ) : null}
 
-      <LocationDialog
+      <LocationPicker
         open={dialog === "location"}
         onOpenChange={(o) => !o && setDialog(null)}
         onSend={async (place) => {
@@ -1373,110 +1373,6 @@ function ReportDialog({
   );
 }
 
-/** Share a meeting point: a typed place, optionally with the device's current position. */
-function LocationDialog({
-  open,
-  onOpenChange,
-  onSend,
-}: {
-  open: boolean;
-  onOpenChange: (o: boolean) => void;
-  onSend: (place: { label: string; lat?: number; lng?: number }) => Promise<void>;
-}) {
-  const [label, setLabel] = useState("");
-  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
-  const [locating, setLocating] = useState(false);
-  const [busy, setBusy] = useState(false);
-  useEffect(() => {
-    if (open) {
-      setLabel("");
-      setCoords(null);
-    }
-  }, [open]);
-
-  function useMyLocation() {
-    if (!navigator.geolocation) return toast.error("Tarayıcınız konum paylaşımını desteklemiyor.");
-    setLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        setLabel((l) => l || "Bulunduğum konum");
-        setLocating(false);
-      },
-      () => {
-        toast.error("Konumunuz alınamadı. Bir yer adı yazabilirsiniz.");
-        setLocating(false);
-      },
-      { enableHighAccuracy: true, timeout: 10_000 },
-    );
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={(o) => !busy && onOpenChange(o)}>
-      <DialogContent className="border-border bg-surface sm:max-w-md">
-        <form
-          className="space-y-4"
-          onSubmit={async (e) => {
-            e.preventDefault();
-            setBusy(true);
-            try {
-              await onSend({ label: label.trim(), ...(coords ?? {}) });
-              onOpenChange(false);
-            } catch (err) {
-              toast.error(err instanceof Error ? err.message : "Konum gönderilemedi");
-            } finally {
-              setBusy(false);
-            }
-          }}
-        >
-          <DialogHeader>
-            <DialogTitle>Buluşma noktası paylaş</DialogTitle>
-            <DialogDescription>
-              Kalabalık ve herkese açık bir yer seçin. Ev adresinizi paylaşmamanızı öneririz.
-            </DialogDescription>
-          </DialogHeader>
-          <div>
-            <Label htmlFor="loc-label">Yer</Label>
-            <Input
-              id="loc-label"
-              value={label}
-              onChange={(e) => setLabel(e.target.value.slice(0, 120))}
-              placeholder="Örn. Kadıköy İskelesi önü"
-              autoFocus
-            />
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full"
-            disabled={locating}
-            onClick={useMyLocation}
-          >
-            <LocateFixed className="size-4" />{" "}
-            {locating
-              ? "Konum alınıyor…"
-              : coords
-                ? "Konumunuz eklendi ✓"
-                : "Bulunduğum konumu ekle"}
-          </Button>
-          <DialogFooter className="gap-2">
-            <Button
-              type="button"
-              variant="ghost"
-              disabled={busy}
-              onClick={() => onOpenChange(false)}
-            >
-              Vazgeç
-            </Button>
-            <Button type="submit" disabled={busy || label.trim().length < 2}>
-              {busy ? "Gönderiliyor…" : "Konumu gönder"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 /** Saved replies: pick one into the composer, add or remove them. */
 function TemplatesDialog({

@@ -73,6 +73,10 @@ export async function loadConversationThread(
       "update messages set read_at=now() where conversation_id=$1 and sender_id<>$2 and read_at is null",
       [conversationId, userId],
     );
+    await sql.query("update notifications set read_at=now() where user_id=$1 and link=$2 and read_at is null", [
+      userId,
+      `/mesajlar/${conversationId}`,
+    ]);
   }
   const messages = await sql.query<Record<string, unknown>>(
     `select * from (select id,sender_id,content,created_at,read_at from messages where conversation_id=$1 order by created_at desc limit 200) recent order by created_at asc`,

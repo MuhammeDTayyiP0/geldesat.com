@@ -114,7 +114,7 @@ function Chrome({ children }: { children: ReactNode }) {
   const brand = (
     <div className={cn("flex h-16 shrink-0 items-center gap-2.5 border-b border-white/8 px-4", collapsed && "justify-center px-0")}>
       <span className="flex size-9 items-center justify-center rounded-xl bg-white">
-        <LogoMark size={22} />
+        <LogoMark size={22} className="text-brand" />
       </span>
       {!collapsed ? (
         <div className="min-w-0 leading-tight">
