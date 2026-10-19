@@ -94,6 +94,9 @@ export const Route = createRootRoute({
 
 
 function Shell() {
+  const isAdmin = useRouterState({
+    select: (s) => s.location.pathname === "/admin" || s.location.pathname.startsWith("/admin/"),
+  });
   const isChat = useRouterState({
     select: (s) => s.location.pathname.startsWith("/mesajlar"),
   });
@@ -118,6 +121,17 @@ function Shell() {
       return () => clearTimeout(t);
     }
   }, []);
+
+  // The admin console brings its own full-screen layout.
+  if (isAdmin) {
+    return (
+      <>
+        <TopProgressBar />
+        <Outlet />
+        <Toaster position="top-center" richColors />
+      </>
+    );
+  }
 
   return (
     <div className={isChatThread ? "flex app-chat-shell flex-col overflow-hidden" : isChat ? "flex h-dvh flex-col overflow-hidden" : "flex min-h-dvh flex-1 flex-col"}>

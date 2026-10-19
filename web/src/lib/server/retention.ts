@@ -39,10 +39,10 @@ export async function reopenConversation(sql: Sql, conversationId: string): Prom
   );
 }
 
-/** True when the user's account is gone or waiting for deletion: nobody can start or continue chats with them. */
+/** True when the user's account is gone, waiting for deletion or suspended: nobody can start or continue chats with them. */
 export async function isClosedAccount(sql: Sql, userId: string): Promise<boolean> {
   const rows = await sql.query<{ pending: boolean }>(
-    "select deletion_requested_at is not null as pending from profiles where user_id = $1",
+    "select (deletion_requested_at is not null or banned_at is not null) as pending from profiles where user_id = $1",
     [userId],
   );
   return !rows[0] || rows[0].pending;

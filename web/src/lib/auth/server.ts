@@ -1,10 +1,11 @@
 /** Same-origin Better Auth for GeldeSat accounts. */
 import { betterAuth } from "better-auth";
+import { APIError } from "better-auth/api";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
 import { getCookie } from "@tanstack/react-start/server";
 import { randomBytes } from "node:crypto";
 import { Pool } from "pg";
-import { ensureDbReady, getPglite } from "../db";
+import { ensureDbReady, getPglite, getSql } from "../db";
 import { mailConfigured, sendPasswordResetMail, sendVerificationMail } from "../server/mail";
 import { pgliteDialect } from "./pglite-dialect";
 
@@ -111,6 +112,23 @@ export const auth = betterAuth({
       session_data: { name: "__Host-geldesat-auth.session_data" },
       account_data: { name: "__Host-geldesat-auth.account_data" },
       dont_remember: { name: "__Host-geldesat-auth.dont_remember" },
+    },
+  },
+  // Suspended members (admin console) cannot start a session.
+  databaseHooks: {
+    session: {
+      create: {
+        before: async (session) => {
+          const sql = await getSql();
+          const rows = await sql.query<{ banned: boolean }>(
+            "select banned_at is not null as banned from profiles where user_id = $1",
+            [session.userId],
+          );
+          if (rows[0]?.banned) {
+            throw new APIError("FORBIDDEN", { message: "Hesabınız askıya alındı. Destek için destek@geldesat.com adresine yazın." });
+          }
+        },
+      },
     },
   },
   plugins: [tanstackStartCookies()],

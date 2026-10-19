@@ -453,7 +453,12 @@ const SETTING_DEFAULTS: SiteSettings = {
 let _settingsCache: { data: SiteSettings; expiresAt: number } | null = null;
 const SETTINGS_TTL_MS = 60_000;
 
-export const getSiteSettings = createServerFn({ method: "GET" }).handler(async () => {
+/** Drop the cached settings so the next read sees an admin's change at once. */
+export function clearSiteSettingsCache() {
+  _settingsCache = null;
+}
+
+export async function loadSiteSettings(): Promise<SiteSettings> {
   if (_settingsCache && Date.now() < _settingsCache.expiresAt) {
     return _settingsCache.data;
   }
@@ -474,4 +479,6 @@ export const getSiteSettings = createServerFn({ method: "GET" }).handler(async (
   } catch {
     return SETTING_DEFAULTS;
   }
-});
+}
+
+export const getSiteSettings = createServerFn({ method: "GET" }).handler(() => loadSiteSettings());

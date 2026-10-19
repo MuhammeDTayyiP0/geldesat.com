@@ -2,14 +2,13 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
-import { asJson, newId, num, slugify } from "@/lib/utils";
+import { asJson, num } from "@/lib/utils";
 import { deleteUnusedListingImages } from "./upload.server";
 import {
   inheritedAttributes,
   mapListing,
   subtreeIds,
   ensureProfile,
-  requireAdmin,
   creditBalance,
   rateLimit,
   notify,
@@ -19,7 +18,6 @@ import {
 } from "./helpers";
 import { getRequest } from "@tanstack/react-start/server";
 import { ListingInput, renewedStatus, saveListingRecord } from "./listing-write";
-import { purgeUserData } from "./account-purge";
 
 /** True only for a signed-in ADMIN; never throws, so routes can gate on it (e.g. 404 for everyone else). */
 export const isAdminSession = createServerFn({ method: "GET" }).handler(async () => {
@@ -206,42 +204,6 @@ export const renewListing = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-export const saveSiteSettings = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
-  .validator(
-    z.object({
-      company_name: z.string().max(80),
-      iban: z.string().max(40),
-      bank_name: z.string().max(80),
-      account_holder: z.string().max(80),
-      support_email: z.string().max(80),
-      support_phone: z.string().max(20),
-    }),
-  )
-  .handler(async ({ context, data }) => {
-    await requireAdmin(context.userId);
-    const iban = data.iban.replace(/\s+/g, "").toUpperCase();
-    if (iban && !/^TR\d{24}$/.test(iban)) throw new Error("IBAN TR ile başlamalı ve 26 karakter olmalı.");
-    const phone = data.support_phone.trim() ? normalizeTrPhone(data.support_phone) : "";
-    const sql = await getSql();
-    const values: [string, string][] = [
-      ["company_name", data.company_name.trim() || "GeldeSat"],
-      ["iban", iban],
-      ["bank_name", data.bank_name.trim()],
-      ["account_holder", data.account_holder.trim()],
-      ["support_email", data.support_email.trim() || "destek@geldesat.com"],
-      ["support_phone", phone],
-    ];
-    for (const [key, value] of values) {
-      await sql.query(
-        `insert into site_settings (key, value) values ($1,$2)
-         on conflict (key) do update set value = excluded.value`,
-        [key, value],
-      );
-    }
-    return { ok: true };
-  });
-
 export const myListings = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
@@ -394,7 +356,7 @@ export const getSeller = createServerFn({ method: "POST" })
         (select count(*)::int from listings where user_id=p.user_id and status='ACTIVE') as listing_count,
         (select coalesce(avg(rating),0) from reviews where seller_id=p.user_id) as rating_avg,
         (select count(*)::int from reviews where seller_id=p.user_id) as rating_count
-       from profiles p where p.user_id=$1 and p.deletion_requested_at is null`,
+       from profiles p where p.user_id=$1 and p.deletion_requested_at is null and p.banned_at is null`,
       [data.id],
     );
     if (!p[0]) return null;
@@ -435,7 +397,7 @@ export const getStore = createServerFn({ method: "POST" })
     // A store disappears while its owner's account is waiting for deletion.
     const rows = await sql.query<Record<string, unknown>>(
       `select s.* from stores s join profiles p on p.user_id = s.user_id
-       where lower(s.slug)=lower($1) and p.deletion_requested_at is null`,
+       where lower(s.slug)=lower($1) and p.deletion_requested_at is null and p.banned_at is null`,
       [data.slug],
     );
     if (!rows[0]) return null;
@@ -451,215 +413,6 @@ export const getStore = createServerFn({ method: "POST" })
     };
   });
 
-export const adminOverview = createServerFn({ method: "GET" })
-  .middleware([authMiddleware])
-  .handler(async ({ context }) => {
-    await requireAdmin(context.userId);
-    const sql = await getSql();
-    const s = await sql.query<Record<string, number>>(
-      `select
-         (select count(*)::int from listings) as listings,
-         (select count(*)::int from listings where status='PENDING') as pending,
-         (select count(*)::int from listings where status='ACTIVE') as active,
-         (select count(*)::int from profiles) as users,
-         (select count(*)::int from reports where status='OPEN') as reports,
-         (select count(*)::int from stores) as stores,
-         (select count(*)::int from credit_orders where status='PENDING') as credit_orders`,
-    );
-    return s[0];
-  });
-
-export const adminListings = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
-  .validator(z.object({ status: z.string().optional() }))
-  .handler(async ({ context, data }) => {
-    await requireAdmin(context.userId);
-    const sql = await getSql();
-    const rows = data.status
-      ? await sql.query<Record<string, unknown>>(
-          `select l.*, c.name as category_name, p.display_name as seller_name
-           from listings l join categories c on c.id=l.category_id
-           left join profiles p on p.user_id=l.user_id
-           where l.status=$1 order by l.created_at desc limit 80`,
-          [data.status],
-        )
-      : await sql.query<Record<string, unknown>>(
-          `select l.*, c.name as category_name, p.display_name as seller_name
-           from listings l join categories c on c.id=l.category_id
-           left join profiles p on p.user_id=l.user_id
-           order by l.created_at desc limit 80`,
-        );
-    return rows.map(mapListing);
-  });
-
-export const adminReports = createServerFn({ method: "GET" })
-  .middleware([authMiddleware])
-  .handler(async ({ context }) => {
-    await requireAdmin(context.userId);
-    const sql = await getSql();
-    const rows = await sql.query<Record<string, unknown>>(
-      `select r.*, l.title, l.slug, p.display_name as reporter_name
-       from reports r
-       left join listings l on l.id = r.listing_id
-       left join profiles p on p.user_id = r.reporter_id
-       order by r.created_at desc limit 80`,
-    );
-    // Conversation reports carry the reported message, or the last messages, so
-    // moderators can judge them; the reporter chose to share that chat.
-    const excerpts = new Map<string, Array<{ who: string; text: string; at: string }>>();
-    for (const r of rows.filter((x) => x.conversation_id)) {
-      const msgs = await sql.query<{ sender_id: string; content: string; created_at: string }>(
-        r.message_id
-          ? "select sender_id, content, created_at from messages where id=$2 and conversation_id=$1"
-          : "select * from (select sender_id, content, created_at from messages where conversation_id=$1 order by created_at desc limit 10) m order by created_at",
-        r.message_id ? [r.conversation_id, r.message_id] : [r.conversation_id],
-      );
-      excerpts.set(
-        String(r.id),
-        msgs.map((m) => ({ who: m.sender_id === r.reporter_id ? "Şikayet eden" : "Karşı taraf", text: m.content, at: String(m.created_at) })),
-      );
-    }
-    return rows.map((r) => ({
-      id: String(r.id),
-      listing_id: r.listing_id ? String(r.listing_id) : "",
-      reason: String(r.reason),
-      details: r.details ? String(r.details) : "",
-      status: String(r.status),
-      title: r.title ? String(r.title) : r.conversation_id ? "" : "İlan kaldırıldı",
-      slug: String(r.slug ?? ""),
-      reporter_name: String(r.reporter_name ?? "Üye"),
-      created_at: String(r.created_at),
-      conversation_id: r.conversation_id ? String(r.conversation_id) : null,
-      messages: excerpts.get(String(r.id)) ?? [],
-    }));
-  });
-
-export const resolveReport = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
-  .validator(z.object({ id: z.string(), status: z.enum(["OPEN", "CLOSED"]) }))
-  .handler(async ({ context, data }) => {
-    await requireAdmin(context.userId);
-    const sql = await getSql();
-    await sql.query("update reports set status=$2 where id=$1", [data.id, data.status]);
-    return { ok: true };
-  });
-
-export const adminUsers = createServerFn({ method: "GET" })
-  .middleware([authMiddleware])
-  .handler(async ({ context }) => {
-    await requireAdmin(context.userId);
-    const sql = await getSql();
-    const rows = await sql.query<Record<string, unknown>>(
-      `select p.*, u.email as user_email, (select count(*)::int from listings where user_id=p.user_id) as listing_count
-       from profiles p
-       left join "user" u on u.id = p.user_id
-       order by p.created_at desc limit 250`,
-    );
-    return rows.map((p) => ({
-      user_id: String(p.user_id),
-      display_name: String(p.display_name ?? ""),
-      email: p.user_email ? String(p.user_email) : null,
-      phone: p.phone ? String(p.phone) : null,
-      role: String(p.role),
-      city: p.city ? String(p.city) : null,
-      listing_count: num(p.listing_count),
-      last_seen_at: p.last_seen_at ? String(p.last_seen_at) : null,
-      created_at: String(p.created_at),
-    }));
-  });
-
-export const setUserRole = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
-  .validator(z.object({ userId: z.string(), role: z.enum(["USER", "ADMIN"]) }))
-  .handler(async ({ context, data }) => {
-    await requireAdmin(context.userId);
-    if (data.userId === context.userId && data.role !== "ADMIN") {
-      throw new Error("Kendinizi yönetici olmaktan çıkaramazsınız.");
-    }
-    const sql = await getSql();
-    await sql.query("update profiles set role=$2 where user_id=$1", [data.userId, data.role]);
-    return { ok: true };
-  });
-
-export const adminDeleteUser = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
-  .validator(
-    z.object({
-      userId: z.string(),
-      deleteListings: z.boolean().optional().default(true),
-    }),
-  )
-  .handler(async ({ context, data }) => {
-    await requireAdmin(context.userId);
-    if (data.userId === context.userId) {
-      throw new Error("Kendi hesabınızı silemezsiniz.");
-    }
-    const sql = await getSql();
-    const target = await sql.query<{ role: string; display_name: string }>(
-      "select role, display_name from profiles where user_id=$1",
-      [data.userId],
-    );
-    if (target[0]?.role === "ADMIN") {
-      throw new Error("Yönetici rolündeki bir kullanıcıyı silemezsiniz. Lütfen önce rolünü 'USER' olarak değiştirin.");
-    }
-
-    await purgeUserData(sql, data.userId, { deleteListings: data.deleteListings });
-
-    return { ok: true };
-  });
-
-export const adminCreditOrders = createServerFn({ method: "GET" })
-  .middleware([authMiddleware])
-  .handler(async ({ context }) => {
-    await requireAdmin(context.userId);
-    const sql = await getSql();
-    const rows = await sql.query<Record<string, unknown>>(
-      `select o.*, p.display_name as buyer_name
-       from credit_orders o
-       left join profiles p on p.user_id = o.user_id
-       order by o.created_at desc
-       limit 80`,
-    );
-    return rows.map((r) => ({
-      id: String(r.id),
-      user_id: String(r.user_id),
-      buyer_name: String(r.buyer_name ?? "Üye"),
-      sku: String(r.sku),
-      credits: num(r.credits),
-      price: num(r.price),
-      status: String(r.status),
-      created_at: String(r.created_at),
-      resolved_at: r.resolved_at ? String(r.resolved_at) : null,
-    }));
-  });
-
-export const resolveCreditOrder = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
-  .validator(z.object({ id: z.string(), status: z.enum(["PAID", "REJECTED"]) }))
-  .handler(async ({ context, data }) => {
-    await requireAdmin(context.userId);
-    const sql = await getSql();
-    const row = await sql.query<{ user_id: string; status: string; credits: number; sku: string }>(
-      "select user_id, status, credits, sku from credit_orders where id=$1",
-      [data.id],
-    );
-    if (!row[0]) throw new Error("Talep bulunamadı");
-    if (row[0].status !== "PENDING") throw new Error("Bu talep zaten işlendi.");
-    await sql.query("update credit_orders set status=$2, resolved_at=now() where id=$1", [data.id, data.status]);
-    if (data.status === "PAID") {
-      await sql.query("insert into credit_ledger (id, user_id, amount, reason) values ($1,$2,$3,$4)", [
-        newId("crd"),
-        row[0].user_id,
-        num(row[0].credits),
-        `order:${data.id}`,
-      ]);
-      await notify(row[0].user_id, "credit", "Krediniz yüklendi", `${row[0].credits} doping kredisi hesabınıza eklendi.`, "/doping");
-    } else {
-      await notify(row[0].user_id, "credit", "Kredi talebi reddedildi", "Havale bulunamadı veya iptal edildi. Destek: destek@geldesat.com", "/doping");
-    }
-    return { ok: true };
-  });
-
 export const getCategoryAttrs = createServerFn({ method: "POST" })
   .validator(z.object({ categoryId: z.string() }))
   .handler(async ({ data }) => inheritedAttributes(data.categoryId));
@@ -667,68 +420,4 @@ export const getCategoryAttrs = createServerFn({ method: "POST" })
 export const getSubtree = createServerFn({ method: "POST" })
   .validator(z.object({ slug: z.string() }))
   .handler(async ({ data }) => subtreeIds(data.slug));
-
-export const adminSaveCategory = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
-  .validator(
-    z.object({
-      id: z.string().optional(),
-      parentId: z.string().nullable().optional(),
-      name: z.string().min(1).max(80),
-    }),
-  )
-  .handler(async ({ context, data }) => {
-    await requireAdmin(context.userId);
-    const sql = await getSql();
-    const name = data.name.trim();
-    if (!name) throw new Error("Ad gerekli.");
-    if (data.id) {
-      const existing = await sql.query<{ id: string }>("select id from categories where id = $1", [data.id]);
-      if (!existing[0]) throw new Error("Kategori bulunamadı.");
-      await sql.query("update categories set name = $1 where id = $2", [name, data.id]);
-      return { ok: true as const, id: data.id };
-    }
-    const parent = data.parentId ?? null;
-    if (parent) {
-      const p = await sql.query<{ id: string }>("select id from categories where id = $1", [parent]);
-      if (!p[0]) throw new Error("Üst kategori yok.");
-    }
-    const base = slugify(parent ? `${parent}-${name}` : name) || "kategori";
-    let id = base;
-    let n = 2;
-    while (true) {
-      const exists = await sql.query<{ id: string }>("select id from categories where id = $1 or slug = $1", [id]);
-      if (!exists[0]) break;
-      id = `${base}-${n++}`;
-    }
-    const max = await sql.query<{ m: number }>(
-      "select coalesce(max(sort_order), -1)::int as m from categories where parent_id is not distinct from $1",
-      [parent],
-    );
-    await sql.query(
-      "insert into categories (id, name, slug, parent_id, sort_order) values ($1, $2, $1, $3, $4)",
-      [id, name, parent, (max[0]?.m ?? -1) + 1],
-    );
-    return { ok: true as const, id };
-  });
-
-export const adminDeleteCategory = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
-  .validator(z.object({ id: z.string() }))
-  .handler(async ({ context, data }) => {
-    await requireAdmin(context.userId);
-    const sql = await getSql();
-    const kids = await sql.query<{ n: number }>(
-      "select count(*)::int as n from categories where parent_id = $1",
-      [data.id],
-    );
-    if ((kids[0]?.n ?? 0) > 0) throw new Error("Önce alt kategorileri silin.");
-    const used = await sql.query<{ n: number }>(
-      "select count(*)::int as n from listings where category_id = $1",
-      [data.id],
-    );
-    if ((used[0]?.n ?? 0) > 0) throw new Error("Bu kategoride ilan var, silinemez.");
-    await sql.query("delete from categories where id = $1", [data.id]);
-    return { ok: true as const };
-  });
 

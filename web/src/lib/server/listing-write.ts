@@ -4,6 +4,7 @@ import { CITY_COORDS } from "@/lib/data/geo";
 import { asJson, listingSlug, newId, num } from "@/lib/utils";
 import { inheritedAttributes, ensureProfile, rateLimit, assertImages, notify, normalizeTrPhone } from "./helpers";
 import { deleteUnusedListingImages } from "./upload.server";
+import { getAppConfig } from "./config";
 
 export const ListingInput = z.object({
   id: z.string().optional(),
@@ -44,6 +45,8 @@ export async function saveListingRecord(userId: string, data: ListingInputData) 
   // the seller's current profile phone (revealPhone falls back to it).
   const phoneOverride = data.phone?.trim() ? normalizeTrPhone(data.phone) : null;
   const isAdmin = profile[0]?.role === "ADMIN";
+  // Admin console policy: first_free (first listing goes live), all (everything is reviewed), none (no review).
+  const { mode } = await getAppConfig<{ mode: "first_free" | "all" | "none" }>("moderation", { mode: "first_free" });
   const existing = data.id
     ? (
         await sql.query<{
@@ -105,7 +108,7 @@ export async function saveListingRecord(userId: string, data: ListingInputData) 
       existing.description !== data.description ||
       existing.category_id !== data.categoryId ||
       added.length > 0;
-    const reReview = !isAdmin && contentChanged && (existing.status === "ACTIVE" || existing.status === "INACTIVE");
+    const reReview = !isAdmin && mode !== "none" && contentChanged && (existing.status === "ACTIVE" || existing.status === "INACTIVE");
     const nextStatus = existing.status === "REJECTED" || reReview ? "PENDING" : existing.status;
     // The URL follows the title; old links still resolve by the trailing listing number.
     const slug = listingSlug(data.title, existing.listing_no);
@@ -131,7 +134,8 @@ export async function saveListingRecord(userId: string, data: ListingInputData) 
   const listingNo = (await sql.query<{ n: string }>("select nextval('listing_no_seq')::text as n"))[0].n;
   const slug = listingSlug(data.title, listingNo);
   const prior = await sql.query<{ n: number }>("select count(*)::int as n from listings where user_id=$1", [userId]);
-  const status = isAdmin || (prior[0]?.n ?? 0) === 0 ? "ACTIVE" : "PENDING";
+  const autoApprove = isAdmin || mode === "none" || (mode === "first_free" && (prior[0]?.n ?? 0) === 0);
+  const status = autoApprove ? "ACTIVE" : "PENDING";
   await sql.query(
     `insert into listings (id,slug,user_id,store_id,category_id,title,description,price,status,city,district,
       neighborhood,lat,lng,images,attrs,phone_override,expires_at,approved_at,listing_no)

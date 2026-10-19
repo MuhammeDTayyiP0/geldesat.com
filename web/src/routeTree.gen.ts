@@ -23,6 +23,21 @@ import { Route as MesajlarRouteImport } from './routes/mesajlar'
 import { Route as ProfilRouteImport } from './routes/profil'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as SifreSifirlaRouteImport } from './routes/sifre-sifirla'
+import { Route as AdminIndexRouteImport } from './routes/admin/index'
+import { Route as AdminAyarlarRouteImport } from './routes/admin/ayarlar'
+import { Route as AdminDuyurularRouteImport } from './routes/admin/duyurular'
+import { Route as AdminFinansRouteImport } from './routes/admin/finans'
+import { Route as AdminIlanlarRouteImport } from './routes/admin/ilanlar'
+import { Route as AdminKategorilerRouteImport } from './routes/admin/kategoriler'
+import { Route as AdminKayitlarRouteImport } from './routes/admin/kayitlar'
+import { Route as AdminKullanicilarRouteImport } from './routes/admin/kullanicilar'
+import { Route as AdminMagazalarRouteImport } from './routes/admin/magazalar'
+import { Route as AdminModerasyonRouteImport } from './routes/admin/moderasyon'
+import { Route as AdminOzelliklerRouteImport } from './routes/admin/ozellikler'
+import { Route as AdminSayfalarRouteImport } from './routes/admin/sayfalar'
+import { Route as AdminSikayetlerRouteImport } from './routes/admin/sikayetler'
+import { Route as AdminSistemRouteImport } from './routes/admin/sistem'
+import { Route as AdminYorumlarRouteImport } from './routes/admin/yorumlar'
 import { Route as ApiAvatarRouteImport } from './routes/api/avatar'
 import { Route as ApiUploadRouteImport } from './routes/api/upload'
 import { Route as AyarlarIndexRouteImport } from './routes/ayarlar/index'
@@ -137,6 +152,81 @@ const SifreSifirlaRoute = SifreSifirlaRouteImport.update({
   id: '/sifre-sifirla',
   path: '/sifre-sifirla',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AdminIndexRoute = AdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminAyarlarRoute = AdminAyarlarRouteImport.update({
+  id: '/ayarlar',
+  path: '/ayarlar',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminDuyurularRoute = AdminDuyurularRouteImport.update({
+  id: '/duyurular',
+  path: '/duyurular',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminFinansRoute = AdminFinansRouteImport.update({
+  id: '/finans',
+  path: '/finans',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminIlanlarRoute = AdminIlanlarRouteImport.update({
+  id: '/ilanlar',
+  path: '/ilanlar',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminKategorilerRoute = AdminKategorilerRouteImport.update({
+  id: '/kategoriler',
+  path: '/kategoriler',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminKayitlarRoute = AdminKayitlarRouteImport.update({
+  id: '/kayitlar',
+  path: '/kayitlar',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminKullanicilarRoute = AdminKullanicilarRouteImport.update({
+  id: '/kullanicilar',
+  path: '/kullanicilar',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminMagazalarRoute = AdminMagazalarRouteImport.update({
+  id: '/magazalar',
+  path: '/magazalar',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminModerasyonRoute = AdminModerasyonRouteImport.update({
+  id: '/moderasyon',
+  path: '/moderasyon',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminOzelliklerRoute = AdminOzelliklerRouteImport.update({
+  id: '/ozellikler',
+  path: '/ozellikler',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminSayfalarRoute = AdminSayfalarRouteImport.update({
+  id: '/sayfalar',
+  path: '/sayfalar',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminSikayetlerRoute = AdminSikayetlerRouteImport.update({
+  id: '/sikayetler',
+  path: '/sikayetler',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminSistemRoute = AdminSistemRouteImport.update({
+  id: '/sistem',
+  path: '/sistem',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminYorumlarRoute = AdminYorumlarRouteImport.update({
+  id: '/yorumlar',
+  path: '/yorumlar',
+  getParentRoute: () => AdminRoute,
 } as any)
 const ApiAvatarRoute = ApiAvatarRouteImport.update({
   id: '/api/avatar',
@@ -363,7 +453,7 @@ const ApiMobileStoresSlugRoute = ApiMobileStoresSlugRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/admin': typeof AdminRoute
+  '/admin': typeof AdminRouteWithChildren
   '/arsiv': typeof ArsivRoute
   '/bildirimler': typeof BildirimlerRoute
   '/doping': typeof DopingRoute
@@ -376,6 +466,20 @@ export interface FileRoutesByFullPath {
   '/profil': typeof ProfilRoute
   '/search': typeof SearchRoute
   '/sifre-sifirla': typeof SifreSifirlaRoute
+  '/admin/ayarlar': typeof AdminAyarlarRoute
+  '/admin/duyurular': typeof AdminDuyurularRoute
+  '/admin/finans': typeof AdminFinansRoute
+  '/admin/ilanlar': typeof AdminIlanlarRoute
+  '/admin/kategoriler': typeof AdminKategorilerRoute
+  '/admin/kayitlar': typeof AdminKayitlarRoute
+  '/admin/kullanicilar': typeof AdminKullanicilarRoute
+  '/admin/magazalar': typeof AdminMagazalarRoute
+  '/admin/moderasyon': typeof AdminModerasyonRoute
+  '/admin/ozellikler': typeof AdminOzelliklerRoute
+  '/admin/sayfalar': typeof AdminSayfalarRoute
+  '/admin/sikayetler': typeof AdminSikayetlerRoute
+  '/admin/sistem': typeof AdminSistemRoute
+  '/admin/yorumlar': typeof AdminYorumlarRoute
   '/api/avatar': typeof ApiAvatarRouteWithChildren
   '/api/upload': typeof ApiUploadRoute
   '/ayarlar/bildirimler': typeof AyarlarBildirimlerRoute
@@ -392,6 +496,7 @@ export interface FileRoutesByFullPath {
   '/satici/$id': typeof SaticiIdRoute
   '/sayfa/$slug': typeof SayfaSlugRoute
   '/uploads/$': typeof UploadsSplatRoute
+  '/admin/': typeof AdminIndexRoute
   '/ayarlar/': typeof AyarlarIndexRoute
   '/mesajlar/': typeof MesajlarIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -423,7 +528,6 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/admin': typeof AdminRoute
   '/arsiv': typeof ArsivRoute
   '/bildirimler': typeof BildirimlerRoute
   '/doping': typeof DopingRoute
@@ -435,6 +539,20 @@ export interface FileRoutesByTo {
   '/profil': typeof ProfilRoute
   '/search': typeof SearchRoute
   '/sifre-sifirla': typeof SifreSifirlaRoute
+  '/admin/ayarlar': typeof AdminAyarlarRoute
+  '/admin/duyurular': typeof AdminDuyurularRoute
+  '/admin/finans': typeof AdminFinansRoute
+  '/admin/ilanlar': typeof AdminIlanlarRoute
+  '/admin/kategoriler': typeof AdminKategorilerRoute
+  '/admin/kayitlar': typeof AdminKayitlarRoute
+  '/admin/kullanicilar': typeof AdminKullanicilarRoute
+  '/admin/magazalar': typeof AdminMagazalarRoute
+  '/admin/moderasyon': typeof AdminModerasyonRoute
+  '/admin/ozellikler': typeof AdminOzelliklerRoute
+  '/admin/sayfalar': typeof AdminSayfalarRoute
+  '/admin/sikayetler': typeof AdminSikayetlerRoute
+  '/admin/sistem': typeof AdminSistemRoute
+  '/admin/yorumlar': typeof AdminYorumlarRoute
   '/api/avatar': typeof ApiAvatarRouteWithChildren
   '/api/upload': typeof ApiUploadRoute
   '/ayarlar/bildirimler': typeof AyarlarBildirimlerRoute
@@ -451,6 +569,7 @@ export interface FileRoutesByTo {
   '/satici/$id': typeof SaticiIdRoute
   '/sayfa/$slug': typeof SayfaSlugRoute
   '/uploads/$': typeof UploadsSplatRoute
+  '/admin': typeof AdminIndexRoute
   '/ayarlar': typeof AyarlarIndexRoute
   '/mesajlar': typeof MesajlarIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -483,7 +602,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/admin': typeof AdminRoute
+  '/admin': typeof AdminRouteWithChildren
   '/arsiv': typeof ArsivRoute
   '/bildirimler': typeof BildirimlerRoute
   '/doping': typeof DopingRoute
@@ -496,6 +615,20 @@ export interface FileRoutesById {
   '/profil': typeof ProfilRoute
   '/search': typeof SearchRoute
   '/sifre-sifirla': typeof SifreSifirlaRoute
+  '/admin/ayarlar': typeof AdminAyarlarRoute
+  '/admin/duyurular': typeof AdminDuyurularRoute
+  '/admin/finans': typeof AdminFinansRoute
+  '/admin/ilanlar': typeof AdminIlanlarRoute
+  '/admin/kategoriler': typeof AdminKategorilerRoute
+  '/admin/kayitlar': typeof AdminKayitlarRoute
+  '/admin/kullanicilar': typeof AdminKullanicilarRoute
+  '/admin/magazalar': typeof AdminMagazalarRoute
+  '/admin/moderasyon': typeof AdminModerasyonRoute
+  '/admin/ozellikler': typeof AdminOzelliklerRoute
+  '/admin/sayfalar': typeof AdminSayfalarRoute
+  '/admin/sikayetler': typeof AdminSikayetlerRoute
+  '/admin/sistem': typeof AdminSistemRoute
+  '/admin/yorumlar': typeof AdminYorumlarRoute
   '/api/avatar': typeof ApiAvatarRouteWithChildren
   '/api/upload': typeof ApiUploadRoute
   '/ayarlar/bildirimler': typeof AyarlarBildirimlerRoute
@@ -512,6 +645,7 @@ export interface FileRoutesById {
   '/satici/$id': typeof SaticiIdRoute
   '/sayfa/$slug': typeof SayfaSlugRoute
   '/uploads/$': typeof UploadsSplatRoute
+  '/admin/': typeof AdminIndexRoute
   '/ayarlar/': typeof AyarlarIndexRoute
   '/mesajlar/': typeof MesajlarIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -558,6 +692,20 @@ export interface FileRouteTypes {
     | '/profil'
     | '/search'
     | '/sifre-sifirla'
+    | '/admin/ayarlar'
+    | '/admin/duyurular'
+    | '/admin/finans'
+    | '/admin/ilanlar'
+    | '/admin/kategoriler'
+    | '/admin/kayitlar'
+    | '/admin/kullanicilar'
+    | '/admin/magazalar'
+    | '/admin/moderasyon'
+    | '/admin/ozellikler'
+    | '/admin/sayfalar'
+    | '/admin/sikayetler'
+    | '/admin/sistem'
+    | '/admin/yorumlar'
     | '/api/avatar'
     | '/api/upload'
     | '/ayarlar/bildirimler'
@@ -574,6 +722,7 @@ export interface FileRouteTypes {
     | '/satici/$id'
     | '/sayfa/$slug'
     | '/uploads/$'
+    | '/admin/'
     | '/ayarlar/'
     | '/mesajlar/'
     | '/api/auth/$'
@@ -605,7 +754,6 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/admin'
     | '/arsiv'
     | '/bildirimler'
     | '/doping'
@@ -617,6 +765,20 @@ export interface FileRouteTypes {
     | '/profil'
     | '/search'
     | '/sifre-sifirla'
+    | '/admin/ayarlar'
+    | '/admin/duyurular'
+    | '/admin/finans'
+    | '/admin/ilanlar'
+    | '/admin/kategoriler'
+    | '/admin/kayitlar'
+    | '/admin/kullanicilar'
+    | '/admin/magazalar'
+    | '/admin/moderasyon'
+    | '/admin/ozellikler'
+    | '/admin/sayfalar'
+    | '/admin/sikayetler'
+    | '/admin/sistem'
+    | '/admin/yorumlar'
     | '/api/avatar'
     | '/api/upload'
     | '/ayarlar/bildirimler'
@@ -633,6 +795,7 @@ export interface FileRouteTypes {
     | '/satici/$id'
     | '/sayfa/$slug'
     | '/uploads/$'
+    | '/admin'
     | '/ayarlar'
     | '/mesajlar'
     | '/api/auth/$'
@@ -677,6 +840,20 @@ export interface FileRouteTypes {
     | '/profil'
     | '/search'
     | '/sifre-sifirla'
+    | '/admin/ayarlar'
+    | '/admin/duyurular'
+    | '/admin/finans'
+    | '/admin/ilanlar'
+    | '/admin/kategoriler'
+    | '/admin/kayitlar'
+    | '/admin/kullanicilar'
+    | '/admin/magazalar'
+    | '/admin/moderasyon'
+    | '/admin/ozellikler'
+    | '/admin/sayfalar'
+    | '/admin/sikayetler'
+    | '/admin/sistem'
+    | '/admin/yorumlar'
     | '/api/avatar'
     | '/api/upload'
     | '/ayarlar/bildirimler'
@@ -693,6 +870,7 @@ export interface FileRouteTypes {
     | '/satici/$id'
     | '/sayfa/$slug'
     | '/uploads/$'
+    | '/admin/'
     | '/ayarlar/'
     | '/mesajlar/'
     | '/api/auth/$'
@@ -725,7 +903,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AdminRoute: typeof AdminRoute
+  AdminRoute: typeof AdminRouteWithChildren
   ArsivRoute: typeof ArsivRoute
   BildirimlerRoute: typeof BildirimlerRoute
   DopingRoute: typeof DopingRoute
@@ -875,6 +1053,111 @@ declare module '@tanstack/react-router' {
       fullPath: '/sifre-sifirla'
       preLoaderRoute: typeof SifreSifirlaRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/admin/': {
+      id: '/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AdminIndexRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/ayarlar': {
+      id: '/admin/ayarlar'
+      path: '/ayarlar'
+      fullPath: '/admin/ayarlar'
+      preLoaderRoute: typeof AdminAyarlarRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/duyurular': {
+      id: '/admin/duyurular'
+      path: '/duyurular'
+      fullPath: '/admin/duyurular'
+      preLoaderRoute: typeof AdminDuyurularRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/finans': {
+      id: '/admin/finans'
+      path: '/finans'
+      fullPath: '/admin/finans'
+      preLoaderRoute: typeof AdminFinansRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/ilanlar': {
+      id: '/admin/ilanlar'
+      path: '/ilanlar'
+      fullPath: '/admin/ilanlar'
+      preLoaderRoute: typeof AdminIlanlarRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/kategoriler': {
+      id: '/admin/kategoriler'
+      path: '/kategoriler'
+      fullPath: '/admin/kategoriler'
+      preLoaderRoute: typeof AdminKategorilerRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/kayitlar': {
+      id: '/admin/kayitlar'
+      path: '/kayitlar'
+      fullPath: '/admin/kayitlar'
+      preLoaderRoute: typeof AdminKayitlarRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/kullanicilar': {
+      id: '/admin/kullanicilar'
+      path: '/kullanicilar'
+      fullPath: '/admin/kullanicilar'
+      preLoaderRoute: typeof AdminKullanicilarRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/magazalar': {
+      id: '/admin/magazalar'
+      path: '/magazalar'
+      fullPath: '/admin/magazalar'
+      preLoaderRoute: typeof AdminMagazalarRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/moderasyon': {
+      id: '/admin/moderasyon'
+      path: '/moderasyon'
+      fullPath: '/admin/moderasyon'
+      preLoaderRoute: typeof AdminModerasyonRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/ozellikler': {
+      id: '/admin/ozellikler'
+      path: '/ozellikler'
+      fullPath: '/admin/ozellikler'
+      preLoaderRoute: typeof AdminOzelliklerRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/sayfalar': {
+      id: '/admin/sayfalar'
+      path: '/sayfalar'
+      fullPath: '/admin/sayfalar'
+      preLoaderRoute: typeof AdminSayfalarRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/sikayetler': {
+      id: '/admin/sikayetler'
+      path: '/sikayetler'
+      fullPath: '/admin/sikayetler'
+      preLoaderRoute: typeof AdminSikayetlerRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/sistem': {
+      id: '/admin/sistem'
+      path: '/sistem'
+      fullPath: '/admin/sistem'
+      preLoaderRoute: typeof AdminSistemRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/yorumlar': {
+      id: '/admin/yorumlar'
+      path: '/yorumlar'
+      fullPath: '/admin/yorumlar'
+      preLoaderRoute: typeof AdminYorumlarRouteImport
+      parentRoute: typeof AdminRoute
     }
     '/api/avatar': {
       id: '/api/avatar'
@@ -1187,6 +1470,44 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AdminRouteChildren {
+  AdminAyarlarRoute: typeof AdminAyarlarRoute
+  AdminDuyurularRoute: typeof AdminDuyurularRoute
+  AdminFinansRoute: typeof AdminFinansRoute
+  AdminIlanlarRoute: typeof AdminIlanlarRoute
+  AdminKategorilerRoute: typeof AdminKategorilerRoute
+  AdminKayitlarRoute: typeof AdminKayitlarRoute
+  AdminKullanicilarRoute: typeof AdminKullanicilarRoute
+  AdminMagazalarRoute: typeof AdminMagazalarRoute
+  AdminModerasyonRoute: typeof AdminModerasyonRoute
+  AdminOzelliklerRoute: typeof AdminOzelliklerRoute
+  AdminSayfalarRoute: typeof AdminSayfalarRoute
+  AdminSikayetlerRoute: typeof AdminSikayetlerRoute
+  AdminSistemRoute: typeof AdminSistemRoute
+  AdminYorumlarRoute: typeof AdminYorumlarRoute
+  AdminIndexRoute: typeof AdminIndexRoute
+}
+
+const AdminRouteChildren: AdminRouteChildren = {
+  AdminAyarlarRoute: AdminAyarlarRoute,
+  AdminDuyurularRoute: AdminDuyurularRoute,
+  AdminFinansRoute: AdminFinansRoute,
+  AdminIlanlarRoute: AdminIlanlarRoute,
+  AdminKategorilerRoute: AdminKategorilerRoute,
+  AdminKayitlarRoute: AdminKayitlarRoute,
+  AdminKullanicilarRoute: AdminKullanicilarRoute,
+  AdminMagazalarRoute: AdminMagazalarRoute,
+  AdminModerasyonRoute: AdminModerasyonRoute,
+  AdminOzelliklerRoute: AdminOzelliklerRoute,
+  AdminSayfalarRoute: AdminSayfalarRoute,
+  AdminSikayetlerRoute: AdminSikayetlerRoute,
+  AdminSistemRoute: AdminSistemRoute,
+  AdminYorumlarRoute: AdminYorumlarRoute,
+  AdminIndexRoute: AdminIndexRoute,
+}
+
+const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
+
 interface MesajlarRouteChildren {
   MesajlarIdRoute: typeof MesajlarIdRoute
   MesajlarIndexRoute: typeof MesajlarIndexRoute
@@ -1275,7 +1596,7 @@ const ApiMobileMyListingsRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AdminRoute: AdminRoute,
+  AdminRoute: AdminRouteWithChildren,
   ArsivRoute: ArsivRoute,
   BildirimlerRoute: BildirimlerRoute,
   DopingRoute: DopingRoute,
