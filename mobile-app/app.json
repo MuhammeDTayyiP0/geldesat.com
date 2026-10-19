@@ -1,0 +1,98 @@
+{
+  "expo": {
+    "name": "GeldeSat",
+    "slug": "muhammed-tayyip",
+    "owner": "thelouss-team",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "geldesat",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.geldesat.app",
+      "associatedDomains": ["applinks:www.geldesat.com", "webcredentials:www.geldesat.com"],
+      "infoPlist": {
+        "NSCameraUsageDescription": "İlan ve mesaj fotoğrafı çekebilmek için kamera izni gereklidir.",
+        "NSPhotoLibraryUsageDescription": "İlan ve mesaj fotoğraflarını seçebilmek için galeri izni gereklidir.",
+        "NSLocationWhenInUseUsageDescription": "Yakınınızdaki ilanları göstermek ve buluşma noktası paylaşmak için konumunuz kullanılır.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.geldesat.app",
+      "softwareKeyboardLayoutMode": "resize",
+      "adaptiveIcon": {
+        "backgroundColor": "#1a4fd8",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            { "scheme": "https", "host": "www.geldesat.com", "pathPrefix": "/ilan/" },
+            { "scheme": "https", "host": "geldesat.com", "pathPrefix": "/ilan/" }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ],
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.POST_NOTIFICATIONS"
+      ],
+      "blockedPermissions": ["android.permission.RECORD_AUDIO"]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-status-bar",
+      "expo-image",
+      "expo-secure-store",
+      "expo-web-browser",
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 160,
+          "resizeMode": "contain",
+          "backgroundColor": "#1a4fd8"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "İlan ve mesaj fotoğraflarını seçebilmek için galeri izni gereklidir.",
+          "cameraPermission": "İlan ve mesaj fotoğrafı çekebilmek için kamera izni gereklidir.",
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Yakınınızdaki ilanları göstermek ve buluşma noktası paylaşmak için konumunuz kullanılır."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#1a4fd8"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "apiBaseUrl": "https://www.geldesat.com",
+      "router": {},
+      "eas": {
+        "projectId": "6bce724e-28c3-41d6-b0f1-575b126e86db"
+      }
+    }
+  }
+}

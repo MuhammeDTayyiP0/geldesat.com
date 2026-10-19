@@ -1,6 +1,7 @@
 /** Same-origin Better Auth for GeldeSat accounts. */
 import { betterAuth } from "better-auth";
 import { APIError } from "better-auth/api";
+import { bearer } from "better-auth/plugins";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
 import { getCookie } from "@tanstack/react-start/server";
 import { randomBytes } from "node:crypto";
@@ -46,7 +47,7 @@ const trustedOrigins = explicitBaseURL
 const databaseUrl = env("DATABASE_URL");
 const googleClientId = env("GOOGLE_CLIENT_ID");
 const googleClientSecret = env("GOOGLE_CLIENT_SECRET");
-const googleAuthConfigured = Boolean(googleClientId && googleClientSecret);
+export const googleAuthConfigured = Boolean(googleClientId && googleClientSecret);
 const database = databaseUrl
   ? new Pool({ connectionString: databaseUrl })
   : { dialect: pgliteDialect(() => getPglite()), type: "postgres" as const };
@@ -131,7 +132,8 @@ export const auth = betterAuth({
       },
     },
   },
-  plugins: [tanstackStartCookies()],
+  // bearer: the native app sends its session token as `Authorization: Bearer …`.
+  plugins: [bearer(), tanstackStartCookies()],
 });
 
 export function readSessionToken(): string | null {

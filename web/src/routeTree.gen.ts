@@ -80,6 +80,10 @@ import { Route as ApiMobileConversationsIdRouteImport } from './routes/api/mobil
 import { Route as ApiMobileImagesIdRouteImport } from './routes/api/mobile/images/$id'
 import { Route as ApiMobileListingsIdRouteImport } from './routes/api/mobile/listings/$id'
 import { Route as ApiMobileMyListingsIdRouteImport } from './routes/api/mobile/my-listings/$id'
+import { Route as ApiMobileOauthDoneRouteImport } from './routes/api/mobile/oauth/done'
+import { Route as ApiMobileOauthExchangeRouteImport } from './routes/api/mobile/oauth/exchange'
+import { Route as ApiMobileOauthStartRouteImport } from './routes/api/mobile/oauth/start'
+import { Route as ApiMobileRpcFnRouteImport } from './routes/api/mobile/rpc/$fn'
 import { Route as ApiMobileSellersIdRouteImport } from './routes/api/mobile/sellers/$id'
 import { Route as ApiMobileStoresSlugRouteImport } from './routes/api/mobile/stores/$slug'
 
@@ -440,6 +444,26 @@ const ApiMobileMyListingsIdRoute = ApiMobileMyListingsIdRouteImport.update({
   path: '/$id',
   getParentRoute: () => ApiMobileMyListingsRoute,
 } as any)
+const ApiMobileOauthDoneRoute = ApiMobileOauthDoneRouteImport.update({
+  id: '/api/mobile/oauth/done',
+  path: '/api/mobile/oauth/done',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMobileOauthExchangeRoute = ApiMobileOauthExchangeRouteImport.update({
+  id: '/api/mobile/oauth/exchange',
+  path: '/api/mobile/oauth/exchange',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMobileOauthStartRoute = ApiMobileOauthStartRouteImport.update({
+  id: '/api/mobile/oauth/start',
+  path: '/api/mobile/oauth/start',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMobileRpcFnRoute = ApiMobileRpcFnRouteImport.update({
+  id: '/api/mobile/rpc/$fn',
+  path: '/api/mobile/rpc/$fn',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiMobileSellersIdRoute = ApiMobileSellersIdRouteImport.update({
   id: '/api/mobile/sellers/$id',
   path: '/api/mobile/sellers/$id',
@@ -523,6 +547,10 @@ export interface FileRoutesByFullPath {
   '/api/mobile/images/$id': typeof ApiMobileImagesIdRoute
   '/api/mobile/listings/$id': typeof ApiMobileListingsIdRoute
   '/api/mobile/my-listings/$id': typeof ApiMobileMyListingsIdRoute
+  '/api/mobile/oauth/done': typeof ApiMobileOauthDoneRoute
+  '/api/mobile/oauth/exchange': typeof ApiMobileOauthExchangeRoute
+  '/api/mobile/oauth/start': typeof ApiMobileOauthStartRoute
+  '/api/mobile/rpc/$fn': typeof ApiMobileRpcFnRoute
   '/api/mobile/sellers/$id': typeof ApiMobileSellersIdRoute
   '/api/mobile/stores/$slug': typeof ApiMobileStoresSlugRoute
 }
@@ -596,6 +624,10 @@ export interface FileRoutesByTo {
   '/api/mobile/images/$id': typeof ApiMobileImagesIdRoute
   '/api/mobile/listings/$id': typeof ApiMobileListingsIdRoute
   '/api/mobile/my-listings/$id': typeof ApiMobileMyListingsIdRoute
+  '/api/mobile/oauth/done': typeof ApiMobileOauthDoneRoute
+  '/api/mobile/oauth/exchange': typeof ApiMobileOauthExchangeRoute
+  '/api/mobile/oauth/start': typeof ApiMobileOauthStartRoute
+  '/api/mobile/rpc/$fn': typeof ApiMobileRpcFnRoute
   '/api/mobile/sellers/$id': typeof ApiMobileSellersIdRoute
   '/api/mobile/stores/$slug': typeof ApiMobileStoresSlugRoute
 }
@@ -672,6 +704,10 @@ export interface FileRoutesById {
   '/api/mobile/images/$id': typeof ApiMobileImagesIdRoute
   '/api/mobile/listings/$id': typeof ApiMobileListingsIdRoute
   '/api/mobile/my-listings/$id': typeof ApiMobileMyListingsIdRoute
+  '/api/mobile/oauth/done': typeof ApiMobileOauthDoneRoute
+  '/api/mobile/oauth/exchange': typeof ApiMobileOauthExchangeRoute
+  '/api/mobile/oauth/start': typeof ApiMobileOauthStartRoute
+  '/api/mobile/rpc/$fn': typeof ApiMobileRpcFnRoute
   '/api/mobile/sellers/$id': typeof ApiMobileSellersIdRoute
   '/api/mobile/stores/$slug': typeof ApiMobileStoresSlugRoute
 }
@@ -749,6 +785,10 @@ export interface FileRouteTypes {
     | '/api/mobile/images/$id'
     | '/api/mobile/listings/$id'
     | '/api/mobile/my-listings/$id'
+    | '/api/mobile/oauth/done'
+    | '/api/mobile/oauth/exchange'
+    | '/api/mobile/oauth/start'
+    | '/api/mobile/rpc/$fn'
     | '/api/mobile/sellers/$id'
     | '/api/mobile/stores/$slug'
   fileRoutesByTo: FileRoutesByTo
@@ -822,6 +862,10 @@ export interface FileRouteTypes {
     | '/api/mobile/images/$id'
     | '/api/mobile/listings/$id'
     | '/api/mobile/my-listings/$id'
+    | '/api/mobile/oauth/done'
+    | '/api/mobile/oauth/exchange'
+    | '/api/mobile/oauth/start'
+    | '/api/mobile/rpc/$fn'
     | '/api/mobile/sellers/$id'
     | '/api/mobile/stores/$slug'
   id:
@@ -897,6 +941,10 @@ export interface FileRouteTypes {
     | '/api/mobile/images/$id'
     | '/api/mobile/listings/$id'
     | '/api/mobile/my-listings/$id'
+    | '/api/mobile/oauth/done'
+    | '/api/mobile/oauth/exchange'
+    | '/api/mobile/oauth/start'
+    | '/api/mobile/rpc/$fn'
     | '/api/mobile/sellers/$id'
     | '/api/mobile/stores/$slug'
   fileRoutesById: FileRoutesById
@@ -950,6 +998,10 @@ export interface RootRouteChildren {
   ApiMobileProfileRoute: typeof ApiMobileProfileRoute
   ApiMobileReportsRoute: typeof ApiMobileReportsRoute
   ApiMobileReviewsRoute: typeof ApiMobileReviewsRoute
+  ApiMobileOauthDoneRoute: typeof ApiMobileOauthDoneRoute
+  ApiMobileOauthExchangeRoute: typeof ApiMobileOauthExchangeRoute
+  ApiMobileOauthStartRoute: typeof ApiMobileOauthStartRoute
+  ApiMobileRpcFnRoute: typeof ApiMobileRpcFnRoute
   ApiMobileSellersIdRoute: typeof ApiMobileSellersIdRoute
   ApiMobileStoresSlugRoute: typeof ApiMobileStoresSlugRoute
 }
@@ -1453,6 +1505,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiMobileMyListingsIdRouteImport
       parentRoute: typeof ApiMobileMyListingsRoute
     }
+    '/api/mobile/oauth/done': {
+      id: '/api/mobile/oauth/done'
+      path: '/api/mobile/oauth/done'
+      fullPath: '/api/mobile/oauth/done'
+      preLoaderRoute: typeof ApiMobileOauthDoneRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/mobile/oauth/exchange': {
+      id: '/api/mobile/oauth/exchange'
+      path: '/api/mobile/oauth/exchange'
+      fullPath: '/api/mobile/oauth/exchange'
+      preLoaderRoute: typeof ApiMobileOauthExchangeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/mobile/oauth/start': {
+      id: '/api/mobile/oauth/start'
+      path: '/api/mobile/oauth/start'
+      fullPath: '/api/mobile/oauth/start'
+      preLoaderRoute: typeof ApiMobileOauthStartRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/mobile/rpc/$fn': {
+      id: '/api/mobile/rpc/$fn'
+      path: '/api/mobile/rpc/$fn'
+      fullPath: '/api/mobile/rpc/$fn'
+      preLoaderRoute: typeof ApiMobileRpcFnRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/mobile/sellers/$id': {
       id: '/api/mobile/sellers/$id'
       path: '/api/mobile/sellers/$id'
@@ -1643,6 +1723,10 @@ const rootRouteChildren: RootRouteChildren = {
   ApiMobileProfileRoute: ApiMobileProfileRoute,
   ApiMobileReportsRoute: ApiMobileReportsRoute,
   ApiMobileReviewsRoute: ApiMobileReviewsRoute,
+  ApiMobileOauthDoneRoute: ApiMobileOauthDoneRoute,
+  ApiMobileOauthExchangeRoute: ApiMobileOauthExchangeRoute,
+  ApiMobileOauthStartRoute: ApiMobileOauthStartRoute,
+  ApiMobileRpcFnRoute: ApiMobileRpcFnRoute,
   ApiMobileSellersIdRoute: ApiMobileSellersIdRoute,
   ApiMobileStoresSlugRoute: ApiMobileStoresSlugRoute,
 }

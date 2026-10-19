@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getAppConfig, calculateVariant } from "@/lib/server/config";
 import { publicErrorMessage } from "@/lib/server/errors";
+import { googleAuthConfigured } from "@/lib/auth/server";
 
 export const Route = createFileRoute("/api/mobile/config")({
   server: {
@@ -36,6 +37,7 @@ export const Route = createFileRoute("/api/mobile/config")({
               abTests: {
                 listing_card_layout: listingCardVariant,
               },
+              auth: { google: googleAuthConfigured },
             }),
             {
               status: 200,

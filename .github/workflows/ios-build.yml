@@ -1,425 +1,132 @@
 name: Build Unsigned iOS IPA
 
+# Builds mobile-app/ (Expo SDK 58) into an unsigned IPA for sideloading
+# (Sideloadly / AltStore sign it with the tester's own Apple ID). The JS bundle
+# is embedded, so the app runs on its own and talks to www.geldesat.com.
 on:
   push:
     branches:
       - main
       - master
+    paths:
+      - "mobile-app/**"
+      - ".github/workflows/ios-build.yml"
   workflow_dispatch:
+
+concurrency:
+  group: ios-build-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: mobile-app
+    shell: bash
 
 jobs:
   build:
     runs-on: macos-latest
+    timeout-minutes: 90
 
     steps:
-
-      # ==========================================
-      # 1. CHECKOUT
-      # ==========================================
-      - name: Checkout Code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      # ==========================================
-      # 2. NODE.JS
-      # ==========================================
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      # Expo SDK 58 requires Node 22.13 or newer.
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
-          cache-dependency-path: mobile/package-lock.json
+          cache-dependency-path: mobile-app/package-lock.json
 
-      # ==========================================
-      # 3. INSTALL DEPENDENCIES
-      # ==========================================
-      - name: Install Dependencies
-        working-directory: mobile
-        run: |
-          npm ci
+      - name: Install dependencies
+        run: npm ci
 
-      # ==========================================
-      # 4. EXPO PREBUILD
-      # ==========================================
-      - name: Generate iOS Native Project
-        working-directory: mobile
-        shell: bash
+      - name: Generate iOS project
+        run: npx expo prebuild --platform ios --clean --no-install
+
+      # A free Apple ID cannot sign push notifications or associated domains,
+      # and sideloading fails if the app asks for them. Test builds drop them.
+      - name: Remove entitlements a free Apple ID cannot sign
         run: |
           set -e
+          for file in $(find ios -maxdepth 2 -name "*.entitlements"); do
+            echo "Clearing $file"
+            /usr/libexec/PlistBuddy -c "Delete :aps-environment" "$file" 2>/dev/null || true
+            /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.associated-domains" "$file" 2>/dev/null || true
+            cat "$file"
+          done
 
-          echo "========================================="
-          echo "EXPO PREBUILD"
-          echo "========================================="
+      - name: Install CocoaPods
+        working-directory: mobile-app/ios
+        run: pod install
 
-          npx expo prebuild \
-            --platform ios \
-            --clean
-
-      # ==========================================
-      # 5. DETECT IOS PROJECT
-      # ==========================================
-      - name: Detect iOS Workspace and Scheme
-        working-directory: mobile
-        shell: bash
+      - name: Detect workspace and scheme
         run: |
           set -e
-
-          echo "========================================="
-          echo "IOS PROJESI TESPIT EDILIYOR"
-          echo "========================================="
-
-          XCODEPROJ=$(find ios \
-            -maxdepth 1 \
-            -type d \
-            -name "*.xcodeproj" \
-            -print \
-            -quit)
-
-          WORKSPACE=$(find ios \
-            -maxdepth 1 \
-            -type d \
-            -name "*.xcworkspace" \
-            -print \
-            -quit)
-
-          if [ -z "$XCODEPROJ" ]; then
-            echo "HATA: .xcodeproj bulunamadi!"
+          WORKSPACE=$(find ios -maxdepth 1 -type d -name "*.xcworkspace" -print -quit)
+          XCODEPROJ=$(find ios -maxdepth 1 -type d -name "*.xcodeproj" -print -quit)
+          if [ -z "$WORKSPACE" ] || [ -z "$XCODEPROJ" ]; then
+            echo "HATA: iOS projesi bulunamadi"
             find ios -maxdepth 2 -print
             exit 1
           fi
-
-          if [ -z "$WORKSPACE" ]; then
-            echo "HATA: .xcworkspace bulunamadi!"
-            find ios -maxdepth 2 -print
-            exit 1
-          fi
-
-          # Expo prebuild'de uygulama project/scheme adı
-          # genellikle .xcodeproj dosyasının adıyla aynıdır.
-          PROJECT_NAME=$(basename "$XCODEPROJ" .xcodeproj)
-
-          echo "XCODEPROJ:"
-          echo "$XCODEPROJ"
-
-          echo ""
-          echo "WORKSPACE:"
-          echo "$WORKSPACE"
-
-          echo ""
-          echo "APP SCHEME:"
-          echo "$PROJECT_NAME"
-
-          echo ""
-          echo "========================================="
-          echo "WORKSPACE SCHEMES"
-          echo "========================================="
-
-          xcodebuild \
-            -workspace "$WORKSPACE" \
-            -list
-
-          # GitHub Actions'ın sonraki step'lerinde kullanılacak
-          # environment değişkenlerini kaydet.
+          SCHEME=$(basename "$XCODEPROJ" .xcodeproj)
+          echo "Workspace: $WORKSPACE"
+          echo "Scheme:    $SCHEME"
           echo "IOS_WORKSPACE=$WORKSPACE" >> "$GITHUB_ENV"
-          echo "IOS_SCHEME=$PROJECT_NAME" >> "$GITHUB_ENV"
+          echo "IOS_SCHEME=$SCHEME" >> "$GITHUB_ENV"
 
-      # ==========================================
-      # 6. VERIFY APP SCHEME
-      # ==========================================
-      - name: Verify App Scheme
-        working-directory: mobile
-        shell: bash
+      - name: Archive (unsigned)
         run: |
           set -e
-
-          echo "========================================="
-          echo "APP SCHEME KONTROL"
-          echo "========================================="
-
-          echo "Workspace:"
-          echo "$IOS_WORKSPACE"
-
-          echo ""
-          echo "Scheme:"
-          echo "$IOS_SCHEME"
-
-          echo ""
-          echo "Scheme build settings kontrol ediliyor..."
-
-          xcodebuild \
-            -workspace "$IOS_WORKSPACE" \
-            -scheme "$IOS_SCHEME" \
-            -configuration Release \
-            -showBuildSettings \
-            > "$GITHUB_WORKSPACE/mobile/build-settings.txt"
-
-          echo ""
-          echo "PRODUCT_NAME:"
-          grep -m 1 "PRODUCT_NAME =" \
-            "$GITHUB_WORKSPACE/mobile/build-settings.txt" || true
-
-          echo ""
-          echo "PRODUCT_BUNDLE_IDENTIFIER:"
-          grep -m 1 "PRODUCT_BUNDLE_IDENTIFIER =" \
-            "$GITHUB_WORKSPACE/mobile/build-settings.txt" || true
-
-          echo ""
-          echo "TARGET_NAME:"
-          grep -m 1 "TARGET_NAME =" \
-            "$GITHUB_WORKSPACE/mobile/build-settings.txt" || true
-
-      # ==========================================
-      # 7. ARCHIVE UNSIGNED APP
-      # ==========================================
-      - name: Archive iOS App (Unsigned)
-        working-directory: mobile
-        shell: bash
-        run: |
-          set -e
-
-          echo "========================================="
-          echo "UNSIGNED IOS ARCHIVE BASLIYOR"
-          echo "========================================="
-
-          ARCHIVE_DIR="$GITHUB_WORKSPACE/mobile/build"
-          ARCHIVE_PATH="$ARCHIVE_DIR/geldesat.xcarchive"
-
-          rm -rf "$ARCHIVE_DIR"
-          mkdir -p "$ARCHIVE_DIR"
-
-          echo "Workspace:"
-          echo "$IOS_WORKSPACE"
-
-          echo ""
-          echo "Scheme:"
-          echo "$IOS_SCHEME"
-
-          echo ""
-          echo "Archive:"
-          echo "$ARCHIVE_PATH"
-
-          echo ""
-          echo "========================================="
-          echo "XCODEBUILD ARCHIVE"
-          echo "========================================="
-
           xcodebuild \
             -workspace "$IOS_WORKSPACE" \
             -scheme "$IOS_SCHEME" \
             -configuration Release \
             -sdk iphoneos \
             -destination "generic/platform=iOS" \
-            -archivePath "$ARCHIVE_PATH" \
+            -archivePath "$GITHUB_WORKSPACE/mobile-app/build/geldesat.xcarchive" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             COMPILER_INDEX_STORE_ENABLE=NO \
-            archive
+            archive > xcodebuild.log 2>&1 || { grep -E "error:" xcodebuild.log | head -n 50; tail -n 150 xcodebuild.log; exit 1; }
+          tail -n 5 xcodebuild.log
 
-          echo ""
-          echo "========================================="
-          echo "ARCHIVE BASARILI"
-          echo "========================================="
-
-          if [ ! -d "$ARCHIVE_PATH" ]; then
-            echo "HATA: .xcarchive olusturulmadi!"
-            exit 1
-          fi
-
-          echo ""
-          echo "ARCHIVE:"
-          ls -lah "$ARCHIVE_PATH"
-
-          echo ""
-          echo "========================================="
-          echo "ARCHIVE PRODUCTS"
-          echo "========================================="
-
-          find "$ARCHIVE_PATH/Products" \
-            -maxdepth 4 \
-            -print
-
-      # ==========================================
-      # 8. FIND APP INSIDE ARCHIVE
-      # ==========================================
-      - name: Find Archived App
-        working-directory: mobile
-        shell: bash
+      - name: Package IPA
         run: |
           set -e
-
-          ARCHIVE_PATH="$GITHUB_WORKSPACE/mobile/build/geldesat.xcarchive"
-
-          echo "========================================="
-          echo "APP ARANIYOR"
-          echo "========================================="
-
-          APP_PATH=$(find "$ARCHIVE_PATH/Products/Applications" \
-            -maxdepth 1 \
-            -type d \
-            -name "*.app" \
-            -print \
-            -quit)
-
+          APP_PATH=$(find build/geldesat.xcarchive/Products/Applications -maxdepth 1 -type d -name "*.app" -print -quit)
           if [ -z "$APP_PATH" ]; then
-            echo ""
-            echo "HATA: ARCHIVE ICINDE .app BULUNAMADI!"
-            echo ""
-            echo "Archive Products:"
-            find "$ARCHIVE_PATH/Products" \
-              -maxdepth 5 \
-              -print
-
-            echo ""
-            echo "Archive Info:"
-            find "$ARCHIVE_PATH" \
-              -maxdepth 2 \
-              -type f \
-              -print
-
+            echo "HATA: archive icinde .app bulunamadi"
+            find build/geldesat.xcarchive/Products -maxdepth 4 -print
             exit 1
           fi
+          rm -rf Payload geldesat-unsigned.ipa
+          mkdir Payload
+          cp -R "$APP_PATH" Payload/
+          zip -qry geldesat-unsigned.ipa Payload
+          unzip -Z1 geldesat-unsigned.ipa | grep -qE '^Payload/[^/]+\.app/' || { echo "HATA: IPA bos"; exit 1; }
+          ls -lh geldesat-unsigned.ipa
 
-          echo ""
-          echo "APP BULUNDU:"
-          echo "$APP_PATH"
-
-          echo ""
-          echo "APP BOYUTU:"
-          du -sh "$APP_PATH"
-
-          echo ""
-          echo "APP ICERIGI:"
-          ls -lah "$APP_PATH"
-
-          # Sonraki step için kaydet
-          echo "APP_PATH=$APP_PATH" >> "$GITHUB_ENV"
-
-      # ==========================================
-      # 9. CREATE UNSIGNED IPA
-      # ==========================================
-      - name: Create Unsigned IPA
-        working-directory: mobile
-        shell: bash
-        run: |
-          set -e
-
-          echo "========================================="
-          echo "UNSIGNED IPA OLUSTURULUYOR"
-          echo "========================================="
-
-          IPA_PATH="$GITHUB_WORKSPACE/mobile/geldesat-unsigned.ipa"
-          PAYLOAD_DIR="$GITHUB_WORKSPACE/mobile/Payload"
-
-          echo "App:"
-          echo "$APP_PATH"
-
-          echo ""
-          echo "IPA:"
-          echo "$IPA_PATH"
-
-          echo ""
-          echo "========================================="
-          echo "PAYLOAD HAZIRLANIYOR"
-          echo "========================================="
-
-          rm -rf "$PAYLOAD_DIR"
-          mkdir -p "$PAYLOAD_DIR"
-
-          cp -R "$APP_PATH" "$PAYLOAD_DIR/"
-
-          echo ""
-          echo "Payload:"
-          ls -lah "$PAYLOAD_DIR"
-
-          echo ""
-          echo "========================================="
-          echo "IPA ZIPLENIYOR"
-          echo "========================================="
-
-          rm -f "$IPA_PATH"
-
-          cd "$GITHUB_WORKSPACE/mobile"
-
-          # IPA aslında ZIP formatındadır.
-          # Payload/....app yapısını koruyoruz.
-          zip -qry "$IPA_PATH" Payload
-
-          if [ ! -f "$IPA_PATH" ]; then
-            echo "HATA: IPA olusturulamadi!"
-            exit 1
-          fi
-
-          echo ""
-          echo "========================================="
-          echo "IPA BASARIYLA OLUSTURULDU"
-          echo "========================================="
-
-          ls -lh "$IPA_PATH"
-
-      # ==========================================
-      # 10. VERIFY IPA
-      # ==========================================
-      - name: Verify IPA
-        working-directory: mobile
-        shell: bash
-        run: |
-          set -e
-
-          IPA_PATH="$GITHUB_WORKSPACE/mobile/geldesat-unsigned.ipa"
-
-          echo "========================================="
-          echo "IPA KONTROL EDILIYOR"
-          echo "========================================="
-
-          if [ ! -f "$IPA_PATH" ]; then
-            echo "HATA: IPA bulunamadi!"
-            exit 1
-          fi
-
-          echo "IPA bulundu:"
-          ls -lh "$IPA_PATH"
-
-          echo ""
-          echo "========================================="
-          echo "IPA ICERIGI"
-          echo "========================================="
-
-          unzip -l "$IPA_PATH"
-
-          echo ""
-          echo "========================================="
-          echo "APP KONTROLU"
-          echo "========================================="
-
-          APP_IN_IPA=$(unzip -Z1 "$IPA_PATH" | grep -E '^Payload/[^/]+\.app/$' | head -n 1 || true)
-
-          if [ -z "$APP_IN_IPA" ]; then
-            echo "HATA: IPA icinde Payload/*.app bulunamadi!"
-            exit 1
-          fi
-
-          echo "IPA icindeki App:"
-          echo "$APP_IN_IPA"
-
-          echo ""
-          echo "IPA KONTROL BASARILI"
-
-      # ==========================================
-      # 11. UPLOAD IPA
-      # ==========================================
-      - name: Upload IPA Artifact
+      - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: geldesat-ios-app
-          path: mobile/geldesat-unsigned.ipa
+          name: geldesat-ios-unsigned
+          path: mobile-app/geldesat-unsigned.ipa
           if-no-files-found: error
+          retention-days: 14
 
-      # ==========================================
-      # 12. OPTIONAL - UPLOAD ARCHIVE
-      # ==========================================
-      - name: Upload Xcode Archive
+      - name: Upload build log on failure
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: geldesat-xcarchive
-          path: mobile/build/geldesat.xcarchive
-          if-no-files-found: error
+          name: xcodebuild-log
+          path: mobile-app/xcodebuild.log
+          if-no-files-found: ignore

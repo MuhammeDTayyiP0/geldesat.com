@@ -23,7 +23,7 @@ export const Route = createFileRoute("/api/mobile/listings/$id")({
              join categories c on c.id=l.category_id
              left join profiles p on p.user_id=l.user_id
              left join stores s on s.id=l.store_id
-             where l.id=$1 or lower(l.slug)=lower($1)
+             where l.id=$1 or lower(l.slug)=lower($1) or ($1 ~ '^[0-9]{7,15}$' and l.listing_no::text=$1)
              limit 1`,
             [params.id],
           );
