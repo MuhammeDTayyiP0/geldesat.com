@@ -1,4 +1,12 @@
-@import "tailwindcss";
+/*
+ * Scan only src/ for class names. Without an explicit source Tailwind scans the
+ * whole project minus .gitignore'd paths — and the Docker build has no
+ * .gitignore, so the server build also read the browser build's fresh .output/
+ * and produced different CSS (and a different file name) than the browser
+ * build. The HTML then linked a stylesheet that didn't exist and pages showed
+ * unstyled until the JS loaded.
+ */
+@import "tailwindcss" source("./");
 @import "tw-animate-css";
 /* Self-hosted IBM Plex Sans (one variable file per script; browsers fetch only the ranges a page uses). */
 @import "@fontsource-variable/ibm-plex-sans/wght.css";
