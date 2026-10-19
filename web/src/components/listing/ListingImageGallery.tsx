@@ -1,7 +1,7 @@
 import * as React from "react";
 import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, Maximize2, X, ImageIcon } from "lucide-react";
-import { photoSrc } from "@/lib/images";
+import { photoSrc, photoSrcSet } from "@/lib/images";
 
 interface ListingImageGalleryProps {
   images: string[];
@@ -164,10 +164,14 @@ export function ListingImageGallery({ images, title, categoryName }: ListingImag
           className="absolute inset-0 size-full scale-125 object-cover opacity-70 blur-2xl"
         />
         <img
-          src={validImages[currentIdx]}
+          src={photoSrc(validImages[currentIdx], 800)}
+          srcSet={photoSrcSet(validImages[currentIdx], [480, 800, 1200])}
+          sizes="(min-width: 1024px) 760px, 100vw"
           alt={`${title} - Görsel ${currentIdx + 1}`}
           className="relative size-full cursor-zoom-in object-contain transition-transform duration-300 group-hover:scale-[1.01]"
           loading="eager"
+          fetchPriority={currentIdx === 0 ? "high" : "auto"}
+          decoding="async"
         />
 
         {/* Counter Badge */}

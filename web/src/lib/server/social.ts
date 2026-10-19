@@ -173,11 +173,16 @@ export const unreadCount = createServerFn({ method: "GET" })
     void sweepRetention().catch((err) => console.warn("[retention] sweep failed", err));
     void sweepMessageDigests().catch((err) => console.warn("[digest] sweep failed", err));
     const sql = await getSql();
-    const a = await sql.query<{ n: number }>(
-      "select count(*)::int as n from notifications where user_id=$1 and read_at is null",
-      [context.userId],
-    );
-    return { notifications: a[0]?.n ?? 0, messages: await unreadMessageCount(sql, context.userId) };
+    const [a, messages] = await Promise.all([
+      sql.query<{ n: number; role: string | null }>(
+        `select (select count(*)::int from notifications where user_id=$1 and read_at is null) as n,
+                (select role from profiles where user_id=$1) as role`,
+        [context.userId],
+      ),
+      unreadMessageCount(sql, context.userId),
+    ]);
+    // `admin` rides along so the header needs no separate profile request.
+    return { notifications: a[0]?.n ?? 0, messages, admin: a[0]?.role === "ADMIN" };
   });
 
 export const blockUser = createServerFn({ method: "POST" })

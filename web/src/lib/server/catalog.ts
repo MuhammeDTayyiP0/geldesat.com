@@ -14,6 +14,14 @@ import {
   type ListingCard,
 } from "./helpers";
 import { CITY_COORDS } from "@/lib/data/geo";
+import { inferSearchCategoryId } from "@/lib/search-params";
+import {
+  categoryPath,
+  getCategoryCounts,
+  getCategoryTree,
+  pickCounts,
+  type CategoryNode,
+} from "./category-cache";
 import { getSessionUser } from "@/lib/auth/verify.server";
 import { getRequest } from "@tanstack/react-start/server";
 
@@ -45,7 +53,11 @@ const Filters = z.object({
  * `status` is server-only: the public `searchCatalog` validator strips it, so
  * visitors only ever see ACTIVE listings.
  */
-export type SearchFilters = z.infer<typeof Filters> & { status?: string };
+export type SearchFilters = z.infer<typeof Filters> & {
+  status?: string;
+  /** Skip the COUNT query when the caller ignores `total`/`pages`. */
+  skipCount?: boolean;
+};
 
 export async function searchListings(f: SearchFilters): Promise<{
   listings: ListingCard[];
@@ -71,24 +83,31 @@ export async function searchListings(f: SearchFilters): Promise<{
 
   if (f.q?.trim()) {
     // Escape LIKE wildcards so user-typed % and _ are literal characters
-    const escaped = f.q.trim().replace(/%/g, "\\%").replace(/_/g, "\\_");
-    const q = `%${escaped}%`;
-    params.push(q);
+    const term = f.q.trim();
+    const escaped = term.replace(/%/g, "\\%").replace(/_/g, "\\_");
+    params.push(`%${escaped}%`);
     const i = params.length;
-    params.push(q);
-    const j = params.length;
-    // ilan no (number/id/slug) + title/desc
-    conds.push(`(l.title ilike $${i} or l.description ilike $${i} or l.id ilike $${j} or l.slug ilike $${j} or l.listing_no::text = trim(both '#' from $${params.length + 1}) or coalesce(s.name,'') ilike $${i})`);
-    params.push(f.q.trim());
+    // Each branch can use its own index (title/description trigram, store_id),
+    // so Postgres can combine them instead of scanning every listing.
+    const ors = [
+      `l.title ilike $${i}`,
+      `l.description ilike $${i}`,
+      `l.store_id = any(array(select st.id from stores st where st.name ilike $${i}))`,
+    ];
+    // "#1000005" or "1000005": the listing number.
+    const listingNo = /^#?\d{1,15}$/.test(term) ? term.replace("#", "") : null;
+    if (listingNo) {
+      params.push(listingNo);
+      ors.push(`l.listing_no = $${params.length}::bigint`);
+    }
+    conds.push(`(${ors.join(" or ")})`);
   }
   if (f.category) {
     const ids = await subtreeIds(f.category);
     if (ids.length) {
-      const placeholders = ids.map((id) => {
-        params.push(id);
-        return `$${params.length}`;
-      });
-      conds.push(`l.category_id in (${placeholders.join(",")})`);
+      // One array parameter instead of thousands of placeholders for big subtrees.
+      params.push(ids);
+      conds.push(`l.category_id = any($${params.length}::text[])`);
     }
   }
   if (f.city) add("l.city = ?", f.city);
@@ -157,13 +176,14 @@ export async function searchListings(f: SearchFilters): Promise<{
 
   // Run COUNT and data fetch in parallel — cuts latency roughly in half
   const [countRows, rows] = await Promise.all([
-    sql.query<{ n: number }>(
-      `select count(*)::int as n
-       from listings l
-       left join stores s on s.id = l.store_id
-       ${where}`,
-      countParams,
-    ),
+    f.skipCount
+      ? Promise.resolve([] as { n: number }[])
+      : sql.query<{ n: number }>(
+          `select count(*)::int as n
+           from listings l
+           ${where}`,
+          countParams,
+        ),
     sql.query<Record<string, unknown>>(
       `select ${listingSelect("", true)},
          coalesce((
@@ -190,84 +210,92 @@ export async function searchListings(f: SearchFilters): Promise<{
   };
 }
 
-export const listCategories = createServerFn({ method: "GET" }).handler(async () => {
-  const sql = await getSql();
-  const rows = await sql.query<CategoryRow>(
-    "select id, name, slug, parent_id, icon, sort_order from categories order by sort_order, name",
-  );
-  const counts = await sql.query<{ category_id: string; n: number }>(
-    `select category_id, count(*)::int as n from listings
-     where status = 'ACTIVE' and (expires_at is null or expires_at > now())
-     group by category_id`,
-  );
-  const countMap = new Map(counts.map((c) => [c.category_id, c.n]));
-  const byParent = new Map<string | null, CategoryRow[]>();
-  const parentIds = new Set<string>();
-  for (const r of rows) {
-    const k = r.parent_id;
-    const arr = byParent.get(k) ?? [];
-    arr.push(r);
-    byParent.set(k, arr);
-    if (r.parent_id) parentIds.add(r.parent_id);
-  }
-  function withCount(id: string): number {
-    let n = countMap.get(id) ?? 0;
-    for (const child of byParent.get(id) ?? []) n += withCount(child.id);
-    return n;
-  }
-  return {
-    categories: rows.map((r) => ({ ...r, has_children: parentIds.has(r.id) })),
-    counts: Object.fromEntries(rows.map((r) => [r.id, withCount(r.id)])),
-    roots: rows.filter((r) => !r.parent_id).map((r) => ({ ...r, has_children: parentIds.has(r.id) })),
-  };
+/**
+ * Root categories with their live-listing counts — what the home page and the
+ * search sidebar show. The full tree has thousands of rows and stays on the server.
+ */
+export const listCategoryRoots = createServerFn({ method: "GET" }).handler(async () => {
+  const [tree, counts] = await Promise.all([getCategoryTree(), getCategoryCounts()]);
+  const roots = tree.children.get(null) ?? [];
+  return { roots, counts: pickCounts(counts, roots) };
 });
 
-export const listCategoryRoots = createServerFn({ method: "GET" }).handler(async () => {
-  const sql = await getSql();
-  const roots = await sql.query<CategoryRow>(
-    "select id,name,slug,parent_id,icon,sort_order from categories where parent_id is null order by sort_order,name",
-  );
-  return { roots };
-});
+/**
+ * One level of the category picker: the rows along `path` (root first) and the
+ * children of its last entry (the roots for an empty path), with counts.
+ */
+export const browseCategories = createServerFn({ method: "GET" })
+  .validator(z.object({ path: z.array(z.string().max(200)).max(20) }))
+  .handler(async ({ data }) => {
+    const [tree, counts] = await Promise.all([getCategoryTree(), getCategoryCounts()]);
+    const pathRows = data.path.map((id) => tree.byId.get(id)).filter((c): c is CategoryNode => Boolean(c));
+    const last = data.path.length ? pathRows[pathRows.length - 1]?.id : null;
+    const children = last === undefined ? [] : (tree.children.get(last) ?? []);
+    return { pathRows, children, counts: pickCounts(counts, children) };
+  });
 
 export const getCategory = createServerFn({ method: "POST" })
   .validator(z.object({ slug: z.string() }))
   .handler(async ({ data }) => {
-    const sql = await getSql();
-    const rows = await sql.query<CategoryRow>(
-      "select id, name, slug, parent_id, icon, sort_order from categories where lower(slug) = lower($1)",
-      [data.slug],
-    );
-    const cat = rows[0];
+    const tree = await getCategoryTree();
+    const cat = tree.bySlug.get(data.slug.toLowerCase());
     if (!cat) return { category: null as CategoryRow | null, path: [] as CategoryRow[], children: [] as CategoryRow[], attributes: [] as Awaited<ReturnType<typeof inheritedAttributes>> };
-    const all = await sql.query<CategoryRow>(
-      "select id, name, slug, parent_id, icon, sort_order from categories",
-    );
-    const byId = new Map(all.map((c) => [c.id, c]));
-    const path: CategoryRow[] = [];
-    let cur: CategoryRow | undefined = cat;
-    while (cur) {
-      path.unshift(cur);
-      cur = cur.parent_id ? byId.get(cur.parent_id) : undefined;
-    }
-    const parentIds = new Set(all.map((c) => c.parent_id).filter((id): id is string => Boolean(id)));
-    const children = all
-      .filter((c) => c.parent_id === cat.id)
-      .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, "tr"))
-      .map((c) => ({ ...c, has_children: parentIds.has(c.id) }));
     const attributes = await inheritedAttributes(cat.id);
-    return { category: cat, path, children, attributes };
+    return {
+      category: cat as CategoryRow,
+      path: categoryPath(tree, cat.id) as CategoryRow[],
+      children: (tree.children.get(cat.id) ?? []) as CategoryRow[],
+      attributes,
+    };
   });
 
 export const searchCatalog = createServerFn({ method: "POST" })
   .validator(Filters)
   .handler(async ({ data }) => searchListings(data));
 
-export const featuredListings = createServerFn({ method: "GET" }).handler(async () => {
+/**
+ * Search results plus, for a text search without a category, the category the
+ * results narrow down to (so the page can offer that category's filters).
+ */
+export const searchCatalogWithContext = createServerFn({ method: "POST" })
+  .validator(Filters)
+  .handler(async ({ data }) => {
+    const result = await searchListings(data);
+    let inferredCategorySlug: string | null = null;
+    if (!data.category && data.q?.trim()) {
+      const tree = await getCategoryTree();
+      const id = inferSearchCategoryId(result.listings.map((l) => l.category_id), tree.rows);
+      inferredCategorySlug = id ? (tree.byId.get(id)?.slug ?? null) : null;
+    }
+    return { result, inferredCategorySlug };
+  });
+
+/** Memoize a server-side read for `ttlMs` (per process); failures are not kept. */
+function cached<T>(ttlMs: number, load: () => Promise<T>): () => Promise<T> {
+  let entry: { expiresAt: number; promise: Promise<T> } | null = null;
+  return () => {
+    if (entry && Date.now() < entry.expiresAt) return entry.promise;
+    const next = {
+      expiresAt: Date.now() + ttlMs,
+      promise: load().catch((err) => {
+        if (entry === next) entry = null;
+        throw err;
+      }),
+    };
+    entry = next;
+    return next.promise;
+  };
+}
+
+// The home page is the busiest page and these change slowly; a few seconds of
+// staleness saves several queries per visit.
+const homeFeatured = cached(20_000, async () => {
   // date_desc already sorts featured_until items first, so one call is enough
-  const result = await searchListings({ limit: 8, page: 1, sort: "date_desc" });
+  const result = await searchListings({ limit: 8, page: 1, sort: "date_desc", skipCount: true });
   return result.listings;
 });
+
+export const featuredListings = createServerFn({ method: "GET" }).handler(() => homeFeatured());
 
 export const getListing = createServerFn({ method: "POST" })
   .validator(z.object({ slug: z.string().max(200) }))
@@ -316,45 +344,34 @@ export const getListing = createServerFn({ method: "POST" })
       listing.lat = CITY_COORDS[listing.city].lat;
       listing.lng = CITY_COORDS[listing.city].lng;
     }
-    const pathRows = await sql.query<CategoryRow>(
-      `with recursive chain as (
-         select id, name, slug, parent_id, icon, sort_order from categories where id = $1
-         union all
-         select c.id, c.name, c.slug, c.parent_id, c.icon, c.sort_order
-         from categories c join chain ch on ch.parent_id = c.id
-       )
-       select * from chain`,
-      [listing.category_id],
-    );
-    const path = [...pathRows].reverse();
-    const history = await sql.query<{ price: string | number; recorded_at: string }>(
-      "select price, recorded_at from price_history where listing_id = $1 order by recorded_at asc",
-      [listing.id],
-    );
-    let similar = await searchListings({
-      category: listing.category_id,
-      minPrice: listing.price > 0 ? listing.price * 0.7 : undefined,
-      maxPrice: listing.price > 0 ? listing.price * 1.3 : undefined,
-      limit: 6,
-      page: 1,
-    });
-    let filteredSimilar = similar.listings.filter((x) => x.id !== listing.id);
-    if (filteredSimilar.length === 0) {
-      similar = await searchListings({
+    // Everything below depends only on the listing row, so fetch it in parallel.
+    const similarOf = (narrow: boolean) =>
+      searchListings({
         category: listing.category_id,
+        minPrice: narrow && listing.price > 0 ? listing.price * 0.7 : undefined,
+        maxPrice: narrow && listing.price > 0 ? listing.price * 1.3 : undefined,
         limit: 6,
         page: 1,
-      });
-      filteredSimilar = similar.listings.filter((x) => x.id !== listing.id);
-    }
-    const seller = await sql.query<Record<string, unknown>>(
-      `select p.user_id, p.display_name, p.city, p.created_at, p.avatar_url, p.bio,
-              (select count(*)::int from listings where user_id = p.user_id and status = 'ACTIVE') as listing_count,
-              (select coalesce(avg(rating),0) from reviews where seller_id = p.user_id) as rating_avg,
-              (select count(*)::int from reviews where seller_id = p.user_id) as rating_count
-       from profiles p where p.user_id = $1`,
-      [listing.user_id],
-    );
+        skipCount: true,
+      }).then((r) => r.listings.filter((x) => x.id !== listing.id));
+    const [tree, history, similarNarrow, seller] = await Promise.all([
+      getCategoryTree(),
+      sql.query<{ price: string | number; recorded_at: string }>(
+        "select price, recorded_at from price_history where listing_id = $1 order by recorded_at asc",
+        [listing.id],
+      ),
+      similarOf(true),
+      sql.query<Record<string, unknown>>(
+        `select p.user_id, p.display_name, p.city, p.created_at, p.avatar_url, p.bio,
+                (select count(*)::int from listings where user_id = p.user_id and status = 'ACTIVE') as listing_count,
+                (select coalesce(avg(rating),0) from reviews where seller_id = p.user_id) as rating_avg,
+                (select count(*)::int from reviews where seller_id = p.user_id) as rating_count
+         from profiles p where p.user_id = $1`,
+        [listing.user_id],
+      ),
+    ]);
+    const path = categoryPath(tree, listing.category_id) as CategoryRow[];
+    const filteredSimilar = similarNarrow.length > 0 || listing.price <= 0 ? similarNarrow : await similarOf(false);
     const phoneVisibility = String(rows[0].phone_visibility) as PhoneVisibility;
     const hasPhone =
       phoneVisibility !== "hidden" &&
@@ -421,15 +438,16 @@ export const getLegal = createServerFn({ method: "POST" })
     return rows[0] ?? null;
   });
 
-export const statsHome = createServerFn({ method: "GET" }).handler(async () => {
+const homeStats = cached(60_000, async () => {
   const sql = await getSql();
   const rows = await sql.query<{ listings: number; cities: number }>(
-    `select
-       (select count(*)::int from listings where status = 'ACTIVE' and (expires_at is null or expires_at > now())) as listings,
-       (select count(distinct city)::int from listings where status = 'ACTIVE' and (expires_at is null or expires_at > now())) as cities`,
+    `select count(*)::int as listings, count(distinct city)::int as cities
+     from listings where status = 'ACTIVE' and (expires_at is null or expires_at > now())`,
   );
   return rows[0] ?? { listings: 0, cities: 0 };
 });
+
+export const statsHome = createServerFn({ method: "GET" }).handler(() => homeStats());
 
 export type SiteSettings = {
   company_name: string;

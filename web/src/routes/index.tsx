@@ -13,7 +13,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { useState } from "react";
-import { featuredListings, listCategories, statsHome } from "@/lib/server/catalog";
+import { featuredListings, listCategoryRoots, statsHome } from "@/lib/server/catalog";
 import { ListingCard } from "@/components/listing/ListingCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,7 +21,7 @@ import { jsonLd } from "@/lib/seo";
 
 export const Route = createFileRoute("/")({
   loader: async () => {
-    const [cats, featured, stats] = await Promise.all([listCategories(), featuredListings(), statsHome()]);
+    const [cats, featured, stats] = await Promise.all([listCategoryRoots(), featuredListings(), statsHome()]);
     return { cats, featured, stats };
   },
   head: () => {

@@ -1,15 +1,15 @@
 /**
  * Content-Security-Policy for server-rendered pages. Scripts must come from this
  * site or carry the per-request nonce that TanStack Router stamps on its own
- * inline scripts (and that the root shell passes to its splash script).
+ * inline scripts.
  * Inline styles stay allowed: React `style` props and the critical CSS need them.
  */
 export function buildCsp(nonce: string): string {
   return [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}'`,
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    "font-src 'self' data: https://fonts.gstatic.com",
+    "style-src 'self' 'unsafe-inline'",
+    "font-src 'self' data:",
     // Listing photos can be legacy external URLs; Google avatars come from googleusercontent.
     "img-src 'self' data: blob: https:",
     "connect-src 'self'",

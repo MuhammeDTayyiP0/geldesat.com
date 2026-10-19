@@ -107,7 +107,10 @@ function createPostgresSql(): Promise<Sql> {
     types.setTypeParser(OID_INT8, Number);
     types.setTypeParser(OID_DATE, identity);
     types.setTypeParser(OID_INTERVAL, identity);
-    const pool = new Pool({ connectionString: databaseUrl });
+    // pg defaults to 10 connections; pages fire several queries in parallel, so
+    // allow more (DB_POOL_MAX overrides) and drop idle ones after 30 s.
+    const max = Number(process.env.DB_POOL_MAX) || 20;
+    const pool = new Pool({ connectionString: databaseUrl, max, idleTimeoutMillis: 30_000 });
     return toSql(
       async <T>(text: string, params: unknown[]) => {
         const res = await pool.query(text, params);

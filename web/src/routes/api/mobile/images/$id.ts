@@ -9,14 +9,15 @@ export const Route = createFileRoute("/api/mobile/images/$id")({
       GET: async ({ request, params }) => {
         if (!/^[0-9a-f-]{36}$/i.test(params.id)) return new Response(null, { status: 404 });
         try {
-          const sql = await getSql();
-          const rows = await sql.query<{ mime_type: string; data: Buffer }>(
-            "select mime_type,data from mobile_listing_images where id=$1",
-            [params.id],
-          );
-          const image = rows[0];
-          if (!image) return new Response(null, { status: 404 });
-          return await storedImageResponse(request, params.id, image.mime_type, image.data);
+          const response = await storedImageResponse(request, params.id, async () => {
+            const sql = await getSql();
+            const rows = await sql.query<{ mime_type: string; data: Buffer }>(
+              "select mime_type,data from mobile_listing_images where id=$1",
+              [params.id],
+            );
+            return rows[0] ? { mimeType: rows[0].mime_type, data: rows[0].data } : null;
+          });
+          return response ?? new Response(null, { status: 404 });
         } catch {
           return new Response(null, { status: 500 });
         }

@@ -86,7 +86,18 @@ export async function preparePhoto(file: File, rotate: PhotoRotation = 0): Promi
   }
 }
 
+type PhotoWidth = 240 | 480 | 800 | 1200;
+
+function isStoredPhoto(url: string): boolean {
+  return url.startsWith("/uploads/") || url.startsWith("/api/mobile/images/");
+}
+
 /** Resized copy of a stored listing photo (server-generated WebP). Other URLs pass through. */
-export function photoSrc(url: string, width: 240 | 480 | 800): string {
-  return url.startsWith("/uploads/") || url.startsWith("/api/mobile/images/") ? `${url}?w=${width}` : url;
+export function photoSrc(url: string, width: PhotoWidth): string {
+  return isStoredPhoto(url) ? `${url}?w=${width}` : url;
+}
+
+/** `srcset` over the given widths for a stored photo; undefined for external URLs. */
+export function photoSrcSet(url: string, widths: readonly PhotoWidth[]): string | undefined {
+  return isStoredPhoto(url) ? widths.map((w) => `${url}?w=${w} ${w}w`).join(", ") : undefined;
 }

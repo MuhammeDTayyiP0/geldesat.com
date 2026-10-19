@@ -84,6 +84,15 @@ export default defineConfig(({ command, isPreview }) => ({
     port: 3000,
   },
   resolve: { tsconfigPaths: true },
+  // PGLite is the local-dev database. Bundling it copies its 16 MB of WASM into
+  // the public assets: the browser build sees it through server modules (their
+  // code is tree-shaken away, the WASM files were not), and the server build
+  // would inline it. External, it loads from node_modules on the rare run that
+  // needs it.
+  ssr: { external: ["@electric-sql/pglite"] },
+  environments: {
+    client: { build: { rollupOptions: { external: ["@electric-sql/pglite"] } } },
+  },
   plugins: [
     pgliteBootstrapPlugin(),
     seoDevPlugin(),
@@ -92,7 +101,7 @@ export default defineConfig(({ command, isPreview }) => ({
     ...(command === "build" || isPreview
       ? [
           // Self-hosted Node server (Coolify / Docker); server/ holds Nitro middleware.
-          nitro({ preset: "node-server", serverDir: "./server" }),
+          nitro({ preset: "node-server", serverDir: "./server", traceDeps: ["@electric-sql/pglite*"] }),
         ]
       : []),
     viteReact(),

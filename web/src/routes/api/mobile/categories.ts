@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { getSql } from "@/lib/db";
-import { CategoryRow } from "@/lib/server/helpers";
+import { getCategoryCounts, getCategoryTree } from "@/lib/server/category-cache";
 import { publicErrorMessage } from "@/lib/server/errors";
 
 export const Route = createFileRoute("/api/mobile/categories")({
@@ -8,29 +7,17 @@ export const Route = createFileRoute("/api/mobile/categories")({
     handlers: {
       GET: async () => {
         try {
-          const sql = await getSql();
-          const rows = await sql.query<CategoryRow>(
-            `select id, name, slug, parent_id, icon, sort_order
-             from categories
-             order by parent_id nulls first, sort_order asc, name asc`,
-          );
-          const countRows = await sql.query<{ category_id: string; n: number }>(
-            `with recursive tree(root_id, category_id) as (
-               select id, id from categories
-               union all
-               select tree.root_id, c.id from categories c join tree on c.parent_id=tree.category_id
-             )
-             select tree.root_id as category_id, count(l.id)::int as n
-             from tree left join listings l on l.category_id=tree.category_id and l.status='ACTIVE'
-               and (l.expires_at is null or l.expires_at>now())
-             group by tree.root_id`,
-          );
+          const [tree, counts] = await Promise.all([getCategoryTree(), getCategoryCounts()]);
+          // Same shape and order as before: roots first, then by sort order and name.
+          const rows = tree.rows
+            .map(({ id, name, slug, parent_id, icon, sort_order }) => ({ id, name, slug, parent_id, icon, sort_order }))
+            .sort((x, y) => (x.parent_id === null ? 0 : 1) - (y.parent_id === null ? 0 : 1) || (x.parent_id ?? "").localeCompare(y.parent_id ?? "") || x.sort_order - y.sort_order || x.name.localeCompare(y.name));
 
           return new Response(
             JSON.stringify({
               success: true,
               categories: rows,
-              counts: Object.fromEntries(countRows.map((row) => [row.category_id, row.n])),
+              counts,
             }),
             {
               status: 200,

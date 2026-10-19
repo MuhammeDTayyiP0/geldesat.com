@@ -1,40 +1,17 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { Home, LayoutGrid, MessageCircle, Plus, User } from "lucide-react";
-import { useEffect, useState } from "react";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { unreadCount } from "@/lib/server/social";
+import { useUnread } from "@/lib/unread-store";
 import { cn } from "@/lib/utils";
 
 export function BottomNav() {
   const { user } = useCurrentUserState();
-  const [msgUnread, setMsgUnread] = useState(0);
+  // Loaded and kept fresh by the header (always mounted alongside this bar).
+  const msgUnread = useUnread().messages;
 
   const pathname = useRouterState({
     select: (s) => s.location.pathname,
   });
-
-  useEffect(() => {
-    if (!user) {
-      setMsgUnread(0);
-      return;
-    }
-
-    let active = true;
-    function load() {
-      unreadCount()
-        .then((c) => {
-          if (active) setMsgUnread(c.messages);
-        })
-        .catch(() => {});
-    }
-
-    load();
-    window.addEventListener("geldesat:inbox", load);
-    return () => {
-      active = false;
-      window.removeEventListener("geldesat:inbox", load);
-    };
-  }, [user]);
 
   const isHome = pathname === "/";
   const isCategories = pathname.startsWith("/search") || pathname.startsWith("/category");

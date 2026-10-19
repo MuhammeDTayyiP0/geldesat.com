@@ -11,20 +11,29 @@ import {
   Search,
   User,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { SignedIn, SignedOut } from "@/lib/auth/gates";
 import { subscribeChatStream } from "@/lib/chat-stream";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { unreadCount } from "@/lib/server/social";
-import { getMe } from "@/lib/server/account";
+import { setUnread, useUnread } from "@/lib/unread-store";
 import { LogoMark } from "@/components/brand/LogoMark";
 import { cn } from "@/lib/utils";
 import { MAIN_NAV_CATEGORIES } from "./navbar/nav-data";
 import type { MegaCategory } from "./navbar/nav-data";
 import { AutocompleteSearchBar } from "./navbar/SearchBar";
-import { UserAccountDropdown } from "./navbar/UserAccountDropdown";
-import { MegaMenuOverlay, AllCategoriesMegaMenu } from "./navbar/MegaMenu";
-import { MobileNavigationDrawer } from "./navbar/MobileNavigationDrawer";
+
+// Menus that only appear after a hover, a click or sign-in load on demand, so
+// they stay out of the code every page downloads first.
+const loadMegaMenu = () => import("./navbar/MegaMenu");
+const MegaMenuOverlay = lazy(() => loadMegaMenu().then((m) => ({ default: m.MegaMenuOverlay })));
+const AllCategoriesMegaMenu = lazy(() => loadMegaMenu().then((m) => ({ default: m.AllCategoriesMegaMenu })));
+const MobileNavigationDrawer = lazy(() =>
+  import("./navbar/MobileNavigationDrawer").then((m) => ({ default: m.MobileNavigationDrawer })),
+);
+const UserAccountDropdown = lazy(() =>
+  import("./navbar/UserAccountDropdown").then((m) => ({ default: m.UserAccountDropdown })),
+);
 
 export interface NavbarProps {
   className?: string;
@@ -32,8 +41,7 @@ export interface NavbarProps {
 
 export function Navbar({ className }: NavbarProps) {
   const { user, isPending } = useCurrentUserState();
-  const [msgUnread, setMsgUnread] = useState(0);
-  const [noteUnread, setNoteUnread] = useState(0);
+  const { messages: msgUnread, notifications: noteUnread } = useUnread();
   const [admin, setAdmin] = useState(false);
 
   // Mega menü hover kontrolü
@@ -58,15 +66,15 @@ export function Navbar({ className }: NavbarProps) {
     };
   }, []);
 
-  // Mobil drawer durumu
+  // Mobil drawer durumu (kodu ilk açılışta yüklenir, sonra kapanış animasyonu için mounted kalır)
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  const [mobileDrawerLoaded, setMobileDrawerLoaded] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
 
   // SSE ve unread yükleyici
   useEffect(() => {
     if (!user) {
-      setMsgUnread(0);
-      setNoteUnread(0);
+      setUnread({ messages: 0, notifications: 0 });
       setAdmin(false);
       return;
     }
@@ -74,22 +82,19 @@ export function Navbar({ className }: NavbarProps) {
     function loadStats() {
       unreadCount()
         .then((c) => {
-          setNoteUnread(c.notifications);
-          setMsgUnread(c.messages);
+          setUnread({ messages: c.messages, notifications: c.notifications });
+          setAdmin(c.admin);
         })
         .catch(() => undefined);
     }
 
     loadStats();
-    getMe()
-      .then((m) => setAdmin(m.profile?.role === "ADMIN"))
-      .catch(() => undefined);
 
     // The header owns the inbox side of the shared chat stream and re-broadcasts
     // it as a window event for the inbox page.
     const unsubscribe = subscribeChatStream((data) => {
       if (data.type === "new_message") {
-        setMsgUnread((prev) => prev + 1);
+        setUnread((prev) => ({ ...prev, messages: prev.messages + 1 }));
         window.dispatchEvent(new CustomEvent("geldesat:inbox", { detail: data }));
       } else if (data.type === "read_update" || data.type === "inbox_ping") {
         loadStats();
@@ -97,9 +102,10 @@ export function Navbar({ className }: NavbarProps) {
       }
     });
     window.addEventListener("geldesat:inbox", loadStats);
+    // The chat stream pushes changes; this only catches what it may have missed.
     const tick = window.setInterval(() => {
       if (document.visibilityState === "visible") loadStats();
-    }, 20000);
+    }, 60000);
 
     return () => {
       unsubscribe();
@@ -155,7 +161,10 @@ export function Navbar({ className }: NavbarProps) {
           <div className="flex items-center gap-2 sm:gap-3">
             <button
               type="button"
-              onClick={() => setMobileDrawerOpen(true)}
+              onClick={() => {
+                setMobileDrawerLoaded(true);
+                setMobileDrawerOpen(true);
+              }}
               className="grid size-10 place-items-center rounded-lg text-muted hover:bg-elevated hover:text-fg md:hidden"
               aria-label="Menüyü Aç"
             >
@@ -268,7 +277,9 @@ export function Navbar({ className }: NavbarProps) {
                   </SignedOut>
 
                   <SignedIn>
-                    <UserAccountDropdown admin={admin} />
+                    <Suspense fallback={<div className="size-10" aria-hidden="true" />}>
+                      <UserAccountDropdown admin={admin} />
+                    </Suspense>
                   </SignedIn>
                 </>
               )}
@@ -299,6 +310,7 @@ export function Navbar({ className }: NavbarProps) {
       <nav
         aria-label="Ana kategoriler"
         onMouseLeave={handleStripMouseLeave}
+        onPointerEnter={() => void loadMegaMenu()}
         className="relative z-10 hidden md:block border-b border-border/80 bg-surface/98 backdrop-blur-md"
       >
         <div className="mx-auto flex h-11 max-w-7xl items-center px-4 sm:px-6">
@@ -371,18 +383,24 @@ export function Navbar({ className }: NavbarProps) {
         </div>
 
         {/* Hover Mega Menü Açılır Panelleri */}
-        {allCategoriesHovered && <AllCategoriesMegaMenu onClose={handleAllCategoriesMouseLeave} />}
-        {hoveredCategory && <MegaMenuOverlay activeCategory={hoveredCategory} onClose={handleCategoryMouseLeave} />}
+        <Suspense fallback={null}>
+          {allCategoriesHovered && <AllCategoriesMegaMenu onClose={handleAllCategoriesMouseLeave} />}
+          {hoveredCategory && <MegaMenuOverlay activeCategory={hoveredCategory} onClose={handleCategoryMouseLeave} />}
+        </Suspense>
       </nav>
 
       {/* Mobil Hamburger Çekmecesi */}
-      <MobileNavigationDrawer
-        isOpen={mobileDrawerOpen}
-        onClose={() => setMobileDrawerOpen(false)}
-        unreadMsgCount={msgUnread}
-        unreadNoteCount={noteUnread}
-        admin={admin}
-      />
+      {mobileDrawerLoaded ? (
+        <Suspense fallback={null}>
+          <MobileNavigationDrawer
+            isOpen={mobileDrawerOpen}
+            onClose={() => setMobileDrawerOpen(false)}
+            unreadMsgCount={msgUnread}
+            unreadNoteCount={noteUnread}
+            admin={admin}
+          />
+        </Suspense>
+      ) : null}
     </header>
   );
 }

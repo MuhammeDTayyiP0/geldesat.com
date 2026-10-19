@@ -4,6 +4,7 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import type { Sql } from "@/lib/db";
 import { newId } from "@/lib/utils";
 import { requireAdmin } from "../helpers";
+import { clearCategoryCache } from "../category-cache";
 
 /** Signed-in ADMIN only; every admin server function runs behind this. */
 export const adminMiddleware = createMiddleware({ type: "function" })
@@ -27,6 +28,13 @@ export async function audit(
   summary: string,
   meta?: Record<string, unknown>,
 ): Promise<void> {
+  if (targetType === "category") {
+    // Every category edit is audited, so this is the one place to refresh the
+    // public tree. Edits often run inside a transaction that commits after this
+    // call, so clear once more after it has had time to land.
+    clearCategoryCache();
+    setTimeout(clearCategoryCache, 2000);
+  }
   try {
     await sql.query(
       `insert into admin_audit_log (id, admin_id, action, target_type, target_id, summary, meta)

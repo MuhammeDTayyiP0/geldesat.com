@@ -13,7 +13,7 @@ const MIN_SHORT_EDGE = 240;
 /** Stored masters must fit the 2 MB column check in mobile_listing_images. */
 const MAX_STORED_BYTES = 2 * 1024 * 1024;
 /** Widths the site asks for in cards, thumbnails and the gallery. */
-export const VARIANT_WIDTHS = [240, 480, 800] as const;
+export const VARIANT_WIDTHS = [240, 480, 800, 1200] as const;
 
 /** GeldeSat logo strokes (64×64 viewBox) at the given stroke width. */
 const markPaths = (width: number) => `

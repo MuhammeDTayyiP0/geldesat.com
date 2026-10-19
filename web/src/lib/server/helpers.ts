@@ -1,6 +1,7 @@
 import { getSql } from "@/lib/db";
 import { asJson, num } from "@/lib/utils";
 import { resolveNotifyPrefs, type NotifyChannelPrefs, type PhoneVisibility } from "@/lib/notification-prefs";
+import { findCategory, getCategoryTree, subtreeOf } from "./category-cache";
 
 export type CategoryRow = {
   id: string;
@@ -117,17 +118,9 @@ export function mapListing(row: Record<string, unknown>): ListingCard {
 }
 
 export async function subtreeIds(slugOrId: string): Promise<string[]> {
-  const sql = await getSql();
-  const rows = await sql.query<{ id: string }>(
-    `with recursive tree as (
-       select id from categories where slug = $1 or id = $1
-       union all
-       select c.id from categories c join tree t on c.parent_id = t.id
-     )
-     select id from tree`,
-    [slugOrId],
-  );
-  return rows.map((r) => r.id);
+  const tree = await getCategoryTree();
+  const cat = findCategory(tree, slugOrId);
+  return cat ? subtreeOf(tree, cat.id) : [];
 }
 
 export async function inheritedAttributes(categoryId: string): Promise<AttrDef[]> {
@@ -357,8 +350,10 @@ export function listingSelect(extra = "", onlyCover = false) {
   const imagesExpr = onlyCover
     ? "case when jsonb_array_length(l.images) > 0 then jsonb_build_array(l.images->0) else '[]'::jsonb end as images"
     : "l.images";
+  // Cards only show a teaser, so lists don't carry every listing's full text.
+  const descriptionExpr = onlyCover ? "left(l.description, 160) as description" : "l.description";
   return `
-    l.id, l.listing_no, l.slug, l.user_id, l.store_id, l.category_id, l.title, l.description,
+    l.id, l.listing_no, l.slug, l.user_id, l.store_id, l.category_id, l.title, ${descriptionExpr},
     l.price, l.currency, l.status, l.city, l.district, l.neighborhood, l.lat, l.lng,
     ${imagesExpr}, l.attrs, l.view_count, l.featured_until, l.expires_at, l.created_at, l.updated_at,
     c.name as category_name, c.slug as category_slug,

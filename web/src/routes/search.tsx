@@ -12,8 +12,8 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { getCategory, listCategories, searchCatalog } from "@/lib/server/catalog";
-import { attrsToSearch, inferSearchCategoryId, parseAttrs, parseSearch, toFilters, type CatalogSearch } from "@/lib/search-params";
+import { getCategory, listCategoryRoots, searchCatalogWithContext } from "@/lib/server/catalog";
+import { attrsToSearch, parseAttrs, parseSearch, toFilters, type CatalogSearch } from "@/lib/search-params";
 
 import { ListingCard } from "@/components/listing/ListingCard";
 import { Filters, type FilterState } from "@/components/listing/Filters";
@@ -35,21 +35,15 @@ export const Route = createFileRoute("/search")({
   validateSearch: (s: Record<string, unknown>) => parseSearch(s),
   loaderDeps: ({ search }) => search,
   loader: async ({ deps }) => {
-    const [requestedCategory, categoryData, result] = await Promise.all([
+    const [requestedCategory, categoryData, { result, inferredCategorySlug }] = await Promise.all([
       deps.category ? getCategory({ data: { slug: deps.category } }) : null,
-      listCategories(),
-      searchCatalog({ data: toFilters({ ...deps, neighborhood: undefined }) }),
+      listCategoryRoots(),
+      searchCatalogWithContext({ data: toFilters({ ...deps, neighborhood: undefined }) }),
     ]);
-    const inferredCategoryId = !deps.category && deps.q?.trim()
-      ? inferSearchCategoryId(result.listings.map((listing) => listing.category_id), categoryData.categories)
-      : undefined;
-    const inferredCategory = inferredCategoryId
-      ? categoryData.categories.find((category) => category.id === inferredCategoryId)
-      : undefined;
     const categoryContext = requestedCategory?.category
       ? requestedCategory
-      : inferredCategory
-        ? await getCategory({ data: { slug: inferredCategory.slug } })
+      : inferredCategorySlug
+        ? await getCategory({ data: { slug: inferredCategorySlug } })
         : null;
     return {
       result,
@@ -568,8 +562,8 @@ function SearchPage() {
                   : "grid gap-3"
               }
             >
-              {result.listings.map((l: any) => (
-                <ListingCard key={l.id} listing={l} variant={view} />
+              {result.listings.map((l: any, i: number) => (
+                <ListingCard key={l.id} listing={l} variant={view} priority={i < 2} />
               ))}
             </div>
           )}

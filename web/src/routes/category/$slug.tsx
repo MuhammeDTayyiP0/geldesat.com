@@ -16,11 +16,13 @@ export const Route = createFileRoute("/category/$slug")({
   validateSearch: (s: Record<string, unknown>) => parseSearch(s),
   loaderDeps: ({ search }) => search,
   loader: async ({ deps, params }) => {
-    const cat = await getCategory({ data: { slug: params.slug } });
+    const [cat, result] = await Promise.all([
+      getCategory({ data: { slug: params.slug } }),
+      searchCatalog({ data: { ...toFilters(deps), category: params.slug } }),
+    ]);
     if (!cat || !cat.category) {
       throw notFound();
     }
-    const result = await searchCatalog({ data: { ...toFilters(deps), category: params.slug } });
     return { cat, result };
   },
   notFoundComponent: () => (
@@ -278,8 +280,8 @@ function CategoryPage() {
             </div>
           ) : (
             <div className={view === "grid" ? "grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3" : "grid gap-3"}>
-              {result.listings.map((l: any) => (
-                <ListingCard key={l.id} listing={l} variant={view} />
+              {result.listings.map((l: any, i: number) => (
+                <ListingCard key={l.id} listing={l} variant={view} priority={i < 2} />
               ))}
             </div>
           )}

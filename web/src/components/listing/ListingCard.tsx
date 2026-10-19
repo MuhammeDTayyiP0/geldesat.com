@@ -7,16 +7,19 @@ import { Badge } from "@/components/ui/badge";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { toggleFavorite } from "@/lib/server/social";
 import { toast } from "sonner";
-import { photoSrc } from "@/lib/images";
+import { photoSrc, photoSrcSet } from "@/lib/images";
 
 export function ListingCard({
   listing,
   variant = "grid",
   initialFavorite = false,
+  priority = false,
 }: {
   listing: Listing;
   variant?: "grid" | "list";
   initialFavorite?: boolean;
+  /** Above the fold on load: fetch the photo right away instead of lazily. */
+  priority?: boolean;
 }) {
   const [fav, setFav] = useState(initialFavorite);
   const [favLoading, setFavLoading] = useState(false);
@@ -57,8 +60,11 @@ export function ListingCard({
       {img ? (
         <img
           src={photoSrc(img, 480)}
+          srcSet={photoSrcSet(img, [240, 480, 800])}
+          sizes={variant === "list" ? "(min-width: 768px) 220px, (min-width: 640px) 180px, 110px" : "(min-width: 1024px) 300px, (min-width: 640px) 50vw, 100vw"}
           alt={listing.title}
-          loading="lazy"
+          loading={priority ? "eager" : "lazy"}
+          fetchPriority={priority ? "high" : undefined}
           decoding="async"
           className="size-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
         />

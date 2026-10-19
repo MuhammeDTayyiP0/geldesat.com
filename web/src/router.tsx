@@ -34,6 +34,9 @@ export function getRouter() {
     defaultPendingComponent: GlobalPending,
     defaultPendingMs: 1000,
     defaultPendingMinMs: 0,
+    // Start loading a page's code and data when the pointer rests on (or touches)
+    // its link, so most navigations are already done by the click.
+    defaultPreload: "intent",
     ...(nonce ? { ssr: { nonce } } : {}),
   });
 }

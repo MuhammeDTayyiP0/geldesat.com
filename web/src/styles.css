@@ -1,9 +1,11 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+/* Self-hosted IBM Plex Sans (one variable file per script; browsers fetch only the ranges a page uses). */
+@import "@fontsource-variable/ibm-plex-sans/wght.css";
 
 @theme {
-  --font-sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
-  --font-display: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-sans: "IBM Plex Sans Variable", "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-display: "IBM Plex Sans Variable", "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
 
   --color-bg: #f3f5f8;
   --color-fg: #12151c;
@@ -238,11 +240,4 @@ html {
   animation: skeleton-shimmer 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
-/* Initial Splash Screen: Auto-dissolve smoothly the moment styles.css finishes evaluation */
-#app-splash-loader {
-  opacity: 0 !important;
-  visibility: hidden !important;
-  pointer-events: none !important;
-  transition: opacity 0.28s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.28s cubic-bezier(0.4, 0, 0.2, 1) !important;
-}
 

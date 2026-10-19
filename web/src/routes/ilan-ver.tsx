@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
-import { listCategories } from "@/lib/server/catalog";
+import { browseCategories } from "@/lib/server/catalog";
 import { getCategoryAttrs, getListingForEdit, getMe, saveListing } from "@/lib/server/account";
 import { TURKEY_CITIES } from "@/lib/data/locations";
 import { NEIGHBORHOODS } from "@/lib/data/geo";
@@ -77,7 +77,8 @@ function AttrInput({
 export const Route = createFileRoute("/ilan-ver")({
   validateSearch: (s: Record<string, unknown>): { id?: string } =>
     typeof s.id === "string" && s.id ? { id: s.id } : {},
-  loader: () => listCategories(),
+  // Only the root level; deeper levels load as the user drills down.
+  loader: () => browseCategories({ data: { path: [] } }),
   head: () => ({
     meta: [
       { title: "Ücretsiz İlan Ver | GeldeSat" },
@@ -116,7 +117,7 @@ function PostPage() {
 
 function PostForm() {
   const { user, isPending } = useCurrentUserState();
-  const cats = Route.useLoaderData();
+  const rootLevel = Route.useLoaderData();
   const { id: editId } = Route.useSearch();
   const nav = useNavigate();
   const [step, setStep] = useState(0);
@@ -142,13 +143,38 @@ function PostForm() {
   const userId = user?.id;
 
   const selected = path[path.length - 1];
-  const children = cats.categories.filter((c: any) => c.parent_id === (selected ?? null));
-  const currentCats = path.length === 0 ? cats.roots : children;
-  const leaf = path.length > 0 && children.length === 0;
-  const pathRows = path.map((id) => cats.categories.find((c: any) => c.id === id)).filter(Boolean) as CategoryRow[];
+  const pathKey = path.join("/");
+  // The picker level for `path`; `key` says which path it belongs to.
+  const [level, setLevel] = useState({ key: "", ...rootLevel });
+  // Every category row seen so far, for breadcrumbs while the next level loads.
+  const knownCats = useRef(new Map<string, CategoryRow>());
+  for (const c of [...level.pathRows, ...level.children]) knownCats.current.set(c.id, c);
+  const levelReady = level.key === pathKey;
+  const children = levelReady ? level.children : [];
+  const currentCats = children;
+  const pathRows = path.map((id) => knownCats.current.get(id)).filter(Boolean) as CategoryRow[];
+  const selectedRow = selected ? knownCats.current.get(selected) : undefined;
+  const leaf = path.length > 0 && (selectedRow?.has_children === false || (levelReady && children.length === 0));
   const cityData = TURKEY_CITIES.find((c) => c.name === city);
   const hoods = (city && district && NEIGHBORHOODS[city]?.[district]) || [];
   const needsPhoto = path[0] === "emlak" || path[0] === "vasita";
+
+  useEffect(() => {
+    if (level.key === pathKey || selectedRow?.has_children === false) return;
+    let cancelled = false;
+    browseCategories({ data: { path } })
+      .then((next) => {
+        if (!cancelled) setLevel({ key: pathKey, ...next });
+      })
+      .catch(() => {
+        if (!cancelled) toast.error("Kategoriler yüklenemedi");
+      });
+    return () => {
+      cancelled = true;
+    };
+    // `path` is captured through `pathKey`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathKey, level.key, selectedRow?.has_children]);
 
   useEffect(() => {
     if (!selected) return;
@@ -320,13 +346,15 @@ function PostForm() {
                     Değiştir
                   </Button>
                 </div>
+              ) : !levelReady ? (
+                <p className="py-10 text-center text-sm text-muted">Kategoriler yükleniyor…</p>
               ) : (
                 <CategoryButtons
                   items={currentCats}
-                  counts={cats.counts}
+                  counts={level.counts}
                   onPick={(c) => {
                     setPath([...path, c.id]);
-                    if (!cats.categories.some((x: any) => x.parent_id === c.id)) setStep(1);
+                    if (!c.has_children) setStep(1);
                   }}
                 />
               )}
