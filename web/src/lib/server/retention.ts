@@ -91,8 +91,8 @@ let lastSweep = 0;
  * Purge accounts whose grace period ended and chats whose retention ended.
  * Runs at most hourly, piggybacking on regular traffic like the expiry sweep.
  */
-export async function sweepRetention(): Promise<void> {
-  if (Date.now() - lastSweep < 60 * 60_000) return;
+export async function sweepRetention(force = false): Promise<void> {
+  if (!force && Date.now() - lastSweep < 60 * 60_000) return;
   lastSweep = Date.now();
   const sql = await getSql();
   const due = await sql.query<{ user_id: string }>(

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
 import { asIso, asJson, formatPrice, newId, num } from "@/lib/utils";
-import { DELETE_WINDOW_MS, DELETED_MESSAGE_TEXT, type ChatMessage, type OfferStatus } from "@/lib/chat-shared";
+import { DELETE_WINDOW_MS, DELETED_MESSAGE_TEXT, MAX_TEMPLATE_LENGTH, MAX_TEMPLATES, type ChatMessage, type OfferStatus } from "@/lib/chat-shared";
 import { ensureProfile, firstInWindow, notify, rateLimit } from "./helpers";
 import { chatVisibleTo, DELETED_USER_NAME, hideConversationFor, isClosedAccount, reopenConversation } from "./retention";
 import {
@@ -18,7 +18,11 @@ import {
 
 /** Messages per page when opening a chat or scrolling back. */
 const THREAD_PAGE = 60;
-const MSG_COLUMNS = "id, sender_id, content, kind, meta, deleted_at, created_at, read_at";
+/** Message columns, plus the quoted message (if replying) as JSON; valid in SELECT and RETURNING. */
+const MSG_COLUMNS = `id, sender_id, content, kind, meta, deleted_at, created_at, read_at, reply_to,
+  (select json_build_object('id', r.id, 'sender_id', r.sender_id, 'kind', r.kind,
+          'content', case when r.deleted_at is null then r.content else '${DELETED_MESSAGE_TEXT}' end)
+   from messages r where r.id = messages.reply_to) as reply`;
 
 type Conv = { id: string; buyer_id: string; seller_id: string; listing_id: string | null };
 
@@ -33,6 +37,7 @@ export function mapMsg(m: Record<string, unknown>, hideRead = false): ChatMessag
     deleted,
     created_at: asIso(m.created_at),
     read_at: !hideRead && m.read_at ? asIso(m.read_at) : null,
+    reply: deleted ? null : asJson<ChatMessage["reply"]>(m.reply, null),
   };
 }
 
@@ -76,13 +81,17 @@ async function deliver(
   sql: Sql,
   conv: Conv,
   senderId: string,
-  message: { content: string; kind?: ChatMessage["kind"]; meta?: ChatMessage["meta"] },
+  message: { content: string; kind?: ChatMessage["kind"]; meta?: ChatMessage["meta"]; replyTo?: string },
 ): Promise<ChatMessage> {
   const id = newId("msg");
+  // A reply may only quote a message from the same chat.
+  const replyTo = message.replyTo
+    ? ((await sql.query<{ id: string }>("select id from messages where id=$1 and conversation_id=$2", [message.replyTo, conv.id]))[0]?.id ?? null)
+    : null;
   const rows = await sql.query<Record<string, unknown>>(
-    `insert into messages (id, conversation_id, sender_id, content, kind, meta)
-     values ($1,$2,$3,$4,$5,$6::jsonb) returning ${MSG_COLUMNS}`,
-    [id, conv.id, senderId, message.content, message.kind ?? "text", message.meta ? JSON.stringify(message.meta) : null],
+    `insert into messages (id, conversation_id, sender_id, content, kind, meta, reply_to)
+     values ($1,$2,$3,$4,$5,$6::jsonb,$7) returning ${MSG_COLUMNS}`,
+    [id, conv.id, senderId, message.content, message.kind ?? "text", message.meta ? JSON.stringify(message.meta) : null, replyTo],
   );
   await sql.query("update conversations set updated_at=now() where id=$1", [conv.id]);
   await reopenConversation(sql, conv.id);
@@ -126,57 +135,108 @@ export const startConversation = createServerFn({ method: "POST" })
 
 export const sendMessage = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator(z.object({ conversationId: z.string(), content: z.string().trim().min(1, "Mesaj boş olamaz").max(2000) }))
+  .validator(
+    z.object({
+      conversationId: z.string(),
+      content: z.string().trim().min(1, "Mesaj boş olamaz").max(2000),
+      replyTo: z.string().max(60).optional(),
+    }),
+  )
   .handler(async ({ context, data }) => {
     rateLimit(`msg:${context.userId}`, 40, 60_000);
     const sql = await getSql();
     const conv = await myConversation(sql, data.conversationId, context.userId);
     await assertCanMessage(sql, context.userId, otherOf(conv, context.userId));
-    return deliver(sql, conv, context.userId, { content: data.content.trim() });
+    return deliver(sql, conv, context.userId, { content: data.content.trim(), replyTo: data.replyTo });
   });
 
-/** Buyer's price offer, shown as a card the seller can accept or decline. */
+/** Share a meeting point: coordinates from the browser and/or a typed place name. */
+export const sendLocation = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(
+    z.object({
+      conversationId: z.string(),
+      label: z.string().trim().min(2, "Bir yer adı yazın").max(120),
+      lat: z.number().min(-90).max(90).optional(),
+      lng: z.number().min(-180).max(180).optional(),
+    }),
+  )
+  .handler(async ({ context, data }) => {
+    rateLimit(`msg:${context.userId}`, 40, 60_000);
+    const sql = await getSql();
+    const conv = await myConversation(sql, data.conversationId, context.userId);
+    await assertCanMessage(sql, context.userId, otherOf(conv, context.userId));
+    // ~11 m precision is plenty for a meeting point and avoids over-sharing.
+    const round = (n?: number) => (n == null ? undefined : Math.round(n * 10_000) / 10_000);
+    return deliver(sql, conv, context.userId, {
+      content: `📍 Konum: ${data.label}`,
+      kind: "location",
+      meta: { label: data.label, lat: round(data.lat), lng: round(data.lng) },
+    });
+  });
+
+/**
+ * A price offer card. The buyer opens with an offer; either side may answer the
+ * other's pending offer with a counter offer (`counterTo`). One offer is open
+ * at a time: a new one withdraws (or, for the answered one, counters) the rest.
+ */
 export const sendOffer = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator(z.object({ conversationId: z.string(), amount: z.number().int().min(1).max(1_000_000_000) }))
+  .validator(
+    z.object({
+      conversationId: z.string(),
+      amount: z.number().int().min(1).max(1_000_000_000),
+      counterTo: z.string().max(60).optional(),
+    }),
+  )
   .handler(async ({ context, data }) => {
     rateLimit(`offer:${context.userId}`, 10, 60_000);
     const sql = await getSql();
     const conv = await myConversation(sql, data.conversationId, context.userId);
-    if (conv.buyer_id !== context.userId) throw new Error("Teklifi yalnızca alıcı verebilir.");
     const listing = conv.listing_id
       ? (await sql.query<{ status: string }>("select status from listings where id=$1", [conv.listing_id]))[0]
       : undefined;
     if (!listing || listing.status !== "ACTIVE") throw new Error("İlan yayında değil; teklif verilemez.");
-    await assertCanMessage(sql, context.userId, conv.seller_id);
-    // A new offer replaces the buyer's open one.
-    const open = await sql.query<Record<string, unknown>>(
-      `update messages set meta = jsonb_set(meta, '{status}', '"withdrawn"')
-       where conversation_id=$1 and sender_id=$2 and kind='offer' and deleted_at is null and meta->>'status'='pending'
+    await assertCanMessage(sql, context.userId, otherOf(conv, context.userId));
+    if (data.counterTo) {
+      const target = await sql.query<{ sender_id: string; meta: unknown }>(
+        "select sender_id, meta from messages where id=$1 and conversation_id=$2 and kind='offer' and deleted_at is null",
+        [data.counterTo, conv.id],
+      );
+      if (!target[0] || target[0].sender_id === context.userId || asJson<{ status?: string }>(target[0].meta, {}).status !== "pending") {
+        throw new Error("Bu teklif artık geçerli değil.");
+      }
+    } else if (conv.buyer_id !== context.userId) {
+      throw new Error("Satıcı yalnızca gelen bir teklife karşı teklif verebilir.");
+    }
+    const closed = await sql.query<Record<string, unknown>>(
+      `update messages set meta = jsonb_set(meta, '{status}', to_jsonb(case when id = $2 then 'countered' else 'withdrawn' end))
+       where conversation_id=$1 and kind='offer' and deleted_at is null and meta->>'status'='pending'
        returning ${MSG_COLUMNS}`,
-      [conv.id, context.userId],
+      [conv.id, data.counterTo ?? ""],
     );
-    for (const m of open) broadcastChatUpdate(conv.id, mapMsg(m));
+    for (const m of closed) broadcastChatUpdate(conv.id, mapMsg(m));
     return deliver(sql, conv, context.userId, {
-      content: `Teklif: ${formatPrice(data.amount)}`,
+      content: `${data.counterTo ? "Karşı teklif" : "Teklif"}: ${formatPrice(data.amount)}`,
       kind: "offer",
-      meta: { amount: data.amount, status: "pending" },
+      meta: { amount: data.amount, status: "pending", counter: Boolean(data.counterTo) },
     });
   });
 
-/** Seller accepts or declines a pending offer. */
+/** The person who received a pending offer accepts or declines it. */
 export const respondOffer = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ messageId: z.string(), accept: z.boolean() }))
   .handler(async ({ context, data }) => {
     const sql = await getSql();
-    const rows = await sql.query<{ conversation_id: string; meta: unknown }>(
-      "select conversation_id, meta from messages where id=$1 and kind='offer' and deleted_at is null",
+    const rows = await sql.query<{ conversation_id: string; sender_id: string; meta: unknown }>(
+      "select conversation_id, sender_id, meta from messages where id=$1 and kind='offer' and deleted_at is null",
       [data.messageId],
     );
     if (!rows[0]) throw new Error("Teklif bulunamadı");
     const conv = await myConversation(sql, rows[0].conversation_id, context.userId);
-    if (conv.seller_id !== context.userId) throw new Error("Teklife yalnızca satıcı yanıt verebilir.");
+    if (rows[0].sender_id === context.userId) throw new Error("Kendi teklifinize yanıt veremezsiniz.");
+    const offerer = rows[0].sender_id;
     const meta = asJson<{ amount?: number; status?: OfferStatus }>(rows[0].meta, {});
     if (meta.status !== "pending") throw new Error("Bu teklif artık geçerli değil.");
     const status: OfferStatus = data.accept ? "accepted" : "rejected";
@@ -186,12 +246,12 @@ export const respondOffer = createServerFn({ method: "POST" })
     );
     const msg = mapMsg(updated[0]);
     broadcastChatUpdate(conv.id, msg);
-    broadcastUserInbox(conv.buyer_id, { type: "inbox_ping", conversationId: conv.id });
+    broadcastUserInbox(offerer, { type: "inbox_ping", conversationId: conv.id });
     await notify(
-      conv.buyer_id,
+      offerer,
       "message",
       data.accept ? "Teklifiniz kabul edildi" : "Teklifiniz reddedildi",
-      `${formatPrice(meta.amount ?? 0)} teklifiniz ${data.accept ? "kabul edildi. Satıcıyla buluşmayı ayarlayabilirsiniz." : "reddedildi."}`,
+      `${formatPrice(meta.amount ?? 0)} teklifiniz ${data.accept ? "kabul edildi. Buluşmayı mesajlaşarak ayarlayabilirsiniz." : "reddedildi."}`,
       `/mesajlar/${conv.id}`,
     );
     return msg;
@@ -534,3 +594,73 @@ export async function sendChatPhoto(sql: Sql, userId: string, conversationId: st
   );
   return deliver(sql, conv, userId, { content: "📷 Fotoğraf", kind: "image", meta: { image_id: imageId } });
 }
+
+/** Find messages in one chat containing `q` (newest first). */
+export const searchMessages = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ conversationId: z.string(), q: z.string().trim().min(2).max(100) }))
+  .handler(async ({ context, data }) => {
+    rateLimit(`chatsearch:${context.userId}`, 30, 60_000);
+    const sql = await getSql();
+    const conv = await myConversation(sql, data.conversationId, context.userId);
+    // Escape LIKE wildcards so "%" and "_" in the query are literal.
+    const like = `%${data.q.replace(/[\\%_]/g, (c) => "\\" + c)}%`;
+    const rows = await sql.query<{ id: string; sender_id: string; content: string; created_at: string }>(
+      `select id, sender_id, content, created_at from messages
+       where conversation_id=$1 and deleted_at is null and kind in ('text','offer','location') and content ilike $2
+       order by created_at desc limit 50`,
+      [conv.id, like],
+    );
+    return rows.map((r) => ({ id: r.id, sender_id: r.sender_id, content: r.content, created_at: asIso(r.created_at) }));
+  });
+
+/** A window of messages around one message, for jumping to a search result or quote. */
+export const loadAroundMessage = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ conversationId: z.string(), messageId: z.string() }))
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    const conv = await myConversation(sql, data.conversationId, context.userId);
+    const target = await sql.query<{ created_at: string }>("select created_at from messages where id=$1 and conversation_id=$2", [
+      data.messageId,
+      conv.id,
+    ]);
+    if (!target[0]) throw new Error("Mesaj bulunamadı");
+    const showReads = (await readsVisible(sql, otherOf(conv, context.userId))) && (await readsVisible(sql, context.userId));
+    const half = 30;
+    const [before, after] = await Promise.all([
+      sql.query<Record<string, unknown>>(
+        `select ${MSG_COLUMNS} from messages where conversation_id=$1 and created_at < $2 order by created_at desc limit $3`,
+        [conv.id, target[0].created_at, half + 1],
+      ),
+      sql.query<Record<string, unknown>>(
+        `select ${MSG_COLUMNS} from messages where conversation_id=$1 and created_at >= $2 order by created_at asc limit $3`,
+        [conv.id, target[0].created_at, half + 2],
+      ),
+    ]);
+    const map = (m: Record<string, unknown>) => mapMsg(m, !showReads && String(m.sender_id) === context.userId);
+    return {
+      messages: [...before.slice(0, half).reverse(), ...after.slice(0, half + 1)].map(map),
+      hasMoreBefore: before.length > half,
+      hasMoreAfter: after.length > half + 1,
+    };
+  });
+
+/** My saved reply templates. */
+export const getChatTemplates = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const sql = await getSql();
+    const rows = await sql.query<{ chat_templates: unknown }>("select chat_templates from profiles where user_id=$1", [context.userId]);
+    return asJson<string[]>(rows[0]?.chat_templates, []);
+  });
+
+export const saveChatTemplates = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ templates: z.array(z.string().trim().min(1).max(MAX_TEMPLATE_LENGTH)).max(MAX_TEMPLATES) }))
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    await ensureProfile(context.userId);
+    await sql.query("update profiles set chat_templates=$2::jsonb where user_id=$1", [context.userId, JSON.stringify(data.templates)]);
+    return data.templates;
+  });

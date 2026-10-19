@@ -27,8 +27,8 @@ let lastRun = 0;
  * while the user is online, and at most every few hours per user. Runs at most
  * every 10 minutes, piggybacking on regular traffic like the other sweeps.
  */
-export async function sweepMessageDigests(): Promise<void> {
-  if (!mailConfigured || Date.now() - lastRun < 10 * 60_000) return;
+export async function sweepMessageDigests(force = false): Promise<void> {
+  if (!mailConfigured || (!force && Date.now() - lastRun < 10 * 60_000)) return;
   lastRun = Date.now();
   const sql = await getSql();
   const due = await sql.query<{ user_id: string; email: string; name: string }>(

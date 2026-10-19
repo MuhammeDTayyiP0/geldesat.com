@@ -1,15 +1,26 @@
 /** Message shapes and helpers shared by the chat server functions and the chat UI. */
 
-export type OfferStatus = "pending" | "accepted" | "rejected" | "withdrawn";
+export type OfferStatus = "pending" | "accepted" | "rejected" | "withdrawn" | "countered";
 
 export type ChatMessage = {
   id: string;
   sender_id: string;
   /** Readable text; for photos and offers a fallback ("📷 Fotoğraf", "Teklif: …"). */
   content: string;
-  kind: "text" | "image" | "offer";
-  meta: { image_id?: string; amount?: number; status?: OfferStatus } | null;
+  kind: "text" | "image" | "offer" | "location";
+  meta: {
+    image_id?: string;
+    amount?: number;
+    status?: OfferStatus;
+    /** Offer made in answer to the other side's offer. */
+    counter?: boolean;
+    lat?: number;
+    lng?: number;
+    label?: string;
+  } | null;
   deleted: boolean;
+  /** The message this one answers, if any (shown as a quote). */
+  reply: { id: string; sender_id: string; content: string; kind: string } | null;
   created_at: string;
   read_at: string | null;
 };
@@ -18,6 +29,15 @@ export type ChatMessage = {
 export const DELETE_WINDOW_MS = 60 * 60_000;
 
 export const DELETED_MESSAGE_TEXT = "Bu mesaj silindi";
+
+/** Most saved reply templates a user may keep, and their length. */
+export const MAX_TEMPLATES = 15;
+export const MAX_TEMPLATE_LENGTH = 300;
+
+export function mapsUrl(meta: { lat?: number; lng?: number; label?: string }): string {
+  const q = meta.lat != null && meta.lng != null ? `${meta.lat},${meta.lng}` : (meta.label ?? "");
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
+}
 
 export function chatImageUrl(imageId: string): string {
   return `/api/chat/image/${encodeURIComponent(imageId)}`;
@@ -89,5 +109,6 @@ export function previewText(kind: string, content: string, deleted: boolean): st
   if (deleted) return DELETED_MESSAGE_TEXT;
   if (content === "::ilan-foto::") return "İlan görseli";
   if (kind === "image") return "📷 Fotoğraf";
+  if (kind === "location") return content.startsWith("📍") ? content : `📍 ${content}`;
   return content;
 }

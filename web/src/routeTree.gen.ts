@@ -45,6 +45,7 @@ import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiAvatarIdRouteImport } from './routes/api/avatar/$id'
 import { Route as ApiChatImageRouteImport } from './routes/api/chat/image'
 import { Route as ApiChatStreamRouteImport } from './routes/api/chat/stream'
+import { Route as ApiCronSweepRouteImport } from './routes/api/cron/sweep'
 import { Route as ApiHesapVerilerimRouteImport } from './routes/api/hesap/verilerim'
 import { Route as ApiMobileBlocksRouteImport } from './routes/api/mobile/blocks'
 import { Route as ApiMobileCategoriesRouteImport } from './routes/api/mobile/categories'
@@ -247,6 +248,11 @@ const ApiChatStreamRoute = ApiChatStreamRouteImport.update({
   path: '/api/chat/stream',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiCronSweepRoute = ApiCronSweepRouteImport.update({
+  id: '/api/cron/sweep',
+  path: '/api/cron/sweep',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiHesapVerilerimRoute = ApiHesapVerilerimRouteImport.update({
   id: '/api/hesap/verilerim',
   path: '/api/hesap/verilerim',
@@ -392,6 +398,7 @@ export interface FileRoutesByFullPath {
   '/api/avatar/$id': typeof ApiAvatarIdRoute
   '/api/chat/image': typeof ApiChatImageRouteWithChildren
   '/api/chat/stream': typeof ApiChatStreamRoute
+  '/api/cron/sweep': typeof ApiCronSweepRoute
   '/api/hesap/verilerim': typeof ApiHesapVerilerimRoute
   '/api/mobile/blocks': typeof ApiMobileBlocksRoute
   '/api/mobile/categories': typeof ApiMobileCategoriesRoute
@@ -450,6 +457,7 @@ export interface FileRoutesByTo {
   '/api/avatar/$id': typeof ApiAvatarIdRoute
   '/api/chat/image': typeof ApiChatImageRouteWithChildren
   '/api/chat/stream': typeof ApiChatStreamRoute
+  '/api/cron/sweep': typeof ApiCronSweepRoute
   '/api/hesap/verilerim': typeof ApiHesapVerilerimRoute
   '/api/mobile/blocks': typeof ApiMobileBlocksRoute
   '/api/mobile/categories': typeof ApiMobileCategoriesRoute
@@ -510,6 +518,7 @@ export interface FileRoutesById {
   '/api/avatar/$id': typeof ApiAvatarIdRoute
   '/api/chat/image': typeof ApiChatImageRouteWithChildren
   '/api/chat/stream': typeof ApiChatStreamRoute
+  '/api/cron/sweep': typeof ApiCronSweepRoute
   '/api/hesap/verilerim': typeof ApiHesapVerilerimRoute
   '/api/mobile/blocks': typeof ApiMobileBlocksRoute
   '/api/mobile/categories': typeof ApiMobileCategoriesRoute
@@ -571,6 +580,7 @@ export interface FileRouteTypes {
     | '/api/avatar/$id'
     | '/api/chat/image'
     | '/api/chat/stream'
+    | '/api/cron/sweep'
     | '/api/hesap/verilerim'
     | '/api/mobile/blocks'
     | '/api/mobile/categories'
@@ -629,6 +639,7 @@ export interface FileRouteTypes {
     | '/api/avatar/$id'
     | '/api/chat/image'
     | '/api/chat/stream'
+    | '/api/cron/sweep'
     | '/api/hesap/verilerim'
     | '/api/mobile/blocks'
     | '/api/mobile/categories'
@@ -688,6 +699,7 @@ export interface FileRouteTypes {
     | '/api/avatar/$id'
     | '/api/chat/image'
     | '/api/chat/stream'
+    | '/api/cron/sweep'
     | '/api/hesap/verilerim'
     | '/api/mobile/blocks'
     | '/api/mobile/categories'
@@ -745,6 +757,7 @@ export interface RootRouteChildren {
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiChatImageRoute: typeof ApiChatImageRouteWithChildren
   ApiChatStreamRoute: typeof ApiChatStreamRoute
+  ApiCronSweepRoute: typeof ApiCronSweepRoute
   ApiHesapVerilerimRoute: typeof ApiHesapVerilerimRoute
   ApiMobileBlocksRoute: typeof ApiMobileBlocksRoute
   ApiMobileCategoriesRoute: typeof ApiMobileCategoriesRoute
@@ -1017,6 +1030,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiChatStreamRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/cron/sweep': {
+      id: '/api/cron/sweep'
+      path: '/api/cron/sweep'
+      fullPath: '/api/cron/sweep'
+      preLoaderRoute: typeof ApiCronSweepRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/hesap/verilerim': {
       id: '/api/hesap/verilerim'
       path: '/api/hesap/verilerim'
@@ -1287,6 +1307,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiChatImageRoute: ApiChatImageRouteWithChildren,
   ApiChatStreamRoute: ApiChatStreamRoute,
+  ApiCronSweepRoute: ApiCronSweepRoute,
   ApiHesapVerilerimRoute: ApiHesapVerilerimRoute,
   ApiMobileBlocksRoute: ApiMobileBlocksRoute,
   ApiMobileCategoriesRoute: ApiMobileCategoriesRoute,
