@@ -8,9 +8,7 @@ import { TopProgressBar } from "@/components/layout/TopProgressBar";
 import { NotFound } from "@/components/common/NotFound";
 import { DeletionBanner } from "@/components/account/DeletionBanner";
 import { Toaster } from "sonner";
-import appCss from "../styles.css?url";
-import plexLatin from "@fontsource-variable/ibm-plex-sans/files/ibm-plex-sans-latin-wght-normal.woff2?url";
-import plexLatinExt from "@fontsource-variable/ibm-plex-sans/files/ibm-plex-sans-latin-ext-wght-normal.woff2?url";
+import { appCss, criticalFonts } from "@/lib/critical-assets";
 import { jsonLd } from "@/lib/seo";
 
 const APP_NAME = "GeldeSat";
@@ -66,8 +64,7 @@ export const Route = createRootRoute({
       { rel: "manifest", href: "/site.webmanifest" },
       { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
       // Turkish text needs both the latin and latin-ext ranges; fetch them with the CSS.
-      { rel: "preload", href: plexLatin, as: "font", type: "font/woff2", crossOrigin: "anonymous" },
-      { rel: "preload", href: plexLatinExt, as: "font", type: "font/woff2", crossOrigin: "anonymous" },
+      ...criticalFonts.map((href) => ({ rel: "preload", href, as: "font", type: "font/woff2", crossOrigin: "anonymous" as const })),
     ],
     scripts: [
       {
