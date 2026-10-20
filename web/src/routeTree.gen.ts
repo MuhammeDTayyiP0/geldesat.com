@@ -89,6 +89,7 @@ import { Route as ApiMobileOauthStartRouteImport } from './routes/api/mobile/oau
 import { Route as ApiMobileRpcFnRouteImport } from './routes/api/mobile/rpc/$fn'
 import { Route as ApiMobileSellersIdRouteImport } from './routes/api/mobile/sellers/$id'
 import { Route as ApiMobileStoresSlugRouteImport } from './routes/api/mobile/stores/$slug'
+import { Route as ApiTilesZXYRouteImport } from './routes/api/tiles/$z/$x/$y'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -492,6 +493,11 @@ const ApiMobileStoresSlugRoute = ApiMobileStoresSlugRouteImport.update({
   path: '/api/mobile/stores/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiTilesZXYRoute = ApiTilesZXYRouteImport.update({
+  id: '/api/tiles/$z/$x/$y',
+  path: '/api/tiles/$z/$x/$y',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -574,6 +580,7 @@ export interface FileRoutesByFullPath {
   '/api/mobile/rpc/$fn': typeof ApiMobileRpcFnRoute
   '/api/mobile/sellers/$id': typeof ApiMobileSellersIdRoute
   '/api/mobile/stores/$slug': typeof ApiMobileStoresSlugRoute
+  '/api/tiles/$z/$x/$y': typeof ApiTilesZXYRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -654,6 +661,7 @@ export interface FileRoutesByTo {
   '/api/mobile/rpc/$fn': typeof ApiMobileRpcFnRoute
   '/api/mobile/sellers/$id': typeof ApiMobileSellersIdRoute
   '/api/mobile/stores/$slug': typeof ApiMobileStoresSlugRoute
+  '/api/tiles/$z/$x/$y': typeof ApiTilesZXYRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -737,6 +745,7 @@ export interface FileRoutesById {
   '/api/mobile/rpc/$fn': typeof ApiMobileRpcFnRoute
   '/api/mobile/sellers/$id': typeof ApiMobileSellersIdRoute
   '/api/mobile/stores/$slug': typeof ApiMobileStoresSlugRoute
+  '/api/tiles/$z/$x/$y': typeof ApiTilesZXYRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -821,6 +830,7 @@ export interface FileRouteTypes {
     | '/api/mobile/rpc/$fn'
     | '/api/mobile/sellers/$id'
     | '/api/mobile/stores/$slug'
+    | '/api/tiles/$z/$x/$y'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -901,6 +911,7 @@ export interface FileRouteTypes {
     | '/api/mobile/rpc/$fn'
     | '/api/mobile/sellers/$id'
     | '/api/mobile/stores/$slug'
+    | '/api/tiles/$z/$x/$y'
   id:
     | '__root__'
     | '/'
@@ -983,6 +994,7 @@ export interface FileRouteTypes {
     | '/api/mobile/rpc/$fn'
     | '/api/mobile/sellers/$id'
     | '/api/mobile/stores/$slug'
+    | '/api/tiles/$z/$x/$y'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -1043,6 +1055,7 @@ export interface RootRouteChildren {
   ApiMobileRpcFnRoute: typeof ApiMobileRpcFnRoute
   ApiMobileSellersIdRoute: typeof ApiMobileSellersIdRoute
   ApiMobileStoresSlugRoute: typeof ApiMobileStoresSlugRoute
+  ApiTilesZXYRoute: typeof ApiTilesZXYRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -1607,6 +1620,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiMobileStoresSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/tiles/$z/$x/$y': {
+      id: '/api/tiles/$z/$x/$y'
+      path: '/api/tiles/$z/$x/$y'
+      fullPath: '/api/tiles/$z/$x/$y'
+      preLoaderRoute: typeof ApiTilesZXYRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -1792,6 +1812,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiMobileRpcFnRoute: ApiMobileRpcFnRoute,
   ApiMobileSellersIdRoute: ApiMobileSellersIdRoute,
   ApiMobileStoresSlugRoute: ApiMobileStoresSlugRoute,
+  ApiTilesZXYRoute: ApiTilesZXYRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

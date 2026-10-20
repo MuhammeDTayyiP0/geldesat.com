@@ -97,6 +97,18 @@ export default function ChatScreen() {
   const [typing, setTyping] = useState(false);
   const [presence, setPresence] = useState<{ online: boolean; lastSeen: string | null }>({ online: false, lastSeen: null });
   const [sheet, setSheet] = useState<SheetName>(null);
+  // Next step chosen in a sheet (photo picker, another sheet, a confirm), run
+  // once that sheet's modal is gone: opening it earlier freezes the app.
+  const afterClose = useRef<(() => void) | null>(null);
+  const thenClose = (next: () => void) => {
+    afterClose.current = next;
+    setSheet(null);
+  };
+  const runAfterClose = () => {
+    const next = afterClose.current;
+    afterClose.current = null;
+    next?.();
+  };
   const [selected, setSelected] = useState<ChatMessage | null>(null);
   const [selectedDeletable, setSelectedDeletable] = useState(false);
   const [away, setAway] = useState(false);
@@ -583,19 +595,21 @@ export default function ChatScreen() {
 
       <PhotoViewer images={viewer ? [viewer] : []} start={viewer ? 0 : null} headers={authHeaders} onClose={() => setViewer(null)} />
 
-      <Sheet visible={sheet === 'attach'} onClose={() => setSheet(null)} title="Gönder">
+      <Sheet visible={sheet === 'attach'} onClose={() => setSheet(null)} onDismissed={runAfterClose} title="Gönder">
         <RowGroup>
-          <ListRow icon={ImagePlus} label="Galeriden fotoğraf" onPress={() => void sendPhoto('library')} />
-          <ListRow icon={ImagePlus} label="Fotoğraf çek" onPress={() => void sendPhoto('camera')} />
-          <ListRow icon={MapPin} label="Buluşma noktası paylaş" onPress={() => setSheet('location')} />
+          <ListRow icon={ImagePlus} label="Galeriden fotoğraf" onPress={() => thenClose(() => void sendPhoto('library'))} />
+          <ListRow icon={ImagePlus} label="Fotoğraf çek" onPress={() => thenClose(() => void sendPhoto('camera'))} />
+          <ListRow icon={MapPin} label="Buluşma noktası paylaş" onPress={() => thenClose(() => setSheet('location'))} />
           {buying && conv.listing_status === 'ACTIVE' ? (
             <ListRow
               icon={HandCoins}
               label="Teklif ver"
-              onPress={() => {
-                setCounterTo(null);
-                setSheet('offer');
-              }}
+              onPress={() =>
+                thenClose(() => {
+                  setCounterTo(null);
+                  setSheet('offer');
+                })
+              }
             />
           ) : null}
         </RowGroup>
@@ -645,7 +659,7 @@ export default function ChatScreen() {
         ) : null}
       </Sheet>
 
-      <Sheet visible={sheet === 'actions'} onClose={() => setSheet(null)} title="Mesaj">
+      <Sheet visible={sheet === 'actions'} onClose={() => setSheet(null)} onDismissed={runAfterClose} title="Mesaj">
         {selected ? (
           <RowGroup>
             <ListRow
@@ -672,78 +686,83 @@ export default function ChatScreen() {
                 icon={Trash2}
                 label="Herkesten sil"
                 danger
-                onPress={async () => {
-                  setSheet(null);
-                  const ok = await confirm({ title: 'Mesaj herkesten silinsin mi?', confirmText: 'Sil', destructive: true });
-                  if (!ok) return;
-                  try {
-                    const updated = await chat.deleteMessage(selected.id);
-                    setMessages((list) => list.map((m) => (m.id === updated.id ? updated : m)));
-                  } catch (e) {
-                    toast.error(errorMessage(e));
-                  }
-                }}
+                onPress={() =>
+                  thenClose(async () => {
+                    const ok = await confirm({ title: 'Mesaj herkesten silinsin mi?', confirmText: 'Sil', destructive: true });
+                    if (!ok) return;
+                    try {
+                      const updated = await chat.deleteMessage(selected.id);
+                      setMessages((list) => list.map((m) => (m.id === updated.id ? updated : m)));
+                    } catch (e) {
+                      toast.error(errorMessage(e));
+                    }
+                  })
+                }
               />
             ) : null}
             {selected.sender_id !== me ? (
-              <ListRow icon={Flag} label="Mesajı bildir" danger onPress={() => setSheet('report')} />
+              <ListRow icon={Flag} label="Mesajı bildir" danger onPress={() => thenClose(() => setSheet('report'))} />
             ) : null}
           </RowGroup>
         ) : null}
       </Sheet>
 
-      <Sheet visible={sheet === 'menu'} onClose={() => setSheet(null)} title={conv.other_name}>
+      <Sheet visible={sheet === 'menu'} onClose={() => setSheet(null)} onDismissed={runAfterClose} title={conv.other_name}>
         <RowGroup>
           <ListRow
             icon={Ban}
             label={data.blockedByMe ? 'Engeli kaldır' : 'Kullanıcıyı engelle'}
             danger={!data.blockedByMe}
-            onPress={async () => {
-              setSheet(null);
-              if (!data.blockedByMe) {
-                const ok = await confirm({
-                  title: `${conv.other_name} engellensin mi?`,
-                  message: 'Engellediğiniz kişi size mesaj gönderemez. Engeli Ayarlar’dan kaldırabilirsiniz.',
-                  confirmText: 'Engelle',
-                  destructive: true,
-                });
-                if (!ok) return;
-              }
-              try {
-                if (data.blockedByMe) await account.unblock(conv.other_id);
-                else await account.block(conv.other_id);
-                void thread.refetch();
-                void queryClient.invalidateQueries({ queryKey: keys.blocked });
-              } catch (e) {
-                toast.error(errorMessage(e));
-              }
-            }}
+            onPress={() =>
+              thenClose(async () => {
+                if (!data.blockedByMe) {
+                  const ok = await confirm({
+                    title: `${conv.other_name} engellensin mi?`,
+                    message: 'Engellediğiniz kişi size mesaj gönderemez. Engeli Ayarlar’dan kaldırabilirsiniz.',
+                    confirmText: 'Engelle',
+                    destructive: true,
+                  });
+                  if (!ok) return;
+                }
+                try {
+                  if (data.blockedByMe) await account.unblock(conv.other_id);
+                  else await account.block(conv.other_id);
+                  void thread.refetch();
+                  void queryClient.invalidateQueries({ queryKey: keys.blocked });
+                } catch (e) {
+                  toast.error(errorMessage(e));
+                }
+              })
+            }
           />
           <ListRow
             icon={Flag}
             label="Sohbeti bildir"
             danger
-            onPress={() => {
-              setSelected(null);
-              setSheet('report');
-            }}
+            onPress={() =>
+              thenClose(() => {
+                setSelected(null);
+                setSheet('report');
+              })
+            }
           />
           <ListRow
             icon={Trash2}
             label="Sohbeti sil"
             danger
-            onPress={async () => {
-              setSheet(null);
-              const ok = await confirm({ title: 'Sohbet silinsin mi?', message: 'Yalnızca sizin kutunuzdan silinir.', confirmText: 'Sil', destructive: true });
-              if (!ok) return;
-              try {
-                await chat.remove(id);
-                void queryClient.invalidateQueries({ queryKey: keys.inbox });
-                router.back();
-              } catch (e) {
-                toast.error(errorMessage(e));
-              }
-            }}
+            onPress={() =>
+              thenClose(async () => {
+                const ok = await confirm({ title: 'Sohbet silinsin mi?', message: 'Yalnızca sizin kutunuzdan silinir.', confirmText: 'Sil', destructive: true });
+                if (!ok) return;
+                try {
+                  await chat.remove(id);
+                  void queryClient.invalidateQueries({ queryKey: keys.inbox });
+                  router.back();
+                } catch (e) {
+                  toast.error(errorMessage(e));
+                }
+              })
+            }
           />
         </RowGroup>
       </Sheet>

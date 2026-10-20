@@ -1,4 +1,4 @@
-import { TILE_ATTRIBUTION, TILE_SUBDOMAINS, TILE_URL } from './tiles';
+import { TILE_ATTRIBUTION, TILE_URL } from './tiles';
 
 export type MapCenter = { lat: number; lng: number; zoom: number };
 
@@ -32,7 +32,7 @@ export function mapHtml(initial: MapCenter, dark: boolean): string {
   }
   var map = L.map('map', { zoomControl: false, attributionControl: true })
     .setView([${initial.lat}, ${initial.lng}], ${initial.zoom});
-  L.tileLayer('${TILE_URL}', { subdomains: '${TILE_SUBDOMAINS}', maxZoom: 19, detectRetina: true,
+  L.tileLayer('${TILE_URL}', { maxZoom: 19,
     attribution: '${TILE_ATTRIBUTION.replace(/'/g, "\\'")}' }).addTo(map);
   map.on('movestart', function(){ post({ type: 'movestart' }); });
   map.on('moveend', function(){ var c = map.getCenter(); post({ type: 'moveend', lat: c.lat, lng: c.lng, zoom: map.getZoom() }); });

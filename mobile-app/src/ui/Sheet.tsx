@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
@@ -21,6 +21,12 @@ export type SheetProps = {
   tall?: boolean;
   /** Wrap children in a ScrollView (default true). */
   scroll?: boolean;
+  /**
+   * Called once the sheet has slid out and its modal is gone. Open the next
+   * modal, photo picker or camera from here, not from the row's onPress:
+   * presenting one while this modal is still closing freezes the app.
+   */
+  onDismissed?: () => void;
 };
 
 /** Pull further than this (or flick faster than DISMISS_VELOCITY) and the sheet closes. */
@@ -32,7 +38,7 @@ const DISMISS_VELOCITY = 900;
  * the backdrop, back button and close icon dismiss it too. It slides out
  * before unmounting, whoever closes it.
  */
-export function Sheet({ visible, onClose, title, subtitle, children, footer, tall, scroll = true }: SheetProps) {
+export function Sheet({ visible, onClose, title, subtitle, children, footer, tall, scroll = true, onDismissed }: SheetProps) {
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
@@ -43,6 +49,21 @@ export function Sheet({ visible, onClose, title, subtitle, children, footer, tal
   if (visible && !mounted) setMounted(true);
 
   const offset = useSharedValue(height);
+
+  // After the modal has unmounted, give the native side a frame to tear it down.
+  const wasMounted = useRef(mounted);
+  const dismissed = useRef(onDismissed);
+  useEffect(() => {
+    dismissed.current = onDismissed;
+  });
+  useEffect(() => {
+    if (wasMounted.current && !mounted) {
+      const t = setTimeout(() => dismissed.current?.(), 60);
+      wasMounted.current = mounted;
+      return () => clearTimeout(t);
+    }
+    wasMounted.current = mounted;
+  }, [mounted]);
 
   useEffect(() => {
     if (visible) {

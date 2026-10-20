@@ -1,11 +1,12 @@
+import { API_BASE_URL } from '@/lib/config';
+
 /**
- * Map tiles for the chat's meeting points (CARTO "Voyager" style over
- * OpenStreetMap data; free for this volume with attribution, no API key).
+ * Map tiles for the chat's meeting points: OpenStreetMap, served through the
+ * site's /api/tiles (cached, no API key; CARTO's free basemaps now need one).
  * Kept in step with web/src/lib/map-tiles.ts.
  */
-export const TILE_URL = "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
-export const TILE_SUBDOMAINS = "abcd";
-export const TILE_ATTRIBUTION = '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · © <a href="https://carto.com/attributions">CARTO</a>';
+export const TILE_URL = `${API_BASE_URL}/api/tiles/{z}/{x}/{y}.png`;
+export const TILE_ATTRIBUTION = '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
 
 /** Turkey's centre, for a picker opened without a known position. */
 export const TURKEY_CENTER = { lat: 39.0, lng: 35.2, zoom: 6 };
@@ -21,8 +22,7 @@ export function tilePoint(lat: number, lng: number, z: number): { x: number; y: 
 }
 
 export function tileUrl(x: number, y: number, z: number): string {
-  const sub = TILE_SUBDOMAINS[Math.abs(x + y) % TILE_SUBDOMAINS.length];
-  return `https://${sub}.basemaps.cartocdn.com/rastertiles/voyager/${z}/${x}/${y}@2x.png`;
+  return `${API_BASE_URL}/api/tiles/${z}/${x}/${y}.png`;
 }
 
 /**

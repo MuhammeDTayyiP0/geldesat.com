@@ -4,7 +4,7 @@ import { Loader2, LocateFixed, MapPin, Search, Send, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import { TILE_ATTRIBUTION, TILE_SUBDOMAINS, TILE_URL, TURKEY_CENTER } from "@/lib/map-tiles";
+import { TILE_ATTRIBUTION, TILE_URL, TURKEY_CENTER } from "@/lib/map-tiles";
 import { cn } from "@/lib/utils";
 import "leaflet/dist/leaflet.css";
 
@@ -54,7 +54,7 @@ export function LocationPicker({
         [TURKEY_CENTER.lat, TURKEY_CENTER.lng],
         TURKEY_CENTER.zoom,
       );
-      L.tileLayer(TILE_URL, { subdomains: TILE_SUBDOMAINS, attribution: TILE_ATTRIBUTION, maxZoom: 19, detectRetina: true }).addTo(instance);
+      L.tileLayer(TILE_URL, { attribution: TILE_ATTRIBUTION, maxZoom: 19 }).addTo(instance);
       L.control.zoom({ position: "bottomright" }).addTo(instance);
       instance.on("movestart", () => setMoving(true));
       instance.on("moveend", () => {

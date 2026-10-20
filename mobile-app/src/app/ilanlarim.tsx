@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useMutation, useQuery } from '@tanstack/react-query';
@@ -66,13 +66,30 @@ export default function MyListingsScreen() {
     onError: (e) => toast.error(errorMessage(e)),
   });
 
-  const run = async (listing: Listing, body: Parameters<typeof myListings.action>[1]) => {
-    setMenu(null);
+  // A confirm or another screen opened while the menu sheet is still closing
+  // freezes the app, so those wait until the sheet is gone.
+  const afterClose = useRef<(() => void) | null>(null);
+  const run = (listing: Listing, body: Parameters<typeof myListings.action>[1]) => {
     if (body.action === 'delete') {
-      const ok = await confirm({ title: 'İlan silinsin mi?', message: 'Bu işlem geri alınamaz.', confirmText: 'Sil', destructive: true });
-      if (!ok) return;
+      afterClose.current = async () => {
+        const ok = await confirm({ title: 'İlan silinsin mi?', message: 'Bu işlem geri alınamaz.', confirmText: 'Sil', destructive: true });
+        if (ok) action.mutate({ listing, body });
+      };
+      setMenu(null);
+      return;
     }
+    setMenu(null);
     action.mutate({ listing, body });
+  };
+  /** Close the menu, then go somewhere once it is gone. */
+  const thenGo = (go: () => void) => {
+    afterClose.current = go;
+    setMenu(null);
+  };
+  const runAfterClose = () => {
+    const next = afterClose.current;
+    afterClose.current = null;
+    next?.();
   };
 
   if (session.status !== 'signedIn') {
@@ -122,15 +139,15 @@ export default function MyListingsScreen() {
         />
       )}
 
-      <Sheet visible={!!menu} onClose={() => setMenu(null)} title={menu?.title} subtitle={menu ? listingStatusLabel(menu.status ?? '', isExpired(menu)) : undefined}>
+      <Sheet visible={!!menu} onClose={() => setMenu(null)} onDismissed={runAfterClose} title={menu?.title} subtitle={menu ? listingStatusLabel(menu.status ?? '', isExpired(menu)) : undefined}>
         {menu ? (
           <RowGroup>
             <ListRow
               icon={Eye}
               label="İlanı görüntüle"
               onPress={() => {
-                setMenu(null);
-                router.push({ pathname: '/ilan/[id]', params: { id: menu.id } });
+                const id = menu.id;
+                thenGo(() => router.push({ pathname: '/ilan/[id]', params: { id } }));
               }}
             />
             {menu.status !== 'SOLD' ? (
@@ -139,8 +156,8 @@ export default function MyListingsScreen() {
                 label="Düzenle"
                 detail="Değişiklikler yeniden incelemeye gidebilir"
                 onPress={() => {
-                  setMenu(null);
-                  router.push({ pathname: '/ilan-ver', params: { id: menu.id } });
+                  const id = menu.id;
+                  thenGo(() => router.push({ pathname: '/ilan-ver', params: { id } }));
                 }}
               />
             ) : null}
@@ -160,10 +177,7 @@ export default function MyListingsScreen() {
               <ListRow
                 icon={Rocket}
                 label="Öne çıkar (doping)"
-                onPress={() => {
-                  setMenu(null);
-                  router.push('/doping');
-                }}
+                onPress={() => thenGo(() => router.push('/doping'))}
               />
             ) : null}
             <ListRow icon={Trash2} label="Sil" danger onPress={() => void run(menu, { action: 'delete' })} />
