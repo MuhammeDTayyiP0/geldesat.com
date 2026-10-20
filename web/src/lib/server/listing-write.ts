@@ -23,6 +23,15 @@ export const ListingInput = z.object({
 
 export type ListingInputData = z.infer<typeof ListingInput>;
 
+/** Listings stay hidden while their owner's account waits for deletion. */
+export async function assertNotClosing(sql: Pick<Awaited<ReturnType<typeof getSql>>, "query">, userId: string) {
+  const rows = await sql.query<{ pending: boolean }>(
+    "select deletion_requested_at is not null as pending from profiles where user_id=$1",
+    [userId],
+  );
+  if (rows[0]?.pending) throw new Error("Hesabınız silinme sürecinde. Önce hesabınızı geri alın.");
+}
+
 /** Status after an owner renews: only an approved listing may go back live. */
 export function renewedStatus(status: string, approvedAt: string | null): string {
   if (status === "SOLD" || status === "PENDING") return status;

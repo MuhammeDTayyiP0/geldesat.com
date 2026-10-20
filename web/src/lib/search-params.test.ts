@@ -50,6 +50,17 @@ test("query parameters retain multi-select attributes and filter values", () => 
     minM2: undefined,
     maxM2: undefined,
     attrs: { Renk: ["Siyah", "Mavi"] },
+    urgent: undefined,
+    featured: undefined,
     limit: 20,
   });
+});
+
+test("urgent and featured flags survive the URL round trip", () => {
+  const parsed = parseSearch({ urgent: "1", featured: "yes" });
+  assert.equal(parsed.urgent, "1");
+  assert.equal(parsed.featured, undefined);
+  const filters = toFilters(parsed);
+  assert.equal(filters.urgent, true);
+  assert.equal(filters.featured, undefined);
 });

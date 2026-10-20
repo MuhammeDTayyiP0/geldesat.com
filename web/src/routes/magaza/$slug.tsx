@@ -1,10 +1,10 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { ProfilePageSkeleton } from "@/components/listing/ListingGridSkeleton";
 import { getStore } from "@/lib/server/account";
 import { searchCatalog } from "@/lib/server/catalog";
 import { ListingCard } from "@/components/listing/ListingCard";
 import { Badge } from "@/components/ui/badge";
 import { NotFound } from "@/components/common/NotFound";
-import { BrandSpinner } from "@/components/brand/BrandSpinner";
 import { jsonLd } from "@/lib/seo";
 
 export const Route = createFileRoute("/magaza/$slug")({
@@ -76,7 +76,7 @@ export const Route = createFileRoute("/magaza/$slug")({
       ],
     };
   },
-  pendingComponent: () => <BrandSpinner fullPage text="Mağaza bilgileri yükleniyor…" />,
+  pendingComponent: ProfilePageSkeleton,
   notFoundComponent: () => (
     <NotFound
       type="store"
@@ -102,7 +102,7 @@ function StorePage() {
           Satıcı profili
         </Link>
       </div>
-      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="mt-6 grid grid-cols-2 gap-2.5 sm:gap-4 lg:grid-cols-3">
         {listings.map((l: any) => (
           <ListingCard key={l.id} listing={l} />
         ))}

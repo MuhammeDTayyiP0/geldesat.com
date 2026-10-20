@@ -33,6 +33,7 @@ export const keys = {
   me: ['me'] as const,
   counts: ['counts'] as const,
   favorites: ['favorites'] as const,
+  recent: ['recent'] as const,
   myListings: ['myListings'] as const,
   forEdit: (id: string) => ['forEdit', id] as const,
   notifications: ['notifications'] as const,

@@ -3,6 +3,7 @@ import { getSql } from "@/lib/db";
 import { auth } from "@/lib/auth/server";
 import { canReviewSeller, firstInWindow, mapListing, rateLimit, revealListingPhone, viewerKey } from "@/lib/server/helpers";
 import { publicErrorMessage } from "@/lib/server/errors";
+import { recordListingView } from "@/lib/server/recently-viewed";
 
 async function sessionUserId(request: Request) {
   const session = await auth.api.getSession({ headers: request.headers });
@@ -34,6 +35,7 @@ export const Route = createFileRoute("/api/mobile/listings/$id")({
           if (!live && userId !== listing.user_id) {
             return Response.json({ success: false, error: "İlan yayında değil." }, { status: 404 });
           }
+          if (userId && userId !== listing.user_id) await recordListingView(userId, listing.id);
           const favoriteRows = userId
             ? await sql.query<{ listing_id: string }>("select listing_id from favorites where user_id=$1 and listing_id=$2", [userId, listing.id])
             : [];

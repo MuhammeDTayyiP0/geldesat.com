@@ -23,6 +23,7 @@ import { Route as MesajlarRouteImport } from './routes/mesajlar'
 import { Route as ProfilRouteImport } from './routes/profil'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as SifreSifirlaRouteImport } from './routes/sifre-sifirla'
+import { Route as SonBakilanlarRouteImport } from './routes/son-bakilanlar'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as AdminAyarlarRouteImport } from './routes/admin/ayarlar'
 import { Route as AdminDuyurularRouteImport } from './routes/admin/duyurular'
@@ -157,6 +158,11 @@ const SearchRoute = SearchRouteImport.update({
 const SifreSifirlaRoute = SifreSifirlaRouteImport.update({
   id: '/sifre-sifirla',
   path: '/sifre-sifirla',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SonBakilanlarRoute = SonBakilanlarRouteImport.update({
+  id: '/son-bakilanlar',
+  path: '/son-bakilanlar',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminIndexRoute = AdminIndexRouteImport.update({
@@ -502,6 +508,7 @@ export interface FileRoutesByFullPath {
   '/profil': typeof ProfilRoute
   '/search': typeof SearchRoute
   '/sifre-sifirla': typeof SifreSifirlaRoute
+  '/son-bakilanlar': typeof SonBakilanlarRoute
   '/admin/ayarlar': typeof AdminAyarlarRoute
   '/admin/duyurular': typeof AdminDuyurularRoute
   '/admin/finans': typeof AdminFinansRoute
@@ -581,6 +588,7 @@ export interface FileRoutesByTo {
   '/profil': typeof ProfilRoute
   '/search': typeof SearchRoute
   '/sifre-sifirla': typeof SifreSifirlaRoute
+  '/son-bakilanlar': typeof SonBakilanlarRoute
   '/admin/ayarlar': typeof AdminAyarlarRoute
   '/admin/duyurular': typeof AdminDuyurularRoute
   '/admin/finans': typeof AdminFinansRoute
@@ -663,6 +671,7 @@ export interface FileRoutesById {
   '/profil': typeof ProfilRoute
   '/search': typeof SearchRoute
   '/sifre-sifirla': typeof SifreSifirlaRoute
+  '/son-bakilanlar': typeof SonBakilanlarRoute
   '/admin/ayarlar': typeof AdminAyarlarRoute
   '/admin/duyurular': typeof AdminDuyurularRoute
   '/admin/finans': typeof AdminFinansRoute
@@ -746,6 +755,7 @@ export interface FileRouteTypes {
     | '/profil'
     | '/search'
     | '/sifre-sifirla'
+    | '/son-bakilanlar'
     | '/admin/ayarlar'
     | '/admin/duyurular'
     | '/admin/finans'
@@ -825,6 +835,7 @@ export interface FileRouteTypes {
     | '/profil'
     | '/search'
     | '/sifre-sifirla'
+    | '/son-bakilanlar'
     | '/admin/ayarlar'
     | '/admin/duyurular'
     | '/admin/finans'
@@ -906,6 +917,7 @@ export interface FileRouteTypes {
     | '/profil'
     | '/search'
     | '/sifre-sifirla'
+    | '/son-bakilanlar'
     | '/admin/ayarlar'
     | '/admin/duyurular'
     | '/admin/finans'
@@ -988,6 +1000,7 @@ export interface RootRouteChildren {
   ProfilRoute: typeof ProfilRoute
   SearchRoute: typeof SearchRoute
   SifreSifirlaRoute: typeof SifreSifirlaRoute
+  SonBakilanlarRoute: typeof SonBakilanlarRoute
   ApiAvatarRoute: typeof ApiAvatarRouteWithChildren
   ApiGeoRoute: typeof ApiGeoRoute
   ApiUploadRoute: typeof ApiUploadRoute
@@ -1130,6 +1143,13 @@ declare module '@tanstack/react-router' {
       path: '/sifre-sifirla'
       fullPath: '/sifre-sifirla'
       preLoaderRoute: typeof SifreSifirlaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/son-bakilanlar': {
+      id: '/son-bakilanlar'
+      path: '/son-bakilanlar'
+      fullPath: '/son-bakilanlar'
+      preLoaderRoute: typeof SonBakilanlarRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin/': {
@@ -1729,6 +1749,7 @@ const rootRouteChildren: RootRouteChildren = {
   ProfilRoute: ProfilRoute,
   SearchRoute: SearchRoute,
   SifreSifirlaRoute: SifreSifirlaRoute,
+  SonBakilanlarRoute: SonBakilanlarRoute,
   ApiAvatarRoute: ApiAvatarRouteWithChildren,
   ApiGeoRoute: ApiGeoRoute,
   ApiUploadRoute: ApiUploadRoute,

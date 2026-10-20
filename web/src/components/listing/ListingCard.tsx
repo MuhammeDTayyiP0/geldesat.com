@@ -1,34 +1,43 @@
 import { Link } from "@tanstack/react-router";
 import { Heart, ImageIcon, MapPin } from "lucide-react";
 import { useState } from "react";
-import { formatDate, formatPrice, cn } from "@/lib/utils";
+import { cn, formatPrice, listingAge, listingHighlights } from "@/lib/utils";
 import type { ListingCard as Listing } from "@/lib/server/helpers";
 import { Badge } from "@/components/ui/badge";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { toggleFavorite } from "@/lib/server/social";
 import { toast } from "sonner";
 import { photoSrc, photoSrcSet } from "@/lib/images";
+import { setFavorite, useFavoriteIds } from "@/lib/favorites-store";
 
 export function ListingCard({
   listing,
   variant = "grid",
   initialFavorite = false,
   priority = false,
+  onFavoriteChange,
 }: {
   listing: Listing;
-  variant?: "grid" | "list";
+  /** grid: responsive grid cell; list: horizontal row; rail: fixed-width card in a sideways row. */
+  variant?: "grid" | "list" | "rail";
   initialFavorite?: boolean;
   /** Above the fold on load: fetch the photo right away instead of lazily. */
   priority?: boolean;
+  /** Called after the heart toggles, e.g. so the favorites page can drop the card. */
+  onFavoriteChange?: (favorite: boolean) => void;
 }) {
-  const [fav, setFav] = useState(initialFavorite);
   const [favLoading, setFavLoading] = useState(false);
   const { user } = useCurrentUserState();
+  const favIds = useFavoriteIds(user?.id);
+  const fav = favIds.has(listing.id) || (initialFavorite && !favIds.size);
 
   const img = listing.images[0];
-  const featured = listing.featured_until && new Date(listing.featured_until) > new Date();
+  const featured =
+    Boolean(listing.featured_until && new Date(listing.featured_until) > new Date()) || Boolean(listing.boosts?.includes("VITRIN"));
   const acil = listing.boosts?.includes("ACIL");
-  const kalin = listing.boosts?.includes("KALIN") || featured;
+  const kalin = listing.boosts?.includes("KALIN");
+  const extra = listingHighlights(listing.attrs);
+  const place = [listing.district, listing.city].filter(Boolean).join(", ");
 
   function handleFav(e: React.MouseEvent) {
     e.preventDefault();
@@ -40,7 +49,8 @@ export function ListingCard({
     setFavLoading(true);
     toggleFavorite({ data: { listingId: listing.id } })
       .then((res) => {
-        setFav(res.favorite);
+        setFavorite(listing.id, res.favorite);
+        onFavoriteChange?.(res.favorite);
         toast.success(res.favorite ? "İlan favorilerinize eklendi" : "İlan favorilerinizden çıkarıldı");
       })
       .catch(() => {
@@ -53,7 +63,7 @@ export function ListingCard({
     <div
       className={
         variant === "list"
-          ? "relative h-full min-h-[110px] w-[110px] shrink-0 overflow-hidden bg-elevated sm:w-[180px] md:w-[220px]"
+          ? "relative w-[128px] shrink-0 self-stretch overflow-hidden bg-elevated sm:w-[200px]"
           : "relative aspect-[4/3] w-full overflow-hidden bg-elevated"
       }
     >
@@ -61,15 +71,15 @@ export function ListingCard({
         <img
           src={photoSrc(img, 480)}
           srcSet={photoSrcSet(img, [240, 480, 800])}
-          sizes={variant === "list" ? "(min-width: 768px) 220px, (min-width: 640px) 180px, 110px" : "(min-width: 1024px) 300px, (min-width: 640px) 50vw, 100vw"}
+          sizes={variant === "list" ? "(min-width: 640px) 200px, 128px" : variant === "rail" ? "200px" : "(min-width: 1024px) 300px, (min-width: 640px) 33vw, 50vw"}
           alt={listing.title}
           loading={priority ? "eager" : "lazy"}
           fetchPriority={priority ? "high" : undefined}
           decoding="async"
-          className="size-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+          className="absolute inset-0 size-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
         />
       ) : (
-        <div className="grid size-full place-items-center px-2 text-center">
+        <div className="absolute inset-0 grid place-items-center px-2 text-center">
           <div>
             <ImageIcon className="mx-auto size-6 text-subtle sm:size-8" />
             <p className="mt-1 line-clamp-1 text-[11px] font-medium text-muted sm:text-xs">
@@ -78,55 +88,47 @@ export function ListingCard({
           </div>
         </div>
       )}
-      <div className="absolute left-1.5 top-1.5 flex flex-wrap gap-1 sm:left-2 sm:top-2">
-        {featured ? <Badge tone="ink" className="text-[10px] px-1.5 py-0.5 sm:text-xs">Vitrin</Badge> : null}
-        {acil ? <Badge tone="danger" className="text-[10px] px-1.5 py-0.5 sm:text-xs">Acil</Badge> : null}
-      </div>
+      {featured || acil ? (
+        <div className="absolute left-2 top-2 flex flex-wrap gap-1">
+          {acil ? <Badge tone="urgent" className="px-1.5 py-0.5 text-[10px] tracking-wide">ACİL</Badge> : null}
+          {featured && variant !== "list" ? (
+            <Badge tone="primary" className="bg-surface/90 px-1.5 py-0.5 text-[10px] font-bold tracking-wide backdrop-blur-xs">VİTRİN</Badge>
+          ) : null}
+        </div>
+      ) : null}
       <button
         type="button"
         onClick={handleFav}
         disabled={favLoading}
         aria-label={fav ? "Favorilerden çıkar" : "Favoriye ekle"}
-        className="absolute right-1.5 top-1.5 z-10 grid size-7 place-items-center rounded-full bg-surface/85 backdrop-blur-xs text-muted shadow-sm transition-transform hover:scale-110 active:scale-95 sm:right-2 sm:top-2 sm:size-8"
+        className="absolute right-1 top-1 z-10 grid size-9 place-items-center transition-transform hover:scale-110 active:scale-95"
       >
-        <Heart className={cn("size-3.5 transition-colors sm:size-4", fav ? "fill-danger text-danger" : "text-fg/70")} />
+        <Heart
+          className={cn("size-[18px] drop-shadow-[0_1px_2px_rgb(0_0_0/0.45)]", fav ? "fill-[#f04438] text-[#f04438]" : "fill-black/25 text-white")}
+          strokeWidth={2.2}
+        />
       </button>
     </div>
   );
 
   const body = (
-    <div className={variant === "list" ? "flex flex-1 min-w-0 flex-col p-2.5 sm:p-4" : "flex flex-1 flex-col p-2.5 sm:p-4"}>
-      <p className="text-sm font-semibold tracking-tight text-primary tabular-nums sm:text-base md:text-lg">
-        {formatPrice(listing.price)}
+    <div className={cn("flex min-w-0 flex-1 flex-col gap-0.5 p-2.5", variant === "list" && "sm:p-4")}>
+      <p className="truncate text-base font-semibold tracking-tight text-primary tabular-nums sm:text-[17px]">
+        {formatPrice(listing.price, listing.currency)}
       </p>
       <h3
         className={cn(
-          "mt-0.5 line-clamp-2 text-xs leading-snug text-fg group-hover:text-primary sm:mt-1 sm:text-sm",
+          "line-clamp-2 min-h-[2.5em] text-[13px] leading-snug text-fg group-hover:text-primary sm:text-sm",
           kalin ? "font-bold" : "font-medium",
         )}
       >
         {listing.title}
       </h3>
-      <div className="mt-1.5 flex flex-wrap gap-1 sm:mt-2">
-        {Object.values(listing.attrs)
-          .slice(0, 3)
-          .map((v) => (
-            <span
-              key={String(v)}
-              className="rounded bg-elevated px-1 py-0.5 text-[10px] text-muted sm:rounded-md sm:px-1.5 sm:text-xs"
-            >
-              {String(v)}
-            </span>
-          ))}
-      </div>
-      <div className="mt-auto flex flex-wrap items-center justify-between gap-1 pt-2 text-[10px] text-muted sm:pt-3 sm:text-xs">
-        <span className="flex min-w-0 items-center gap-1 truncate max-w-[65%] sm:max-w-[70%]">
-          <MapPin className="size-3 shrink-0 sm:size-3.5" />
-          <span className="truncate">
-            {[listing.city, listing.district].filter(Boolean).join(" / ") || "Konum yok"}
-          </span>
-        </span>
-        <span className="shrink-0">{formatDate(listing.created_at)}</span>
+      {extra.length ? <p className="truncate text-xs text-muted">{extra.join(" · ")}</p> : null}
+      <div className="mt-auto flex items-center gap-1 pt-1 text-[11px] text-subtle sm:text-xs">
+        {place ? <MapPin className="size-3 shrink-0" /> : null}
+        <span className="min-w-0 flex-1 truncate">{place || listing.category_name || ""}</span>
+        {variant !== "rail" ? <span className="shrink-0">{listingAge(listing.created_at)}</span> : null}
       </div>
     </div>
   );
@@ -135,19 +137,15 @@ export function ListingCard({
     <Link
       to="/ilan/$slug"
       params={{ slug: listing.slug }}
-      className={`group flex overflow-hidden rounded-xl border border-border bg-surface shadow-card transition-[box-shadow,transform,border-color] duration-150 hover:-translate-y-px hover:shadow-lift ${variant === "list" ? "flex-row" : "flex-col"}`}
-    >
-      {variant === "list" ? (
-        <div className="flex w-full flex-row">
-          {media}
-          {body}
-        </div>
-      ) : (
-        <>
-          {media}
-          {body}
-        </>
+      className={cn(
+        "group flex overflow-hidden rounded-[14px] border border-border bg-surface transition-[box-shadow,transform,border-color] duration-150 hover:-translate-y-px hover:shadow-lift",
+        variant === "list" ? "min-h-[110px] flex-row" : "flex-col",
+        variant === "rail" && "w-[168px] shrink-0 snap-start sm:w-[200px]",
+        acil && variant === "list" && "border-urgent",
       )}
+    >
+      {media}
+      {body}
     </Link>
   );
 }

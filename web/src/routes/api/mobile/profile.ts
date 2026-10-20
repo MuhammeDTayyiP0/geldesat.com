@@ -38,8 +38,9 @@ export const Route = createFileRoute("/api/mobile/profile")({
             sql.query<Record<string, unknown>>(
               `select p.display_name, p.phone, p.bio, p.city, p.district,
                 (select count(*)::int from listings where user_id=p.user_id) as listing_count,
-                (select count(*)::int from listings where user_id=p.user_id and status='ACTIVE') as active_count,
-                (select count(*)::int from favorites where user_id=p.user_id) as favorite_count,
+                (select count(*)::int from listings where user_id=p.user_id and status='ACTIVE' and (expires_at is null or expires_at>now())) as active_count,
+                (select count(*)::int from favorites f join listings l on l.id=f.listing_id
+                   where f.user_id=p.user_id and l.status='ACTIVE' and (l.expires_at is null or l.expires_at>now())) as favorite_count,
                 (select coalesce(avg(rating),0) from reviews where seller_id=p.user_id) as rating_avg,
                 (select count(*)::int from reviews where seller_id=p.user_id) as rating_count
                from profiles p where p.user_id=$1`,

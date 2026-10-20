@@ -17,6 +17,7 @@ import { sweepExpiryReminders } from "./ops";
 import { sweepRetention } from "./retention";
 import { sweepMessageDigests } from "./message-digest";
 import { unreadMessageCount } from "./chat";
+import { clearRecent, recentListings } from "./recently-viewed";
 
 export const toggleFavorite = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
@@ -33,7 +34,7 @@ export const toggleFavorite = createServerFn({ method: "POST" })
       return { favorite: false };
     }
     const owner = await sql.query<{ user_id: string; title: string; slug: string }>(
-      "select user_id, title, slug from listings where id=$1 and status='ACTIVE'",
+      "select user_id, title, slug from listings where id=$1 and status='ACTIVE' and (expires_at is null or expires_at > now())",
       [data.listingId],
     );
     if (!owner[0]) throw new Error("İlan bulunamadı");
@@ -56,11 +57,24 @@ export const myFavorites = createServerFn({ method: "GET" })
        from favorites f
        join listings l on l.id = f.listing_id
        join categories c on c.id = l.category_id
-       where f.user_id=$1 and l.status='ACTIVE'
+       where f.user_id=$1 and l.status='ACTIVE' and (l.expires_at is null or l.expires_at > now())
        order by f.created_at desc`,
       [context.userId],
     );
     return rows.map(mapListing);
+  });
+
+export const myRecentListings = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(({ context }) => recentListings(context.userId));
+
+/** Remove one listing from "Son baktıklarım", or the whole list without `listingId`. */
+export const removeRecentListing = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ listingId: z.string().max(200).nullable() }))
+  .handler(async ({ context, data }) => {
+    await clearRecent(context.userId, data.listingId);
+    return { ok: true };
   });
 
 export const favoriteIds = createServerFn({ method: "GET" })

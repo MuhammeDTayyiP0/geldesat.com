@@ -30,6 +30,8 @@
   --color-danger: #b42318;
   --color-ok: #1f7a4d;
   --color-warn: #9a6700;
+  /* "ACİL" badge fill, as in the app. */
+  --color-urgent: #d92d20;
 
   --radius-sm: 6px;
   --radius-md: 10px;
@@ -55,8 +57,8 @@
   --color-muted: #a3abb8;
   --color-subtle: #7a8392;
   --color-surface: #141922;
-  --color-elevated: #1d2430;
-  --color-border: #2a3341;
+  --color-elevated: #1b212c;
+  --color-border: #262e3b;
   --color-primary: #4f7cff;
   --color-primary-fg: #ffffff;
   --color-ink: #05070a;
@@ -64,6 +66,7 @@
   --color-danger: #f97066;
   --color-ok: #47cd89;
   --color-warn: #fdb022;
+  --color-urgent: #f97066;
   --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px -16px rgb(0 0 0 / 0.7);
   --shadow-lift: 0 1px 2px rgb(0 0 0 / 0.5), 0 16px 32px -18px rgb(0 0 0 / 0.8);
 }
@@ -76,16 +79,16 @@
     --color-muted: #a3abb8;
     --color-subtle: #7a8392;
     --color-surface: #141922;
-    --color-elevated: #1d2430;
-    --color-border: #2a3341;
+    --color-elevated: #1b212c;
+    --color-border: #262e3b;
     --color-primary: #4f7cff;
     --color-primary-fg: #ffffff;
     --color-ink: #05070a;
     --color-brand: #f7f8fc;
-  --color-brand: #f7f8fc;
     --color-danger: #f97066;
     --color-ok: #47cd89;
     --color-warn: #fdb022;
+    --color-urgent: #f97066;
     --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px -16px rgb(0 0 0 / 0.7);
     --shadow-lift: 0 1px 2px rgb(0 0 0 / 0.5), 0 16px 32px -18px rgb(0 0 0 / 0.8);
   }

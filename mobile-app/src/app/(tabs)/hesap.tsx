@@ -3,7 +3,7 @@ import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-n
 import { useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
-import { Bell, ExternalLink, Heart, LayoutGrid, MessageCircle, Pencil, Rocket, Settings, Store, type LucideIcon } from 'lucide-react-native';
+import { Bell, ExternalLink, Heart, History, LayoutGrid, MessageCircle, Pencil, Rocket, Settings, Store, type LucideIcon } from 'lucide-react-native';
 import { myListings } from '@/api/endpoints';
 import { keys, queryClient, useCounts, useMe } from '@/api/queries';
 import { useSession } from '@/auth/session';
@@ -52,7 +52,7 @@ export default function AccountScreen() {
 
   const profile = me.data?.profile;
   const name = profile?.display_name || session.user.name;
-  const live = (mine.data ?? []).filter((l) => l.status === 'ACTIVE' && !(l.expires_at && new Date(l.expires_at).getTime() < now));
+  const live = (mine.data ?? []).filter((l) => l.status === 'ACTIVE' && !(l.expires_at && new Date(l.expires_at).getTime() <= now));
 
   return (
     <ScrollView
@@ -132,6 +132,7 @@ export default function AccountScreen() {
       <View style={styles.tiles}>
         <Tile icon={LayoutGrid} label="İlanlarım" detail={`${formatNumber(profile?.listing_count ?? 0)} ilan`} to="/ilanlarim" />
         <Tile icon={Heart} label="Favorilerim" detail={`${formatNumber(profile?.favorite_count ?? 0)} ilan`} to="/favoriler" />
+        <Tile icon={History} label="Son baktıklarım" detail="Son 50 ilan" to="/son-bakilanlar" />
         <Tile
           icon={MessageCircle}
           label="Mesajlar"

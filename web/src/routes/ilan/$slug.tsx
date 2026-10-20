@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { NotFound } from "@/components/common/NotFound";
 import { buildListingSeo, isListingIndexable, jsonLd } from "@/lib/seo";
 import { getListing, incrementView } from "@/lib/server/catalog";
+import { setFavorite } from "@/lib/favorites-store";
 import { checkReviewEligibility, favoriteIds, leaveReview, reportListing, toggleFavorite } from "@/lib/server/social";
 import { startConversation } from "@/lib/server/chat";
 import { deleteListing, renewListing, revealPhone, setListingStatus } from "@/lib/server/account";
@@ -205,6 +206,7 @@ function ListingPage() {
     try {
       const res = await toggleFavorite({ data: { listingId: listing.id } });
       setFav(res.favorite);
+      setFavorite(listing.id, res.favorite);
       toast.success(res.favorite ? "Favorilere eklendi" : "Favorilerden çıkarıldı");
     } catch {
       setFav((v) => !v);

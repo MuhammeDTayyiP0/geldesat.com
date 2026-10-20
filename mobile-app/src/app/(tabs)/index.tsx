@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { Bell, ChevronRight, Heart, LocateFixed, MapPin, Search, Sparkles } from 'lucide-react-native';
-import { catalog } from '@/api/endpoints';
+import { catalog, listings as listingsApi } from '@/api/endpoints';
 import { keys, queryClient, useConfig, useCounts, useRoots } from '@/api/queries';
 import { useSession } from '@/auth/session';
 import { categoryIcon } from '@/features/catalog/categoryIcon';
@@ -13,7 +13,6 @@ import { ListingRail } from '@/features/listing/ListingRail';
 import { useNearbyCity } from '@/features/location/nearby';
 import { OptionPicker } from '@/features/location/OptionPicker';
 import { formatNumber } from '@/lib/format';
-import { useRecentListings } from '@/lib/storage';
 import { CountDot, EmptyState, ErrorState, IconButton, Skeleton, Text, Wordmark, hairline, radius, space, toast, useTheme } from '@/ui';
 
 const PAGE = 20;
@@ -26,7 +25,6 @@ export default function DiscoverScreen() {
   const { data: counts } = useCounts();
   const { data: config } = useConfig();
   const roots = useRoots();
-  const recent = useRecentListings();
   const nearby = useNearbyCity();
   const [cityPicker, setCityPicker] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -48,6 +46,14 @@ export default function DiscoverScreen() {
       return last.listings.length === PAGE && loaded < last.total ? loaded : undefined;
     },
   });
+  // "Son baktıklarınız" comes from the account, so it is the same on the website and every device.
+  const recentQuery = useQuery({
+    queryKey: keys.recent,
+    queryFn: listingsApi.recent,
+    enabled: session.status === 'signedIn',
+    select: (rows) => rows.filter((r) => r.live).slice(0, 12),
+  });
+  const recent = session.status === 'signedIn' ? (recentQuery.data ?? []) : [];
   const latest = useMemo(() => feed.data?.pages.flatMap((p) => p.listings) ?? [], [feed.data]);
 
   const onRefresh = useCallback(async () => {
@@ -57,6 +63,7 @@ export default function DiscoverScreen() {
       queryClient.invalidateQueries({ queryKey: keys.stats }),
       queryClient.invalidateQueries({ queryKey: keys.roots }),
       queryClient.invalidateQueries({ queryKey: keys.counts }),
+      queryClient.invalidateQueries({ queryKey: keys.recent }),
     ]);
     setRefreshing(false);
   }, []);
@@ -153,7 +160,7 @@ export default function DiscoverScreen() {
       )}
 
       {recent.length ? (
-        <ListingRail title="Son baktıklarınız" items={recent.map((r) => ({ ...r, boosts: [] }))} />
+        <ListingRail title="Son baktıklarınız" items={recent} onSeeAll={() => router.push('/son-bakilanlar')} />
       ) : null}
 
       <Text variant="subheading" style={styles.feedTitle}>

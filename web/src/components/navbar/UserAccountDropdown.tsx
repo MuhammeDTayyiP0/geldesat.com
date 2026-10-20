@@ -1,15 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import {
-  Bell,
-  ChevronDown,
-  Heart,
-  LayoutGrid,
-  LogOut,
-  MessageCircle,
-  Settings,
-  Shield,
-  User,
-} from "lucide-react";
+import { Bell, ChevronDown, Heart, History, LayoutGrid, LogOut, MessageCircle, Settings, Shield, User } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { signOut } from "@/lib/auth/client";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
@@ -114,6 +104,15 @@ export function UserAccountDropdown({ admin }: { admin: boolean }) {
             >
               <Heart className="size-4 text-muted shrink-0" />
               <span>Favorilerim</span>
+            </Link>
+
+            <Link
+              to="/son-bakilanlar"
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-2.5 px-3 py-2 text-sm text-fg hover:bg-elevated rounded-lg transition-colors"
+            >
+              <History className="size-4 text-muted shrink-0" />
+              <span>Son baktıklarım</span>
             </Link>
 
             <Link

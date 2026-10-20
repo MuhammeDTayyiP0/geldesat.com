@@ -61,31 +61,61 @@ export function ListingGridSkeleton() {
             </div>
           </div>
 
-          {/* Cards Grid */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {[1, 2, 3, 4, 5, 6].map((i) => (
-              <div
-                key={i}
-                className="overflow-hidden rounded-2xl border border-border bg-surface shadow-card space-y-3 p-3"
-              >
-                {/* Image */}
-                <Skeleton className="aspect-[4/3] w-full rounded-xl bg-border/50" />
-                
-                {/* Details */}
-                <div className="space-y-2 px-1 pb-1">
-                  <Skeleton className="h-5 w-4/5 rounded bg-border/70" />
-                  <Skeleton className="h-6 w-28 rounded-md bg-border/80" />
-                  
-                  <div className="flex items-center justify-between pt-2 border-t border-border/50">
-                    <Skeleton className="h-3.5 w-24 rounded bg-border/40" />
-                    <Skeleton className="h-3.5 w-16 rounded bg-border/40" />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+          <CardGridSkeleton count={6} className="xl:grid-cols-3" />
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Route pending screen for a profile page (seller, store): header block plus cards. */
+export function ProfilePageSkeleton() {
+  return (
+    <div className="mx-auto max-w-6xl px-4 py-6 animate-in fade-in duration-300" aria-busy>
+      <div className="flex items-center gap-4 rounded-2xl border border-border bg-surface p-5">
+        <Skeleton className="size-16 shrink-0 rounded-full bg-border/60" />
+        <div className="flex-1 space-y-2">
+          <Skeleton className="h-6 w-48 rounded bg-border/70" />
+          <Skeleton className="h-4 w-64 max-w-full rounded bg-border/50" />
+        </div>
+      </div>
+      <CardGridSkeleton count={6} className="mt-6 lg:grid-cols-3" />
+    </div>
+  );
+}
+
+/** Placeholder cards shaped like ListingCard (two per row on phones, as in the app). */
+export function CardGridSkeleton({ count = 6, className = "" }: { count?: number; className?: string }) {
+  return (
+    <div className={`grid grid-cols-2 gap-2.5 sm:gap-4 ${className}`} aria-hidden>
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} className="overflow-hidden rounded-[14px] border border-border bg-surface">
+          <Skeleton className="aspect-[4/3] w-full rounded-none bg-border/50" />
+          <div className="space-y-2 p-2.5">
+            <Skeleton className="h-5 w-24 rounded bg-border/70" />
+            <Skeleton className="h-4 w-4/5 rounded bg-border/50" />
+            <Skeleton className="h-3 w-1/2 rounded bg-border/40" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Placeholder rows shaped like the list variant of ListingCard. */
+export function CardListSkeleton({ count = 4 }: { count?: number }) {
+  return (
+    <div className="grid gap-3" aria-hidden>
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} className="flex min-h-[110px] overflow-hidden rounded-[14px] border border-border bg-surface">
+          <Skeleton className="w-[128px] shrink-0 rounded-none bg-border/50 sm:w-[200px]" />
+          <div className="flex-1 space-y-2 p-3">
+            <Skeleton className="h-5 w-24 rounded bg-border/70" />
+            <Skeleton className="h-4 w-4/5 rounded bg-border/50" />
+            <Skeleton className="h-3 w-1/3 rounded bg-border/40" />
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

@@ -102,6 +102,22 @@ export function memberSince(iso: string | null | undefined): string {
   return `${MONTHS[d.getMonth()]} ${d.getFullYear()}'den beri üye`;
 }
 
+/** Past its end date: still ACTIVE in the database but shown to no one (same rule as the website and server). */
+export function isListingExpired(listing: { expires_at?: string | null }): boolean {
+  return !!listing.expires_at && new Date(listing.expires_at).getTime() <= Date.now();
+}
+
+/** On the air: active and not past its end date. */
+export function isListingLive(listing: { status?: string | null; expires_at?: string | null }): boolean {
+  return listing.status === 'ACTIVE' && !isListingExpired(listing);
+}
+
+/** Whole days until `iso` (negative once passed), or null without a date. */
+export function daysUntil(iso: string | null | undefined): number | null {
+  if (!iso) return null;
+  return Math.ceil((new Date(iso).getTime() - Date.now()) / 86_400_000);
+}
+
 export function listingStatusLabel(status: string, expired = false): string {
   if (expired && status === 'ACTIVE') return 'Süresi doldu';
   switch (status) {

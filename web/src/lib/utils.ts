@@ -5,14 +5,15 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+const priceFormatter = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 0 });
+
+/** "1.500.000 ₺" (as in the app); other currencies lead with their symbol: "$1.500". */
 export function formatPrice(value: number | string, currency = "TRY") {
   const n = typeof value === "string" ? Number(value) : value;
   if (!Number.isFinite(n)) return "—";
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 0,
-  }).format(n);
+  if (currency === "TRY") return `${priceFormatter.format(n)} ₺`;
+  const symbol = currency === "USD" ? "$" : currency === "EUR" ? "€" : `${currency} `;
+  return `${symbol}${priceFormatter.format(n)}`;
 }
 
 export function formatNumber(value: number | string) {
@@ -25,6 +26,50 @@ export function formatDate(value: string | Date) {
   const d = typeof value === "string" ? new Date(value) : value;
   if (Number.isNaN(d.getTime())) return "";
   return d.toLocaleDateString("tr-TR", { day: "numeric", month: "short", year: "numeric" });
+}
+
+/** Past its end date: still ACTIVE in the database but no longer shown to anyone. */
+export function isListingExpired(listing: { expires_at?: string | null }) {
+  return Boolean(listing.expires_at && new Date(listing.expires_at).getTime() <= Date.now());
+}
+
+/** On the air: active and not past its end date (same rule as the server and the app). */
+export function isListingLive(listing: { status?: string | null; expires_at?: string | null }) {
+  return listing.status === "ACTIVE" && !isListingExpired(listing);
+}
+
+/** Up to two highlight attributes (year, km, m², rooms) for cards, picked like the app does. */
+export function listingHighlights(attrs: Record<string, string | number> | null | undefined): string[] {
+  const out: string[] = [];
+  if (!attrs) return out;
+  const pick = (keys: string[], suffix = "") => {
+    for (const key of keys) {
+      const v = attrs[key];
+      if (v !== undefined && v !== "" && out.length < 2) {
+        out.push(typeof v === "number" ? `${formatNumber(v)}${suffix}` : `${v}${suffix}`);
+        return;
+      }
+    }
+  };
+  pick(["Yıl"]);
+  pick(["KM"], " km");
+  pick(["m²", "m² (Net)", "m² (Brüt)"], " m²");
+  pick(["Oda Sayısı"]);
+  return out;
+}
+
+/** "3 gün önce" style age for listing cards (as in the app). */
+export function listingAge(value: string | Date) {
+  const d = typeof value === "string" ? new Date(value) : value;
+  if (Number.isNaN(d.getTime())) return "";
+  const m = Math.floor((Date.now() - d.getTime()) / 60000);
+  if (m < 1) return "şimdi";
+  if (m < 60) return `${m} dk önce`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h} saat önce`;
+  const days = Math.floor(h / 24);
+  if (days < 30) return `${days} gün önce`;
+  return formatDate(d);
 }
 
 export const LISTING_PHOTO_MSG = "::ilan-foto::";

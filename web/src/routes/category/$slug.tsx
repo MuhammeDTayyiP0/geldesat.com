@@ -279,7 +279,7 @@ function CategoryPage() {
               </Link>
             </div>
           ) : (
-            <div className={view === "grid" ? "grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3" : "grid gap-3"}>
+            <div className={view === "grid" ? "grid grid-cols-2 gap-2.5 sm:gap-4 xl:grid-cols-3" : "grid gap-3"}>
               {result.listings.map((l: any, i: number) => (
                 <ListingCard key={l.id} listing={l} variant={view} priority={i < 2} />
               ))}

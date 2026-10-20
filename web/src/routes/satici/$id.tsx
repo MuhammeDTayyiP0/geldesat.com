@@ -1,10 +1,10 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { ProfilePageSkeleton } from "@/components/listing/ListingGridSkeleton";
 import { Star } from "lucide-react";
 import { getSeller } from "@/lib/server/account";
 import { searchCatalog } from "@/lib/server/catalog";
 import { ListingCard } from "@/components/listing/ListingCard";
 import { NotFound } from "@/components/common/NotFound";
-import { BrandSpinner } from "@/components/brand/BrandSpinner";
 import { jsonLd } from "@/lib/seo";
 
 export const Route = createFileRoute("/satici/$id")({
@@ -87,7 +87,7 @@ export const Route = createFileRoute("/satici/$id")({
       ],
     };
   },
-  pendingComponent: () => <BrandSpinner fullPage text="Satıcı profili yükleniyor…" />,
+  pendingComponent: ProfilePageSkeleton,
   notFoundComponent: () => (
     <NotFound
       type="seller"
@@ -117,7 +117,7 @@ function SellerPage() {
         ) : null}
       </div>
       <h2 className="mt-10 font-display text-xl font-semibold">İlanları</h2>
-      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="mt-4 grid grid-cols-2 gap-2.5 sm:gap-4 lg:grid-cols-3">
         {listings.map((l: any) => (
           <ListingCard key={l.id} listing={l} />
         ))}

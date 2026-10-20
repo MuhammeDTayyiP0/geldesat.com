@@ -10,14 +10,12 @@ import { keys, queryClient } from '@/api/queries';
 import type { Listing } from '@/api/types';
 import { useSession } from '@/auth/session';
 import { mediaUrl } from '@/lib/config';
-import { formatNumber, formatPrice, listingStatusLabel } from '@/lib/format';
+import { daysUntil, formatNumber, formatPrice, isListingExpired, listingStatusLabel } from '@/lib/format';
 import { Badge, Button, Chip, EmptyState, ErrorState, Header, ListRow, Loading, RowGroup, Sheet, Text, confirm, hairline, radius, space, toast, useTheme } from '@/ui';
 
 type Tab = 'live' | 'pending' | 'off' | 'sold' | 'rejected';
 
-function isExpired(l: Listing) {
-  return !!l.expires_at && new Date(l.expires_at).getTime() < Date.now();
-}
+const isExpired = isListingExpired;
 
 function tabOf(l: Listing): Tab {
   if (l.status === 'PENDING') return 'pending';
@@ -35,10 +33,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'rejected', label: 'Reddedilen' },
 ];
 
-function daysLeft(iso: string | null | undefined): number | null {
-  if (!iso) return null;
-  return Math.ceil((new Date(iso).getTime() - Date.now()) / 86_400_000);
-}
+const daysLeft = daysUntil;
 
 export default function MyListingsScreen() {
   const { c } = useTheme();

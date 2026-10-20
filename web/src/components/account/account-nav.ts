@@ -5,6 +5,7 @@ import {
   BellRing,
   FileDown,
   Heart,
+  History,
   Lock,
   LayoutGrid,
   MessageCircle,
@@ -23,6 +24,7 @@ type NavTo =
   | "/profil"
   | "/ilanlarim"
   | "/favoriler"
+  | "/son-bakilanlar"
   | "/mesajlar"
   | "/bildirimler"
   | "/ayarlar"
@@ -43,6 +45,7 @@ export const ACCOUNT_ITEMS: AccountNavItem[] = [
   { to: "/profil", label: "Hesabım", icon: UserRound },
   { to: "/ilanlarim", label: "İlanlarım", icon: LayoutGrid, hint: "Yayındaki, bekleyen ve pasif ilanlar" },
   { to: "/favoriler", label: "Favorilerim", icon: Heart, hint: "Kaydettiğiniz ilanlar" },
+  { to: "/son-bakilanlar", label: "Son baktıklarım", icon: History, hint: "Son incelediğiniz 50 ilan" },
   { to: "/mesajlar", label: "Mesajlar", icon: MessageCircle, badge: "messages", hint: "Alıcı ve satıcılarla yazışmalar" },
   { to: "/bildirimler", label: "Bildirimler", icon: Bell, badge: "notifications", hint: "Mesaj, favori ve ilan durumu" },
 ];

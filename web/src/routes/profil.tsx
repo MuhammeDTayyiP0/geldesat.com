@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Bell, CalendarDays, ExternalLink, Heart, LayoutGrid, MapPin, MessageCircle, Plus, Rocket, Star, Store, type LucideIcon } from "lucide-react";
+import { Bell, CalendarDays, ExternalLink, Heart, History, LayoutGrid, MapPin, MessageCircle, Plus, Rocket, Star, Store, type LucideIcon } from "lucide-react";
 import { getMe, myListings } from "@/lib/server/account";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
@@ -129,6 +129,7 @@ function ProfilePage() {
       <nav aria-label="Hesabım" className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
         <Tile to="/ilanlarim" icon={LayoutGrid} label="İlanlarım" detail={`${formatNumber(p?.listing_count ?? 0)} ilan`} />
         <Tile to="/favoriler" icon={Heart} label="Favorilerim" detail={`${formatNumber(p?.favorite_count ?? 0)} ilan`} />
+        <Tile to="/son-bakilanlar" icon={History} label="Son baktıklarım" detail="Son 50 ilan" />
         <Tile to="/mesajlar" icon={MessageCircle} label="Mesajlar" badge={counts.messages} detail={counts.messages ? `${counts.messages} okunmamış` : "Yazışmalar"} />
         <Tile to="/bildirimler" icon={Bell} label="Bildirimler" badge={counts.notifications} detail={counts.notifications ? `${counts.notifications} yeni` : "Güncellemeler"} />
         {me.store ? (
@@ -195,7 +196,7 @@ function Tile({
   detail,
   badge = 0,
 }: {
-  to: "/ilanlarim" | "/favoriler" | "/mesajlar" | "/bildirimler" | "/ayarlar/magaza" | "/doping";
+  to: "/ilanlarim" | "/favoriler" | "/son-bakilanlar" | "/mesajlar" | "/bildirimler" | "/ayarlar/magaza" | "/doping";
   icon: LucideIcon;
   label: string;
   detail: string;

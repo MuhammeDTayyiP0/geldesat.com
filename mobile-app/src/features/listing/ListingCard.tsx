@@ -9,7 +9,7 @@ import { Badge, Text, radius, space, useTheme } from '@/ui';
 
 type Props = {
   listing: Pick<Listing, 'id' | 'title' | 'price' | 'currency' | 'images' | 'city' | 'district' | 'created_at' | 'attrs'> &
-    Partial<Pick<Listing, 'boosts' | 'category_name'>>;
+    Partial<Pick<Listing, 'boosts' | 'category_name' | 'featured_until'>>;
   onPress: () => void;
   favorite?: boolean;
   onFavorite?: () => void;
@@ -36,11 +36,17 @@ function highlights(attrs: Record<string, string | number>): string[] {
   return out;
 }
 
+/** Showcase listing: admins feature it with featured_until (the VITRIN boost is kept for paid doping). */
+function isFeatured(listing: Pick<Listing, 'boosts' | 'featured_until'>): boolean {
+  if (listing.boosts?.includes('VITRIN')) return true;
+  return !!listing.featured_until && new Date(listing.featured_until).getTime() > Date.now();
+}
+
 export const ListingCard = memo(function ListingCard({ listing, onPress, favorite, onFavorite, layout = 'grid' }: Props) {
   const { c } = useTheme();
   const cover = mediaUrl(listing.images[0], layout === 'row' ? 240 : 480);
   const urgent = listing.boosts?.includes('ACIL');
-  const featured = listing.boosts?.includes('VITRIN');
+  const featured = isFeatured(listing);
   const bold = listing.boosts?.includes('KALIN');
   const place = [listing.district, listing.city].filter(Boolean).join(', ');
   const extra = highlights(listing.attrs ?? {});

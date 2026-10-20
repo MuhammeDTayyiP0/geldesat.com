@@ -3,7 +3,7 @@ import { getSql } from "@/lib/db";
 import { getMobileUserId } from "@/lib/server/mobile-auth";
 import { mapListing, notify } from "@/lib/server/helpers";
 import { deleteUnusedListingImages } from "@/lib/server/upload.server";
-import { renewedStatus } from "@/lib/server/listing-write";
+import { assertNotClosing, renewedStatus } from "@/lib/server/listing-write";
 import { publicErrorMessage } from "@/lib/server/errors";
 
 export const Route = createFileRoute("/api/mobile/my-listings/$id")({
@@ -43,12 +43,14 @@ export const Route = createFileRoute("/api/mobile/my-listings/$id")({
           }
           if (body.action === "renew") {
             if (rows[0].status === "REJECTED") return Response.json({ success: false, error: "Reddedilen ilan yenilenemez." }, { status: 400 });
+            await assertNotClosing(sql, userId);
             const status = renewedStatus(rows[0].status, rows[0].approved_at);
             await sql.query("update listings set expires_at=now()+interval '30 days',status=$2,updated_at=now() where id=$1 and user_id=$3", [params.id,status,userId]);
             return Response.json({ success: true });
           }
           if (body.action === "status" && ["ACTIVE","INACTIVE","SOLD"].includes(String(body.status))) {
             if ((rows[0].status === "PENDING" || rows[0].status === "REJECTED" || !rows[0].approved_at) && body.status === "ACTIVE") return Response.json({ success: false, error: "Onay bekleyen ilanı yayına alamazsınız." }, { status: 400 });
+            if (body.status === "ACTIVE") await assertNotClosing(sql, userId);
             await sql.query("update listings set status=$2,updated_at=now() where id=$1 and user_id=$3", [params.id,body.status,userId]);
             if (body.status === "ACTIVE") await notify(userId,"listing","İlanınız yayında","İlanınız tekrar yayına alındı.",`/ilan/${rows[0].slug}`);
             return Response.json({ success: true });

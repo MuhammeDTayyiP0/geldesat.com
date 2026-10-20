@@ -12,6 +12,7 @@ import type {
   Conversation,
   Listing,
   ListingDetail,
+  RecentListing,
   ListingForEdit,
   ListingInput,
   Me,
@@ -56,6 +57,10 @@ export const listings = {
     request('/api/mobile/reports', { method: 'POST', body: { listingId, reason, details } }),
   review: (listingId: string, rating: number, comment?: string) =>
     request('/api/mobile/reviews', { method: 'POST', body: { listingId, rating, comment } }),
+  /** The account's last 50 viewed listings (recorded by the server when a detail opens). */
+  recent: () => rpc<RecentListing[]>('myRecentListings'),
+  /** Remove one listing from the history, or all of it with `null`. */
+  removeRecent: (listingId: string | null) => rpc('removeRecentListing', { listingId }),
   seller: (id: string) => request<{ seller: Seller; listings: Listing[] }>(`/api/mobile/sellers/${encodeURIComponent(id)}`),
   store: (slug: string) => request<{ store: Store; listings: Listing[] }>(`/api/mobile/stores/${encodeURIComponent(slug)}`),
 };

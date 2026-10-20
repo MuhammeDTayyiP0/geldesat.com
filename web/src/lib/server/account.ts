@@ -17,7 +17,7 @@ import {
   viewerKey,
 } from "./helpers";
 import { getRequest } from "@tanstack/react-start/server";
-import { ListingInput, renewedStatus, saveListingRecord } from "./listing-write";
+import { assertNotClosing, ListingInput, renewedStatus, saveListingRecord } from "./listing-write";
 
 /** True only for a signed-in ADMIN; never throws, so routes can gate on it (e.g. 404 for everyone else). */
 export const isAdminSession = createServerFn({ method: "GET" }).handler(async () => {
@@ -28,15 +28,6 @@ export const isAdminSession = createServerFn({ method: "GET" }).handler(async ()
   return profile.role === "ADMIN";
 });
 
-/** Listings stay hidden while their owner's account waits for deletion. */
-async function assertNotClosing(sql: Awaited<ReturnType<typeof getSql>>, userId: string) {
-  const rows = await sql.query<{ pending: boolean }>(
-    "select deletion_requested_at is not null as pending from profiles where user_id=$1",
-    [userId],
-  );
-  if (rows[0]?.pending) throw new Error("Hesabınız silinme sürecinde. Önce hesabınızı geri alın.");
-}
-
 export const getMe = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
@@ -45,8 +36,9 @@ export const getMe = createServerFn({ method: "GET" })
     const rows = await sql.query<Record<string, unknown>>(
       `select p.*, 
         (select count(*)::int from listings where user_id = p.user_id) as listing_count,
-        (select count(*)::int from listings where user_id = p.user_id and status = 'ACTIVE') as active_count,
-        (select count(*)::int from favorites where user_id = p.user_id) as favorite_count,
+        (select count(*)::int from listings where user_id = p.user_id and status = 'ACTIVE' and (expires_at is null or expires_at > now())) as active_count,
+        (select count(*)::int from favorites f join listings l on l.id = f.listing_id
+          where f.user_id = p.user_id and l.status = 'ACTIVE' and (l.expires_at is null or l.expires_at > now())) as favorite_count,
         (select coalesce(avg(rating),0) from reviews where seller_id = p.user_id) as rating_avg,
         (select count(*)::int from reviews where seller_id = p.user_id) as rating_count
        from profiles p where p.user_id = $1`,
@@ -353,7 +345,7 @@ export const getSeller = createServerFn({ method: "POST" })
     const sql = await getSql();
     const p = await sql.query<Record<string, unknown>>(
       `select p.*, 
-        (select count(*)::int from listings where user_id=p.user_id and status='ACTIVE') as listing_count,
+        (select count(*)::int from listings where user_id=p.user_id and status='ACTIVE' and (expires_at is null or expires_at>now())) as listing_count,
         (select coalesce(avg(rating),0) from reviews where seller_id=p.user_id) as rating_avg,
         (select count(*)::int from reviews where seller_id=p.user_id) as rating_count
        from profiles p where p.user_id=$1 and p.deletion_requested_at is null and p.banned_at is null`,

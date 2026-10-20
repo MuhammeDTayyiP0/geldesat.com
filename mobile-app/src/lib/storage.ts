@@ -1,8 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useEffect, useState } from 'react';
-import type { Listing } from '@/api/types';
 
-/** Small per-device lists (recently viewed, recent searches). Failures fall back to empty. */
+/** Small per-device lists (recent searches). Failures fall back to empty. */
 async function readList<T>(key: string): Promise<T[]> {
   try {
     const raw = await AsyncStorage.getItem(key);
@@ -40,38 +39,6 @@ function useStoredList<T>(key: string): [T[], () => void] {
     };
   }, [key, reload]);
   return [items, reload];
-}
-
-// ─── Recently viewed listings ───────────────────────────────────────────────
-
-const RECENT_KEY = 'geldesat.recentListings.v1';
-export type RecentListing = Pick<Listing, 'id' | 'slug' | 'title' | 'price' | 'currency' | 'images' | 'city' | 'district' | 'created_at' | 'attrs'>;
-
-export async function rememberListing(listing: Listing) {
-  const item: RecentListing = {
-    id: listing.id,
-    slug: listing.slug,
-    title: listing.title,
-    price: listing.price,
-    currency: listing.currency,
-    images: listing.images.slice(0, 1),
-    city: listing.city,
-    district: listing.district,
-    created_at: listing.created_at,
-    attrs: {},
-  };
-  const list = (await readList<RecentListing>(RECENT_KEY)).filter((x) => x.id !== listing.id);
-  await writeList(RECENT_KEY, [item, ...list].slice(0, 20));
-  notify(RECENT_KEY);
-}
-
-export async function clearRecentListings() {
-  await writeList(RECENT_KEY, []);
-  notify(RECENT_KEY);
-}
-
-export function useRecentListings() {
-  return useStoredList<RecentListing>(RECENT_KEY)[0];
 }
 
 // ─── Recent searches ────────────────────────────────────────────────────────

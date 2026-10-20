@@ -15,6 +15,10 @@ export type CatalogSearch = {
   minM2?: string;
   maxM2?: string;
   attrs?: string;
+  /** "1": only ACİL listings (home "Acil satılık" rail → Tümü). */
+  urgent?: string;
+  /** "1": only showcase (vitrin) listings. */
+  featured?: string;
 };
 
 type SearchCategoryNode = { id: string; parent_id: string | null };
@@ -75,6 +79,8 @@ export function parseSearch(s: Record<string, unknown>): CatalogSearch {
     minM2: str("minM2"),
     maxM2: str("maxM2"),
     attrs: str("attrs"),
+    urgent: s.urgent === "1" || s.urgent === 1 || s.urgent === true ? "1" : undefined,
+    featured: s.featured === "1" || s.featured === 1 || s.featured === true ? "1" : undefined,
   };
 }
 
@@ -113,6 +119,8 @@ export function toFilters(s: CatalogSearch) {
     minM2: n(s.minM2),
     maxM2: n(s.maxM2),
     attrs: parseAttrs(s.attrs),
+    urgent: s.urgent === "1" || undefined,
+    featured: s.featured === "1" || undefined,
     limit: 20,
   };
 }

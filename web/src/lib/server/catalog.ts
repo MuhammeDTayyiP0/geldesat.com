@@ -24,6 +24,7 @@ import {
 } from "./category-cache";
 import { getSessionUser } from "@/lib/auth/verify.server";
 import { getRequest } from "@tanstack/react-start/server";
+import { recordListingView } from "./recently-viewed";
 
 const Filters = z.object({
   q: z.string().optional(),
@@ -289,13 +290,17 @@ function cached<T>(ttlMs: number, load: () => Promise<T>): () => Promise<T> {
 
 // The home page is the busiest page and these change slowly; a few seconds of
 // staleness saves several queries per visit.
-const homeFeatured = cached(20_000, async () => {
-  // date_desc already sorts featured_until items first, so one call is enough
-  const result = await searchListings({ limit: 8, page: 1, sort: "date_desc", skipCount: true });
-  return result.listings;
+/** Home page rails, the same ones the app shows: urgent, showcase and the newest listings. */
+const homeRails = cached(20_000, async () => {
+  const [urgent, featured, latest] = await Promise.all([
+    searchListings({ limit: 12, page: 1, sort: "date_desc", urgent: true, skipCount: true }),
+    searchListings({ limit: 12, page: 1, sort: "date_desc", featured: true, skipCount: true }),
+    searchListings({ limit: 24, page: 1, sort: "date_desc" }),
+  ]);
+  return { urgent: urgent.listings, featured: featured.listings, latest: latest.listings, latestPages: latest.pages };
 });
 
-export const featuredListings = createServerFn({ method: "GET" }).handler(() => homeFeatured());
+export const homeListings = createServerFn({ method: "GET" }).handler(() => homeRails());
 
 export const getListing = createServerFn({ method: "POST" })
   .validator(z.object({ slug: z.string().max(200) }))
@@ -363,7 +368,7 @@ export const getListing = createServerFn({ method: "POST" })
       similarOf(true),
       sql.query<Record<string, unknown>>(
         `select p.user_id, p.display_name, p.city, p.created_at, p.avatar_url, p.bio,
-                (select count(*)::int from listings where user_id = p.user_id and status = 'ACTIVE') as listing_count,
+                (select count(*)::int from listings where user_id = p.user_id and status = 'ACTIVE' and (expires_at is null or expires_at > now())) as listing_count,
                 (select coalesce(avg(rating),0) from reviews where seller_id = p.user_id) as rating_avg,
                 (select count(*)::int from reviews where seller_id = p.user_id) as rating_count
          from profiles p where p.user_id = $1`,
@@ -420,6 +425,9 @@ export const incrementView = createServerFn({ method: "POST" })
     // One view per visitor and listing every 30 minutes, so reloads or a script
     // cannot inflate the "most viewed" ordering.
     const request = getRequest();
+    const user = await getSessionUser().catch(() => null);
+    // Signed-in visitors get the listing on their "Son baktıklarım" list every time.
+    if (user) await recordListingView(user.id, data.id);
     const viewer = request ? viewerKey(request.headers) : "unknown";
     if (!firstInWindow(`view:${data.id}:${viewer}`, 30 * 60_000)) return { ok: true };
     const sql = await getSql();

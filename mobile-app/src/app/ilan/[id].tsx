@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Linking, Pressable, ScrollView, Share, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   BadgeCheck,
   ChevronLeft,
@@ -17,6 +17,7 @@ import {
   MessageCircle,
   Navigation,
   Pencil,
+  RefreshCw,
   Phone,
   Share2,
   ShieldCheck,
@@ -25,8 +26,8 @@ import {
   TrendingDown,
 } from 'lucide-react-native';
 import { ApiError, errorMessage } from '@/api/client';
-import { listings } from '@/api/endpoints';
-import { keys } from '@/api/queries';
+import { listings, myListings } from '@/api/endpoints';
+import { keys, queryClient } from '@/api/queries';
 import type { Listing } from '@/api/types';
 import { useSession } from '@/auth/session';
 import { useRequireAuth } from '@/auth/useRequireAuth';
@@ -35,8 +36,7 @@ import { Gallery } from '@/features/listing/Gallery';
 import { ListingRail } from '@/features/listing/ListingRail';
 import { MessageSheet, OfferSheet, PhoneSheet, ReportSheet, ReviewSheet } from '@/features/listing/ListingSheets';
 import { webUrl } from '@/lib/config';
-import { formatDate, formatNumber, formatPrice, listingStatusLabel, locationLabel, timeAgo } from '@/lib/format';
-import { rememberListing } from '@/lib/storage';
+import { daysUntil, formatDate, formatNumber, formatPrice, isListingExpired, isListingLive, listingStatusLabel, locationLabel, timeAgo } from '@/lib/format';
 import {
   Avatar,
   Badge,
@@ -78,9 +78,22 @@ export default function ListingScreen() {
   const data = detail.data;
   const listing = data?.listing;
 
+  // Opening a listing puts it on the account's "Son baktıklarım" (recorded by the server).
+  const listingId = listing?.id;
   useEffect(() => {
-    if (listing && listing.status === 'ACTIVE') void rememberListing(listing);
-  }, [listing]);
+    if (listingId && session.status === 'signedIn') void queryClient.invalidateQueries({ queryKey: keys.recent });
+  }, [listingId, session.status]);
+
+  const renew = useMutation({
+    mutationFn: (listingId: string) => myListings.action(listingId, { action: 'renew' }),
+    onSuccess: () => {
+      toast.success('İlan süresi 30 gün uzatıldı');
+      void queryClient.invalidateQueries({ queryKey: keys.listing(id) });
+      void queryClient.invalidateQueries({ queryKey: keys.myListings });
+      void queryClient.invalidateQueries({ queryKey: keys.me });
+    },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
 
   const galleryHeight = Math.round(width * 0.78);
 
@@ -103,7 +116,10 @@ export default function ListingScreen() {
   if (!data || !listing) return <DetailSkeleton height={galleryHeight} />;
 
   const isOwner = data.isOwner;
-  const live = listing.status === 'ACTIVE';
+  // Same rule as the website and the server: an ACTIVE listing past its end date is off the air.
+  const expired = isListingExpired(listing);
+  const live = isListingLive(listing);
+  const daysLeft = daysUntil(listing.expires_at);
   const priceDrop = data.history.length > 1 ? data.history[0].price - listing.price : 0;
   const attrs = Object.entries(listing.attrs ?? {}).filter(([, v]) => v !== '' && v != null);
   const description = listing.description ?? '';
@@ -149,11 +165,25 @@ export default function ListingScreen() {
           {isOwner ? (
             <Card style={[styles.ownerCard, { borderColor: c.primary }]}>
               <View style={styles.row}>
-                <Badge label={listingStatusLabel(listing.status ?? '')} tone={live ? 'ok' : listing.status === 'REJECTED' ? 'danger' : 'warn'} />
+                <Badge label={listingStatusLabel(listing.status ?? '', expired)} tone={live ? 'ok' : listing.status === 'REJECTED' ? 'danger' : 'warn'} />
                 <Text variant="caption" tone="muted" style={styles.flex}>
-                  Bu sizin ilanınız
+                  {live && daysLeft != null ? `Bu sizin ilanınız · ${daysLeft} gün kaldı` : 'Bu sizin ilanınız'}
                 </Text>
               </View>
+              {expired && listing.status === 'ACTIVE' ? (
+                <View style={[styles.expired, { backgroundColor: c.warnSoft }]}>
+                  <Text variant="caption" tone="warn">
+                    Yayın süresi {formatDate(listing.expires_at)} tarihinde doldu; ilan alıcılara görünmüyor. Yenileyerek 30 gün daha yayında tutabilirsiniz.
+                  </Text>
+                  <Button
+                    title="Yenile ve yayına al"
+                    icon={RefreshCw}
+                    size="sm"
+                    loading={renew.isPending}
+                    onPress={() => renew.mutate(listing.id)}
+                  />
+                </View>
+              ) : null}
               <View style={styles.row}>
                 <Button
                   title="Düzenle"
@@ -451,6 +481,7 @@ function DetailSkeleton({ height }: { height: number }) {
 }
 
 const styles = StyleSheet.create({
+  expired: { borderRadius: radius.md, padding: space.md, gap: space.sm },
   flex: { flex: 1 },
   grow: { flex: 1.4 },
   shrink: { flexShrink: 1 },

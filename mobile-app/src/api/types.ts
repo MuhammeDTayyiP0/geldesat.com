@@ -32,6 +32,9 @@ export type Listing = {
   boosts?: string[];
 };
 
+/** A listing on "Son baktıklarım": when it was opened and whether it is still on the air. */
+export type RecentListing = Listing & { viewed_at: string; live: boolean };
+
 export type ListingPage = {
   listings: Listing[];
   total: number;

@@ -34,7 +34,7 @@ import {
   updatePrivacySettings,
 } from "@/lib/server/settings";
 import { getListingForEdit, getMe, myCreditOrders, updateProfile, upsertStore } from "@/lib/server/account";
-import { blockUser, checkReviewEligibility, leaveReview, unblockUser, unreadCount } from "@/lib/server/social";
+import { blockUser, checkReviewEligibility, leaveReview, myRecentListings, removeRecentListing, unblockUser, unreadCount } from "@/lib/server/social";
 import {
   browseCategories,
   getCategory,
@@ -72,6 +72,8 @@ const FUNCTIONS: Record<string, ServerFn> = {
   unblockUser,
   checkReviewEligibility,
   leaveReview,
+  myRecentListings,
+  removeRecentListing,
   // Settings
   getAccountSettings,
   updatePrivacySettings,

@@ -22,7 +22,7 @@ export const Route = createFileRoute("/api/hesap/verilerim")({
           const sql = await getSql();
           const id = user.id;
           const q = (text: string) => sql.query<Record<string, unknown>>(text, [id]);
-          const [account, logins, profile, store, listings, priceHistory, favorites, conversations, messages, reviewsGiven, reviewsReceived, reports, notifications, blocks, sessions] =
+          const [account, logins, profile, store, listings, priceHistory, favorites, recentlyViewed, conversations, messages, reviewsGiven, reviewsReceived, reports, notifications, blocks, sessions] =
             await Promise.all([
               q(`select id, name, email, "emailVerified" as email_verified, "createdAt" as created_at from "user" where id=$1`),
               q(`select "providerId" as provider, "createdAt" as created_at from "account" where "userId"=$1`),
@@ -35,6 +35,7 @@ export const Route = createFileRoute("/api/hesap/verilerim")({
               q(`select h.listing_id, h.price, h.recorded_at from price_history h join listings l on l.id=h.listing_id
                  where l.user_id=$1 order by h.recorded_at`),
               q(`select f.listing_id, l.title, f.created_at from favorites f left join listings l on l.id=f.listing_id where f.user_id=$1`),
+              q(`select v.listing_id, l.title, v.viewed_at from listing_views v left join listings l on l.id=v.listing_id where v.user_id=$1 order by v.viewed_at desc`),
               q(`select c.id, c.listing_id, l.title as listing_title, case when c.buyer_id=$1 then 'alıcı' else 'satıcı' end as role, c.updated_at
                  from conversations c left join listings l on l.id=c.listing_id where c.buyer_id=$1 or c.seller_id=$1`),
               q(`select m.conversation_id, case when m.sender_id=$1 then 'ben' else 'karşı taraf' end as sender, m.content, m.created_at, m.read_at
@@ -59,6 +60,7 @@ export const Route = createFileRoute("/api/hesap/verilerim")({
               listings,
               price_history: priceHistory,
               favorites,
+              recently_viewed: recentlyViewed,
               conversations,
               messages,
               reviews_given: reviewsGiven,

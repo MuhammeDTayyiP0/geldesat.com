@@ -280,6 +280,14 @@ function SearchPage() {
     });
   }
 
+  if (search.urgent) {
+    activeChips.push({ id: "urgent", label: "Acil satılık", onRemove: () => apply({ urgent: undefined }) });
+  }
+
+  if (search.featured) {
+    activeChips.push({ id: "featured", label: "Vitrin ilanları", onRemove: () => apply({ featured: undefined }) });
+  }
+
   if (search.sort && search.sort !== "date_desc") {
     const opt = SORT_OPTIONS.find((s) => s.value === search.sort);
     if (opt) {
@@ -311,10 +319,12 @@ function SearchPage() {
   // Dinamik sayfa başlığı
   const dynamicTitle = useMemo(() => {
     if (search.q) return `“${search.q}” İlanları`;
+    if (search.urgent && !currentCategory) return "Acil Satılık İlanlar";
+    if (search.featured && !currentCategory) return "Vitrin İlanları";
     if (currentCategory?.name) return `${currentCategory.name} İlanları`;
     if (search.city) return `${search.city}${search.district ? `, ${search.district}` : ""} İlanları`;
     return "Tüm İlanlar";
-  }, [search.q, currentCategory, search.city, search.district]);
+  }, [search.q, search.urgent, search.featured, currentCategory, search.city, search.district]);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-4 sm:py-8">
@@ -558,7 +568,7 @@ function SearchPage() {
             <div
               className={
                 view === "grid"
-                  ? "grid grid-cols-2 gap-2.5 sm:gap-4 sm:grid-cols-2 xl:grid-cols-3"
+                  ? "grid grid-cols-2 gap-2.5 sm:gap-4 xl:grid-cols-3"
                   : "grid gap-3"
               }
             >

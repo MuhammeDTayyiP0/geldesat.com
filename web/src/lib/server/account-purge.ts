@@ -25,6 +25,7 @@ export async function purgeUserData(
     await tx.query("delete from boosts where user_id=$1", [userId]);
     await tx.query("delete from phone_reveals where viewer_id=$1", [userId]);
     await tx.query("delete from favorites where user_id=$1", [userId]);
+    await tx.query("delete from listing_views where user_id=$1", [userId]);
     // Reviews about this user go; reviews they wrote stay and show "Silinmiş kullanıcı".
     await tx.query("delete from reviews where seller_id=$1", [userId]);
     await tx.query("delete from reports where reporter_id=$1", [userId]);
