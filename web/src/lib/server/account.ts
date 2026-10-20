@@ -370,7 +370,14 @@ export const getSeller = createServerFn({ method: "POST" })
       rating_avg: num(p[0].rating_avg),
       rating_count: num(p[0].rating_count),
       store: store[0]
-        ? { name: String(store[0].name), slug: String(store[0].slug), plan: String(store[0].plan) }
+        ? {
+            name: String(store[0].name),
+            slug: String(store[0].slug),
+            plan: String(store[0].plan),
+            description: store[0].description ? String(store[0].description) : null,
+            city: store[0].city ? String(store[0].city) : null,
+            logo: store[0].logo_url ? String(store[0].logo_url) : null,
+          }
         : null,
       reviews: reviews.map((r) => ({
         id: String(r.id),

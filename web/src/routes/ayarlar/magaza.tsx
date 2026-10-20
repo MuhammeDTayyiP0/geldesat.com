@@ -25,7 +25,7 @@ type Form = { name: string; description: string; city: string; phone: string };
 function StoreSettings() {
   const { user, isPending } = useCurrentUserState();
   const [loaded, setLoaded] = useState(false);
-  const [store, setStore] = useState<{ slug: string } | null>(null);
+  const [store, setStore] = useState<{ slug: string; userId: string } | null>(null);
   const [saved, setSaved] = useState<Form | null>(null);
   const [form, setForm] = useState<Form>({ name: "", description: "", city: "", phone: "" });
   const [busy, setBusy] = useState(false);
@@ -41,7 +41,7 @@ function StoreSettings() {
           city: s?.city ?? m.profile?.city ?? "",
           phone: maskPhone10(s?.phone ?? m.profile?.phone ?? ""),
         };
-        setStore(s ? { slug: s.slug } : null);
+        setStore(s ? { slug: s.slug, userId: m.userId } : null);
         setSaved(s ? initial : null);
         setForm(initial);
         setLoaded(true);
@@ -68,7 +68,7 @@ function StoreSettings() {
         },
       });
       toast.success("Mağaza güncellendi");
-      setStore({ slug: res.slug });
+      setStore((prev) => ({ slug: res.slug, userId: prev?.userId ?? user?.id ?? "" }));
       setSaved(form);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Kaydedilemedi");
@@ -80,10 +80,10 @@ function StoreSettings() {
   return (
     <AccountShell
       title="Mağazam"
-      description={store ? "Mağaza sayfanızda görünen bilgiler." : undefined}
+      description={store ? "Profilinizin üstünde mağaza olarak görünen bilgiler." : undefined}
       actions={
         store ? (
-          <Link to="/magaza/$slug" params={{ slug: store.slug }}>
+          <Link to="/satici/$id" params={{ id: store.userId }}>
             <Button size="sm" variant="outline">
               <ExternalLink className="size-3.5" />{" "}
               <span className="hidden sm:inline">Mağazayı gör</span>

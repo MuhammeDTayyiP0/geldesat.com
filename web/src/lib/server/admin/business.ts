@@ -116,7 +116,7 @@ export const adminSaveStore = createServerFn({ method: "POST" })
     if (data.attachListings) {
       await sql.query("update listings set store_id = $2 where user_id = $1 and store_id is null", [ownerRow.user_id, id]);
     }
-    await notify(ownerRow.user_id, "system", "Mağazanız açıldı", `"${data.name}" mağazanız GeldeSat'ta yayında.`, `/magaza/${slug}`);
+    await notify(ownerRow.user_id, "system", "Mağazanız açıldı", `"${data.name}" mağazanız GeldeSat'ta yayında.`, `/satici/${ownerRow.user_id}`);
     await audit(sql, context.adminId, "store.create", "store", id, `${ownerRow.display_name} için "${data.name}" mağazası açıldı (${data.plan})`);
     return { ok: true as const, id, slug };
   });

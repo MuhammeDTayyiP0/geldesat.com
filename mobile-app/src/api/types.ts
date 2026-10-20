@@ -150,10 +150,11 @@ export type Seller = {
   bio: string;
   city: string;
   since: string;
+  avatar_url?: string | null;
   listing_count: number;
   rating_avg: number;
   rating_count: number;
-  store: { name: string; slug: string; plan: string } | null;
+  store: { name: string; slug: string; plan: string; description?: string | null; city?: string | null; logo?: string | null } | null;
   reviews: Review[];
 };
 

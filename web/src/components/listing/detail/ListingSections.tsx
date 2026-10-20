@@ -361,7 +361,12 @@ export function SellerCard({
           </span>
         )}
         <span className="min-w-0 flex-1">
-          <span className="block truncate font-semibold group-hover:text-primary">{seller.name}</span>
+          <span className="block truncate font-semibold group-hover:text-primary">{store?.name ?? seller.name}</span>
+          {store ? (
+            <span className="flex items-center gap-1 text-xs text-primary">
+              <Store className="size-3.5" aria-hidden="true" /> Kurumsal mağaza · {seller.name}
+            </span>
+          ) : null}
           <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted">
             {seller.rating_count > 0 ? (
               <span className="inline-flex items-center gap-0.5 font-medium text-fg">
@@ -379,18 +384,6 @@ export function SellerCard({
         <ChevronRight className="size-4 text-subtle transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
       </Link>
       <p className="mt-3 text-xs text-muted">Üyelik: {formatDate(seller.since)}</p>
-      {store ? (
-        <Link
-          to="/magaza/$slug"
-          params={{ slug: store.slug }}
-          className="mt-3 flex items-center justify-between rounded-lg bg-elevated/70 px-3 py-2 text-sm font-medium hover:bg-elevated"
-        >
-          <span className="flex items-center gap-2">
-            <Store className="size-4 text-primary" aria-hidden="true" /> {store.name}
-          </span>
-          <ChevronRight className="size-4 text-subtle" aria-hidden="true" />
-        </Link>
-      ) : null}
       {onReview ? (
         <button type="button" onClick={onReview} className="mt-3 text-sm font-medium text-primary hover:underline">
           Satıcıyı değerlendir

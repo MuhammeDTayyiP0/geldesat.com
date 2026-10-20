@@ -1,7 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useState, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight, HelpCircle, LogOut, Settings, Shield } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { signOut } from "@/lib/auth/client";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { cn } from "@/lib/utils";
@@ -208,13 +207,3 @@ export function MenuRows({ items, counts }: { items: AccountNavItem[]; counts?: 
   );
 }
 
-/** Gear button on the account hub that opens the settings page. */
-export function SettingsButton({ className }: { className?: string }) {
-  return (
-    <Link to="/ayarlar" className={className}>
-      <Button type="button" variant="outline" size="sm">
-        <Settings className="size-4" /> Ayarlar
-      </Button>
-    </Link>
-  );
-}

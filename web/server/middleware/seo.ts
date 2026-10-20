@@ -216,36 +216,13 @@ async function buildListingsSitemap(page: number): Promise<string> {
   }
 }
 
-/** /sitemap-stores.xml — Aktif mağazalar */
+/**
+ * /sitemap-stores.xml — kept for the sitemap index, but empty: a store is shown
+ * on its owner's profile (/satici/…), which sitemap-sellers.xml already lists,
+ * and /magaza/… only redirects there.
+ */
 async function buildStoresSitemap(): Promise<string> {
-  const today = new Date().toISOString().slice(0, 10);
-  try {
-    const { getSql } = await import("../../src/lib/db");
-    const sql = await getSql();
-    const stores = await sql.query<{ slug: string; lastmod: string }>(
-      `SELECT s.slug,
-              COALESCE(TO_CHAR(MAX(l.updated_at), 'YYYY-MM-DD'), TO_CHAR(s.created_at, 'YYYY-MM-DD'), $1) as lastmod
-       FROM stores s
-       LEFT JOIN listings l ON l.store_id = s.id AND l.status = 'ACTIVE' AND (l.expires_at IS NULL OR l.expires_at > now())
-       GROUP BY s.slug, s.created_at
-       ORDER BY s.created_at DESC
-       LIMIT 10000`,
-      [today],
-    );
-    return wrapUrlset(
-      stores.map((s) =>
-        urlEntry(
-          `${BASE_URL}/magaza/${s.slug}`,
-          s.lastmod || today,
-          "weekly",
-          "0.6",
-        ),
-      ),
-    );
-  } catch (err) {
-    console.error("[SEO] buildStoresSitemap error:", err);
-    return wrapUrlset([]);
-  }
+  return wrapUrlset([]);
 }
 
 /** /sitemap-sellers.xml — Yalnızca aktif ilanı olan satıcılar */

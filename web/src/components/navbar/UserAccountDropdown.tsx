@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { Bell, ChevronDown, Heart, History, LayoutGrid, LogOut, MessageCircle, Settings, Shield, User } from "lucide-react";
+import { Bell, ChevronDown, Eye, Heart, History, LayoutGrid, LogOut, MessageCircle, Settings, Shield, User } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { signOut } from "@/lib/auth/client";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
@@ -76,8 +76,20 @@ export function UserAccountDropdown({ admin }: { admin: boolean }) {
               className="flex items-center gap-2.5 px-3 py-2 text-sm text-fg hover:bg-elevated rounded-lg transition-colors"
             >
               <User className="size-4 text-muted shrink-0" />
-              <span>Profilim</span>
+              <span>Hesabım</span>
             </Link>
+
+            {user ? (
+              <Link
+                to="/satici/$id"
+                params={{ id: user.id }}
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2.5 px-3 py-2 text-sm text-fg hover:bg-elevated rounded-lg transition-colors"
+              >
+                <Eye className="size-4 text-muted shrink-0" />
+                <span>Profilimi gör</span>
+              </Link>
+            ) : null}
 
             <Link
               to="/ilanlarim"
@@ -125,7 +137,7 @@ export function UserAccountDropdown({ admin }: { admin: boolean }) {
             </Link>
 
             <Link
-              to="/ayarlar/profil"
+              to="/ayarlar"
               onClick={() => setOpen(false)}
               className="flex items-center gap-2.5 px-3 py-2 text-sm text-fg hover:bg-elevated rounded-lg transition-colors"
             >

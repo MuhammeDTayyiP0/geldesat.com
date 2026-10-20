@@ -416,7 +416,6 @@ function InfoRow({ label, value, icon: Icon, onPress }: { label: string; value: 
 
 function SellerCard({ listing, rating, onPress }: { listing: Listing; rating: { rating_avg: number; rating_count: number }; onPress: () => void }) {
   const { c } = useTheme();
-  const router = useRouter();
   const name = listing.store_name ?? listing.seller_name ?? 'Satıcı';
   return (
     <Card onPress={onPress}>
@@ -444,16 +443,13 @@ function SellerCard({ listing, rating, onPress }: { listing: Listing; rating: { 
         </View>
         <ChevronRight size={18} color={c.subtle} />
       </View>
-      {listing.store_slug ? (
-        <Pressable
-          onPress={() => router.push({ pathname: '/magaza/[slug]', params: { slug: listing.store_slug ?? '' } })}
-          style={[styles.storeLink, { borderTopColor: c.border }]}
-        >
+      {listing.store_name ? (
+        <View style={[styles.storeLink, { borderTopColor: c.border }]}>
           <Store size={16} color={c.primary} />
-          <Text variant="label" tone="primary">
-            Mağazayı ziyaret et
+          <Text variant="caption" tone="muted" style={styles.flex} numberOfLines={1}>
+            Kurumsal mağaza · {listing.seller_name ?? 'Satıcı'}
           </Text>
-        </Pressable>
+        </View>
       ) : null}
     </Card>
   );

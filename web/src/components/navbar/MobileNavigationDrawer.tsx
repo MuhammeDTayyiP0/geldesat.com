@@ -115,11 +115,11 @@ export function MobileNavigationDrawer({
                   <p className="text-sm font-bold text-fg truncate">
                     {user.displayName || "Hesabım"}
                   </p>
-                  <p className="text-xs text-muted truncate">Profili görüntüle</p>
+                  <p className="text-xs text-muted truncate">Hesabım</p>
                 </div>
               </Link>
               <Link
-                to="/ayarlar/profil"
+                to="/ayarlar"
                 onClick={onClose}
                 className="p-2 text-muted hover:text-primary rounded-lg hover:bg-elevated transition-colors"
                 aria-label="Ayarlar"
