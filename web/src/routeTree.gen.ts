@@ -28,6 +28,7 @@ import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as AdminAyarlarRouteImport } from './routes/admin/ayarlar'
 import { Route as AdminDuyurularRouteImport } from './routes/admin/duyurular'
 import { Route as AdminFinansRouteImport } from './routes/admin/finans'
+import { Route as AdminGuncellemelerRouteImport } from './routes/admin/guncellemeler'
 import { Route as AdminIlanlarRouteImport } from './routes/admin/ilanlar'
 import { Route as AdminKategorilerRouteImport } from './routes/admin/kategoriler'
 import { Route as AdminKayitlarRouteImport } from './routes/admin/kayitlar'
@@ -78,6 +79,7 @@ import { Route as ApiMobileNotificationsRouteImport } from './routes/api/mobile/
 import { Route as ApiMobileProfileRouteImport } from './routes/api/mobile/profile'
 import { Route as ApiMobileReportsRouteImport } from './routes/api/mobile/reports'
 import { Route as ApiMobileReviewsRouteImport } from './routes/api/mobile/reviews'
+import { Route as ApiOtaManifestRouteImport } from './routes/api/ota/manifest'
 import { Route as ApiChatImageIdRouteImport } from './routes/api/chat/image/$id'
 import { Route as ApiMobileConversationsIdRouteImport } from './routes/api/mobile/conversations/$id'
 import { Route as ApiMobileImagesIdRouteImport } from './routes/api/mobile/images/$id'
@@ -89,6 +91,9 @@ import { Route as ApiMobileOauthStartRouteImport } from './routes/api/mobile/oau
 import { Route as ApiMobileRpcFnRouteImport } from './routes/api/mobile/rpc/$fn'
 import { Route as ApiMobileSellersIdRouteImport } from './routes/api/mobile/sellers/$id'
 import { Route as ApiMobileStoresSlugRouteImport } from './routes/api/mobile/stores/$slug'
+import { Route as ApiOtaAssetsHashRouteImport } from './routes/api/ota/assets/$hash'
+import { Route as ApiOtaPublishAssetsRouteImport } from './routes/api/ota/publish/assets'
+import { Route as ApiOtaPublishUpdateRouteImport } from './routes/api/ota/publish/update'
 import { Route as ApiTilesZXYRouteImport } from './routes/api/tiles/$z/$x/$y'
 
 const IndexRoute = IndexRouteImport.update({
@@ -184,6 +189,11 @@ const AdminDuyurularRoute = AdminDuyurularRouteImport.update({
 const AdminFinansRoute = AdminFinansRouteImport.update({
   id: '/finans',
   path: '/finans',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminGuncellemelerRoute = AdminGuncellemelerRouteImport.update({
+  id: '/guncellemeler',
+  path: '/guncellemeler',
   getParentRoute: () => AdminRoute,
 } as any)
 const AdminIlanlarRoute = AdminIlanlarRouteImport.update({
@@ -437,6 +447,11 @@ const ApiMobileReviewsRoute = ApiMobileReviewsRouteImport.update({
   path: '/api/mobile/reviews',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiOtaManifestRoute = ApiOtaManifestRouteImport.update({
+  id: '/api/ota/manifest',
+  path: '/api/ota/manifest',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiChatImageIdRoute = ApiChatImageIdRouteImport.update({
   id: '/$id',
   path: '/$id',
@@ -493,6 +508,21 @@ const ApiMobileStoresSlugRoute = ApiMobileStoresSlugRouteImport.update({
   path: '/api/mobile/stores/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiOtaAssetsHashRoute = ApiOtaAssetsHashRouteImport.update({
+  id: '/api/ota/assets/$hash',
+  path: '/api/ota/assets/$hash',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiOtaPublishAssetsRoute = ApiOtaPublishAssetsRouteImport.update({
+  id: '/api/ota/publish/assets',
+  path: '/api/ota/publish/assets',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiOtaPublishUpdateRoute = ApiOtaPublishUpdateRouteImport.update({
+  id: '/api/ota/publish/update',
+  path: '/api/ota/publish/update',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiTilesZXYRoute = ApiTilesZXYRouteImport.update({
   id: '/api/tiles/$z/$x/$y',
   path: '/api/tiles/$z/$x/$y',
@@ -518,6 +548,7 @@ export interface FileRoutesByFullPath {
   '/admin/ayarlar': typeof AdminAyarlarRoute
   '/admin/duyurular': typeof AdminDuyurularRoute
   '/admin/finans': typeof AdminFinansRoute
+  '/admin/guncellemeler': typeof AdminGuncellemelerRoute
   '/admin/ilanlar': typeof AdminIlanlarRoute
   '/admin/kategoriler': typeof AdminKategorilerRoute
   '/admin/kayitlar': typeof AdminKayitlarRoute
@@ -569,6 +600,7 @@ export interface FileRoutesByFullPath {
   '/api/mobile/profile': typeof ApiMobileProfileRoute
   '/api/mobile/reports': typeof ApiMobileReportsRoute
   '/api/mobile/reviews': typeof ApiMobileReviewsRoute
+  '/api/ota/manifest': typeof ApiOtaManifestRoute
   '/api/chat/image/$id': typeof ApiChatImageIdRoute
   '/api/mobile/conversations/$id': typeof ApiMobileConversationsIdRoute
   '/api/mobile/images/$id': typeof ApiMobileImagesIdRoute
@@ -580,6 +612,9 @@ export interface FileRoutesByFullPath {
   '/api/mobile/rpc/$fn': typeof ApiMobileRpcFnRoute
   '/api/mobile/sellers/$id': typeof ApiMobileSellersIdRoute
   '/api/mobile/stores/$slug': typeof ApiMobileStoresSlugRoute
+  '/api/ota/assets/$hash': typeof ApiOtaAssetsHashRoute
+  '/api/ota/publish/assets': typeof ApiOtaPublishAssetsRoute
+  '/api/ota/publish/update': typeof ApiOtaPublishUpdateRoute
   '/api/tiles/$z/$x/$y': typeof ApiTilesZXYRoute
 }
 export interface FileRoutesByTo {
@@ -599,6 +634,7 @@ export interface FileRoutesByTo {
   '/admin/ayarlar': typeof AdminAyarlarRoute
   '/admin/duyurular': typeof AdminDuyurularRoute
   '/admin/finans': typeof AdminFinansRoute
+  '/admin/guncellemeler': typeof AdminGuncellemelerRoute
   '/admin/ilanlar': typeof AdminIlanlarRoute
   '/admin/kategoriler': typeof AdminKategorilerRoute
   '/admin/kayitlar': typeof AdminKayitlarRoute
@@ -650,6 +686,7 @@ export interface FileRoutesByTo {
   '/api/mobile/profile': typeof ApiMobileProfileRoute
   '/api/mobile/reports': typeof ApiMobileReportsRoute
   '/api/mobile/reviews': typeof ApiMobileReviewsRoute
+  '/api/ota/manifest': typeof ApiOtaManifestRoute
   '/api/chat/image/$id': typeof ApiChatImageIdRoute
   '/api/mobile/conversations/$id': typeof ApiMobileConversationsIdRoute
   '/api/mobile/images/$id': typeof ApiMobileImagesIdRoute
@@ -661,6 +698,9 @@ export interface FileRoutesByTo {
   '/api/mobile/rpc/$fn': typeof ApiMobileRpcFnRoute
   '/api/mobile/sellers/$id': typeof ApiMobileSellersIdRoute
   '/api/mobile/stores/$slug': typeof ApiMobileStoresSlugRoute
+  '/api/ota/assets/$hash': typeof ApiOtaAssetsHashRoute
+  '/api/ota/publish/assets': typeof ApiOtaPublishAssetsRoute
+  '/api/ota/publish/update': typeof ApiOtaPublishUpdateRoute
   '/api/tiles/$z/$x/$y': typeof ApiTilesZXYRoute
 }
 export interface FileRoutesById {
@@ -683,6 +723,7 @@ export interface FileRoutesById {
   '/admin/ayarlar': typeof AdminAyarlarRoute
   '/admin/duyurular': typeof AdminDuyurularRoute
   '/admin/finans': typeof AdminFinansRoute
+  '/admin/guncellemeler': typeof AdminGuncellemelerRoute
   '/admin/ilanlar': typeof AdminIlanlarRoute
   '/admin/kategoriler': typeof AdminKategorilerRoute
   '/admin/kayitlar': typeof AdminKayitlarRoute
@@ -734,6 +775,7 @@ export interface FileRoutesById {
   '/api/mobile/profile': typeof ApiMobileProfileRoute
   '/api/mobile/reports': typeof ApiMobileReportsRoute
   '/api/mobile/reviews': typeof ApiMobileReviewsRoute
+  '/api/ota/manifest': typeof ApiOtaManifestRoute
   '/api/chat/image/$id': typeof ApiChatImageIdRoute
   '/api/mobile/conversations/$id': typeof ApiMobileConversationsIdRoute
   '/api/mobile/images/$id': typeof ApiMobileImagesIdRoute
@@ -745,6 +787,9 @@ export interface FileRoutesById {
   '/api/mobile/rpc/$fn': typeof ApiMobileRpcFnRoute
   '/api/mobile/sellers/$id': typeof ApiMobileSellersIdRoute
   '/api/mobile/stores/$slug': typeof ApiMobileStoresSlugRoute
+  '/api/ota/assets/$hash': typeof ApiOtaAssetsHashRoute
+  '/api/ota/publish/assets': typeof ApiOtaPublishAssetsRoute
+  '/api/ota/publish/update': typeof ApiOtaPublishUpdateRoute
   '/api/tiles/$z/$x/$y': typeof ApiTilesZXYRoute
 }
 export interface FileRouteTypes {
@@ -768,6 +813,7 @@ export interface FileRouteTypes {
     | '/admin/ayarlar'
     | '/admin/duyurular'
     | '/admin/finans'
+    | '/admin/guncellemeler'
     | '/admin/ilanlar'
     | '/admin/kategoriler'
     | '/admin/kayitlar'
@@ -819,6 +865,7 @@ export interface FileRouteTypes {
     | '/api/mobile/profile'
     | '/api/mobile/reports'
     | '/api/mobile/reviews'
+    | '/api/ota/manifest'
     | '/api/chat/image/$id'
     | '/api/mobile/conversations/$id'
     | '/api/mobile/images/$id'
@@ -830,6 +877,9 @@ export interface FileRouteTypes {
     | '/api/mobile/rpc/$fn'
     | '/api/mobile/sellers/$id'
     | '/api/mobile/stores/$slug'
+    | '/api/ota/assets/$hash'
+    | '/api/ota/publish/assets'
+    | '/api/ota/publish/update'
     | '/api/tiles/$z/$x/$y'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -849,6 +899,7 @@ export interface FileRouteTypes {
     | '/admin/ayarlar'
     | '/admin/duyurular'
     | '/admin/finans'
+    | '/admin/guncellemeler'
     | '/admin/ilanlar'
     | '/admin/kategoriler'
     | '/admin/kayitlar'
@@ -900,6 +951,7 @@ export interface FileRouteTypes {
     | '/api/mobile/profile'
     | '/api/mobile/reports'
     | '/api/mobile/reviews'
+    | '/api/ota/manifest'
     | '/api/chat/image/$id'
     | '/api/mobile/conversations/$id'
     | '/api/mobile/images/$id'
@@ -911,6 +963,9 @@ export interface FileRouteTypes {
     | '/api/mobile/rpc/$fn'
     | '/api/mobile/sellers/$id'
     | '/api/mobile/stores/$slug'
+    | '/api/ota/assets/$hash'
+    | '/api/ota/publish/assets'
+    | '/api/ota/publish/update'
     | '/api/tiles/$z/$x/$y'
   id:
     | '__root__'
@@ -932,6 +987,7 @@ export interface FileRouteTypes {
     | '/admin/ayarlar'
     | '/admin/duyurular'
     | '/admin/finans'
+    | '/admin/guncellemeler'
     | '/admin/ilanlar'
     | '/admin/kategoriler'
     | '/admin/kayitlar'
@@ -983,6 +1039,7 @@ export interface FileRouteTypes {
     | '/api/mobile/profile'
     | '/api/mobile/reports'
     | '/api/mobile/reviews'
+    | '/api/ota/manifest'
     | '/api/chat/image/$id'
     | '/api/mobile/conversations/$id'
     | '/api/mobile/images/$id'
@@ -994,6 +1051,9 @@ export interface FileRouteTypes {
     | '/api/mobile/rpc/$fn'
     | '/api/mobile/sellers/$id'
     | '/api/mobile/stores/$slug'
+    | '/api/ota/assets/$hash'
+    | '/api/ota/publish/assets'
+    | '/api/ota/publish/update'
     | '/api/tiles/$z/$x/$y'
   fileRoutesById: FileRoutesById
 }
@@ -1049,12 +1109,16 @@ export interface RootRouteChildren {
   ApiMobileProfileRoute: typeof ApiMobileProfileRoute
   ApiMobileReportsRoute: typeof ApiMobileReportsRoute
   ApiMobileReviewsRoute: typeof ApiMobileReviewsRoute
+  ApiOtaManifestRoute: typeof ApiOtaManifestRoute
   ApiMobileOauthDoneRoute: typeof ApiMobileOauthDoneRoute
   ApiMobileOauthExchangeRoute: typeof ApiMobileOauthExchangeRoute
   ApiMobileOauthStartRoute: typeof ApiMobileOauthStartRoute
   ApiMobileRpcFnRoute: typeof ApiMobileRpcFnRoute
   ApiMobileSellersIdRoute: typeof ApiMobileSellersIdRoute
   ApiMobileStoresSlugRoute: typeof ApiMobileStoresSlugRoute
+  ApiOtaAssetsHashRoute: typeof ApiOtaAssetsHashRoute
+  ApiOtaPublishAssetsRoute: typeof ApiOtaPublishAssetsRoute
+  ApiOtaPublishUpdateRoute: typeof ApiOtaPublishUpdateRoute
   ApiTilesZXYRoute: typeof ApiTilesZXYRoute
 }
 
@@ -1191,6 +1255,13 @@ declare module '@tanstack/react-router' {
       path: '/finans'
       fullPath: '/admin/finans'
       preLoaderRoute: typeof AdminFinansRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/guncellemeler': {
+      id: '/admin/guncellemeler'
+      path: '/guncellemeler'
+      fullPath: '/admin/guncellemeler'
+      preLoaderRoute: typeof AdminGuncellemelerRouteImport
       parentRoute: typeof AdminRoute
     }
     '/admin/ilanlar': {
@@ -1543,6 +1614,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiMobileReviewsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/ota/manifest': {
+      id: '/api/ota/manifest'
+      path: '/api/ota/manifest'
+      fullPath: '/api/ota/manifest'
+      preLoaderRoute: typeof ApiOtaManifestRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/chat/image/$id': {
       id: '/api/chat/image/$id'
       path: '/$id'
@@ -1620,6 +1698,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiMobileStoresSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/ota/assets/$hash': {
+      id: '/api/ota/assets/$hash'
+      path: '/api/ota/assets/$hash'
+      fullPath: '/api/ota/assets/$hash'
+      preLoaderRoute: typeof ApiOtaAssetsHashRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/ota/publish/assets': {
+      id: '/api/ota/publish/assets'
+      path: '/api/ota/publish/assets'
+      fullPath: '/api/ota/publish/assets'
+      preLoaderRoute: typeof ApiOtaPublishAssetsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/ota/publish/update': {
+      id: '/api/ota/publish/update'
+      path: '/api/ota/publish/update'
+      fullPath: '/api/ota/publish/update'
+      preLoaderRoute: typeof ApiOtaPublishUpdateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/tiles/$z/$x/$y': {
       id: '/api/tiles/$z/$x/$y'
       path: '/api/tiles/$z/$x/$y'
@@ -1634,6 +1733,7 @@ interface AdminRouteChildren {
   AdminAyarlarRoute: typeof AdminAyarlarRoute
   AdminDuyurularRoute: typeof AdminDuyurularRoute
   AdminFinansRoute: typeof AdminFinansRoute
+  AdminGuncellemelerRoute: typeof AdminGuncellemelerRoute
   AdminIlanlarRoute: typeof AdminIlanlarRoute
   AdminKategorilerRoute: typeof AdminKategorilerRoute
   AdminKayitlarRoute: typeof AdminKayitlarRoute
@@ -1652,6 +1752,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminAyarlarRoute: AdminAyarlarRoute,
   AdminDuyurularRoute: AdminDuyurularRoute,
   AdminFinansRoute: AdminFinansRoute,
+  AdminGuncellemelerRoute: AdminGuncellemelerRoute,
   AdminIlanlarRoute: AdminIlanlarRoute,
   AdminKategorilerRoute: AdminKategorilerRoute,
   AdminKayitlarRoute: AdminKayitlarRoute,
@@ -1806,12 +1907,16 @@ const rootRouteChildren: RootRouteChildren = {
   ApiMobileProfileRoute: ApiMobileProfileRoute,
   ApiMobileReportsRoute: ApiMobileReportsRoute,
   ApiMobileReviewsRoute: ApiMobileReviewsRoute,
+  ApiOtaManifestRoute: ApiOtaManifestRoute,
   ApiMobileOauthDoneRoute: ApiMobileOauthDoneRoute,
   ApiMobileOauthExchangeRoute: ApiMobileOauthExchangeRoute,
   ApiMobileOauthStartRoute: ApiMobileOauthStartRoute,
   ApiMobileRpcFnRoute: ApiMobileRpcFnRoute,
   ApiMobileSellersIdRoute: ApiMobileSellersIdRoute,
   ApiMobileStoresSlugRoute: ApiMobileStoresSlugRoute,
+  ApiOtaAssetsHashRoute: ApiOtaAssetsHashRoute,
+  ApiOtaPublishAssetsRoute: ApiOtaPublishAssetsRoute,
+  ApiOtaPublishUpdateRoute: ApiOtaPublishUpdateRoute,
   ApiTilesZXYRoute: ApiTilesZXYRoute,
 }
 export const routeTree = rootRouteImport

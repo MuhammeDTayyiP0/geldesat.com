@@ -1,13 +1,15 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp, Building2, Landmark, LayoutTemplate, ListChecks, Plus, Save, Settings2, Smartphone, ToggleLeft } from "lucide-react";
+import { ArrowDown, ArrowUp, Building2, ChevronRight, Landmark, LayoutTemplate, ListChecks, Plus, Save, Settings2, Smartphone, ToggleLeft, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ToggleSwitch } from "@/components/ui/toggle-switch";
 import { cn } from "@/lib/utils";
+import { FLAG_PLATFORMS, type FlagPlatform, type FlagRule, type FlagRules } from "@/lib/flags";
 import { adminGetSettings, adminSaveAppConfig, adminSaveSiteSettings, type MobileAppConfig, type ModerationMode } from "@/lib/server/admin/content";
 import { useRunner } from "@/components/admin/hooks";
-import { Card, CardHead, ErrorState, Field, inputClass, PageHeader, Spinner } from "@/components/admin/ui";
+import type { Tone } from "@/components/admin/format";
+import { Card, CardHead, ErrorState, Field, inputClass, PageHeader, Pill, Spinner, useConfirm } from "@/components/admin/ui";
 
 export const Route = createFileRoute("/admin/ayarlar")({
   component: SettingsPage,
@@ -30,10 +32,8 @@ function SettingsPage() {
       <div className="space-y-4">
         <ModerationCard key={d.moderation.mode} mode={d.moderation.mode} />
         <SiteCard key={JSON.stringify(d.site)} site={d.site} />
-        <div className="grid gap-4 lg:grid-cols-2">
-          <FeaturesCard key={JSON.stringify(d.features)} features={d.features} />
-          <HomeSectionsCard key={d.homeSections.join(",")} sections={d.homeSections} />
-        </div>
+        <FeaturesCard key={JSON.stringify(d.features)} features={d.features} />
+        <HomeSectionsCard key={d.homeSections.join(",")} sections={d.homeSections} />
         <MobileCard key={JSON.stringify(d.mobileApp)} config={d.mobileApp} />
       </div>
     </div>
@@ -138,39 +138,173 @@ function SiteCard({ site }: { site: Awaited<ReturnType<typeof adminGetSettings>>
   );
 }
 
-const FEATURE_LABELS: Record<string, { label: string; hint: string }> = {
-  doping_enabled: { label: "Doping / vitrin satışı", hint: "Mobil uygulamada doping ekranlarını gösterir." },
-  ab_testing: { label: "A/B testleri", hint: "Mobil ilan kartı yerleşim deneyi." },
-  mobile_bottom_nav: { label: "Mobil alt menü", hint: "Mobil uygulamada alt gezinme çubuğu." },
+/** Descriptions for flags saved before flags carried their own. */
+const KNOWN_FLAGS: Record<string, string> = {
+  doping_enabled: "Doping / vitrin satışı ekranları.",
+  mobile_bottom_nav: "Mobil uygulamada alt gezinme çubuğu.",
 };
 
-function FeaturesCard({ features }: { features: Record<string, boolean> }) {
+const PLATFORM_LABEL: Record<FlagPlatform, string> = { web: "Web", ios: "iOS", android: "Android" };
+const ROLLOUT_STEPS = [0, 1, 5, 10, 25, 50, 100];
+
+function flagStatus(rule: FlagRule): { label: string; tone: Tone } {
+  if (!rule.enabled) return { label: "Kapalı", tone: "muted" };
+  if (rule.rollout >= 100) return { label: "Herkese açık", tone: "ok" };
+  if (rule.rollout <= 0) return rule.admins ? { label: "Sadece yöneticiler", tone: "violet" } : { label: "Kimseye açık değil", tone: "muted" };
+  return { label: `Üyelerin %${rule.rollout}'i`, tone: "warn" };
+}
+
+function FeaturesCard({ features }: { features: FlagRules }) {
   const [value, setValue] = useState(features);
+  const [open, setOpen] = useState<string | null>(null);
   const [newKey, setNewKey] = useState("");
   const { run, busy } = useRunner();
+  const { confirm } = useConfirm();
   const dirty = JSON.stringify(value) !== JSON.stringify(features);
+  const patch = (key: string, p: Partial<FlagRule>) => setValue((v) => ({ ...v, [key]: { ...v[key], ...p } }));
+  const remove = async (key: string) => {
+    const ok = await confirm({
+      title: `"${key}" silinsin mi?`,
+      body: "Kaydettiğinizde bu anahtar uygulamalara artık gönderilmez; kodda kullanılıyorsa kapalı sayılır.",
+      confirmLabel: "Sil",
+      danger: true,
+    });
+    if (!ok) return;
+    setValue((v) => {
+      const next = { ...v };
+      delete next[key];
+      return next;
+    });
+  };
+
   return (
     <Card>
-      <CardHead title={<span className="inline-flex items-center gap-2"><ToggleLeft className="size-4 text-primary" /> Özellik anahtarları</span>} description="Uygulamalara giden açma/kapama ayarları (feature flags)." />
+      <CardHead
+        title={<span className="inline-flex items-center gap-2"><ToggleLeft className="size-4 text-primary" /> Özellik anahtarları</span>}
+        description="Yeni bir özelliği önce yöneticilere, sonra üyelerin bir yüzdesine, en sonda herkese açın. Ana anahtar kapalıysa özellik herkeste kapanır. Değişiklik yeni açılışlara hemen, açık sayfa ve uygulamalara birkaç dakika içinde yansır."
+      />
       <ul className="divide-y divide-border">
-        {Object.entries(value).map(([key, on]) => (
-          <li key={key} className="flex items-center gap-3 px-4 py-3">
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium">{FEATURE_LABELS[key]?.label ?? key}</p>
-              <p className="text-xs text-muted">{FEATURE_LABELS[key]?.hint ?? <span className="font-mono">{key}</span>}</p>
-            </div>
-            <ToggleSwitch checked={on} onChange={(next) => setValue((v) => ({ ...v, [key]: next }))} label={key} />
-          </li>
-        ))}
+        {Object.entries(value).map(([key, rule]) => {
+          const status = flagStatus(rule);
+          const expanded = open === key;
+          return (
+            <li key={key}>
+              <div className="flex items-center gap-3 px-4 py-3">
+                <button type="button" onClick={() => setOpen(expanded ? null : key)} className="flex min-w-0 flex-1 items-center gap-2 text-left" aria-expanded={expanded}>
+                  <ChevronRight className={cn("size-4 shrink-0 text-subtle transition-transform", expanded && "rotate-90")} />
+                  <span className="min-w-0">
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      <span className="font-mono text-sm font-medium">{key}</span>
+                      <Pill tone={status.tone}>{status.label}</Pill>
+                      {rule.platforms.length ? <Pill>{rule.platforms.map((p) => PLATFORM_LABEL[p]).join(" · ")}</Pill> : null}
+                      {rule.minAppVersion ? <Pill>≥ {rule.minAppVersion}</Pill> : null}
+                    </span>
+                    <span className="mt-0.5 block truncate text-xs text-muted">{rule.description || KNOWN_FLAGS[key] || "Açıklama yok"}</span>
+                  </span>
+                </button>
+                <ToggleSwitch checked={rule.enabled} onChange={(next) => patch(key, { enabled: next })} label={`${key} ana anahtarı`} />
+              </div>
+              {expanded ? (
+                <div className="space-y-4 border-t border-border bg-elevated/40 px-4 py-4 md:pl-10">
+                  <Field label="Açıklama">
+                    <input value={rule.description} onChange={(e) => patch(key, { description: e.target.value })} maxLength={200} className={inputClass} placeholder={KNOWN_FLAGS[key] ?? "Bu anahtar neyi açıyor?"} />
+                  </Field>
+                  <Field label="Kimler görsün?" hint="Aynı üye her zaman aynı sonucu alır; yüzdeyi artırınca önceden görenler görmeye devam eder.">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {ROLLOUT_STEPS.map((step) => (
+                        <button
+                          key={step}
+                          type="button"
+                          onClick={() => patch(key, { rollout: step })}
+                          className={cn(
+                            "h-8 rounded-lg border px-2.5 text-xs font-semibold tabular-nums transition-colors",
+                            rule.rollout === step ? "border-primary bg-primary/8 text-primary" : "border-border text-muted hover:border-primary/40 hover:text-fg",
+                          )}
+                        >
+                          %{step}
+                        </button>
+                      ))}
+                      <span className="ml-1 inline-flex items-center gap-1 text-xs text-muted">
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          value={rule.rollout}
+                          onChange={(e) => patch(key, { rollout: Math.min(100, Math.max(0, Math.round(Number(e.target.value) || 0))) })}
+                          className={cn(inputClass, "h-8 w-20 tabular-nums")}
+                          aria-label="Yüzde"
+                        />
+                        %
+                      </span>
+                    </div>
+                  </Field>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <Field label="Platformlar" hint="Hiçbiri seçili değilse hepsinde çalışır.">
+                      <div className="flex gap-1.5">
+                        {FLAG_PLATFORMS.map((p) => {
+                          const on = rule.platforms.includes(p);
+                          return (
+                            <button
+                              key={p}
+                              type="button"
+                              aria-pressed={on}
+                              onClick={() => patch(key, { platforms: FLAG_PLATFORMS.filter((x) => (x === p ? !on : rule.platforms.includes(x))) })}
+                              className={cn(
+                                "h-9 rounded-lg border px-3 text-sm font-medium transition-colors",
+                                on ? "border-primary bg-primary/8 text-primary" : "border-border text-muted hover:border-primary/40 hover:text-fg",
+                              )}
+                            >
+                              {PLATFORM_LABEL[p]}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </Field>
+                    <Field label="En düşük uygulama sürümü" hint="Bu sürümden eski uygulamalarda kapalı kalır (web'i etkilemez).">
+                      <input
+                        value={rule.minAppVersion ?? ""}
+                        onChange={(e) => patch(key, { minAppVersion: e.target.value.replace(/[^\d.]/g, "") || null })}
+                        className={cn(inputClass, "font-mono")}
+                        placeholder="Tüm sürümler (ör. 1.2.0)"
+                      />
+                    </Field>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 text-sm">
+                      <ToggleSwitch checked={rule.admins} onChange={(next) => patch(key, { admins: next })} label="Yöneticilere her zaman açık" />
+                      <span>
+                        Yöneticilere her zaman açık
+                        <span className="block text-xs text-muted">Yüzde %0 iken bile kendi hesabınızda deneyebilirsiniz.</span>
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <code className="hidden rounded bg-elevated px-2 py-1 text-[11px] text-muted sm:inline">useFlag("{key}")</code>
+                      <Button type="button" size="sm" variant="ghost" className="text-danger" onClick={() => void remove(key)}>
+                        <Trash2 className="size-4" /> Sil
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </li>
+          );
+        })}
       </ul>
       <div className="flex gap-2 border-t border-border p-3">
-        <input value={newKey} onChange={(e) => setNewKey(e.target.value.replace(/[^a-z0-9_]/gi, "_").toLowerCase())} placeholder="yeni_anahtar" className={cn(inputClass, "h-9 font-mono")} />
+        <input
+          value={newKey}
+          onChange={(e) => setNewKey(e.target.value.replace(/[^a-z0-9_]/gi, "_").toLowerCase().slice(0, 60))}
+          placeholder="yeni_ozellik"
+          className={cn(inputClass, "h-9 font-mono")}
+        />
         <Button
           size="sm"
           variant="outline"
           disabled={!newKey || newKey in value}
           onClick={() => {
-            setValue((v) => ({ ...v, [newKey]: false }));
+            // A new feature starts dark: on for admins only, 0% for everyone else.
+            setValue((v) => ({ ...v, [newKey]: { enabled: true, rollout: 0, platforms: [], minAppVersion: null, admins: true, description: "" } }));
+            setOpen(newKey);
             setNewKey("");
           }}
         >

@@ -1,5 +1,9 @@
-import { QueryClient, useQuery } from '@tanstack/react-query';
+import { AppState, Platform } from 'react-native';
+import Constants from 'expo-constants';
+import { QueryClient, focusManager, useQuery } from '@tanstack/react-query';
 import { useSession } from '@/auth/session';
+import { cachedConfig, rememberConfig } from '@/lib/configCache';
+import { deviceId } from '@/lib/storage';
 import { ApiError } from './client';
 import { account, catalog } from './endpoints';
 import type { SearchFilters } from './types';
@@ -67,9 +71,33 @@ export function useCounts() {
   });
 }
 
+/**
+ * Server config and this person's feature flags. Starts from the copy saved on
+ * the device, refetches on sign-in / sign-out (flags follow the account) and
+ * when the app returns to the foreground after a few minutes.
+ */
 export function useConfig() {
-  return useQuery({ queryKey: keys.config, queryFn: () => catalog.config(), staleTime: 5 * 60_000 });
+  const session = useSession();
+  const userId = session.status === 'signedIn' ? session.user.id : session.status;
+  return useQuery({
+    queryKey: [...keys.config, userId],
+    queryFn: async () => {
+      const config = await catalog.config({ deviceId: await deviceId(), platform: Platform.OS, appVersion: Constants.expoConfig?.version });
+      rememberConfig(config);
+      return config;
+    },
+    enabled: session.status !== 'loading',
+    placeholderData: (previous) => previous ?? cachedConfig(),
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: true,
+  });
 }
+
+// React Query's "window focus" is the app coming back to the foreground.
+focusManager.setEventListener((setFocused) => {
+  const sub = AppState.addEventListener('change', (state) => setFocused(state === 'active'));
+  return () => sub.remove();
+});
 
 export function useRoots() {
   return useQuery({ queryKey: keys.roots, queryFn: catalog.roots, staleTime: 10 * 60_000 });

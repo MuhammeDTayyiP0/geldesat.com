@@ -14,6 +14,8 @@ import { clearPrivateQueries, queryClient, useCounts } from '@/api/queries';
 import { resetChatStream, subscribeChatStream } from '@/features/chat/stream';
 import { appRouteForWebPath } from '@/lib/links';
 import { notificationLink, registerForPush } from '@/lib/push';
+import { loadCachedConfig } from '@/lib/configCache';
+import { useOtaUpdates } from '@/lib/ota';
 import { loadThemePref } from '@/lib/themePref';
 import { ToastHost, useTheme } from '@/ui';
 
@@ -22,9 +24,10 @@ void SplashScreen.preventAutoHideAsync();
 export default function RootLayout() {
   const { dark, c } = useTheme();
   const [ready, setReady] = useState(false);
+  useOtaUpdates();
 
   useEffect(() => {
-    void Promise.all([loadThemePref(), restoreSession()]).finally(() => {
+    void Promise.all([loadThemePref(), restoreSession(), loadCachedConfig()]).finally(() => {
       setReady(true);
       SplashScreen.hide();
     });

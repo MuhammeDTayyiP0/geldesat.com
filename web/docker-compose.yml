@@ -37,6 +37,7 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:-}
+      OTA_PUBLISH_TOKEN: ${OTA_PUBLISH_TOKEN:-}
       HOST: "0.0.0.0"
       PORT: "3000"
       NITRO_HOST: "0.0.0.0"

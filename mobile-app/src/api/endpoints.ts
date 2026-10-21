@@ -29,7 +29,8 @@ import type {
 // ─── Catalog ────────────────────────────────────────────────────────────────
 
 export const catalog = {
-  config: (deviceId?: string) => request<MobileConfig>(`/api/mobile/config${toQuery({ deviceId })}`, { auth: false }),
+  /** Sends the session token when signed in: feature flags are decided per person. */
+  config: (params: { deviceId: string; platform: string; appVersion?: string }) => request<MobileConfig>(`/api/mobile/config${toQuery(params)}`),
   stats: () => rpc<{ listings: number; cities: number }>('statsHome'),
   roots: () => rpc<{ roots: Category[]; counts: Record<string, number> }>('listCategoryRoots'),
   browse: (path: string[]) => rpc<BrowseResult>('browseCategories', { path }),

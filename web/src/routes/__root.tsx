@@ -11,6 +11,8 @@ import { Toaster } from "sonner";
 import { appCss, criticalFonts } from "@/lib/critical-assets";
 import { jsonLd } from "@/lib/seo";
 import { getThemePref, useThemePref } from "@/lib/theme";
+import { getWebFlags } from "@/lib/server/config";
+import { useFlagRefresh, type RootLoaderData } from "@/lib/use-flag";
 
 const APP_NAME = "GeldeSat";
 
@@ -25,8 +27,12 @@ const CRITICAL_CSS = `*,::before,::after{box-sizing:border-box}html{overflow-x:h
 const BASE = "https://www.geldesat.com";
 
 export const Route = createRootRoute({
-  // Theme cookie, read once while server rendering; later changes update the client store.
-  loader: () => getThemePref(),
+  // Theme cookie and feature flags, read once while server rendering; later
+  // changes update their client stores (see lib/theme.ts, lib/use-flag.ts).
+  loader: async (): Promise<RootLoaderData> => {
+    const [theme, flags] = await Promise.all([getThemePref(), getWebFlags()]);
+    return { theme, flags };
+  },
   shouldReload: false,
   head: () => ({
     meta: [
@@ -99,7 +105,8 @@ export const Route = createRootRoute({
 
 
 function Shell() {
-  const theme = useThemePref(Route.useLoaderData() ?? "system");
+  const theme = useThemePref(Route.useLoaderData()?.theme ?? "system");
+  useFlagRefresh();
   const isAdmin = useRouterState({
     select: (s) => s.location.pathname === "/admin" || s.location.pathname.startsWith("/admin/"),
   });
@@ -148,7 +155,7 @@ function Shell() {
 }
 
 function Root() {
-  const theme = useThemePref(Route.useLoaderData() ?? "system");
+  const theme = useThemePref(Route.useLoaderData()?.theme ?? "system");
   return (
     <html lang="tr" className="antialiased" data-theme={theme === "system" ? undefined : theme} suppressHydrationWarning>
       <head>

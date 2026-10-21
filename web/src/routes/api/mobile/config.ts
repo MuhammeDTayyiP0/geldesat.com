@@ -1,7 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { getAppConfig, calculateVariant } from "@/lib/server/config";
+import { getAppConfig, resolveFlags } from "@/lib/server/config";
 import { publicErrorMessage } from "@/lib/server/errors";
 import { googleAuthConfigured } from "@/lib/auth/server";
+import { getMobileUserId } from "@/lib/server/mobile-auth";
+import { VERSION_PATTERN, type FlagPlatform } from "@/lib/flags";
+
+/** Builds before 1.1 send no `platform`; their HTTP client gives it away. */
+function platformOf(url: URL, request: Request): FlagPlatform {
+  const p = url.searchParams.get("platform");
+  if (p === "ios" || p === "android") return p;
+  const ua = request.headers.get("user-agent") ?? "";
+  return /darwin|cfnetwork|iphone|ipad/i.test(ua) ? "ios" : "android";
+}
 
 export const Route = createFileRoute("/api/mobile/config")({
   server: {
@@ -9,14 +19,17 @@ export const Route = createFileRoute("/api/mobile/config")({
       GET: async ({ request }) => {
         try {
           const url = new URL(request.url);
-          const userId = url.searchParams.get("userId") || url.searchParams.get("deviceId") || "guest";
+          const deviceId = url.searchParams.get("deviceId")?.slice(0, 80) || null;
+          const appVersion = url.searchParams.get("appVersion");
+          const userId = await getMobileUserId(request).catch(() => null);
 
           const [sections, features, mobileApp] = await Promise.all([
             getAppConfig<string[]>("home_sections", ["hero", "categories", "featured", "recent", "stats"]),
-            getAppConfig<Record<string, boolean>>("features", {
-              ab_testing: true,
-              doping_enabled: true,
-              mobile_bottom_nav: true,
+            resolveFlags({
+              userId,
+              anonId: deviceId,
+              platform: platformOf(url, request),
+              appVersion: appVersion && VERSION_PATTERN.test(appVersion) ? appVersion : null,
             }),
             getAppConfig("mobile_app", {
               min_ios_version: "1.0.0",
@@ -25,18 +38,12 @@ export const Route = createFileRoute("/api/mobile/config")({
             }),
           ]);
 
-          // Yerel A/B Testi Varyant Hesaplaması (0 TL, harici servis yok)
-          const listingCardVariant = calculateVariant("listing_card_layout", userId, ["grid", "list"]);
-
           return new Response(
             JSON.stringify({
               success: true,
               homeSections: sections,
               features,
               mobileApp,
-              abTests: {
-                listing_card_layout: listingCardVariant,
-              },
               auth: { google: googleAuthConfigured },
             }),
             {
@@ -44,7 +51,8 @@ export const Route = createFileRoute("/api/mobile/config")({
               headers: {
                 "Content-Type": "application/json",
                 "Access-Control-Allow-Origin": "*",
-                "Cache-Control": "public, max-age=60",
+                // Flags differ per person, so no shared caches.
+                "Cache-Control": "private, no-store",
               },
             },
           );

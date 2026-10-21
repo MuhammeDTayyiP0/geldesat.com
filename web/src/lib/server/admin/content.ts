@@ -3,7 +3,8 @@ import { z } from "zod";
 import { getSql, dbSource } from "@/lib/db";
 import { newId, num, slugify } from "@/lib/utils";
 import { normalizeTrPhone } from "../helpers";
-import { getAppConfig, setAppConfig } from "../config";
+import { DEFAULT_FLAGS, getAppConfig, setAppConfig } from "../config";
+import { FLAG_NAME_PATTERN, FLAG_PLATFORMS, VERSION_PATTERN, normalizeFlags } from "@/lib/flags";
 import { clearSiteSettingsCache, loadSiteSettings } from "../catalog";
 import { mailConfigured } from "../mail";
 import { adminMiddleware, audit, likeTerm, paged, paging, PageInput, ts, Where } from "./common";
@@ -160,7 +161,7 @@ export const adminGetSettings = createServerFn({ method: "GET" })
   .handler(async () => {
     const [site, features, mobileApp, homeSections, moderation] = await Promise.all([
       loadSiteSettings(),
-      getAppConfig<Record<string, boolean>>("features", { ab_testing: true, doping_enabled: true, mobile_bottom_nav: true }),
+      getAppConfig<unknown>("features", DEFAULT_FLAGS).then(normalizeFlags),
       getAppConfig<MobileAppConfig>("mobile_app", { min_ios_version: "1.0.0", min_android_version: "1.0.0", announcement: null }),
       getAppConfig<string[]>("home_sections", ["hero", "categories", "featured", "recent", "stats"]),
       getAppConfig<{ mode: ModerationMode }>("moderation", { mode: "first_free" }),
@@ -203,7 +204,22 @@ export const adminSaveSiteSettings = createServerFn({ method: "POST" })
   });
 
 const ConfigInput = z.discriminatedUnion("key", [
-  z.object({ key: z.literal("features"), value: z.record(z.string().max(60), z.boolean()) }),
+  z.object({
+    key: z.literal("features"),
+    value: z
+      .record(
+        z.string().regex(FLAG_NAME_PATTERN, "Anahtar adı küçük harf, rakam ve _ olmalı"),
+        z.object({
+          enabled: z.boolean(),
+          rollout: z.number().int().min(0).max(100),
+          platforms: z.array(z.enum(FLAG_PLATFORMS)).max(3),
+          minAppVersion: z.string().trim().regex(VERSION_PATTERN, "Sürüm 1.2.3 biçiminde olmalı").nullable(),
+          admins: z.boolean(),
+          description: z.string().trim().max(200),
+        }),
+      )
+      .refine((v) => Object.keys(v).length <= 100, "En fazla 100 özellik anahtarı olabilir"),
+  }),
   z.object({
     key: z.literal("mobile_app"),
     value: z.object({

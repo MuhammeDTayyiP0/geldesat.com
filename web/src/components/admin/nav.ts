@@ -9,6 +9,7 @@ import {
   ListChecks,
   Megaphone,
   MessageSquareWarning,
+  Rocket,
   Settings2,
   SlidersHorizontal,
   Star,
@@ -31,6 +32,7 @@ export type AdminPath =
   | "/admin/duyurular"
   | "/admin/sayfalar"
   | "/admin/ayarlar"
+  | "/admin/guncellemeler"
   | "/admin/kayitlar"
   | "/admin/sistem";
 
@@ -81,7 +83,8 @@ export const ADMIN_NAV: Array<{ group: string; items: AdminNavItem[] }> = [
   {
     group: "Sistem",
     items: [
-      { to: "/admin/ayarlar", label: "Ayarlar", icon: Settings2, keywords: "site iletişim banka mobil" },
+      { to: "/admin/ayarlar", label: "Ayarlar", icon: Settings2, keywords: "site iletişim banka mobil özellik anahtarı flag" },
+      { to: "/admin/guncellemeler", label: "Uygulama güncellemeleri", icon: Rocket, keywords: "ota mobil güncelleme sürüm geri al" },
       { to: "/admin/kayitlar", label: "İşlem kayıtları", icon: History, keywords: "audit log denetim" },
       { to: "/admin/sistem", label: "Sistem durumu", icon: Activity, keywords: "veritabanı sağlık bakım" },
     ],

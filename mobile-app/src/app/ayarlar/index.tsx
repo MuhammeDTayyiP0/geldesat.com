@@ -24,6 +24,7 @@ import { useMe } from '@/api/queries';
 import { signOut } from '@/auth/auth';
 import { useSession } from '@/auth/session';
 import { SUPPORT_EMAIL } from '@/lib/config';
+import { runningVersionLabel } from '@/lib/ota';
 import { unregisterPush } from '@/lib/push';
 import { useThemePref } from '@/lib/themePref';
 import { Avatar, Button, Header, ListRow, RowGroup, Text, confirm, font, hairline, radius, space, toast, useTheme } from '@/ui';
@@ -170,7 +171,7 @@ export default function SettingsScreen() {
         ) : null}
 
         <Text variant="small" tone="subtle" center>
-          GeldeSat {Constants.expoConfig?.version ?? ''}
+          GeldeSat {runningVersionLabel(Constants.expoConfig?.version ?? '')}
         </Text>
       </ScrollView>
     </View>

@@ -3,6 +3,7 @@ import { Check, Monitor, Moon, Sun, type LucideIcon } from "lucide-react";
 import { AccountShell } from "@/components/account/AccountShell";
 import { setThemePref, useThemePref, type ThemePref } from "@/lib/theme";
 import { cn } from "@/lib/utils";
+import type { RootLoaderData } from "@/lib/use-flag";
 
 export const Route = createFileRoute("/ayarlar/gorunum")({
   head: () => ({ meta: [{ title: "Görünüm | GeldeSat" }, { name: "robots", content: "noindex,nofollow" }] }),
@@ -19,7 +20,7 @@ const OPTIONS: { value: ThemePref; label: string; hint: string; icon: LucideIcon
 
 /** Light / dark / follow-the-device. Works signed out too; the choice is kept in a cookie on this browser. */
 function AppearanceSettings() {
-  const pref = useThemePref((root.useLoaderData() as ThemePref | undefined) ?? "system");
+  const pref = useThemePref((root.useLoaderData() as RootLoaderData | undefined)?.theme ?? "system");
   return (
     <AccountShell title="Görünüm" description="Sitenin açık veya koyu renklerde görünmesini seçin.">
       <div className="mx-auto max-w-2xl">

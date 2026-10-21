@@ -13,7 +13,7 @@
     "start:prod": "node scripts/migrate.mjs && node .output/server/index.mjs",
     "db:migrate": "node scripts/migrate.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "node scripts/run-tests.mjs && node --import jiti/register --test src/lib/auth/sign-in-gate.test.ts src/lib/server/mobile-conversation-store.test.ts src/lib/search-params.test.ts src/lib/seo.test.ts",
+    "test": "node scripts/run-tests.mjs && node --import jiti/register --test src/lib/auth/sign-in-gate.test.ts src/lib/server/mobile-conversation-store.test.ts src/lib/search-params.test.ts src/lib/seo.test.ts src/lib/flags.test.ts src/lib/server/ota.test.ts",
     "lint": "eslint .",
     "format": "prettier --write ."
   },
