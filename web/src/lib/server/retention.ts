@@ -1,3 +1,4 @@
+import { asIso } from "@/lib/utils";
 import { getSql, type Sql } from "@/lib/db";
 import { ACCOUNT_GRACE_DAYS, CHAT_RETENTION_DAYS, purgeUserData } from "./account-purge";
 
@@ -58,7 +59,7 @@ export async function requestAccountDeletion(userId: string): Promise<string> {
     const rows = await tx.query<{ until: string }>(
       `update profiles set deletion_requested_at = coalesce(deletion_requested_at, now())
        where user_id = $1
-       returning (deletion_requested_at + make_interval(days => $2))::text as until`,
+       returning deletion_requested_at + make_interval(days => $2) as until`,
       [userId, ACCOUNT_GRACE_DAYS],
     );
     await tx.query(
@@ -68,7 +69,7 @@ export async function requestAccountDeletion(userId: string): Promise<string> {
     );
     await tx.query('delete from "session" where "userId" = $1', [userId]);
     await tx.query("delete from mobile_push_tokens where user_id = $1", [userId]);
-    return rows[0]?.until ?? "";
+    return rows[0]?.until ? asIso(rows[0].until) : "";
   });
   return until;
 }

@@ -29,6 +29,9 @@ function SettingsHome() {
       : section.items,
   })).filter((section) => section.items.length);
   const name = user.displayName || user.primaryEmail?.split("@")[0] || "Hesabım";
+  const matches = (words: string) => !term || words.toLocaleLowerCase("tr").includes(term);
+  const showHelp = matches("yardım destek iletişim kullanım koşulları gizlilik yönetim paneli");
+  const showSignOut = matches("çıkış yap oturum kapat");
 
   return (
     <AccountShell title="Ayarlar">
@@ -55,15 +58,15 @@ function SettingsHome() {
 
         {sections.map((section) => (
           <section key={section.title}>
-            <h2 className="mb-1.5 px-1 text-xs font-semibold uppercase tracking-wider text-subtle">{section.title}</h2>
+            <h2 className="mb-1.5 px-1 text-xs font-semibold uppercase tracking-wider text-muted">{section.title}</h2>
             <MenuRows items={section.items} />
           </section>
         ))}
-        {term && !sections.length ? <p className="py-6 text-center text-sm text-muted">“{q.trim()}” ile eşleşen ayar yok.</p> : null}
+        {term && !sections.length && !showHelp && !showSignOut ? <p className="py-6 text-center text-sm text-muted">“{q.trim()}” ile eşleşen ayar yok.</p> : null}
 
-        {!term ? (
+        {showHelp ? (
           <section>
-            <h2 className="mb-1.5 px-1 text-xs font-semibold uppercase tracking-wider text-subtle">Destek</h2>
+            <h2 className="mb-1.5 px-1 text-xs font-semibold uppercase tracking-wider text-muted">Destek</h2>
             <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface">
               {admin ? (
                 <li>
@@ -73,7 +76,7 @@ function SettingsHome() {
                 </li>
               ) : null}
               <li>
-                <Link to="/sayfa/$slug" params={{ slug: "yardim" }} className="flex min-h-13 items-center gap-3 px-4 hover:bg-elevated/60">
+                <Link to="/sayfa/$slug" params={{ slug: "iletisim" }} className="flex min-h-13 items-center gap-3 px-4 hover:bg-elevated/60">
                   <HelpCircle className="size-5 text-muted" /> Yardım ve destek
                 </Link>
               </li>
@@ -86,7 +89,7 @@ function SettingsHome() {
           </section>
         ) : null}
 
-        {!term ? (
+        {showSignOut ? (
           <ul className="overflow-hidden rounded-2xl border border-border bg-surface">
             <li>
               <SignOutButton className="flex min-h-13 w-full items-center gap-3 px-4 text-left font-medium text-danger hover:bg-danger-solid/8" />

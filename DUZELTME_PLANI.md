@@ -102,7 +102,7 @@ Sonraki fazlar bunları kullanır.
 - [x] Router `remountDeps`; ilan ve sohbet state taşınması, galeri çökmesi (Madde 16).
 - [x] Türkçe hata ekranı, yeniden dene ve ana sayfa (Madde 37).
 - [x] Zod hatası normalize, şemalara Türkçe mesaj; `validationMessage` ortak (Bölüm 2.6).
-- [ ] `translateAuthError` web'e; `?error=` okuma; "Unauthorized" (Madde 38).
+- [x] `translateAuthError` web'e; `?error=` okuma; "Unauthorized" (Madde 38).
 - [ ] Ortak `ErrorState`, sayfalama ve seçim yardımcıları, `useDirtyGuard`, `FieldGroup`, erişilebilir `Drawer` (Bölüm 2.4, 2.14; Madde 36).
 - [x] `useCurrentUser` kararlı hâle getirildi; sekme dönüşünde ekranlar yeniden yüklenmiyor (Bölüm 2.5; mağaza formu veri kaybı).
 - [x] Tema: `text-subtle`, koyu `primary`, `ok`, `urgent`, `violet` token'ları; `text-ink`/`bg-ink` kullanımı, logo (Madde 39; Bölüm 2.13).
@@ -135,12 +135,12 @@ Sonraki fazlar bunları kullanır.
 
 ## Faz 6: Web hesap ve ayarlar (rapor 3.4)
 
-- [ ] Giriş: Google hata yolu, doğrulama geri bildirimi, onay kaydı (sürüm ve tarih), şifre göster, oturumlu yönlendirme (Madde 38).
-- [ ] Sıfırlama postasını arka plana al, SMTP zaman aşımı, süresi dolan token yolu.
-- [ ] Tüm ayar sayfalarında hata durumu; `hasPassword` hata davranışı; mağaza formu telefon ve il önerisi.
-- [ ] KVKK dışa aktarım tamamlama ve indirme hatası (`verilerim.ts`).
-- [ ] Avatar tek kaynak, `phone-input` `maxLength`, `settings.ts` şifre sınırı, tarih ISO.
-- [ ] E-posta değiştirme, tek cihaz kapatma, Türkçe metin ve terim birliği, radyo klavye desteği.
+- [x] Giriş: Google hata yolu, doğrulama geri bildirimi, onay kaydı (sürüm ve tarih), şifre göster, oturumlu yönlendirme (Madde 38).
+- [x] Sıfırlama postasını arka plana al, SMTP zaman aşımı, süresi dolan token yolu.
+- [x] Tüm ayar sayfalarında hata durumu; `hasPassword` hata davranışı; mağaza formu telefon ve il önerisi.
+- [x] KVKK dışa aktarım tamamlama ve indirme hatası (`verilerim.ts`).
+- [x] Avatar tek kaynak, `phone-input` `maxLength`, `settings.ts` şifre sınırı, tarih ISO.
+- [x] E-posta değiştirme, tek cihaz kapatma, Türkçe metin ve terim birliği, radyo klavye desteği.
 
 ## Faz 7: Mesajlaşma sunucu ve web (rapor 3.3)
 

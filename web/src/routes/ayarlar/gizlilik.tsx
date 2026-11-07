@@ -1,3 +1,4 @@
+import { ErrorState } from "@/components/common/ErrorState";
 import { createFileRoute } from "@tanstack/react-router";
 import { errorText } from "@/lib/error-text";
 import { useEffect, useState } from "react";
@@ -27,14 +28,16 @@ function PrivacySettings() {
   const { user, isPending } = useCurrentUserState();
   const [state, setState] = useState<{ phone_visibility: PhoneVisibility; show_whatsapp: boolean; read_receipts: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     if (!user) return;
     getAccountSettings()
       .then((s) => setState({ phone_visibility: s.phone_visibility, show_whatsapp: s.show_whatsapp, read_receipts: s.read_receipts }))
-      .catch(() => toast.error("Ayarlar yüklenemedi"));
+      .catch(() => setFailed(true));
   }, [user]);
 
+  if (failed) return <AccountShell title="Gizlilik"><ErrorState message="Ayarlarınız yüklenemedi. Sayfayı yenileyip tekrar deneyin." /></AccountShell>;
   if (isPending || (user && !state)) return <BrandSpinner fullPage text="Yükleniyor…" />;
   if (!user || !state) return <RedirectToSignIn />;
 
@@ -60,17 +63,15 @@ function PrivacySettings() {
         <section className="rounded-2xl border border-border bg-surface p-4 shadow-card sm:p-6">
           <h2 className="text-base font-semibold">Telefon numaramı kimler görebilir?</h2>
           <p className="mt-1 text-sm text-muted">Tüm ilanlarınız için geçerlidir. İlana özel girdiğiniz numara da bu ayara uyar.</p>
-          <div className="mt-4 grid gap-2" role="radiogroup" aria-label="Telefon görünürlüğü">
+          <div className="mt-4 grid gap-2" aria-label="Telefon görünürlüğü">
             {PHONE_OPTIONS.map(({ value, title, body, icon: Icon }) => {
               const on = state.phone_visibility === value;
               return (
                 <button
                   key={value}
                   type="button"
-                  role="radio"
-                  aria-checked={on}
-                  disabled={busy}
-                  onClick={() => !on && void save({ ...state, phone_visibility: value })}
+                  aria-pressed={on}
+                  onClick={() => !on && !busy && void save({ ...state, phone_visibility: value })}
                   className={cn(
                     "flex items-start gap-3 rounded-xl border p-3.5 text-left transition-colors",
                     on ? "border-primary bg-primary/5" : "border-border hover:bg-elevated/60",

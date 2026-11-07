@@ -26,7 +26,6 @@ export const PhoneInput = forwardRef<HTMLInputElement, PhoneInputProps>(
   ) => {
     const maskFn = showFlag ? maskPhone10 : maskPhoneInput;
     const defaultPlaceholder = showFlag ? "5xx xxx xx xx" : "05xx xxx xx xx";
-    const maxLen = showFlag ? 13 : 14;
 
     function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
       const masked = maskFn(e.target.value);
@@ -58,7 +57,7 @@ export const PhoneInput = forwardRef<HTMLInputElement, PhoneInputProps>(
           type="tel"
           inputMode="numeric"
           autoComplete="tel"
-          maxLength={maxLen}
+          // No maxLength: a pasted "+90 532 ..." would be cut before the mask can clean it.
           value={maskFn(value)}
           onChange={handleChange}
           disabled={disabled}

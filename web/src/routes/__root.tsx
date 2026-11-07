@@ -1,3 +1,5 @@
+import { toast } from "sonner";
+import { takeFlash } from "@/lib/flash";
 import { createRootRoute, HeadContent, Outlet, Scripts, useRouterState } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { Header } from "@/components/layout/Header";
@@ -104,6 +106,10 @@ export const Route = createRootRoute({
 
 
 function Shell() {
+  useEffect(() => {
+    const message = takeFlash();
+    if (message) toast.success(message);
+  }, []);
   const theme = useThemePref(Route.useLoaderData()?.theme ?? "system");
   useFlagRefresh();
   const isAdmin = useRouterState({

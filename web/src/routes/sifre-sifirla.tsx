@@ -1,3 +1,4 @@
+import { setFlash } from "@/lib/flash";
 import { authErrorText } from "@/lib/auth/errors";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { errorText } from "@/lib/error-text";
@@ -108,8 +109,14 @@ function NewPasswordForm({ token }: { token: string }) {
     setBusy(true);
     try {
       const { error } = await authClient.resetPassword({ newPassword: password, token });
+      if (error?.code === "INVALID_TOKEN" || error?.code === "TOKEN_EXPIRED") {
+        // The link can expire while the form is open: back to asking for a new one.
+        setFlash(authErrorText(error));
+        window.location.href = "/sifre-sifirla";
+        return;
+      }
       if (error) throw new Error(authErrorText(error));
-      toast.success("Şifreniz güncellendi. Yeni şifrenizle giriş yapabilirsiniz.");
+      setFlash("Şifreniz güncellendi. Yeni şifrenizle giriş yapabilirsiniz.");
       window.location.href = "/login";
     } catch (err) {
       toast.error(errorText(err, "Şifre güncellenemedi"));

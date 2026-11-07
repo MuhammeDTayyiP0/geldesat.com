@@ -24,7 +24,7 @@ function AppearanceSettings() {
   return (
     <AccountShell title="Görünüm" description="Sitenin açık veya koyu renklerde görünmesini seçin.">
       <div className="mx-auto max-w-2xl">
-        <ul role="radiogroup" aria-label="Tema" className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface">
+        <ul aria-label="Tema" className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface">
           {OPTIONS.map((o) => {
             const Icon = o.icon;
             const selected = pref === o.value;
@@ -32,8 +32,7 @@ function AppearanceSettings() {
               <li key={o.value}>
                 <button
                   type="button"
-                  role="radio"
-                  aria-checked={selected}
+                  aria-pressed={selected}
                   onClick={() => setThemePref(o.value)}
                   className="flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left hover:bg-elevated/60"
                 >

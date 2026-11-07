@@ -7,7 +7,7 @@ import { getCookie } from "@tanstack/react-start/server";
 import { randomBytes } from "node:crypto";
 import { Pool } from "pg";
 import { ensureDbReady, getPglite, getSql } from "../db";
-import { mailConfigured, sendPasswordResetMail, sendVerificationMail } from "../server/mail";
+import { mailConfigured, sendEmailChangeMail, sendPasswordResetMail, sendVerificationMail } from "../server/mail";
 import { pgliteDialect } from "./pglite-dialect";
 
 void ensureDbReady();
@@ -40,9 +40,11 @@ const baseURL = explicitBaseURL ?? {
   protocol: "auto" as const,
   fallback: "http://localhost:3000",
 };
+// Local origins only count on a developer's machine.
+const devOrigins = process.env.NODE_ENV === "production" ? [] : localOrigins;
 const trustedOrigins = explicitBaseURL
-  ? [...new Set([explicitBaseURL, ...localOrigins, ...siteOrigins])]
-  : [...localOrigins, ...siteOrigins];
+  ? [...new Set([explicitBaseURL, ...devOrigins, ...siteOrigins])]
+  : [...devOrigins, ...siteOrigins];
 
 const databaseUrl = env("DATABASE_URL");
 const googleClientId = env("GOOGLE_CLIENT_ID");
@@ -61,6 +63,8 @@ export const auth = betterAuth({
   trustedOrigins,
   // People open a classifieds app every few weeks; the 7-day default signs them out.
   session: { expiresIn: 60 * 60 * 24 * 60, updateAge: 60 * 60 * 24 },
+  // Google failures come back to the login page, which explains them.
+  onAPIError: { errorURL: "/login" },
   emailAndPassword: {
     enabled: true,
     revokeSessionsOnPasswordReset: true,
@@ -77,6 +81,14 @@ export const auth = betterAuth({
   // account (see accountLinking) and what ADMIN_EMAILS trusts.
   ...(mailConfigured
     ? {
+        user: {
+          changeEmail: {
+            enabled: true,
+            sendChangeEmailConfirmation: async ({ user, newEmail, url }: { user: { email: string; name?: string | null }; newEmail: string; url: string }) => {
+              await sendEmailChangeMail({ to: user.email, name: user.name, newEmail, url });
+            },
+          },
+        },
         emailVerification: {
           sendOnSignUp: true,
           autoSignInAfterVerification: true,
@@ -108,6 +120,13 @@ export const auth = betterAuth({
       }
     : {}),
   advanced: {
+    // E-mail goes out after the answer: otherwise response time would reveal
+    // whether an address has an account, and a slow mail server would hold requests.
+    backgroundTasks: {
+      handler: (task: Promise<unknown>) => {
+        void task.catch((err) => console.error("[auth] background task failed", err));
+      },
+    },
     useSecureCookies: false,
     defaultCookieAttributes: { secure: true, sameSite: "lax", path: "/" },
     cookies: {

@@ -1,3 +1,5 @@
+import { Link } from "@tanstack/react-router";
+import { ErrorState } from "@/components/common/ErrorState";
 import { createFileRoute } from "@tanstack/react-router";
 import { errorText } from "@/lib/error-text";
 import { useEffect, useState } from "react";
@@ -18,6 +20,7 @@ export const Route = createFileRoute("/ayarlar/bildirimler")({
 
 function NotificationSettings() {
   const { user, isPending } = useCurrentUserState();
+  const [failed, setFailed] = useState(false);
   const [prefs, setPrefs] = useState<NotifyPrefs | null>(null);
   const [pushDevices, setPushDevices] = useState(0);
   const [email, setEmail] = useState<{ on: boolean; ready: boolean; configured: boolean }>({ on: true, ready: false, configured: false });
@@ -31,9 +34,10 @@ function NotificationSettings() {
         setPushDevices(s.push_devices);
         setEmail({ on: s.message_email, ready: s.email_ready, configured: s.email_configured });
       })
-      .catch(() => toast.error("Tercihler yüklenemedi"));
+      .catch(() => setFailed(true));
   }, [user]);
 
+  if (failed) return <AccountShell title="Bildirimler"><ErrorState message="Tercihleriniz yüklenemedi. Sayfayı yenileyip tekrar deneyin." /></AccountShell>;
   if (isPending || (user && !prefs)) return <BrandSpinner fullPage text="Yükleniyor…" />;
   if (!user || !prefs) return <RedirectToSignIn />;
 
@@ -107,7 +111,7 @@ function NotificationSettings() {
             </div>
             <ToggleSwitch
               label="Okunmamış mesaj e-postası"
-              checked={email.on}
+              checked={email.on && email.configured}
               disabled={busy || !email.configured}
               onChange={async (v) => {
                 setEmail((e) => ({ ...e, on: v }));
@@ -124,7 +128,7 @@ function NotificationSettings() {
             <p className="mt-3 text-xs text-muted">E-posta gönderimi şu an kapalı.</p>
           ) : !email.ready ? (
             <p className="mt-3 text-xs text-warn">
-              E-posta adresiniz doğrulanmadığı için gönderilmez. Hesap ve güvenlik sayfasından doğrulayabilirsiniz.
+              E-posta adresiniz doğrulanmadığı için gönderilmez. <Link to="/ayarlar/guvenlik" className="underline">Şifre ve güvenlik</Link> sayfasından doğrulayabilirsiniz.
             </p>
           ) : null}
         </section>

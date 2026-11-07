@@ -2,9 +2,9 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
-import { asJson } from "@/lib/utils";
+import { asIso, asJson } from "@/lib/utils";
 import { NOTIFY_TYPES, resolveNotifyPrefs, type PhoneVisibility } from "@/lib/notification-prefs";
-import { ensureProfile } from "./helpers";
+import { ensureProfile, rateLimit } from "./helpers";
 import { mailConfigured } from "./mail";
 
 /** Privacy and notification settings for the signed-in user. */
@@ -84,10 +84,10 @@ export const getDeletionStatus = createServerFn({ method: "GET" })
     void sweepRetention().catch((err) => console.warn("[retention] sweep failed", err));
     const sql = await getSql();
     const rows = await sql.query<{ until: string | null }>(
-      "select (deletion_requested_at + interval '30 days')::text as until from profiles where user_id=$1",
+      "select deletion_requested_at + interval '30 days' as until from profiles where user_id=$1",
       [context.userId],
     );
-    return { purgeAt: rows[0]?.until ?? null };
+    return { purgeAt: rows[0]?.until ? asIso(rows[0].until) : null };
   });
 
 /**
@@ -113,6 +113,7 @@ export const requestMyAccountDeletion = createServerFn({ method: "POST" })
     );
     if (credential[0]) {
       if (!data.password) throw new Error("Şifrenizi girin.");
+      rateLimit(`account-delete:${context.userId}`, 5, 15 * 60_000);
       try {
         await auth.api.verifyPassword({ body: { password: data.password }, headers });
       } catch {

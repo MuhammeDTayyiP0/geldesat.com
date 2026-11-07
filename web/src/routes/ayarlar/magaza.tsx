@@ -1,3 +1,4 @@
+import { ErrorState } from "@/components/common/ErrorState";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { errorText } from "@/lib/error-text";
 import { useEffect, useState, type FormEvent } from "react";
@@ -26,10 +27,11 @@ type Form = { name: string; description: string; city: string; phone: string };
 function StoreSettings() {
   const { user, isPending } = useCurrentUserState();
   const [loaded, setLoaded] = useState(false);
-  const [store, setStore] = useState<{ slug: string; userId: string } | null>(null);
+  const [store, setStore] = useState<{ userId: string } | null>(null);
   const [saved, setSaved] = useState<Form | null>(null);
   const [form, setForm] = useState<Form>({ name: "", description: "", city: "", phone: "" });
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -39,17 +41,20 @@ function StoreSettings() {
         const initial: Form = {
           name: s?.name ?? "",
           description: s?.description ?? "",
-          city: s?.city ?? m.profile?.city ?? "",
-          phone: maskPhone10(s?.phone ?? m.profile?.phone ?? ""),
+          // A new store starts with the member's city; an existing one shows only what it saved.
+          city: s ? (s.city ?? "") : (m.profile?.city ?? ""),
+          // The personal number is not copied in: saving it would make it the store's.
+          phone: maskPhone10(s?.phone ?? ""),
         };
-        setStore(s ? { slug: s.slug, userId: m.userId } : null);
+        setStore(s ? { userId: m.userId } : null);
         setSaved(s ? initial : null);
         setForm(initial);
         setLoaded(true);
       })
-      .catch(() => toast.error("Mağaza bilgileri yüklenemedi"));
+      .catch(() => setFailed(true));
   }, [user]);
 
+  if (failed) return <AccountShell title="Mağaza"><ErrorState message="Mağaza bilgileri yüklenemedi. Sayfayı yenileyip tekrar deneyin." /></AccountShell>;
   if (isPending || (user && !loaded)) return <BrandSpinner fullPage text="Yükleniyor…" />;
   if (!user) return <RedirectToSignIn />;
 
@@ -84,7 +89,7 @@ function StoreSettings() {
       description={store ? "Profilinizin üstünde mağaza olarak görünen bilgiler." : undefined}
       actions={
         store ? (
-          <Link to="/satici/$id" params={{ id: store.userId }} className={buttonVariants({ variant: "outline", size: "sm" })}>
+          <Link to="/satici/$id" params={{ id: store.userId }} aria-label="Mağazayı gör" className={buttonVariants({ variant: "outline", size: "sm" })}>
               <ExternalLink className="size-3.5" />{" "}
               <span className="hidden sm:inline">Mağazayı gör</span>
             </Link>

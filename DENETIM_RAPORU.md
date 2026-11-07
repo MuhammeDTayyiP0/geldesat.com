@@ -80,7 +80,7 @@ Temiz çıkan alanlar: admin server fonksiyonlarının tamamı yetki kontrollü 
 ### Görünür kalite, SEO ve mağaza
 
 - [x] 37. **Y · Hata ekranı İngilizce ve ham.** "Something went wrong" ile `error.message` gösteriyor, çıkış yolu yok, sabit `zinc` renk kullanıyor. `?sort=foo` ile herkes tetikleyebilir. `W/lib/error-component.tsx`, `W/lib/search-params.ts:113-114`.
-- [ ] 38. **Y · Giriş hataları İngilizce, Google hatası sessiz.** "Invalid email or password" doğrudan görünüyor; mobilde çeviri var, web'de yok. Bağlanamayan Google hesabı mesajsız ana sayfaya düşer. `W/routes/login.tsx:42-50,72`, `W/routes/sifre-sifirla.tsx:65,109`, `W/lib/auth/server.ts:57`.
+- [x] 38. **Y · Giriş hataları İngilizce, Google hatası sessiz.** "Invalid email or password" doğrudan görünüyor; mobilde çeviri var, web'de yok. Bağlanamayan Google hesabı mesajsız ana sayfaya düşer. `W/routes/login.tsx:42-50,72`, `W/routes/sifre-sifirla.tsx:65,109`, `W/lib/auth/server.ts:57`.
 - [x] 39. **Y · Koyu temada logo görünmüyor.** `text-ink` koyu temada `#05070a`. `W/components/Navbar.tsx:178`, `MobileNavigationDrawer.tsx:68` → `text-brand` veya `text-fg`.
 - [x] 40. **Y · Harita pinleri yanlış.** Aynı şehirdeki ilanlar tam üst üste, yalnız 24 ilan; pinler iframe üstüne doğrusal yüzdeyle konuyor, kaydırınca yerinde kalıyor. `W/routes/harita.tsx:37-41,60-69` → `/api/tiles` ile gerçek harita ve kümeleme.
 - [x] 41. **Y · Arama kalitesi düşük.** Tek parça `ILIKE`; kelime bölme, Türkçe karakter eşleme ve kategori adı yok. "Honda Civic" sırası tutmazsa, "kiralik" hiç bulunmaz. `W/lib/server/catalog.ts:85-105`.
@@ -297,37 +297,37 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 ### 3.4 Web: hesap ve ayarlar
 
 **Giriş ve şifre**
-- [ ] O · `login.tsx:41,68-75,134` — Onay yalnız istemcide, kaydedilmiyor; Google kutuyu atlıyor.
-- [ ] O · `lib/auth/server.ts:78-85` — Doğrulama linkinin sonucu bildirilmiyor, `?error=` okunmuyor.
+- [x] O · `login.tsx:41,68-75,134` — Onay yalnız istemcide, kaydedilmiyor; Google kutuyu atlıyor.
+- [x] O · `lib/auth/server.ts:78-85` — Doğrulama linkinin sonucu bildirilmiyor, `?error=` okunmuyor.
 - [x] O · `lib/auth/server.ts:57` — `session.expiresIn` yok, varsayılan 7 gün; uygulamayı 7 gün açmayan düşer.
-- [ ] O · `lib/auth/server.ts:68-70` — Sıfırlama postası isteğin içinde; süreden hesap varlığı anlaşılır, SMTP takılırsa bekler.
+- [x] O · `lib/auth/server.ts:68-70` — Sıfırlama postası isteğin içinde; süreden hesap varlığı anlaşılır, SMTP takılırsa bekler.
 - [ ] D · `login.tsx:41` — Kayıt e-postanın varlığını açıklıyor. D (olası) · `:43,48`, `sifre-sifirla.tsx:110-111` — Başarı toast'ı tam sayfa geçişte kayboluyor.
-- [ ] D · `login.tsx:22-30` — Oturumlu kullanıcı yönlendirilmiyor. `:97` — Ad kırpılmıyor. `:84-89` — Seçili durum yok. `:34-37` — Ölü dal, düğme neden kapalı belli değil. `:112` — Şifre göster yok.
-- [ ] D · `sifre-sifirla.tsx:108-113` — Süresi dolan token'da yeni bağlantı yolu yok.
+- [x] D · `login.tsx:22-30` — Oturumlu kullanıcı yönlendirilmiyor. `:97` — Ad kırpılmıyor. `:84-89` — Seçili durum yok. `:34-37` — Ölü dal, düğme neden kapalı belli değil. `:112` — Şifre göster yok.
+- [x] D · `sifre-sifirla.tsx:108-113` — Süresi dolan token'da yeni bağlantı yolu yok.
 
 **Profil ve ayarlar**
 - [x] Y · `ayarlar/magaza.tsx:35-50`, `use-current-user.ts:40-50` — Sekmeye dönünce kaydedilmemiş mağaza formu siliniyor → `user?.id`.
-- [ ] O · `magaza.tsx:41-42`, `account.ts:262,392-412` — Kişisel numara alana dolduruluyor, kaydedilince `stores.phone` olup herkese açık yanıtta dönüyor. O · `magaza.tsx:49-52` — Sonsuz yükleme. D · `:41,28,44,71,86-90` — İl önerisi kafa karıştırıyor, ölü `slug`, `<a><button>`.
-- [ ] O · `profil.tsx:31-33,47` — `getMe` hatası sonsuz iskelet. O · `api/avatar.ts:39`, `ayarlar/profil.tsx:85`, `AccountShell.tsx:10-11` — `user.image` ve `avatar_url` ayrışıyor.
+- [x] O · `magaza.tsx:41-42`, `account.ts:262,392-412` — Kişisel numara alana dolduruluyor, kaydedilince `stores.phone` olup herkese açık yanıtta dönüyor. O · `magaza.tsx:49-52` — Sonsuz yükleme. D · `:41,28,44,71,86-90` — İl önerisi kafa karıştırıyor, ölü `slug`, `<a><button>`.
+- [x] O · `profil.tsx:31-33,47` — `getMe` hatası sonsuz iskelet. O · `api/avatar.ts:39`, `ayarlar/profil.tsx:85`, `AccountShell.tsx:10-11` — `user.image` ve `avatar_url` ayrışıyor.
 - [ ] D · `profil.tsx:88,102` — Kontrast; doping satırı.
-- [ ] D · `ayarlar/index.tsx:45-53,58,66,25-30` — Odak halkası, kontrast, arama Destek ve Çıkış'ı kapsamıyor.
-- [ ] O · `api/hesap/verilerim.ts:25-51` — KVKK dışa aktarımı eksik: konum, `kind/meta`, sohbet görselleri, şablonlar, kredi, doping, cihazlar. Yorum "her şey" diyor.
-- [ ] O · `ayarlar/hesap.tsx:47`, `verilerim.ts:21,86` — Sınır aşılınca hata JSON'u dosya olarak iniyor.
-- [ ] D · `hesap.tsx:29-32`, `guvenlik.tsx:43-46` — `hasPassword` hata durumunda yanlış; şifreli üye takılır. `hesap.tsx:92,98-99` — "Vazgeç" sonrası şifre alanda. `settings.ts:121-125` — Şifre denemesinde sınır yok. `hesap.tsx:101` — `SIL` kabul edilmiyor. `:47-51` — `<a><button>`.
+- [x] D · `ayarlar/index.tsx:45-53,58,66,25-30` — Odak halkası, kontrast, arama Destek ve Çıkış'ı kapsamıyor.
+- [x] O · `api/hesap/verilerim.ts:25-51` — KVKK dışa aktarımı eksik: konum, `kind/meta`, sohbet görselleri, şablonlar, kredi, doping, cihazlar. Yorum "her şey" diyor.
+- [x] O · `ayarlar/hesap.tsx:47`, `verilerim.ts:21,86` — Sınır aşılınca hata JSON'u dosya olarak iniyor.
+- [x] D · `hesap.tsx:29-32`, `guvenlik.tsx:43-46` — `hasPassword` hata durumunda yanlış; şifreli üye takılır. `hesap.tsx:92,98-99` — "Vazgeç" sonrası şifre alanda. `settings.ts:121-125` — Şifre denemesinde sınır yok. `hesap.tsx:101` — `SIL` kabul edilmiyor. `:47-51` — `<a><button>`.
 - [x] O · `ayarlar/profil.tsx:67-74,150`, `account.ts:91` — `"a "` ham JSON toast'ı.
 - [x] O · `account.ts:101-108`, `migrations/0009_ops.sql:15` — Telefon doğrulamasız benzersiz ayrılıyor; başkası numaranı kilitleyebilir, sınır yok, numara taranabilir.
 - [x] O · `helpers.ts:206,238-241`, `satici/$id.tsx:169`, `csp.ts:14` — Kayıttaki serbest `image` herkese açık profile geçiyor; harici görsel ve IP toplama.
-- [ ] O (olası) · `api/avatar.ts:15-23` — Boyut `content-length`'e bağlı, HEIF'te yok, hız sınırı yok. D (olası) · `api/avatar/$id.ts:22` — Bir yıl `immutable`.
-- [ ] D · `guvenlik.tsx:99` — "Şifre kurtarma için doğrulanmış e-posta gerekir" yanlış. `:147` — "Son etkinlik: 3 gün". `:15,78`, `account-nav.ts:59` — Ad tutarsız. `:107,118` — Google kullanıcısına form görünüyor. `:47,131-153` — Hata yok. `:135-150` — Tek cihaz kapatılamıyor.
-- [ ] O · `guvenlik.tsx:81-86`, `auth/server.ts:62` — E-posta değiştirme yok.
-- [ ] O · `gizlilik.tsx:32-37`, `bildirimler.tsx:33-37` — Sonsuz yükleme. O · `engellenenler.tsx:28-30` — Hata "kimse yok" görünüyor.
-- [ ] D · `gizlilik.tsx:62-72`, `gorunum.tsx:27-35` — Radyo klavyesiz. `bildirimler.tsx:125-127,109-110` — Bağlantı yok; SMTP kapalıyken anahtar açık. `engellenenler.tsx:41` — "Ali engeli kaldırıldı". `gorunum.tsx:21`, `AccountShell.tsx:72-101` — Ziyaretçiye "Çıkış yap".
+- [x] O (olası) · `api/avatar.ts:15-23` — Boyut `content-length`'e bağlı, HEIF'te yok, hız sınırı yok. D (olası) · `api/avatar/$id.ts:22` — Bir yıl `immutable`.
+- [x] D · `guvenlik.tsx:99` — "Şifre kurtarma için doğrulanmış e-posta gerekir" yanlış. `:147` — "Son etkinlik: 3 gün". `:15,78`, `account-nav.ts:59` — Ad tutarsız. `:107,118` — Google kullanıcısına form görünüyor. `:47,131-153` — Hata yok. `:135-150` — Tek cihaz kapatılamıyor.
+- [x] O · `guvenlik.tsx:81-86`, `auth/server.ts:62` — E-posta değiştirme yok.
+- [x] O · `gizlilik.tsx:32-37`, `bildirimler.tsx:33-37` — Sonsuz yükleme. O · `engellenenler.tsx:28-30` — Hata "kimse yok" görünüyor.
+- [x] D · `gizlilik.tsx:62-72`, `gorunum.tsx:27-35` — Radyo klavyesiz. `bildirimler.tsx:125-127,109-110` — Bağlantı yok; SMTP kapalıyken anahtar açık. `engellenenler.tsx:41` — "Ali engeli kaldırıldı". `gorunum.tsx:21`, `AccountShell.tsx:72-101` — Ziyaretçiye "Çıkış yap".
 
 **Ortak**
-- [ ] O · `components/ui/phone-input.tsx:29,61` — `maxLength` 13, `+90...` yapıştırınca kesiliyor.
-- [ ] D · `verify.server.ts:7` — "Unauthorized". `gates.tsx:37` — `replace` yok, geri tuşu tuzağı. `AccountShell.tsx:153`, `__root.tsx:146` — İç içe `<main>`. `account-nav.ts:81-97`, `AccountShell.tsx:75,148` — Çift istek. `AccountShell.tsx:116`, `UserAccountDropdown.tsx:166` — Çıkış hatası gösterilmiyor. `UserAccountDropdown.tsx:36-73` — Menü deseni eksik; `:109,155,171` terim tutarsız.
-- [ ] D (olası) · `settings.ts:91`, `DeletionBanner.tsx:27` — `::text` tarih Safari'de "Invalid Date" olabilir; mobil Hermes için de geçerli (`M/app/ayarlar/guvenlik.tsx:51`, O).
-- [ ] D · `auth/server.ts:35,43-45` — `localhost` üretimde güvenilir. `sign-in-gate.ts:8`, `use-current-user.ts:64` — Ölü kod. `styles.css:22` — `text-subtle` AA altı.
+- [x] O · `components/ui/phone-input.tsx:29,61` — `maxLength` 13, `+90...` yapıştırınca kesiliyor.
+- [x] D · `verify.server.ts:7` — "Unauthorized". `gates.tsx:37` — `replace` yok, geri tuşu tuzağı. `AccountShell.tsx:153`, `__root.tsx:146` — İç içe `<main>`. `account-nav.ts:81-97`, `AccountShell.tsx:75,148` — Çift istek. `AccountShell.tsx:116`, `UserAccountDropdown.tsx:166` — Çıkış hatası gösterilmiyor. `UserAccountDropdown.tsx:36-73` — Menü deseni eksik; `:109,155,171` terim tutarsız.
+- [x] D (olası) · `settings.ts:91`, `DeletionBanner.tsx:27` — `::text` tarih Safari'de "Invalid Date" olabilir; mobil Hermes için de geçerli (`M/app/ayarlar/guvenlik.tsx:51`, O).
+- [x] D · `auth/server.ts:35,43-45` — `localhost` üretimde güvenilir. `sign-in-gate.ts:8`, `use-current-user.ts:64` — Ölü kod. `styles.css:22` — `text-subtle` AA altı.
 
 ### 3.5 Web: admin operasyon
 

@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import { Link } from "@tanstack/react-router";
 import { Bell, ChevronDown, Eye, Heart, History, LayoutGrid, LogOut, MessageCircle, Settings, Shield, User } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -60,7 +61,6 @@ export function UserAccountDropdown({ admin }: { admin: boolean }) {
 
       {open && (
         <div
-          role="menu"
           className="absolute right-0 top-full mt-1.5 z-50 w-64 overflow-hidden rounded-xl border border-border bg-surface p-1 shadow-lift animate-in fade-in-50 zoom-in-95 duration-100"
         >
           {/* Kullanıcı Başlık Bilgisi */}
@@ -106,7 +106,7 @@ export function UserAccountDropdown({ admin }: { admin: boolean }) {
               className="flex items-center gap-2.5 px-3 py-2 text-sm text-fg hover:bg-elevated rounded-lg transition-colors"
             >
               <MessageCircle className="size-4 text-muted shrink-0" />
-              <span>Mesajlarım</span>
+              <span>Mesajlar</span>
             </Link>
 
             <Link
@@ -152,7 +152,7 @@ export function UserAccountDropdown({ admin }: { admin: boolean }) {
                 className="flex items-center gap-2.5 px-3 py-2 text-sm text-warn hover:bg-elevated rounded-lg transition-colors font-medium"
               >
                 <Shield className="size-4 text-warn shrink-0" />
-                <span>Yönetim Paneli</span>
+                <span>Yönetim paneli</span>
               </Link>
             )}
           </div>
@@ -163,12 +163,15 @@ export function UserAccountDropdown({ admin }: { admin: boolean }) {
                 disabled={signingOut}
                 onClick={() => {
                   setSigningOut(true);
-                  void signOut().catch(() => setSigningOut(false));
+                  void signOut().catch(() => {
+                    setSigningOut(false);
+                    toast.error("Çıkış yapılamadı. Lütfen tekrar deneyin.");
+                  });
                 }}
                 className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-danger hover:bg-danger-solid/10 rounded-lg transition-colors font-medium text-left"
               >
                 <LogOut className="size-4 text-danger shrink-0" />
-                <span>{signingOut ? "Çıkış Yapılıyor…" : "Güvenli Çıkış"}</span>
+                <span>{signingOut ? "Çıkış yapılıyor…" : "Çıkış yap"}</span>
               </button>
             </div>
         </div>

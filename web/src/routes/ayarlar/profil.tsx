@@ -1,3 +1,4 @@
+import { ErrorState } from "@/components/common/ErrorState";
 import { createFileRoute } from "@tanstack/react-router";
 import { errorText } from "@/lib/error-text";
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -27,6 +28,7 @@ const EMPTY: Form = { name: "", phone: "", city: "", district: "", bio: "" };
 
 function ProfileSettings() {
   const { user, isPending } = useCurrentUserState();
+  const [failed, setFailed] = useState(false);
   const [saved, setSaved] = useState<Form | null>(null);
   const [form, setForm] = useState<Form>(EMPTY);
   const [avatar, setAvatar] = useState<string | null>(null);
@@ -50,10 +52,11 @@ function ProfileSettings() {
         setForm(loaded);
         setAvatar(p?.avatar_url ?? user.profileImageUrl);
       })
-      .catch(() => toast.error("Profil yüklenemedi"));
+      .catch(() => setFailed(true));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- load once per signed-in user
   }, [user?.id]);
 
+  if (failed) return <AccountShell title="Profil bilgileri"><ErrorState message="Profiliniz yüklenemedi. Sayfayı yenileyip tekrar deneyin." /></AccountShell>;
   if (isPending || (user && !saved)) return <BrandSpinner fullPage text="Profil yükleniyor…" />;
   if (!user) return <RedirectToSignIn />;
 
@@ -66,6 +69,7 @@ function ProfileSettings() {
     setBusy(true);
     try {
       const name = form.name.trim();
+      if (name.length < 2) throw new Error("Adınız en az 2 karakter olmalı.");
       await updateProfile({ data: { display_name: name, phone: cleanPhone(form.phone), bio: form.bio.trim(), city: form.city, district: form.district } });
       // Keep the sign-in record (header, menus) in step with the profile name.
       await authClient.updateUser({ name }).catch(() => undefined);
@@ -83,7 +87,6 @@ function ProfileSettings() {
     setPhotoBusy(true);
     try {
       const url = await uploadAvatar(file);
-      await authClient.updateUser({ image: url }).catch(() => undefined);
       setAvatar(url);
       toast.success("Profil fotoğrafı güncellendi");
     } catch (err) {
@@ -97,7 +100,6 @@ function ProfileSettings() {
     setPhotoBusy(true);
     try {
       await removeAvatar();
-      await authClient.updateUser({ image: null }).catch(() => undefined);
       setAvatar(null);
       toast.success("Profil fotoğrafı kaldırıldı");
     } catch (err) {

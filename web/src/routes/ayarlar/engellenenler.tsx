@@ -1,3 +1,4 @@
+import { ErrorState } from "@/components/common/ErrorState";
 import { createFileRoute } from "@tanstack/react-router";
 import { errorText } from "@/lib/error-text";
 import { useEffect, useState } from "react";
@@ -23,14 +24,16 @@ function BlockedUsers() {
   const { user, isPending } = useCurrentUserState();
   const [rows, setRows] = useState<Row[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     if (!user) return;
     listBlockedUsers()
       .then(setRows)
-      .catch(() => setRows([]));
+      .catch(() => setFailed(true));
   }, [user]);
 
+  if (failed) return <AccountShell title="Engellenenler"><ErrorState message="Liste yüklenemedi. Sayfayı yenileyip tekrar deneyin." /></AccountShell>;
   if (isPending || (user && !rows)) return <BrandSpinner fullPage text="Yükleniyor…" />;
   if (!user || !rows) return <RedirectToSignIn />;
 
@@ -39,7 +42,7 @@ function BlockedUsers() {
     try {
       await unblockUser({ data: { userId: r.id } });
       setRows((prev) => (prev ?? []).filter((x) => x.id !== r.id));
-      toast.success(`${r.name} engeli kaldırıldı`);
+      toast.success(`${r.name} için engel kaldırıldı`);
     } catch (e) {
       toast.error(errorText(e, "Engel kaldırılamadı"));
     } finally {

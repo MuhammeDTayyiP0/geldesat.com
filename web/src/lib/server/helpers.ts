@@ -241,10 +241,10 @@ export async function ensureProfile(
   // (unreviewed picture, visitors' IPs sent elsewhere). Only Google's photos pass.
   const avatar = resolvedImage && /^https:\/\/[a-z0-9-]+\.googleusercontent\.com\//.test(resolvedImage) ? resolvedImage : null;
   await sql.query(
-    `insert into profiles (user_id, display_name, avatar_url, role)
-     values ($1, $2, $3, $4)
+    `insert into profiles (user_id, display_name, avatar_url, role, terms_accepted_at, terms_version)
+     values ($1, $2, $3, $4, now(), $5)
      on conflict (user_id) do nothing`,
-    [userId, name, avatar, role],
+    [userId, name, avatar, role, TERMS_VERSION],
   );
   const row = await sql.query<{ user_id: string; role: string; display_name: string }>(
     "select user_id, role, display_name from profiles where user_id = $1",
@@ -346,6 +346,13 @@ export async function notify(userId: string, type: string, title: string, body: 
 
 const ALLOWED_UPLOAD_PATH = /^\/uploads\/[-a-zA-Z0-9_.]+\.(webp|jpg|jpeg|png)$/i;
 const ALLOWED_MOBILE_IMAGE_PATH = /^\/api\/mobile\/images\/[0-9a-f-]{36}$/i;
+
+/**
+ * Sign-up on the site and in the app happens under this version of the terms;
+ * change it when their text changes. Both sign-up screens say so before the
+ * account exists, so creating the profile is the moment of acceptance.
+ */
+export const TERMS_VERSION = "2026-09-16";
 
 /** Deliberately vague: saying "registered on another account" would let anyone test numbers. */
 export const PHONE_UNAVAILABLE = "Bu telefon numarası kullanılamıyor. Sorun olduğunu düşünüyorsanız destek ekibine yazın.";

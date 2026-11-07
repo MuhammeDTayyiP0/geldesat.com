@@ -36,6 +36,8 @@ export const Route = createFileRoute("/api/avatar")({
           );
           const url = `/api/avatar/${encodeURIComponent(auth.userId)}?v=${Date.now().toString(36)}`;
           await sql.query("update profiles set avatar_url=$2 where user_id=$1", [auth.userId, url]);
+          // Menus read the sign-in record; keep it in step for web and app alike.
+          await sql.query('update "user" set image=$2 where id=$1', [auth.userId, url]);
           return json({ url });
         } catch (err) {
           return json({ error: publicErrorMessage(err, "Fotoğraf yüklenemedi") }, errorStatus(err, 400));
@@ -48,6 +50,7 @@ export const Route = createFileRoute("/api/avatar")({
         const sql = await getSql();
         await sql.query("delete from user_avatars where user_id=$1", [auth.userId]);
         await sql.query("update profiles set avatar_url=null where user_id=$1", [auth.userId]);
+        await sql.query('update "user" set image=null where id=$1', [auth.userId]);
         return json({ ok: true });
       },
     },

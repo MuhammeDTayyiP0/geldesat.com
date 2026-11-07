@@ -34,5 +34,5 @@ export function SignedOut({ children }: { children: ReactNode }) {
 export function RedirectToSignIn({ to = SIGN_IN_PATH }: { to?: string }) {
   const redirect =
     typeof window !== "undefined" ? `${window.location.pathname}${window.location.search}` : undefined;
-  return <Navigate to={to} search={redirect && redirect !== to ? { redirect } : {}} />;
+  return <Navigate replace to={to} search={redirect && redirect !== to ? { redirect } : {}} />;
 }

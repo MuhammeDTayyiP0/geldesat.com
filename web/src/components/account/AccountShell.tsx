@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useState, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight, HelpCircle, LogOut, Settings, Shield } from "lucide-react";
@@ -113,7 +114,10 @@ export function SignOutButton({ className }: { className?: string }) {
       className={className}
       onClick={() => {
         setBusy(true);
-        void signOut("/").catch(() => setBusy(false));
+        void signOut("/").catch(() => {
+          setBusy(false);
+          toast.error("Çıkış yapılamadı. Lütfen tekrar deneyin.");
+        });
       }}
     >
       <LogOut className="size-4.5" /> {busy ? "Çıkış yapılıyor…" : "Çıkış yap"}

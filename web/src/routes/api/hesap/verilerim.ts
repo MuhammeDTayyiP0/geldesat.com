@@ -26,10 +26,10 @@ export const Route = createFileRoute("/api/hesap/verilerim")({
             await Promise.all([
               q(`select id, name, email, "emailVerified" as email_verified, "createdAt" as created_at from "user" where id=$1`),
               q(`select "providerId" as provider, "createdAt" as created_at from "account" where "userId"=$1`),
-              q(`select user_id, display_name, phone, bio, city, district, avatar_url, role, phone_visibility, show_whatsapp, notify_prefs, created_at
+              q(`select user_id, display_name, phone, bio, city, district, avatar_url, role, phone_visibility, show_whatsapp, read_receipts, message_email, chat_templates, terms_accepted_at, terms_version, notify_prefs, created_at
                  from profiles where user_id=$1`),
               q(`select id, name, slug, description, city, phone, plan, created_at from stores where user_id=$1`),
-              q(`select id, listing_no, slug, category_id, title, description, price, currency, status, city, district, neighborhood,
+              q(`select id, listing_no, slug, category_id, title, description, price, currency, status, city, district, neighborhood, lat, lng,
                         images, attrs, phone_override, view_count, created_at, updated_at, expires_at
                  from listings where user_id=$1 order by created_at`),
               q(`select h.listing_id, h.price, h.recorded_at from price_history h join listings l on l.id=h.listing_id
@@ -38,21 +38,30 @@ export const Route = createFileRoute("/api/hesap/verilerim")({
               q(`select v.listing_id, l.title, v.viewed_at from listing_views v left join listings l on l.id=v.listing_id where v.user_id=$1 order by v.viewed_at desc`),
               q(`select c.id, c.listing_id, l.title as listing_title, case when c.buyer_id=$1 then 'alıcı' else 'satıcı' end as role, c.updated_at
                  from conversations c left join listings l on l.id=c.listing_id where c.buyer_id=$1 or c.seller_id=$1`),
-              q(`select m.conversation_id, case when m.sender_id=$1 then 'ben' else 'karşı taraf' end as sender, m.content, m.created_at, m.read_at
+              q(`select m.conversation_id, case when m.sender_id=$1 then 'ben' else 'karşı taraf' end as sender, m.content, m.kind, m.meta, m.reply_to, m.created_at, m.read_at
                  from messages m join conversations c on c.id=m.conversation_id
                  where c.buyer_id=$1 or c.seller_id=$1 order by m.created_at`),
               q(`select seller_id, listing_id, rating, comment, created_at from reviews where reviewer_id=$1`),
               q(`select listing_id, rating, comment, created_at from reviews where seller_id=$1`),
-              q(`select listing_id, reason, details, status, created_at from reports where reporter_id=$1`),
+              q(`select listing_id, conversation_id, message_id, reason, details, status, created_at from reports where reporter_id=$1`),
               q(`select type, title, body, link, read_at, created_at from notifications where user_id=$1 order by created_at`),
               q(`select blocked_id, created_at from user_blocks where blocker_id=$1`),
               q(`select "createdAt" as created_at, "updatedAt" as last_active, "userAgent" as user_agent, "ipAddress" as ip_address
                  from "session" where "userId"=$1`),
             ]);
+          const [chatPhotos, creditOrders, creditLedger, boosts, phoneReveals, devices] = await Promise.all([
+            q(`select i.id, i.conversation_id, i.mime_type, i.created_at from chat_images i join conversations c on c.id=i.conversation_id
+               where c.buyer_id=$1 or c.seller_id=$1`),
+            q(`select id, sku, credits, price, status, created_at, resolved_at from credit_orders where user_id=$1 order by created_at`),
+            q(`select amount, reason, created_at from credit_ledger where user_id=$1 order by created_at`),
+            q(`select listing_id, kind, starts_at, ends_at from boosts where user_id=$1`),
+            q(`select listing_id, created_at from phone_reveals where viewer_id=$1 order by created_at`),
+            q(`select platform, created_at, updated_at from mobile_push_tokens where user_id=$1`),
+          ]);
           const body = JSON.stringify(
             {
               exported_at: new Date().toISOString(),
-              note: "GeldeSat hesabınıza ait kayıtlı veriler (KVKK md. 11). Şifreniz ve oturum anahtarlarınız güvenlik nedeniyle dahil edilmemiştir.",
+              note: "GeldeSat hesabınıza ait kayıtlı veriler (KVKK md. 11). Şifreniz, oturum anahtarlarınız ve bildirim cihaz anahtarlarınız güvenlik nedeniyle dahil edilmemiştir; sohbet fotoğraflarının kendisi sohbet içinden indirilebilir.",
               account: account[0] ?? null,
               sign_in_methods: logins,
               profile: profile[0] ?? null,
@@ -69,6 +78,12 @@ export const Route = createFileRoute("/api/hesap/verilerim")({
               notifications,
               blocked_users: blocks,
               sessions,
+              chat_photos: chatPhotos,
+              credit_orders: creditOrders,
+              credit_ledger: creditLedger,
+              boosts,
+              phone_numbers_viewed: phoneReveals,
+              push_devices: devices,
             },
             null,
             2,

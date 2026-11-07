@@ -14,7 +14,7 @@ import { Input, Label } from "@/components/ui/input";
 import { AccountShell } from "@/components/account/AccountShell";
 
 export const Route = createFileRoute("/ayarlar/guvenlik")({
-  head: () => ({ meta: [{ title: "Hesap ve güvenlik | GeldeSat" }, { name: "robots", content: "noindex,nofollow" }] }),
+  head: () => ({ meta: [{ title: "Şifre ve güvenlik | GeldeSat" }, { name: "robots", content: "noindex,nofollow" }] }),
   component: SecuritySettings,
 });
 
@@ -34,9 +34,12 @@ function SecuritySettings() {
   const [hasPassword, setHasPassword] = useState<boolean | null>(null);
   const [sessions, setSessions] = useState<SessionRow[] | null>(null);
   const [verifyBusy, setVerifyBusy] = useState(false);
+  const [sessionsFailed, setSessionsFailed] = useState(false);
 
   async function loadSessions() {
-    const { data } = await authClient.listSessions();
+    const { data, error } = await authClient.listSessions();
+    if (error) throw new Error(authErrorText(error));
+    setSessionsFailed(false);
     setSessions((data as SessionRow[] | null) ?? []);
   }
 
@@ -44,9 +47,9 @@ function SecuritySettings() {
     if (!user) return;
     authClient
       .listAccounts()
-      .then(({ data }) => setHasPassword(Boolean(data?.some((a) => a.providerId === "credential"))))
+      .then(({ data, error }) => setHasPassword(error ? true : Boolean(data?.some((a) => a.providerId === "credential"))))
       .catch(() => setHasPassword(true));
-    void loadSessions().catch(() => setSessions([]));
+    void loadSessions().catch(() => setSessionsFailed(true));
   }, [user]);
 
   if (isPending) return <BrandSpinner fullPage text="Yükleniyor…" />;
@@ -59,7 +62,7 @@ function SecuritySettings() {
     if (!user?.primaryEmail) return;
     setVerifyBusy(true);
     try {
-      const { error } = await authClient.sendVerificationEmail({ email: user.primaryEmail, callbackURL: "/ayarlar/guvenlik" });
+      const { error } = await authClient.sendVerificationEmail({ email: user.primaryEmail, callbackURL: "/login?verified=1&redirect=/ayarlar/guvenlik" });
       if (error) throw new Error(authErrorText(error, "Gönderilemedi"));
       toast.success("Doğrulama bağlantısı e-postanıza gönderildi");
     } catch (err) {
@@ -67,6 +70,21 @@ function SecuritySettings() {
     } finally {
       setVerifyBusy(false);
     }
+  }
+
+  async function changeEmail() {
+    const next = window.prompt("Yeni e-posta adresiniz");
+    if (!next?.trim()) return;
+    const { error } = await authClient.changeEmail({ newEmail: next.trim(), callbackURL: "/ayarlar/guvenlik" });
+    if (error) return toast.error(authErrorText(error, "E-posta değiştirilemedi"));
+    toast.success("Onay bağlantısı gönderildi. Değişiklik onaylanınca geçerli olur.");
+  }
+
+  async function closeSession(token: string) {
+    const { error } = await authClient.revokeSession({ token });
+    if (error) return toast.error(authErrorText(error, "Oturum kapatılamadı"));
+    toast.success("Oturum kapatıldı");
+    void loadSessions().catch(() => setSessionsFailed(true));
   }
 
   async function signOutOthers() {
@@ -77,7 +95,7 @@ function SecuritySettings() {
   }
 
   return (
-    <AccountShell title="Hesap ve güvenlik" description="Giriş bilgileriniz ve açık oturumlarınız.">
+    <AccountShell title="Şifre ve güvenlik" description="Giriş bilgileriniz ve açık oturumlarınız.">
       <div className="space-y-5">
         <section className="rounded-2xl border border-border bg-surface p-4 shadow-card sm:p-6">
           <h2 className="text-base font-semibold">E-posta</h2>
@@ -85,6 +103,9 @@ function SecuritySettings() {
             <p className="flex min-w-0 items-center gap-2 text-sm">
               <Mail className="size-4 shrink-0 text-muted" />
               <span className="truncate font-medium">{user.primaryEmail}</span>
+              <button type="button" onClick={() => void changeEmail()} className="shrink-0 text-xs font-medium text-primary hover:underline">
+                Değiştir
+              </button>
             </p>
             {verified ? (
               <span className="inline-flex items-center gap-1 rounded-full bg-ok/10 px-2.5 py-1 text-xs font-medium text-ok">
@@ -98,7 +119,7 @@ function SecuritySettings() {
           </div>
           {!verified ? (
             <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-elevated/70 p-3 text-sm text-muted">
-              <span>Doğrulanmış e-posta, Google ile giriş ve şifre kurtarma için gereklidir.</span>
+              <span>Doğrulanmış e-posta, Google ile giriş ve okunmamış mesaj e-postaları için gereklidir.</span>
               <Button size="sm" variant="outline" disabled={verifyBusy} onClick={() => void sendVerification()}>
                 {verifyBusy ? "Gönderiliyor…" : "Doğrulama e-postası gönder"}
               </Button>
@@ -130,7 +151,9 @@ function SecuritySettings() {
               </Button>
             ) : null}
           </div>
-          {sessions === null ? (
+          {sessionsFailed ? (
+            <p className="mt-3 text-sm text-danger">Oturumlar yüklenemedi.</p>
+          ) : sessions === null ? (
             <p className="mt-3 text-sm text-muted">Yükleniyor…</p>
           ) : (
             <ul className="mt-3 divide-y divide-border">
@@ -146,8 +169,13 @@ function SecuritySettings() {
                         {d.label}
                         {current ? <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">Bu cihaz</span> : null}
                       </p>
-                      <p className="text-xs text-muted">Son etkinlik: {timeAgo(String(s.updatedAt))}</p>
+                      <p className="text-xs text-muted">Son oturum yenileme: {timeAgo(String(s.updatedAt))} önce</p>
                     </div>
+                    {current ? null : (
+                      <Button size="sm" variant="ghost" onClick={() => void closeSession(s.token)}>
+                        Kapat
+                      </Button>
+                    )}
                   </li>
                 );
               })}

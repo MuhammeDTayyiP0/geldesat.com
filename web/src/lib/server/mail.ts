@@ -23,6 +23,9 @@ function getTransporter(): Transporter {
       port,
       secure: port === 465,
       auth: user ? { user, pass: env("SMTP_PASS") ?? "" } : undefined,
+      connectionTimeout: 8_000,
+      greetingTimeout: 8_000,
+      socketTimeout: 15_000,
     });
   }
   return transporter;
@@ -97,6 +100,19 @@ function layout(input: {
 const hello = (name?: string | null) => (name?.trim() ? `Merhaba ${escapeHtml(name.trim())},` : "Merhaba,");
 
 /** "Confirm your address" after sign-up or when requested from settings. */
+export async function sendEmailChangeMail(input: { to: string; name?: string | null; newEmail: string; url: string }): Promise<void> {
+  const subject = "E-posta değişikliğini onaylayın – GeldeSat";
+  const html = layout({
+    preheader: "Hesabınızın e-posta adresi değiştirilmek isteniyor.",
+    title: "E-posta adresiniz değişiyor",
+    bodyHtml: `${hello(input.name)}<br><br>Hesabınızın e-posta adresini <strong>${escapeHtml(input.newEmail)}</strong> olarak değiştirmek istediniz. Onaylamak için aşağıdaki butona dokunun.`,
+    button: { label: "Değişikliği onayla", url: input.url },
+    noteHtml: "Bu isteği siz yapmadıysanız bu e-postayı yok sayın ve şifrenizi değiştirin.",
+  });
+  const text = `${input.name ? `Merhaba ${input.name},` : "Merhaba,"}\n\nHesabınızın e-posta adresini ${input.newEmail} olarak değiştirmek istediniz. Onaylamak için: ${input.url}\n\nBu isteği siz yapmadıysanız bu e-postayı yok sayın ve şifrenizi değiştirin.`;
+  await send(input.to, subject, html, text);
+}
+
 export async function sendVerificationMail(input: { to: string; name?: string | null; url: string }): Promise<void> {
   const subject = "E-posta adresinizi doğrulayın – GeldeSat";
   const html = layout({

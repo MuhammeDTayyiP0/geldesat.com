@@ -24,12 +24,36 @@ function AccountData() {
   const { user, isPending } = useCurrentUserState();
   const [hasPassword, setHasPassword] = useState<boolean | null>(null);
   const [open, setOpen] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+
+  /** A plain download link would save an error answer as if it were the data. */
+  async function download() {
+    setDownloading(true);
+    try {
+      const res = await fetch("/api/hesap/verilerim");
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(body?.error || (res.status === 429 ? "Çok sık indirme denediniz. Biraz sonra tekrar deneyin." : "Verileriniz hazırlanamadı."));
+      }
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "geldesat-verilerim.json";
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) {
+      toast.error(errorText(err, "Verileriniz indirilemedi"));
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   useEffect(() => {
     if (!user) return;
     authClient
       .listAccounts()
-      .then(({ data }) => setHasPassword(Boolean(data?.some((a) => a.providerId === "credential"))))
+      // An error answer is not "no password": asking for it is the safe guess.
+      .then(({ data, error }) => setHasPassword(error ? true : Boolean(data?.some((a) => a.providerId === "credential"))))
       .catch(() => setHasPassword(true));
   }, [user]);
 
@@ -45,11 +69,9 @@ function AccountData() {
             Profiliniz, ilanlarınız, mesajlarınız, favorileriniz, değerlendirmeleriniz ve bildirimleriniz tek bir dosya (JSON) olarak
             indirilir. KVKK kapsamındaki bilgi edinme hakkınızdır.
           </p>
-          <a href="/api/hesap/verilerim" download className="mt-4 inline-block">
-            <Button type="button" variant="outline">
-              <Download className="size-4" /> Verilerimi indir
-            </Button>
-          </a>
+          <Button type="button" variant="outline" className="mt-4" disabled={downloading} onClick={() => void download()}>
+            <Download className="size-4" /> {downloading ? "Hazırlanıyor…" : "Verilerimi indir"}
+          </Button>
         </section>
 
         <section className="rounded-2xl border border-danger/30 bg-surface p-4 shadow-card sm:p-6">
@@ -99,7 +121,13 @@ function DeleteDialog({ open, onOpenChange, needsPassword }: { open: boolean; on
   const [password, setPassword] = useState("");
   const [word, setWord] = useState("");
   const [busy, setBusy] = useState(false);
-  const ready = word.trim().toLocaleUpperCase("tr") === CONFIRM_WORD && (!needsPassword || password.length > 0);
+  // A cancelled dialog must not keep the typed password around.
+  useEffect(() => {
+    if (open) return;
+    setPassword("");
+    setWord("");
+  }, [open]);
+  const ready = word.trim().toLocaleUpperCase("tr").replace(/I/g, "İ") === CONFIRM_WORD && (!needsPassword || password.length > 0);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -109,7 +137,7 @@ function DeleteDialog({ open, onOpenChange, needsPassword }: { open: boolean; on
       await requestMyAccountDeletion({ data: needsPassword ? { password } : {} });
       // The server already ended every session; clear this browser's cookies too.
       await authClient.signOut().catch(() => undefined);
-      toast.success("Hesabınız 30 gün içinde silinecek. Bu sürede giriş yaparak geri alabilirsiniz.");
+      toast.success("Hesabınız 30 gün içinde silinecek. Bu sürede giriş yapıp sitedeki “Hesabımı geri al” düğmesine basarak geri alabilirsiniz.");
       setTimeout(() => (window.location.href = "/"), 1200);
     } catch (err) {
       toast.error(errorText(err, "Hesap silinemedi"));
@@ -123,7 +151,7 @@ function DeleteDialog({ open, onOpenChange, needsPassword }: { open: boolean; on
         <form onSubmit={submit} className="space-y-4">
           <DialogHeader>
             <DialogTitle>Hesabınız silinsin mi?</DialogTitle>
-            <DialogDescription>Hesabınız hemen gizlenir ve 30 gün sonra kalıcı olarak silinir. Bu süre içinde giriş yaparak geri alabilirsiniz.</DialogDescription>
+            <DialogDescription>Hesabınız hemen gizlenir ve 30 gün sonra kalıcı olarak silinir. Bu süre içinde giriş yapıp “Hesabımı geri al” düğmesine basarak geri alabilirsiniz.</DialogDescription>
           </DialogHeader>
           {needsPassword ? (
             <div>

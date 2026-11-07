@@ -1,3 +1,4 @@
+import { ErrorState } from "@/components/common/ErrorState";
 import { useFlag } from "@/lib/use-flag";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
@@ -26,17 +27,20 @@ function AccountHub() {
   const { user, isPending } = useCurrentUserState();
   const [me, setMe] = useState<Me | null>(null);
   const { counts } = useAccountMeta();
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     if (!user) return;
     let alive = true;
+    setFailed(false);
     getMe()
       .then((m) => alive && setMe(m))
-      .catch(() => undefined);
+      .catch(() => alive && setFailed(true));
     return () => {
       alive = false;
     };
-  }, [user]);
+  }, [user, attempt]);
 
   if (!isPending && !user) return <RedirectToSignIn />;
 
@@ -46,7 +50,9 @@ function AccountHub() {
   return (
     <AccountShell title="Hesabım" hub>
       <section className="rounded-2xl border border-border bg-surface p-4 shadow-card sm:p-5">
-        {!me || !user ? (
+        {failed ? (
+          <ErrorState message="Profil bilgileriniz yüklenemedi." onRetry={() => setAttempt((n) => n + 1)} />
+        ) : !me || !user ? (
           <div className="flex items-center gap-4" aria-busy>
             <Skeleton className="size-16 rounded-full bg-border/60" />
             <div className="flex-1 space-y-2">
