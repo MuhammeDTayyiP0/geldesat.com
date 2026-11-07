@@ -13,7 +13,7 @@
     "start:prod": "node scripts/migrate.mjs && node .output/server/index.mjs",
     "db:migrate": "node scripts/migrate.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "node scripts/run-tests.mjs && node --import ./scripts/test-register.mjs --test src/lib/auth/sign-in-gate.test.ts src/lib/search-params.test.ts src/lib/seo.test.ts src/lib/flags.test.ts src/lib/server/ota.test.ts src/lib/listing-attrs.test.ts src/lib/server/mobile-oauth.test.ts src/lib/server/mobile-rpc.test.ts src/lib/server/catalog-search.test.ts src/lib/chat-shared.test.ts src/lib/listing-status.test.ts src/components/navbar/nav-data.test.ts src/lib/server/migration-integrity.test.ts",
+    "test": "node scripts/run-tests.mjs && node --import ./scripts/test-register.mjs --test src/lib/auth/sign-in-gate.test.ts src/lib/search-params.test.ts src/lib/seo.test.ts src/lib/flags.test.ts src/lib/flags-in-code.test.ts src/lib/server/ota.test.ts src/lib/listing-attrs.test.ts src/lib/server/mobile-oauth.test.ts src/lib/server/mobile-rpc.test.ts src/lib/server/catalog-search.test.ts src/lib/chat-shared.test.ts src/lib/listing-status.test.ts src/components/navbar/nav-data.test.ts src/lib/server/migration-integrity.test.ts",
     "lint": "eslint .",
     "format": "prettier --write ."
   },

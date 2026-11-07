@@ -5,7 +5,7 @@ import { ArrowDown, ArrowUp, Building2, ChevronRight, Landmark, LayoutTemplate, 
 import { Button } from "@/components/ui/button";
 import { ToggleSwitch } from "@/components/ui/toggle-switch";
 import { cn } from "@/lib/utils";
-import { KNOWN_FLAGS as FLAGS_IN_CODE, FLAG_PLATFORMS, type FlagPlatform, type FlagRule, type FlagRules } from "@/lib/flags";
+import { CODE_FLAGS, KNOWN_FLAGS as FLAGS_IN_CODE, FLAG_PLATFORMS, readyToMakePermanent, type FlagPlatform, type FlagRule, type FlagRules } from "@/lib/flags";
 import { adminGetSettings, adminSaveAppConfig, adminSaveSiteSettings, type MobileAppConfig, type ModerationMode } from "@/lib/server/admin/content";
 import { useRunner } from "@/components/admin/hooks";
 import type { Tone } from "@/components/admin/format";
@@ -147,14 +147,8 @@ function SiteCard({ site }: { site: Awaited<ReturnType<typeof adminGetSettings>>
   );
 }
 
-/** Descriptions for flags saved before flags carried their own. */
-const KNOWN_FLAGS: Record<string, string> = {
-  doping_enabled: "Doping / vitrin satışı ekranları.",
-  harita_v2: "Harita sayfasında il başına ilan sayılı gerçek harita.",
-  arama_v2: "Aramada kelime bazlı, Türkçe harften bağımsız eşleşme.",
-  ilan_formu_v2: "İlan formunda otomatik taslak ve çıkış uyarısı.",
-  sohbet_v2: "Sohbetin ilk okunmamışta açılması, görülünce okundu sayılması.",
-};
+/** A flag the panel does not have yet starts dark: on for admins only, 0% for everyone else. */
+const newRule = (description = ""): FlagRule => ({ enabled: true, rollout: 0, platforms: [], minAppVersion: null, admins: true, description });
 
 const PLATFORM_LABEL: Record<FlagPlatform, string> = { web: "Web", ios: "iOS", android: "Android" };
 const ROLLOUT_STEPS = [0, 1, 5, 10, 25, 50, 100];
@@ -173,6 +167,7 @@ function FeaturesCard({ features }: { features: FlagRules }) {
   const { run, busy } = useRunner();
   const { confirm } = useConfirm();
   const dirty = JSON.stringify(value) !== JSON.stringify(features);
+  const missing = FLAGS_IN_CODE.filter((key) => !(key in value));
   const patch = (key: string, p: Partial<FlagRule>) => setValue((v) => ({ ...v, [key]: { ...v[key], ...p } }));
   const remove = async (key: string) => {
     const ok = await confirm({
@@ -195,6 +190,32 @@ function FeaturesCard({ features }: { features: FlagRules }) {
         title={<span className="inline-flex items-center gap-2"><ToggleLeft className="size-4 text-primary" /> Özellik anahtarları</span>}
         description="Yeni bir özelliği önce yöneticilere, sonra üyelerin bir yüzdesine, en sonda herkese açın. Ana anahtar kapalıysa özellik herkeste kapanır. Değişiklik yeni açılışlara hemen, açık sayfa ve uygulamalara birkaç dakika içinde yansır."
       />
+      {missing.length ? (
+        <div className="border-b border-border bg-primary/5 px-4 py-3">
+          <p className="text-sm font-semibold">Kodda var, panelde yok</p>
+          <p className="mt-0.5 text-xs text-muted">
+            Bu özellikler kodda hazır ama henüz kimseye açık değil. Ekleyince yalnızca yöneticilere açık başlar; kendi hesabınızda deneyip yüzdeyi sonra seçin ve kaydedin.
+          </p>
+          <ul className="mt-2 space-y-1.5">
+            {missing.map((key) => (
+              <li key={key} className="flex flex-wrap items-center gap-2">
+                <span className="font-mono text-sm font-medium">{key}</span>
+                <span className="min-w-0 flex-1 text-xs text-muted">{CODE_FLAGS[key]}</span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setValue((v) => ({ ...v, [key]: newRule(CODE_FLAGS[key]) }));
+                    setOpen(key);
+                  }}
+                >
+                  <Plus className="size-4" /> Ekle
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       <ul className="divide-y divide-border">
         {Object.entries(value).map(([key, rule]) => {
           const status = flagStatus(rule);
@@ -210,8 +231,15 @@ function FeaturesCard({ features }: { features: FlagRules }) {
                       <Pill tone={status.tone}>{status.label}</Pill>
                       {rule.platforms.length ? <Pill>{rule.platforms.map((p) => PLATFORM_LABEL[p]).join(" · ")}</Pill> : null}
                       {rule.minAppVersion ? <Pill>≥ {rule.minAppVersion}</Pill> : null}
+                      {!FLAGS_IN_CODE.includes(key) ? (
+                        <Pill tone="warn">Kodda kullanılmıyor</Pill>
+                      ) : readyToMakePermanent(rule) ? (
+                        <span title="Birkaç gün sorunsuz çalıştıysa yapay zekâya &quot;bu anahtarı kalıcı yap&quot; deyin; kod temizlenip yayınlandıktan sonra anahtarı buradan silin.">
+                          <Pill tone="violet">Kalıcı yapılabilir</Pill>
+                        </span>
+                      ) : null}
                     </span>
-                    <span className="mt-0.5 block truncate text-xs text-muted">{rule.description || KNOWN_FLAGS[key] || "Açıklama yok"}</span>
+                    <span className="mt-0.5 block truncate text-xs text-muted">{rule.description || CODE_FLAGS[key] || "Açıklama yok"}</span>
                   </span>
                 </button>
                 <ToggleSwitch checked={rule.enabled} onChange={(next) => patch(key, { enabled: next })} label={`${key} ana anahtarı`} />
@@ -219,7 +247,7 @@ function FeaturesCard({ features }: { features: FlagRules }) {
               {expanded ? (
                 <div className="space-y-4 border-t border-border bg-elevated/40 px-4 py-4 md:pl-10">
                   <Field label="Açıklama">
-                    <input value={rule.description} onChange={(e) => patch(key, { description: e.target.value })} maxLength={200} className={inputClass} placeholder={KNOWN_FLAGS[key] ?? "Bu anahtar neyi açıyor?"} />
+                    <input value={rule.description} onChange={(e) => patch(key, { description: e.target.value })} maxLength={200} className={inputClass} placeholder={CODE_FLAGS[key] ?? "Bu anahtar neyi açıyor?"} />
                   </Field>
                   <FieldGroup label="Kimler görsün?" hint="Aynı üye her zaman aynı sonucu alır; yüzdeyi artırınca önceden görenler görmeye devam eder.">
                     <div className="flex flex-wrap items-center gap-1.5">
@@ -291,7 +319,6 @@ function FeaturesCard({ features }: { features: FlagRules }) {
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
-                      {FLAGS_IN_CODE.includes(key) ? null : <Pill tone="warn">Kodda kullanılmıyor</Pill>}
                       <code className="hidden rounded bg-elevated px-2 py-1 text-[11px] text-muted sm:inline">useFlag("{key}")</code>
                       <Button type="button" size="sm" variant="ghost" className="text-danger" onClick={() => void remove(key)}>
                         <Trash2 className="size-4" /> Sil
@@ -316,8 +343,7 @@ function FeaturesCard({ features }: { features: FlagRules }) {
           variant="outline"
           disabled={!newKey || newKey in value}
           onClick={() => {
-            // A new feature starts dark: on for admins only, 0% for everyone else.
-            setValue((v) => ({ ...v, [newKey]: { enabled: true, rollout: 0, platforms: [], minAppVersion: null, admins: true, description: "" } }));
+            setValue((v) => ({ ...v, [newKey]: newRule(CODE_FLAGS[newKey]) }));
             setOpen(newKey);
             setNewKey("");
           }}

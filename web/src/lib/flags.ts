@@ -38,8 +38,30 @@ export type FlagContext = {
 export const FLAG_NAME_PATTERN = /^[a-z0-9_]{1,60}$/;
 export const VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
 
+/**
+ * Every flag the web or mobile code reads, with what it does. The admin panel
+ * offers the ones not added yet ("Kodda var, panelde yok") and marks panel
+ * entries missing here as having no effect. flags-in-code.test.ts fails when a
+ * `useFlag("…")` name is not listed, or a listed one is no longer read.
+ */
+export const CODE_FLAGS: Record<string, string> = {
+  doping_enabled: "Doping / vitrin satışı ekranları.",
+  harita_v2: "Harita sayfasında il başına ilan sayılı gerçek harita.",
+  arama_v2: "Aramada kelime bazlı, Türkçe harften bağımsız eşleşme.",
+  ilan_formu_v2: "İlan formunda otomatik taslak ve çıkış uyarısı.",
+  sohbet_v2: "Sohbetin ilk okunmamışta açılması, görülünce okundu sayılması.",
+};
+
 /** Flags the code actually reads; the panel marks any other as having no effect. */
-export const KNOWN_FLAGS = ["doping_enabled", "harita_v2", "arama_v2", "ilan_formu_v2", "sohbet_v2"];
+export const KNOWN_FLAGS = Object.keys(CODE_FLAGS);
+
+/**
+ * On for everyone with no platform or version limit: the `useFlag` check and the
+ * old code can be removed, then the flag deleted from the panel.
+ */
+export function readyToMakePermanent(rule: FlagRule): boolean {
+  return rule.enabled && rule.rollout >= 100 && rule.platforms.length === 0 && !rule.minAppVersion;
+}
 
 export function fullRule(enabled: boolean, description = ""): FlagRule {
   return { enabled, rollout: 100, platforms: [], minAppVersion: null, admins: false, description };

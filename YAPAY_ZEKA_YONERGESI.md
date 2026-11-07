@@ -60,6 +60,7 @@ Kurallar:
   return yeniKart ? <IlanKartiA {...props} /> : <IlanKartiB {...props} />;
   ```
 
+- **Yeni anahtarı listeye yaz.** `web/src/lib/flags.ts` içindeki `CODE_FLAGS`'a adını ve tek cümlelik Türkçe açıklamasını ekle. Admin paneli anahtarı buradan bulup "Kodda var, panelde yok" bölümünde **Ekle** düğmesiyle sunar. Listede olmayan bir `useFlag` çağrısını `flags-in-code.test.ts` yakalar ve test kırılır.
 - **Üç ya da daha fazla sürüm** şu an desteklenmiyor (anahtar sadece açık/kapalı). Gerekirse kullanıcıya söyle; uydurma bir çözüm yazma.
 
 ### Sunucuda (gerekirse)
@@ -70,7 +71,7 @@ Anahtarlar arayüz içindir. Bir API'nin davranışı da kişiye göre değişec
 
 Anahtarları ve yüzdeleri kullanıcı **Admin → Ayarlar → Özellik anahtarları** sayfasından yönetir. Kodu yazdıktan sonra kullanıcıya tam olarak şunu söyle:
 
-1. Kod yayınlanınca (web push + mobil `npm run ota`) admin panelinde `<anahtar_adı>` anahtarını ekle.
+1. Kod yayınlanınca (web push + mobil `npm run ota`) admin panelinde "Kodda var, panelde yok" bölümünde `<anahtar_adı>` için **Ekle**'ye bas ve kaydet.
 2. Yeni anahtar "sadece yöneticilere açık" başlar; önce kendi hesabında dene.
 3. Sonra yüzdeyi seç (ör. %50) ve kaydet. Sorun çıkarsa ana anahtarı kapat.
 
@@ -83,7 +84,14 @@ Paneldeki diğer seçenekler:
 
 ### İş bitince anahtarı temizle
 
-Bir özellik %100'de oturduysa ve kullanıcı isterse: `useFlag` kontrolünü ve eski kodu kaldır, yeni kodu kalıcı yap. Ardından kullanıcıya anahtarı admin panelinden silmesini söyle. Önce kodu temizle, sonra anahtarı sil; tersi yeni özelliği herkesten gizler.
+Panel, herkese açık ve platform ya da sürüm sınırı olmayan anahtarların yanına "Kalıcı yapılabilir" yazar. Kullanıcı "`<anahtar>`'ı kalıcı yap" derse:
+
+1. Web ve mobilde `useFlag("<anahtar>")` kontrolünü ve eski kodu kaldır; yeni kod herkes için normal kod olsun. Sunucuda `resolveFlags` sonucunda okunuyorsa orayı da temizle.
+2. Anahtarı `CODE_FLAGS`'tan çıkar (test, kodda okunmayan bir anahtar listede kalırsa kırılır).
+3. Kontrolleri çalıştır, push ve OTA için onay iste.
+4. Kullanıcıya söyle: yayından birkaç gün sonra, panelde anahtarın yanında "Kodda kullanılmıyor" yazınca anahtarı silsin. Güncellemeyi almamış telefonlar anahtara hâlâ bakar; erken silmek yeni özelliği onlardan gizler.
+
+Önce kodu temizle, sonra anahtarı sil; tersi yeni özelliği herkesten gizler.
 
 ---
 
@@ -192,7 +200,7 @@ Hepsi temizse kullanıcıya Türkçe, kısaca şunları yaz:
 
 | Dosya | İçerik |
 |---|---|
-| `web/src/lib/flags.ts` | Yüzde ve kural hesaplama (web ve mobil config'i bunu kullanır) |
+| `web/src/lib/flags.ts` | Yüzde ve kural hesaplama; koddaki anahtarların listesi (`CODE_FLAGS`) |
 | `web/src/lib/use-flag.ts` | Web `useFlag` |
 | `web/src/lib/server/config.ts` | Anahtarların veritabanından okunması, `resolveFlags` |
 | `web/src/routes/api/mobile/config.ts` | Uygulamanın anahtarları aldığı uç nokta |
