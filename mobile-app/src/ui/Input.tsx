@@ -56,11 +56,13 @@ export const Input = forwardRef<TextInputRef, InputProps>(function Input(
             onBlur?.(e);
           }}
           style={[styles.input, { color: c.fg, paddingVertical: multiline ? space.md : 0 }, style]}
+          accessibilityLabel={label ? `${label}${required ? ', zorunlu' : ''}` : undefined}
+          accessibilityHint={error ?? hint}
           {...rest}
         />
         {suffix ? <Text tone="muted">{suffix}</Text> : null}
         {secureTextEntry ? (
-          <Pressable accessibilityLabel={hidden ? 'Şifreyi göster' : 'Şifreyi gizle'} hitSlop={10} onPress={() => setHidden((h) => !h)}>
+          <Pressable accessibilityRole="button" accessibilityLabel={hidden ? 'Şifreyi göster' : 'Şifreyi gizle'} hitSlop={13} onPress={() => setHidden((h) => !h)}>
             {hidden ? <Eye size={18} color={c.subtle} /> : <EyeOff size={18} color={c.subtle} />}
           </Pressable>
         ) : null}
@@ -111,6 +113,8 @@ export function SelectField({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={label ?? placeholder}
+        accessibilityValue={value ? { text: value } : undefined}
+        accessibilityHint={error ?? undefined}
         disabled={disabled}
         onPress={onPress}
         style={({ pressed }) => [

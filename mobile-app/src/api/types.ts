@@ -271,7 +271,13 @@ export type BlockedUser = { id: string; name: string; avatar: string | null; sin
 export type MobileConfig = {
   homeSections: string[];
   features: Record<string, boolean>;
-  mobileApp: { min_ios_version: string; min_android_version: string; announcement: string | null };
+  mobileApp: {
+    min_ios_version: string;
+    min_android_version: string;
+    announcement: string | null;
+    ios_store_url?: string | null;
+    android_store_url?: string | null;
+  };
   auth?: { google: boolean };
 };
 

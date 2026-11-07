@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { MessageSquareText, Plus, Trash2 } from 'lucide-react-native';
@@ -7,9 +8,19 @@ import { chat } from '@/api/endpoints';
 import { keys, queryClient } from '@/api/queries';
 import { MAX_TEMPLATES, MAX_TEMPLATE_LENGTH } from '@/features/chat/shared';
 import { Button, Card, EmptyState, Header, IconButton, Input, Loading, Text, space, toast, useTheme } from '@/ui';
+import { RequireSignIn } from '@/auth/RequireSignIn';
 
 /** Saved reply templates, offered as quick replies in chats (same list as on the website). */
-export default function TemplatesScreen() {
+export default function TemplatesScreenScreen() {
+  return (
+    <RequireSignIn title="Hazır mesajlarım">
+      <TemplatesScreen />
+    </RequireSignIn>
+  );
+}
+
+function TemplatesScreen() {
+  const insets = useSafeAreaInsets();
   const { c } = useTheme();
   const query = useQuery({ queryKey: keys.templates, queryFn: chat.templates });
   const [saved, setItems] = useState<string[] | null>(null);
@@ -36,7 +47,7 @@ export default function TemplatesScreen() {
       {query.isLoading ? (
         <Loading />
       ) : (
-        <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+        <ScrollView contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + space.xxxl }]} keyboardShouldPersistTaps="handled">
           <Text tone="muted">Sık yazdığınız mesajları kaydedin; sohbette ⚡ simgesiyle tek dokunuşla gönderin.</Text>
           <Input
             multiline

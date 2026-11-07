@@ -35,7 +35,7 @@ export default function LegalPage() {
       <Header title={page?.title ?? ''} />
       {query.isLoading ? (
         <Loading />
-      ) : query.isError ? (
+      ) : query.isError && !query.data ? (
         <ErrorState error={query.error} onRetry={() => query.refetch()} />
       ) : !page ? (
         <EmptyState icon={FileText} title="Sayfa bulunamadı" />

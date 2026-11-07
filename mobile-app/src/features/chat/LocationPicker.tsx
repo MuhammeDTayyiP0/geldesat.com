@@ -224,7 +224,7 @@ function PickerBody({ onClose, onSend }: Omit<Props, 'visible'>) {
             onPress={() => void send('mine')}
             style={({ pressed }) => [styles.mineRow, pressed && { backgroundColor: c.elevated }]}
           >
-            <View style={[styles.mineIcon, { backgroundColor: c.primary }]}>
+            <View style={[styles.mineIcon, { backgroundColor: c.primarySolid }]}>
               {busy === 'mine' ? <ActivityIndicator color="#fff" size="small" /> : <Navigation size={18} color="#fff" />}
             </View>
             <View style={styles.flex}>

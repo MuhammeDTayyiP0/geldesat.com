@@ -97,7 +97,7 @@ export default function ListingScreen() {
 
   const galleryHeight = Math.round(width * 0.78);
 
-  if (detail.isError) {
+  if (detail.isError && !detail.data) {
     const notFound = detail.error instanceof ApiError && detail.error.status === 404;
     return (
       <View style={[styles.flex, { backgroundColor: c.bg, paddingTop: insets.top }]}>

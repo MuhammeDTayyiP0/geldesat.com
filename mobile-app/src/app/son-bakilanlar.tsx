@@ -57,7 +57,7 @@ export default function RecentScreen() {
         <EmptyState icon={History} title="Giriş yapın" action={<Button title="Giriş yap" onPress={() => router.push('/giris')} />} />
       ) : query.isLoading ? (
         <Loading />
-      ) : query.isError ? (
+      ) : query.isError && !query.data ? (
         <ErrorState error={query.error} onRetry={() => query.refetch()} />
       ) : (
         <FlatList

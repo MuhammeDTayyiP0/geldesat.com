@@ -20,7 +20,7 @@ Notifications.setNotificationHandler({
  * Ask for notification permission (once) and register this device's Expo push
  * token with the account. Silent no-op on simulators or when declined.
  */
-export async function registerForPush(): Promise<void> {
+export async function registerForPush({ ask = true }: { ask?: boolean } = {}): Promise<void> {
   if (!Device.isDevice || Platform.OS === 'web') return;
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('default', {
@@ -32,7 +32,7 @@ export async function registerForPush(): Promise<void> {
   }
   const current = await Notifications.getPermissionsAsync();
   let granted = current.granted;
-  if (!granted && current.canAskAgain) granted = (await Notifications.requestPermissionsAsync()).granted;
+  if (!granted && ask && current.canAskAgain) granted = (await Notifications.requestPermissionsAsync()).granted;
   if (!granted) return;
   const projectId = (Constants.expoConfig?.extra as { eas?: { projectId?: string } } | undefined)?.eas?.projectId;
   const { data: token } = await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined);
@@ -40,12 +40,20 @@ export async function registerForPush(): Promise<void> {
   await AsyncStorage.setItem(PUSH_KEY, token);
 }
 
-/** Remove this device from the account before signing out. */
-export async function unregisterPush(): Promise<void> {
-  const token = await AsyncStorage.getItem(PUSH_KEY);
-  if (!token) return;
-  await account.unregisterPush(token).catch(() => undefined);
-  await AsyncStorage.removeItem(PUSH_KEY);
+/** This device's push token, forgotten locally (sign-out). The caller removes it from the account. */
+export async function takePushToken(): Promise<string | null> {
+  try {
+    const token = await AsyncStorage.getItem(PUSH_KEY);
+    await AsyncStorage.removeItem(PUSH_KEY);
+    return token;
+  } catch {
+    return null;
+  }
+}
+
+/** Remove a push token from the account the session belongs to (works after the local sign-out). */
+export async function unregisterPushToken(pushToken: string, sessionToken: string): Promise<void> {
+  await account.unregisterPush(pushToken, sessionToken);
 }
 
 export async function pushPermissionGranted(): Promise<boolean> {

@@ -12,6 +12,19 @@ export class ApiError extends Error {
 
 export const NETWORK_ERROR = 'Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edin.';
 
+/** fetch with a time limit; a dead network rejects with NETWORK_ERROR instead of hanging. */
+export async function timedFetch(url: string, init: RequestInit = {}, timeoutMs = 20_000): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch {
+    throw new ApiError(NETWORK_ERROR, 0);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 /** Header the site's upload routes require (see web/src/lib/listing-photos.ts). */
 export const UPLOAD_HEADER = 'x-geldesat-upload';
 
@@ -67,7 +80,8 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     | null;
 
   if (response.status === 401 && token) {
-    void clearSession();
+    // Only if this was the current session: a late answer must not end a newer one.
+    if (getToken() === token) void clearSession();
     throw new ApiError(data?.error || 'Oturumunuz sona erdi. Lütfen tekrar giriş yapın.', 401);
   }
   if (!response.ok || data?.success === false) {

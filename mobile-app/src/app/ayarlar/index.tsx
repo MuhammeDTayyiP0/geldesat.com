@@ -25,7 +25,6 @@ import { signOut } from '@/auth/auth';
 import { useSession } from '@/auth/session';
 import { SUPPORT_EMAIL } from '@/lib/config';
 import { runningVersionLabel } from '@/lib/ota';
-import { unregisterPush } from '@/lib/push';
 import { useThemePref } from '@/lib/themePref';
 import { Avatar, Button, Header, ListRow, RowGroup, Text, confirm, font, hairline, radius, space, toast, useTheme } from '@/ui';
 
@@ -97,7 +96,7 @@ export default function SettingsScreen() {
     const ok = await confirm({ title: 'Çıkış yapılsın mı?', message: 'Bu cihazdaki oturumunuz kapanacak.', confirmText: 'Çıkış yap', destructive: true });
     if (!ok) return;
     try {
-      await signOut(unregisterPush);
+      await signOut();
       router.navigate('/');
     } catch (e) {
       toast.error(errorMessage(e));

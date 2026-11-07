@@ -172,7 +172,7 @@ function ReviewBody({ photos, mode, max, existing = 0, onCancel, onConfirm }: Ph
                 >
                   <Image source={{ uri: x.photo.uri }} style={StyleSheet.absoluteFill} contentFit="cover" />
                   {coverHere && i === 0 ? (
-                    <View style={[styles.thumbCover, { backgroundColor: c.primary }]}>
+                    <View style={[styles.thumbCover, { backgroundColor: c.primarySolid }]}>
                       <Star size={9} color="#fff" fill="#fff" />
                     </View>
                   ) : null}
@@ -207,7 +207,7 @@ function ReviewBody({ photos, mode, max, existing = 0, onCancel, onConfirm }: Ph
                 accessibilityLabel={items.length > 1 ? `${items.length} fotoğrafı gönder` : 'Gönder'}
                 disabled={!!turning}
                 onPress={confirm}
-                style={[styles.send, { backgroundColor: c.primary, opacity: turning ? 0.5 : 1 }]}
+                style={[styles.send, { backgroundColor: c.primarySolid, opacity: turning ? 0.5 : 1 }]}
               >
                 <SendHorizontal size={20} color={c.onPrimary} />
                 {items.length > 1 ? (

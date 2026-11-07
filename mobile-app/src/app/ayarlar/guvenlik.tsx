@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
@@ -10,10 +11,19 @@ import { keys, queryClient } from '@/api/queries';
 import { changePassword, requestPasswordReset, sendVerificationEmail, signOut } from '@/auth/auth';
 import { useSession } from '@/auth/session';
 import { formatDate } from '@/lib/format';
-import { unregisterPush } from '@/lib/push';
 import { Button, Card, Header, Input, ListRow, RowGroup, Sheet, Text, confirm, space, toast, useTheme } from '@/ui';
+import { RequireSignIn } from '@/auth/RequireSignIn';
 
-export default function SecuritySettings() {
+export default function SecuritySettingsScreen() {
+  return (
+    <RequireSignIn title="Şifre ve güvenlik">
+      <SecuritySettings />
+    </RequireSignIn>
+  );
+}
+
+function SecuritySettings() {
+  const insets = useSafeAreaInsets();
   const { c } = useTheme();
   const router = useRouter();
   const session = useSession();
@@ -44,7 +54,7 @@ export default function SecuritySettings() {
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
       <Header title="Şifre ve güvenlik" />
-      <KeyboardAwareScrollView bottomOffset={24} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.body}>
+      <KeyboardAwareScrollView bottomOffset={24} keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + space.xxxl }]}>
         {purgeAt ? (
           <Card style={[styles.gap, { backgroundColor: c.dangerSoft, borderColor: c.dangerSoft }]}>
             <Text variant="label" tone="danger">
@@ -122,8 +132,8 @@ export default function SecuritySettings() {
         onClose={() => setDeleteOpen(false)}
         onDeleted={async () => {
           setDeleteOpen(false);
-          await signOut(unregisterPush);
-          toast.info('Hesabınız 30 gün içinde silinecek. Bu süre içinde giriş yaparak geri alabilirsiniz.');
+          await signOut();
+          toast.info('Hesabınız 30 gün sonra silinecek. Vazgeçerseniz giriş yapıp Ayarlar → Şifre ve güvenlik bölümünden geri alın.');
           router.navigate('/');
         }}
       />
@@ -169,8 +179,8 @@ function DeleteAccountSheet({ visible, onClose, onDeleted }: { visible: boolean;
       }
     >
       <Text tone="muted">
-        Hesabınızı silmek istediğinizde ilanlarınız gizlenir, oturumlarınız kapanır. 30 gün içinde giriş yaparak hesabınızı geri alabilirsiniz; bu sürenin
-        sonunda verileriniz kalıcı olarak silinir.
+        İlanlarınız hemen gizlenir ve tüm oturumlarınız kapanır. 30 gün içinde vazgeçerseniz giriş yapıp Ayarlar → Şifre ve güvenlik bölümünden
+        hesabınızı geri alabilirsiniz; giriş yapmak tek başına geri almaz. Bu sürenin sonunda verileriniz kalıcı olarak silinir.
       </Text>
       <Input
         label="Şifreniz"

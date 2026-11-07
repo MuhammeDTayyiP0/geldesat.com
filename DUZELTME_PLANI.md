@@ -161,8 +161,8 @@ Sonraki fazlar bunları kullanır.
 - [x] İlan işlemleri: fiyat doğrulama, sıra (audit önce, bildirim arka planda), gerekçe, bildirim, taşıma uyarısı, doğru metinler.
 - [x] Kullanıcılar: rol koruması (K10), bootstrap, not ayrı işlev, silinme iptali.
 - [x] Yorum genişletme, mağaza kapanış bildirimi, boş durumlar, kayıt filtresi, audit önce/sonra (Bölüm 2.15).
-- [ ] Zorunlu güncelleme mobilde gerçekten çalışsın (Madde 33; mobil kısmı Faz 10).
-- [ ] `homeSections` ana ekrana bağlansın; `doping_enabled`, `mobile_bottom_nav` bağlansın; panelde kullanılmayan anahtar uyarısı (Madde 34).
+- [x] Zorunlu güncelleme mobilde gerçekten çalışsın (Madde 33; mobil kısmı Faz 10).
+- [x] `homeSections` ana ekrana bağlansın; `doping_enabled`, `mobile_bottom_nav` bağlansın; panelde kullanılmayan anahtar uyarısı (Madde 34).
 - [x] OTA: mağaza sürümüne dönüş iki platforma (Madde 35), %100 onayı, platform bazlı "Yayında", `critical`, audit, `ota_assets` temizliği, async gzip.
 - [x] Kategori: toplu aktarım onayı, özyinelemeli sıralama, döngü koruması, 301 için slug geçmişi.
 - [x] Sayfalar: bağlı adres kilidi, sürüm geçmişi, ortak önizleme. Duyurular: tercih türü, arka plan işi, doğru sayaç.
@@ -181,14 +181,14 @@ Sonraki fazlar bunları kullanır.
 
 Hepsi JS; `expo.version` değişmez, OTA ile gider.
 
-- [ ] `ErrorBoundary`, açılışta saklı oturumla hemen açılma, tüm `auth.ts` isteklerinde zaman aşımı (Madde 25).
-- [ ] Hata raporlama ucu (K9).
-- [ ] Zorunlu güncelleme ekranı (Madde 33), `homeSections` kullanımı.
-- [ ] Tek `endSession`: push, önbellek, taslak, aramalar; çıkış önce yerel (Madde 12; Bölüm 2.8).
-- [ ] `ayarlar` için oturum koruması; `isError && !data` ortak kalıbı.
-- [ ] `Sheet` klavye, `onDismissed` kuralı, modal içi hata gösterimi (Bölüm 2.10).
-- [ ] `Input`, `Switch`, `ListRow`, `Toast`, `Stars` erişilebilirliği; hedef boyutları; `minHeight`; `insets.bottom`; tema token'ları.
-- [ ] `scripts/ota-publish.mjs` native değişiklik koruması.
+- [x] `ErrorBoundary`, açılışta saklı oturumla hemen açılma, tüm `auth.ts` isteklerinde zaman aşımı (Madde 25).
+- [x] Hata raporlama ucu (K9).
+- [x] Zorunlu güncelleme ekranı (Madde 33), `homeSections` kullanımı.
+- [x] Tek `endSession`: push, önbellek, taslak, aramalar; çıkış önce yerel (Madde 12; Bölüm 2.8).
+- [x] `ayarlar` için oturum koruması; `isError && !data` ortak kalıbı.
+- [x] `Sheet` klavye, `onDismissed` kuralı, modal içi hata gösterimi (Bölüm 2.10).
+- [x] `Input`, `Switch`, `ListRow`, `Toast`, `Stars` erişilebilirliği; hedef boyutları; `minHeight`; `insets.bottom`; tema token'ları.
+- [x] `scripts/ota-publish.mjs` native değişiklik koruması.
 
 ## Faz 11: Mobil keşif (rapor 3.8)
 

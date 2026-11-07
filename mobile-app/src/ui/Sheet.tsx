@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { KeyboardAvoidingView, useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
 import { GestureDetector, GestureHandlerRootView, usePanGesture } from 'react-native-gesture-handler';
 import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
@@ -9,6 +9,7 @@ import { X } from 'lucide-react-native';
 import { IconButton } from './Button';
 import { Text } from './Text';
 import { radius, space, useTheme } from './theme';
+import { ToastHost } from './Toast';
 
 export type SheetProps = {
   visible: boolean;
@@ -94,7 +95,19 @@ export function Sheet({ visible, onClose, title, subtitle, children, footer, tal
     },
   });
 
-  const sheetStyle = useAnimatedStyle(() => ({ transform: [{ translateY: offset.get() }] }));
+  // iOS: lift the sheet with the keyboard (negative height while it is open). The sheet is
+  // absolutely positioned, so the avoiding view's padding cannot move it there; Android
+  // resizes the window instead.
+  const keyboard = useReanimatedKeyboardAnimation();
+  const lift = Platform.OS === 'ios';
+  const sheetStyle = useAnimatedStyle(() => {
+    const kb = lift ? keyboard.height.get() : 0;
+    return {
+      transform: [{ translateY: offset.get() + kb }],
+      maxHeight: maxHeight + kb,
+      ...(tall ? { height: maxHeight + kb } : null),
+    };
+  });
   const backdropStyle = useAnimatedStyle(() => ({ opacity: interpolate(offset.get(), [0, height * 0.6], [1, 0], 'clamp') }));
 
   if (!mounted) return null;
@@ -102,15 +115,14 @@ export function Sheet({ visible, onClose, title, subtitle, children, footer, tal
   return (
     <Modal visible transparent animationType="none" onRequestClose={onClose} statusBarTranslucent navigationBarTranslucent>
       <GestureHandlerRootView style={styles.flex}>
-        <KeyboardAvoidingView behavior="padding" style={styles.flex}>
+        <KeyboardAvoidingView behavior="padding" enabled={!lift} style={styles.flex}>
           <Animated.View style={[styles.backdrop, { backgroundColor: c.overlay }, backdropStyle]}>
-            <Pressable accessibilityLabel="Kapat" style={styles.flex} onPress={onClose} />
+            <Pressable accessibilityRole="button" accessibilityLabel="Kapat" style={styles.flex} onPress={onClose} />
           </Animated.View>
           <Animated.View
             style={[
               styles.sheet,
-              { backgroundColor: c.surface, maxHeight, paddingBottom: footer ? 0 : insets.bottom + space.md },
-              tall && { height: maxHeight },
+              { backgroundColor: c.surface, paddingBottom: footer ? 0 : insets.bottom + space.md },
               sheetStyle,
             ]}
           >
@@ -151,6 +163,8 @@ export function Sheet({ visible, onClose, title, subtitle, children, footer, tal
             ) : null}
           </Animated.View>
         </KeyboardAvoidingView>
+        {/* Errors from inside the sheet would otherwise show behind the modal. */}
+        <ToastHost active={visible} />
       </GestureHandlerRootView>
     </Modal>
   );

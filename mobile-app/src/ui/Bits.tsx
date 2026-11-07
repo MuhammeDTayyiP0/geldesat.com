@@ -87,7 +87,7 @@ export function Badge({ label, tone = 'primary', style }: { label: string; tone?
     ok: [c.okSoft, c.ok],
     warn: [c.warnSoft, c.warn],
     neutral: [c.elevated, c.muted],
-    urgent: [c.urgent, '#ffffff'],
+    urgent: [c.urgentSolid, '#ffffff'],
   } as const;
   const [bg, fg] = map[tone];
   return (
@@ -104,7 +104,7 @@ export function CountDot({ count }: { count: number }) {
   const { c } = useTheme();
   if (!count) return null;
   return (
-    <View style={[styles.dot, { backgroundColor: c.urgent, borderColor: c.surface }]}>
+    <View style={[styles.dot, { backgroundColor: c.urgentSolid, borderColor: c.surface }]}>
       <Text variant="small" style={styles.dotText}>
         {count > 99 ? '99+' : count}
       </Text>
@@ -136,10 +136,22 @@ const STAR = '#e0a000';
 
 export function Stars({ value, size = 14, onChange }: { value: number; size?: number; onChange?: (v: number) => void }) {
   return (
-    <View style={styles.stars} accessibilityLabel={`${value.toFixed(1)} / 5 puan`}>
+    <View
+      style={styles.stars}
+      accessible={!onChange}
+      accessibilityRole={onChange ? undefined : 'image'}
+      accessibilityLabel={onChange ? undefined : `${value.toFixed(1)} / 5 puan`}
+    >
       {[1, 2, 3, 4, 5].map((n) =>
         onChange ? (
-          <Pressable key={n} hitSlop={6} onPress={() => onChange(n)} accessibilityLabel={`${n} yıldız`}>
+          <Pressable
+            key={n}
+            hitSlop={Math.max(6, Math.ceil((44 - size) / 2))}
+            onPress={() => onChange(n)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: value === n }}
+            accessibilityLabel={`${n} yıldız`}
+          >
             <Star size={size} color={STAR} fill={value >= n ? STAR : 'transparent'} />
           </Pressable>
         ) : (
@@ -210,12 +222,31 @@ export function ListRow({
           disabled={disabled}
           trackColor={{ true: c.primary, false: c.border }}
           thumbColor="#ffffff"
+          // The whole row is the switch for screen readers (below).
+          accessibilityElementsHidden={!onPress}
+          importantForAccessibility={onPress ? 'auto' : 'no-hide-descendants'}
+          accessibilityLabel={label}
         />
       ) : onPress ? (
         <ChevronRight size={18} color={c.subtle} />
       ) : null}
     </>
   );
+  if (onSwitch && !onPress) {
+    return (
+      <Pressable
+        accessibilityRole="switch"
+        accessibilityLabel={label}
+        accessibilityHint={detail}
+        accessibilityState={{ checked: !!switchValue, disabled: !!disabled }}
+        disabled={disabled}
+        onPress={() => onSwitch(!switchValue)}
+        style={[styles.row, disabled && styles.disabled]}
+      >
+        {content}
+      </Pressable>
+    );
+  }
   if (!onPress) return <View style={[styles.row, disabled && styles.disabled]}>{content}</View>;
   return (
     <Pressable
@@ -285,7 +316,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.xs + 2,
-    height: 36,
+    minHeight: 36,
     paddingHorizontal: space.md,
     borderRadius: radius.pill,
     borderWidth: 1,
@@ -315,5 +346,5 @@ const styles = StyleSheet.create({
   groupTitle: { marginLeft: space.lg, letterSpacing: 0.4 },
   group: { borderRadius: radius.lg, borderWidth: hairline, overflow: 'hidden' },
   segment: { flexDirection: 'row', borderRadius: radius.md, padding: 3 },
-  segmentItem: { flex: 1, alignItems: 'center', justifyContent: 'center', height: 34, borderRadius: radius.md - 2 },
+  segmentItem: { flex: 1, alignItems: 'center', justifyContent: 'center', minHeight: 34, paddingVertical: space.xs, borderRadius: radius.md - 2 },
 });

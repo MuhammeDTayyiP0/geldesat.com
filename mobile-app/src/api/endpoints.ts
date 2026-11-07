@@ -93,8 +93,15 @@ export const account = {
       method: 'POST',
       body: { action: 'register-push', token, platform: Platform.OS === 'ios' ? 'ios' : 'android' },
     }),
-  unregisterPush: (token: string) =>
-    request('/api/mobile/notifications', { method: 'POST', body: { action: 'unregister-push', token } }),
+  /** `sessionToken`: sign-out has already cleared the session in the app. */
+  unregisterPush: (token: string, sessionToken: string) =>
+    request('/api/mobile/notifications', {
+      method: 'POST',
+      body: { action: 'unregister-push', token },
+      auth: false,
+      headers: { Authorization: `Bearer ${sessionToken}` },
+      timeoutMs: 8_000,
+    }),
   settings: () => rpc<AccountSettings>('getAccountSettings'),
   updatePrivacy: (data: { phone_visibility: PhoneVisibility; show_whatsapp: boolean; read_receipts: boolean }) =>
     rpc('updatePrivacySettings', data),

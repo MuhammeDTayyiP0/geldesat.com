@@ -12,6 +12,7 @@ import { useSession } from '@/auth/session';
 import { mediaUrl } from '@/lib/config';
 import { daysUntil, formatNumber, formatPrice, isListingExpired, listingStatusLabel } from '@/lib/format';
 import { Badge, Button, Chip, EmptyState, ErrorState, Header, ListRow, Loading, RowGroup, Sheet, Text, confirm, hairline, radius, space, toast, useTheme } from '@/ui';
+import { useFlag } from '@/lib/flags';
 
 type Tab = 'live' | 'pending' | 'off' | 'sold' | 'rejected';
 
@@ -37,6 +38,8 @@ const daysLeft = daysUntil;
 
 export default function MyListingsScreen() {
   const { c } = useTheme();
+  // Doping sales are closed while this is off: no entry points to an empty shop (K11).
+  const dopingOn = useFlag('doping_enabled');
   const router = useRouter();
   const session = useSession();
   const [tab, setTab] = useState<Tab>('live');
@@ -119,7 +122,7 @@ export default function MyListingsScreen() {
 
       {query.isLoading ? (
         <Loading />
-      ) : query.isError ? (
+      ) : query.isError && !query.data ? (
         <ErrorState error={query.error} onRetry={() => query.refetch()} />
       ) : (
         <FlatList
@@ -173,7 +176,7 @@ export default function MyListingsScreen() {
             {menu.status !== 'REJECTED' && menu.status !== 'SOLD' && menu.status !== 'PENDING' ? (
               <ListRow icon={RefreshCw} label="Süreyi 30 gün uzat" onPress={() => void run(menu, { action: 'renew' })} />
             ) : null}
-            {menu.status === 'ACTIVE' ? (
+            {menu.status === 'ACTIVE' && dopingOn ? (
               <ListRow
                 icon={Rocket}
                 label="Öne çıkar (doping)"

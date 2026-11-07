@@ -193,7 +193,7 @@ export default function ResultsScreen() {
         onEndReached={() => results.hasNextPage && !results.isFetchingNextPage && results.fetchNextPage()}
         loadingMore={results.isFetchingNextPage}
         empty={
-          results.isError ? (
+          results.isError && !results.data ? (
             <ErrorState error={results.error} onRetry={() => results.refetch()} />
           ) : (
             <EmptyState

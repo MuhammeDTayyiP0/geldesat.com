@@ -25,7 +25,7 @@ export default function StoreRedirect() {
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
       <Header title="Mağaza" />
-      {query.isError ? <ErrorState error={query.error} onRetry={() => query.refetch()} /> : <Loading />}
+      {query.isError && !query.data ? <ErrorState error={query.error} onRetry={() => query.refetch()} /> : <Loading />}
     </View>
   );
 }

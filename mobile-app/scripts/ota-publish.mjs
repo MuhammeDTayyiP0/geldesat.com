@@ -15,18 +15,27 @@
  *   --critical      Restart the app as soon as the update is downloaded.
  *   --server        Site URL.                                           default app.json extra.apiBaseUrl
  *   --dry-run       Build and hash, but do not upload.
+ *   --save-fingerprint  Record the native fingerprint of this version, right after
+ *                   a store build made from this code. Publishes nothing.
+ *
+ * Before uploading, the native part of the app (packages with native code,
+ * app.json native settings, plugins) is compared with the fingerprint recorded
+ * for this app version (scripts/native-fingerprint.json). If it changed, the
+ * update would crash the phones that have the old store build, so the script
+ * stops: raise expo.version and make a store build instead (YAPAY_ZEKA_YONERGESI.md §5).
  *
  * Needs GELDESAT_OTA_TOKEN (same value as OTA_PUBLISH_TOKEN on the server), from
  * the environment or mobile-app/.env.local. See OTA_GUNCELLEME.md.
  */
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const OUT = "dist-ota";
+const FINGERPRINT_FILE = join(root, "scripts", "native-fingerprint.json");
 const BATCH_BYTES = 8 * 1024 * 1024;
 
 const CONTENT_TYPES = {
@@ -57,7 +66,7 @@ function fail(message) {
 }
 
 function parseArgs(argv) {
-  const opts = { channel: "production", platform: "all", rollout: 100, critical: false, dryRun: false, message: "", server: "" };
+  const opts = { channel: "production", platform: "all", rollout: 100, critical: false, dryRun: false, saveFingerprint: false, message: "", server: "" };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     const next = () => {
@@ -72,8 +81,10 @@ function parseArgs(argv) {
     else if (arg === "--server") opts.server = next();
     else if (arg === "--critical") opts.critical = true;
     else if (arg === "--dry-run") opts.dryRun = true;
+    else if (arg === "--save-fingerprint") opts.saveFingerprint = true;
     else fail(`Bilinmeyen seçenek: ${arg}`);
   }
+  if (opts.saveFingerprint) return opts;
   if (!opts.message.trim()) fail('Ne değiştiğini yazın: --message "…"');
   if (!/^[a-z0-9][a-z0-9-]{0,31}$/.test(opts.channel)) fail("Kanal küçük harf, rakam ve - olmalı (ör. production, preview).");
   if (!["android", "ios", "all"].includes(opts.platform)) fail("--platform android, ios ya da all olmalı.");
@@ -95,6 +106,56 @@ function run(command, { capture = false } = {}) {
   const result = spawnSync(command, { cwd: root, shell: true, stdio: capture ? ["ignore", "pipe", "inherit"] : "inherit", encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
   if (result.status !== 0) fail(`Komut başarısız oldu: ${command}`);
   return result.stdout ?? "";
+}
+
+/** Native fingerprint of the project. Script names, versions and `extra` are left out: they do not change the native app. */
+async function nativeFingerprint() {
+  const mod = await import("@expo/fingerprint");
+  const api = mod.createFingerprintAsync ? mod : mod.default;
+  const skips = api.SourceSkips;
+  return api.createFingerprintAsync(root, {
+    sourceSkips: skips.PackageJsonScriptsAll | skips.ExpoConfigVersions | skips.ExpoConfigRuntimeVersionIfString | skips.ExpoConfigExtraSection | skips.GitIgnore,
+  });
+}
+
+function readFingerprints() {
+  return existsSync(FINGERPRINT_FILE) ? JSON.parse(readFileSync(FINGERPRINT_FILE, "utf8")) : {};
+}
+
+async function saveFingerprint(version) {
+  const fingerprint = await nativeFingerprint();
+  const all = readFingerprints();
+  all[version] = { hash: fingerprint.hash, recordedAt: new Date().toISOString(), sources: fingerprint.sources };
+  writeFileSync(FINGERPRINT_FILE, `${JSON.stringify(all, null, 2)}\n`);
+  console.log(`✓ ${version} sürümünün native parmak izi kaydedildi: ${fingerprint.hash.slice(0, 12)}. Bu dosyayı commit edin.`);
+}
+
+/** Stops the publish when the native part differs from the store build of this version. */
+async function checkNative(version) {
+  const recorded = readFingerprints()[version];
+  if (!recorded) {
+    fail(
+      `${version} sürümü için kayıtlı native parmak izi yok (scripts/native-fingerprint.json).\n` +
+        `  Bu sürümün mağaza build'i şu anki kodla alındıysa: npm run ota -- --save-fingerprint`,
+    );
+  }
+  const current = await nativeFingerprint();
+  if (current.hash === recorded.hash) return;
+  const mod = await import("@expo/fingerprint");
+  const api = mod.diffFingerprints ? mod : mod.default;
+  const changed = api
+    .diffFingerprints({ hash: recorded.hash, sources: recorded.sources ?? [] }, current)
+    .map((d) => {
+      const source = d.afterSource ?? d.addedSource ?? d.removedSource ?? d.beforeSource;
+      const label = { added: "eklendi", removed: "kaldırıldı", changed: "değişti" }[d.op] ?? d.op;
+      return `  - ${source?.filePath ?? source?.id ?? "?"} (${label})`;
+    });
+  fail(
+    `Uygulamanın native kısmı ${version} mağaza build'inden farklı. Bu güncelleme eski uygulamaları açılışta çökertebilir.\n` +
+      `${changed.slice(0, 15).join("\n")}\n` +
+      `  Yapılacak: app.json → expo.version değerini artırın ve yeni mağaza build'i alın (YAPAY_ZEKA_YONERGESI.md §5).\n` +
+      `  Değişiklik native değilse ve yine de eminseniz, mağaza build'iyle aynı kodda: npm run ota -- --save-fingerprint`,
+  );
 }
 
 /** The runtime this JS was built for; must match the store build (app.json runtimeVersion). */
@@ -135,11 +196,17 @@ async function api(server, token, path, init) {
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
   const token = readToken();
-  if (!opts.dryRun && token.length < 24) fail("GELDESAT_OTA_TOKEN bulunamadı (ortam değişkeni ya da mobile-app/.env.local).");
+  if (!opts.dryRun && !opts.saveFingerprint && token.length < 24) fail("GELDESAT_OTA_TOKEN bulunamadı (ortam değişkeni ya da mobile-app/.env.local).");
 
   console.log("• Uygulama ayarları okunuyor…");
   const exp = JSON.parse(run("npx expo config --json --type public", { capture: true }));
   const runtimeVersion = runtimeVersionOf(exp);
+  if (opts.saveFingerprint) {
+    await saveFingerprint(exp.version);
+    return;
+  }
+  console.log("• Native kısım mağaza sürümüyle karşılaştırılıyor…");
+  await checkNative(exp.version);
   const server = (opts.server || exp.extra?.apiBaseUrl || "https://www.geldesat.com").replace(/\/+$/, "");
   const platforms = opts.platform === "all" ? ["android", "ios"] : [opts.platform];
 

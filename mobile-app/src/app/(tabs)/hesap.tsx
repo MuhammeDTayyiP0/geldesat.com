@@ -6,9 +6,12 @@ import { keys, queryClient, useCounts, useMe } from '@/api/queries';
 import { useSession } from '@/auth/session';
 import { formatNumber } from '@/lib/format';
 import { Avatar, Badge, BrandIcon, Button, IconButton, ListRow, RowGroup, Stars, Text, hairline, radius, space, useTheme } from '@/ui';
+import { useFlag } from '@/lib/flags';
 
 export default function AccountScreen() {
   const { c } = useTheme();
+  // Doping sales are closed while this is off: no entry points to an empty shop (K11).
+  const dopingOn = useFlag('doping_enabled');
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const session = useSession();
@@ -141,7 +144,7 @@ export default function AccountScreen() {
           {me.data?.store ? (
             <ListRow icon={Store} label="Mağazam" detail={me.data.store.name} onPress={() => router.push('/ayarlar/magaza')} />
           ) : null}
-          <ListRow icon={Rocket} label="Doping" detail="İlanınızı öne çıkarın" onPress={() => router.push('/doping')} />
+          {dopingOn ? <ListRow icon={Rocket} label="Doping" detail="İlanınızı öne çıkarın" onPress={() => router.push('/doping')} /> : null}
         </RowGroup>
         <RowGroup>
           <ListRow icon={Settings} label="Ayarlar" detail="Profil, güvenlik, bildirimler, çıkış" onPress={() => router.push('/ayarlar' as Href)} />

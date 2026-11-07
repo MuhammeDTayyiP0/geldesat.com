@@ -7,26 +7,27 @@ import type { MobileConfig } from '@/api/types';
  * as soon as it arrives.
  */
 
-const KEY = 'geldesat.config.v1';
-let cached: MobileConfig | undefined;
+const KEY = 'geldesat.config.v2';
+/** `owner`: the account id the flags were resolved for, or "signedOut". */
+let cached: { owner: string; config: MobileConfig } | undefined;
 
 /** Read once at startup, before the first screen renders (see app/_layout.tsx). */
 export async function loadCachedConfig(): Promise<void> {
   try {
     const raw = await AsyncStorage.getItem(KEY);
-    cached = raw ? (JSON.parse(raw) as MobileConfig) : undefined;
+    cached = raw ? (JSON.parse(raw) as { owner: string; config: MobileConfig }) : undefined;
   } catch {
     cached = undefined;
   }
 }
 
-export function cachedConfig(): MobileConfig | undefined {
-  return cached;
+export function cachedConfig(owner: string): MobileConfig | undefined {
+  return cached?.owner === owner ? cached.config : undefined;
 }
 
-export function rememberConfig(config: MobileConfig) {
-  cached = config;
-  AsyncStorage.setItem(KEY, JSON.stringify(config)).catch(() => {
+export function rememberConfig(config: MobileConfig, owner: string) {
+  cached = { owner, config };
+  AsyncStorage.setItem(KEY, JSON.stringify(cached)).catch(() => {
     // Only a startup convenience.
   });
 }

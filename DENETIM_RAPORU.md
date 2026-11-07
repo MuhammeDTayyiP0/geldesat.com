@@ -45,8 +45,8 @@ Temiz çıkan alanlar: admin server fonksiyonlarının tamamı yetki kontrollü 
 - [x] 9. **Y · Onay denetimsiz.** Toplu onay kaynak durumu ve satıcı askısını kontrol etmiyor: "Tümü"nden seçilince SATILDI, REDDEDİLDİ ve askıdaki satıcının ilanları yayına girer. `listings.ts:282-305` → `status='PENDING'` koşulu. Ayrıca `A` kısayolu `e.repeat` ve yükleme kontrolü yapmıyor; basılı tutmak sıradaki ilanı görmeden onaylar. `W/routes/admin/moderasyon.tsx:141-143`.
 - [x] 10. **Y · Okundu gizliliği sızıyor.** Eski REST ucu `read_receipts` ayarına bakmadan `read_at` döndürüyor ve yayınlıyor. Mevcut uygulama bu ucu çağırmıyor, ama açık. `W/routes/api/mobile/conversations/$id.ts:23-41` → RPC mantığını uygula veya uçları kapat.
 - [ ] 11. **Y · Satıcının WhatsApp ayarı uygulamada geçersiz.** "WhatsApp ile yaz" her zaman görünüyor, mobil API `show_whatsapp` döndürmüyor. `M/features/listing/ListingSheets.tsx:122`, `W/routes/api/mobile/listings/$id.ts` → alanı ekle, koşula bağla; web önce deploy edilmeli.
-- [ ] 12. **Y · Oturumu kapanmış telefona mesaj push'u.** 401'de, çevrimdışı çıkışta ve hesap silmede sunucudaki token kalıyor; şifre değişse bile çalınan telefon mesaj önizlemesi alır. `M/api/client.ts:68-70`, `M/lib/push.ts:47-48`, `M/app/ayarlar/guvenlik.tsx:125,159` → oturum kapanışında sunucuda sil, token'ı oturuma bağla.
-- [ ] 13. **Y · Hesap silme metni yanlış, veri kaybına yol açabilir.** Mobil "giriş yaparak geri alabilirsiniz" diyor; giriş geri almıyor, açık `restoreMyAccount` gerekiyor ve düğme yalnız Şifre ve güvenlik içinde. Kullanıcı geri aldığını sanar, 30 gün sonra veri silinir. `M/app/ayarlar/guvenlik.tsx:126,172`, `W/lib/server/settings.ts:132` → belirgin banner ve doğru metin.
+- [x] 12. **Y · Oturumu kapanmış telefona mesaj push'u.** 401'de, çevrimdışı çıkışta ve hesap silmede sunucudaki token kalıyor; şifre değişse bile çalınan telefon mesaj önizlemesi alır. `M/api/client.ts:68-70`, `M/lib/push.ts:47-48`, `M/app/ayarlar/guvenlik.tsx:125,159` → oturum kapanışında sunucuda sil, token'ı oturuma bağla.
+- [x] 13. **Y · Hesap silme metni yanlış, veri kaybına yol açabilir.** Mobil "giriş yaparak geri alabilirsiniz" diyor; giriş geri almıyor, açık `restoreMyAccount` gerekiyor ve düğme yalnız Şifre ve güvenlik içinde. Kullanıcı geri aldığını sanar, 30 gün sonra veri silinir. `M/app/ayarlar/guvenlik.tsx:126,172`, `W/lib/server/settings.ts:132` → belirgin banner ve doğru metin.
 - [ ] 14. **Y (olası) · IP tabanlı sınırlar.** `x-forwarded-for` ilk değerine dayanıyor; proxy'ye göre sahtelenebilir veya herkes aynı IP'yi paylaşıp haksız 429 alabilir. `W/lib/server/helpers.ts` `viewerKey`, `web/docker-compose.yml:27` → gerçek zinciri doğrula, güvenilir tek kaynak kullan, portu kapat.
 - [x] 15. **O · Kredi çift yükleme.** Durum transaction dışında okunuyor, `update` koşulsuz. Satış şu an kapalı, açılmadan düzeltilmeli. `W/lib/server/admin/business.ts:195-202`.
 
@@ -61,7 +61,7 @@ Temiz çıkan alanlar: admin server fonksiyonlarının tamamı yetki kontrollü 
 - [x] 22. **Y · Dolandırıcılık uyarısı çalışmıyor.** `\b` Türkçe harfleri tanımıyor, ekleri kaçırıyor. Denenen 9 ifadeden 7'si yakalanmadı: "ön ödeme yapın", "ödeme linki atıyorum", "kaporayı gönder", "kaporası lazım", "önödeme lazım", "paparaya at", "whatsapptan yaz". `W/lib/chat-shared.ts:68-70`, `M/features/chat/shared.ts:31,34` → Unicode sınırı, ek toleransı, test.
 - [x] 23. **Y · Tekrarlayan hatırlatma push'u.** Tekrar önleme `notifications` satırına bakıyor; `expiry` için uygulama içini kapatıp push'u açık bırakan kullanıcıda satır yazılmıyor, her süpürmede yeniden push gider. `W/lib/server/ops.ts:17-21`, `helpers.ts` `notify` → `listings.expiry_notified_at`.
 - [x] 24. **Y · Model yılı "2.018" görünüyor.** Web detay ve kart, mobil kart ve detay. `W/components/listing/detail/ListingSections.tsx:140`, `W/lib/utils.ts:49`, `M/features/listing/ListingCard.tsx:26`, `M/app/ilan/[id].tsx:242`.
-- [ ] 25. **Y · Uygulama açılışı kırılgan.** Açılış ekranı zaman aşımı olmayan `get-session` isteğini bekliyor; hiç `ErrorBoundary` yok, hatalı OTA uygulamayı tümden kapatır, hata raporlama da yok. `M/app/_layout.tsx:24-34`, `M/auth/auth.ts:154`.
+- [x] 25. **Y · Uygulama açılışı kırılgan.** Açılış ekranı zaman aşımı olmayan `get-session` isteğini bekliyor; hiç `ErrorBoundary` yok, hatalı OTA uygulamayı tümden kapatır, hata raporlama da yok. `M/app/_layout.tsx:24-34`, `M/auth/auth.ts:154`.
 - [ ] 26. **Y · Android taslak siliniyor.** Devam diyaloğunun dışına dokunmak veya geri tuşu onaysız `clearDraft()` çalıştırır. `M/ui/dialogs.ts:28`, `M/app/ilan-ver.tsx:125`.
 - [ ] 27. **Y · Hazır mesajlar silinebilir.** Liste yüklenemezken boş görünür, yeni ekleme tüm listenin üstüne yazar. `M/app/ayarlar/sablonlar.tsx:14-16,54`.
 - [ ] 28. **Y · 24 saatlik taslak fotoğrafı.** Sunucu bağlanmamış fotoğrafı 24 saatte siliyor; taslak bunu bilmiyor, Yayınla hangisi olduğunu söylemeden hata verir. `M/app/ilan-ver.tsx:123`, `W/lib/server/upload.server.ts:15-19`.
@@ -72,8 +72,8 @@ Temiz çıkan alanlar: admin server fonksiyonlarının tamamı yetki kontrollü 
 
 ### Yönetici yanıltan ayarlar
 
-- [ ] 33. **Y · Zorunlu güncelleme çalışmıyor.** "Altındaki sürümler güncellemeye zorlanır" yazıyor; mobil bu alanları yalnız tipte tutuyor. `W/routes/admin/ayarlar.tsx:398`, `M/api/types.ts:274`.
-- [ ] 34. **O · Etkisiz ayarlar ve anahtarlar.** Mobil ana sayfa bölümleri (`homeSections`) yalnız tipte; `doping_enabled`, `mobile_bottom_nav` görünüyor ama kodda hiçbir `useFlag` çağrısı yok (web ve mobil). `W/routes/admin/ayarlar.tsx:337`, `W/lib/server/config.ts:8`.
+- [x] 33. **Y · Zorunlu güncelleme çalışmıyor.** "Altındaki sürümler güncellemeye zorlanır" yazıyor; mobil bu alanları yalnız tipte tutuyor. `W/routes/admin/ayarlar.tsx:398`, `M/api/types.ts:274`.
+- [x] 34. **O · Etkisiz ayarlar ve anahtarlar.** Mobil ana sayfa bölümleri (`homeSections`) yalnız tipte; `doping_enabled`, `mobile_bottom_nav` görünüyor ama kodda hiçbir `useFlag` çağrısı yok (web ve mobil). `W/routes/admin/ayarlar.tsx:337`, `W/lib/server/config.ts:8`.
 - [x] 35. **Y · Mağaza sürümüne dönüş eksik platforma gidebilir.** Metin "tüm telefonlar" diyor, istek `u.platforms` gönderiyor. Yalnız Android satırından tetiklenirse iOS bozuk kodda kalır. `W/routes/admin/guncellemeler.tsx:71`.
 - [x] 36. **O · `Field` label hatası.** Buton grubunu saran `<label>`: etikete veya boşluğa tıklamak ilk butonu tetikler. Duyuruda kitle "Tüm üyeler" olur, anahtar yüzdesi sessizce %0'a düşer. `W/components/admin/ui.tsx:315`, `ayarlar.tsx:212,242`, `duyurular.tsx:62`, `ozellikler.tsx:254` → `FieldGroup`.
 
@@ -553,24 +553,24 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 - [ ] D · `giris.tsx:21,101` — `reason` dışarıdan metin yazdırabilir (olası); yanlış modda görünüyor. `:111-114,184,190` — Eski hata kalıyor. `:54` — Doğrulama postası söylenmiyor.
 - [ ] O (olası) · `app/oauth.tsx:8`, `giris.tsx:33-37` — Android'de Google sonrası yanlış ekran; cihazda denenmeli. D (olası) · `auth.ts:134` — Askı nedeni görünmüyor.
 - [ ] O · `(tabs)/hesap.tsx:41`, `ayarlar/index.tsx:169` — "Üye ol" giriş sekmesini açıyor. D · `hesap.tsx:144,109` — Doping satırı; rol.
-- [ ] O · `ayarlar/index.tsx:96-105`, `auth.ts:169-184` — Kötü ağda "Çıkış yap" takılıyor, hesap açık kalıyor → önce yerel temizlik. D · `:80`, `magaza.tsx:54` — `mailto` hatası; `:126` — Rol yok.
-- [ ] Y (olası) · `ayarlar/profil.tsx:60-61` — Sheet kapanırken kamera açılıyor; `Sheet.tsx` yorumu dondurduğunu yazıyor → `onDismissed`.
+- [x] O · `ayarlar/index.tsx:96-105`, `auth.ts:169-184` — Kötü ağda "Çıkış yap" takılıyor, hesap açık kalıyor → önce yerel temizlik. D · `:80`, `magaza.tsx:54` — `mailto` hatası; `:126` — Rol yok.
+- [x] Y (olası) · `ayarlar/profil.tsx:60-61` — Sheet kapanırken kamera açılıyor; `Sheet.tsx` yorumu dondurduğunu yazıyor → `onDismissed`.
 - [ ] O · `profil.tsx:88` — Sonsuz yükleme. D · `:61,42` — `try` dışı; kaydedilmemiş uyarısı yok.
 - [ ] O (olası) · `guvenlik.tsx:163` — "Şifre hatalı" toast'ı modal altında. O · `:172` — Silme metni saklananları söylemiyor. O · `:72-88,106` — `hasPassword` ve doğrulama durumu yok. O · `:44` — Açık oturumlar ve diğer cihazlardan çıkış yok.
 - [ ] D · `:28` — Şifre tekrar alanı yok. `:56-68` — Geri alma sonrası yenileme yok.
 - [ ] O · `gizlilik.tsx:47-53` — Seçili durum duyurulmuyor. D · `Bits.tsx:214`, `gizlilik.tsx:52,61` — Gereksiz ok; "Kimse" iken WhatsApp açık.
 - [ ] O · `ayarlar/bildirimler.tsx:32-33,47-51` (olası) — Hızlı kayıtlar tercih kaybettiriyor. O · `Bits.tsx:207` — `Switch` etiketsiz. D · `:114-116,84` — İyimser yok; reddedince ayarlar açılıyor.
 - [ ] D · `engellenenler.tsx:45` — Küçük hedef, ad yok. O · `magaza.tsx:37,46` — `me` hatasında sahibe "Başvur" görünüyor. D (olası) · `:76` — `store.plan` ham.
-- [ ] O · `auth.ts:23,89` — Giriş ve şifre isteklerinde zaman aşımı yok, düğme sonsuz dönebilir.
-- [ ] D (olası) · `auth.ts:158-161` — Bakım sayfası oturumu siliyor. `:101-102` — Bellekte oturumda yeni token atlanıyor. `api/client.ts:69` — Eski istek yeni oturumu kapatabilir.
-- [ ] O · `app/ayarlar/` — Ortak oturum koruması yok; misafirde sonsuz yükleme.
+- [x] O · `auth.ts:23,89` — Giriş ve şifre isteklerinde zaman aşımı yok, düğme sonsuz dönebilir.
+- [x] D (olası) · `auth.ts:158-161` — Bakım sayfası oturumu siliyor. `:101-102` — Bellekte oturumda yeni token atlanıyor. `api/client.ts:69` — Eski istek yeni oturumu kapatabilir.
+- [x] O · `app/ayarlar/` — Ortak oturum koruması yok; misafirde sonsuz yükleme.
 - [ ] D · `api/queries.ts:90` — Yapılandırma önbelleği hesaba bağlı değil. D (olası) · `Bits.tsx:20`, `theme.ts:97`, `endpoints.ts:45,114` — Ölü kod.
-- [ ] Y (olası) · `ui/Sheet.tsx:105,162-166` — `paddingBottom` mutlak konumda etkisiz; iOS'ta klavye şifre alanını ve onayı örtüyor → cihazda doğrula, `translateY`.
-- [ ] O · `ui/Input.tsx:43` — Etiket bağlı değil. O · `ui/Toast.tsx:60` — VoiceOver duyurusu yok. O · `ui/theme.ts:14,44,45,50` — Kontrast (bkz. Bölüm 2).
-- [ ] O (olası) · `Button.tsx:23,89`, `Bits.tsx:318` — Sabit yükseklik, büyük yazıda kırpılma. Alt boşluklarda `insets.bottom` yok: `profil.tsx:142`, `guvenlik.tsx:188`, `gizlilik.tsx:90`, `bildirimler.tsx:127`, `engellenenler.tsx:31`, `yasal.tsx:43`.
+- [x] Y (olası) · `ui/Sheet.tsx:105,162-166` — `paddingBottom` mutlak konumda etkisiz; iOS'ta klavye şifre alanını ve onayı örtüyor → cihazda doğrula, `translateY`.
+- [x] O · `ui/Input.tsx:43` — Etiket bağlı değil. O · `ui/Toast.tsx:60` — VoiceOver duyurusu yok. O · `ui/theme.ts:14,44,45,50` — Kontrast (bkz. Bölüm 2).
+- [x] O (olası) · `Button.tsx:23,89`, `Bits.tsx:318` — Sabit yükseklik, büyük yazıda kırpılma. Alt boşluklarda `insets.bottom` yok: `profil.tsx:142`, `guvenlik.tsx:188`, `gizlilik.tsx:90`, `bildirimler.tsx:127`, `engellenenler.tsx:31`, `yasal.tsx:43`.
 - [ ] D · `Input.tsx:63`, `Bits.tsx:14,139,318`, `Header.tsx:45`, `Sheet.tsx:107`, `Button.tsx:23` — Rol ve 44 pt eksikleri. `Toast.tsx:32-35` — Yeni toast silinebiliyor.
 - [ ] D · `app.json:45-46` — Android filtresi yalnız `/ilan/` (mağaza sürümü gerekir). D (olası) · `app.json:10-15` — OTA imzası yok (bkz. 3.6).
-- [ ] D · `scripts/ota-publish.mjs:135-167` — Native değişiklik kontrolü yok; yönergenin en kritik kuralı insan dikkatine bağlı → fingerprint kontrolü.
+- [x] D · `scripts/ota-publish.mjs:135-167` — Native değişiklik kontrolü yok; yönergenin en kritik kuralı insan dikkatine bağlı → fingerprint kontrolü.
 
 ---
 

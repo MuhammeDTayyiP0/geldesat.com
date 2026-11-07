@@ -1,4 +1,5 @@
 import { Linking, ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Check, CheckCheck, Download, MessageCircle } from 'lucide-react-native';
 import { errorMessage } from '@/api/client';
@@ -7,6 +8,7 @@ import { keys, queryClient } from '@/api/queries';
 import type { AccountSettings, PhoneVisibility } from '@/api/types';
 import { webUrl } from '@/lib/config';
 import { ErrorState, Header, ListRow, Loading, RowGroup, Text, space, toast, useTheme } from '@/ui';
+import { RequireSignIn } from '@/auth/RequireSignIn';
 
 const PHONE_OPTIONS: { value: PhoneVisibility; label: string; detail: string }[] = [
   { value: 'everyone', label: 'Herkes', detail: 'Giriş yapmamış ziyaretçiler dahil' },
@@ -14,7 +16,16 @@ const PHONE_OPTIONS: { value: PhoneVisibility; label: string; detail: string }[]
   { value: 'hidden', label: 'Kimse', detail: 'Alıcılar size yalnızca mesajla ulaşır' },
 ];
 
-export default function PrivacySettings() {
+export default function PrivacySettingsScreen() {
+  return (
+    <RequireSignIn title="Gizlilik">
+      <PrivacySettings />
+    </RequireSignIn>
+  );
+}
+
+function PrivacySettings() {
+  const insets = useSafeAreaInsets();
   const { c } = useTheme();
   const settings = useQuery({ queryKey: keys.settings, queryFn: account.settings });
   const save = useMutation({
@@ -39,9 +50,9 @@ export default function PrivacySettings() {
     <View style={{ flex: 1, backgroundColor: c.bg }}>
       <Header title="Gizlilik" />
       {!s ? (
-        settings.isError ? <ErrorState error={settings.error} onRetry={() => settings.refetch()} /> : <Loading />
+        settings.isError && !settings.data ? <ErrorState error={settings.error} onRetry={() => settings.refetch()} /> : <Loading />
       ) : (
-        <ScrollView contentContainerStyle={styles.body}>
+        <ScrollView contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + space.xxxl }]}>
           <RowGroup title="Telefon numaramı kimler görebilir?">
             {PHONE_OPTIONS.map((o) => (
               <ListRow

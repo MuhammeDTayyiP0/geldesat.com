@@ -53,7 +53,7 @@ function TabBar({ state, emitter, navigateToTab }: BottomTabBarProps) {
               }}
               style={styles.item}
             >
-              <View style={[styles.post, { backgroundColor: c.primary }, shadow(2)]}>
+              <View style={[styles.post, { backgroundColor: c.primarySolid }, shadow(2)]}>
                 <Plus size={26} color={c.onPrimary} strokeWidth={2.6} />
               </View>
               <Text variant="small" tone="primary" style={styles.postLabel}>

@@ -25,7 +25,7 @@ const HEIGHT: Record<Size, number> = { sm: 36, md: 46, lg: 52 };
 function palette(c: Colors, variant: Variant) {
   switch (variant) {
     case 'primary':
-      return { bg: c.primary, pressed: c.primaryPressed, fg: c.onPrimary, border: 'transparent' };
+      return { bg: c.primarySolid, pressed: c.primaryPressed, fg: c.onPrimary, border: 'transparent' };
     case 'secondary':
       return { bg: c.ink, pressed: c.muted, fg: c.bg, border: 'transparent' };
     case 'outline':
@@ -69,7 +69,8 @@ export function Button({
       style={({ pressed }) => [
         styles.base,
         {
-          height: HEIGHT[size],
+          minHeight: HEIGHT[size],
+          paddingVertical: space.xs,
           paddingHorizontal: size === 'sm' ? space.md : space.lg,
           backgroundColor: pressed ? p.pressed : p.bg,
           borderColor: p.border,
@@ -122,7 +123,7 @@ export function IconButton({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
-      hitSlop={6}
+      hitSlop={Math.max(6, Math.ceil((44 - size) / 2))}
       disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => [

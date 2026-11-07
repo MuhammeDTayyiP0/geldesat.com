@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Linking, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
@@ -10,9 +11,19 @@ import { OptionPicker } from '@/features/location/OptionPicker';
 import { SUPPORT_EMAIL } from '@/lib/config';
 import { cleanPhone, maskPhoneInput } from '@/lib/format';
 import { Button, EmptyState, Header, Input, Loading, SelectField, space, toast, useTheme } from '@/ui';
+import { RequireSignIn } from '@/auth/RequireSignIn';
 
 /** Edit the account's store. Stores are opened by the GeldeSat team, not in the app. */
-export default function StoreSettings() {
+export default function StoreSettingsScreen() {
+  return (
+    <RequireSignIn title="Mağazam">
+      <StoreSettings />
+    </RequireSignIn>
+  );
+}
+
+function StoreSettings() {
+  const insets = useSafeAreaInsets();
   const { c } = useTheme();
   const router = useRouter();
   const me = useMe();
@@ -74,7 +85,7 @@ export default function StoreSettings() {
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
       <Header title="Mağazam" subtitle={store.plan} />
-      <KeyboardAwareScrollView bottomOffset={24} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.body}>
+      <KeyboardAwareScrollView bottomOffset={24} keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + space.xxxl }]}>
         <Input label="Mağaza adı" required icon={Store} value={name} onChangeText={setName} maxLength={60} />
         <SelectField label="Şehir" icon={MapPin} placeholder="Seçin" value={city} onPress={() => setPicker(true)} />
         <Input label="Telefon" icon={Phone} keyboardType="phone-pad" value={phone} onChangeText={(t) => setPhone(maskPhoneInput(t))} />

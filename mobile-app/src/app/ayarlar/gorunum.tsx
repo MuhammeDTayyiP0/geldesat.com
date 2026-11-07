@@ -32,7 +32,7 @@ export default function AppearanceScreen() {
                   }}
                   style={({ pressed }) => [styles.row, pressed && { backgroundColor: c.elevated }]}
                 >
-                  <View style={[styles.icon, { backgroundColor: selected ? c.primary : c.elevated }]}>
+                  <View style={[styles.icon, { backgroundColor: selected ? c.primarySolid : c.elevated }]}>
                     <o.icon size={20} color={selected ? c.onPrimary : c.muted} />
                   </View>
                   <View style={styles.flex}>

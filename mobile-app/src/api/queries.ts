@@ -83,11 +83,12 @@ export function useConfig() {
     queryKey: [...keys.config, userId],
     queryFn: async () => {
       const config = await catalog.config({ deviceId: await deviceId(), platform: Platform.OS, appVersion: Constants.expoConfig?.version });
-      rememberConfig(config);
+      rememberConfig(config, userId);
       return config;
     },
     enabled: session.status !== 'loading',
-    placeholderData: (previous) => previous ?? cachedConfig(),
+    // The saved copy only stands in for the account it was fetched for.
+    placeholderData: (previous) => previous ?? cachedConfig(userId),
     staleTime: 5 * 60_000,
     refetchOnWindowFocus: true,
   });
@@ -103,11 +104,13 @@ export function useRoots() {
   return useQuery({ queryKey: keys.roots, queryFn: catalog.roots, staleTime: 10 * 60_000 });
 }
 
-/** Clear everything tied to the signed-in account (sign-out, account switch). */
+/** Queries that look the same to everyone; all others belong to the signed-in account. */
+const PUBLIC_QUERIES = new Set(['config', 'stats', 'categories', 'search', 'rail', 'seller', 'store', 'legal']);
+
+/**
+ * Clear everything tied to the signed-in account (sign-out, expired session,
+ * account switch). Listing details go too: they carry the favorite and owner state.
+ */
 export function clearPrivateQueries() {
-  for (const key of [keys.me, keys.counts, keys.favorites, keys.myListings, keys.notifications, keys.settings, keys.blocked, keys.inbox, keys.templates]) {
-    queryClient.removeQueries({ queryKey: key });
-  }
-  queryClient.removeQueries({ queryKey: ['thread'] });
-  queryClient.removeQueries({ queryKey: ['listing'] });
+  queryClient.removeQueries({ predicate: (query) => !PUBLIC_QUERIES.has(String(query.queryKey[0])) });
 }

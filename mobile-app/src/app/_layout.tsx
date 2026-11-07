@@ -1,8 +1,11 @@
-import { useEffect, useState } from 'react';
-import { Platform } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Platform, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider, useRouter } from 'expo-router';
+import Constants from 'expo-constants';
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider, usePathname, useRouter, type ErrorBoundaryProps } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
+import * as Updates from 'expo-updates';
+import { CircleAlert } from 'lucide-react-native';
 import * as Notifications from 'expo-notifications';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -10,16 +13,45 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { restoreSession } from '@/auth/auth';
 import { useSession } from '@/auth/session';
-import { clearPrivateQueries, queryClient, useCounts } from '@/api/queries';
+import { clearPrivateQueries, queryClient, useConfig, useCounts } from '@/api/queries';
+import { ForceUpdate } from '@/features/app/ForceUpdate';
 import { resetChatStream, subscribeChatStream } from '@/features/chat/stream';
 import { appRouteForWebPath } from '@/lib/links';
 import { notificationLink, registerForPush } from '@/lib/push';
 import { loadCachedConfig } from '@/lib/configCache';
+import { flushErrorReports, installGlobalErrorHandler, reportError, setErrorScreen } from '@/lib/errorReport';
 import { useOtaUpdates } from '@/lib/ota';
 import { loadThemePref } from '@/lib/themePref';
-import { ToastHost, useTheme } from '@/ui';
+import { isOlderVersion } from '@/lib/version';
+import { Button, Text, ToastHost, space, useTheme } from '@/ui';
 
 void SplashScreen.preventAutoHideAsync();
+installGlobalErrorHandler();
+
+/**
+ * A screen that throws while rendering lands here instead of closing the app.
+ * Rendered in place of the whole layout, so it uses no providers.
+ */
+export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  const { c } = useTheme();
+  useEffect(() => {
+    SplashScreen.hide();
+    void reportError(error);
+  }, [error]);
+  return (
+    <View style={[styles.crash, { backgroundColor: c.bg }]}>
+      <CircleAlert size={40} color={c.danger} />
+      <Text variant="title" center>
+        Bir sorun oluştu
+      </Text>
+      <Text tone="muted" center style={styles.crashText}>
+        Bu ekran açılamadı. Sorunu bize bildirdik. Tekrar deneyin ya da uygulamayı yeniden başlatın.
+      </Text>
+      <Button title="Tekrar dene" onPress={() => void retry()} />
+      {Updates.isEnabled ? <Button title="Uygulamayı yeniden başlat" variant="ghost" onPress={() => void Updates.reloadAsync().catch(() => undefined)} /> : null}
+    </View>
+  );
+}
 
 export default function RootLayout() {
   const { dark, c } = useTheme();
@@ -27,9 +59,11 @@ export default function RootLayout() {
   useOtaUpdates();
 
   useEffect(() => {
+    // All local reads: the stored session is checked with the server in the background.
     void Promise.all([loadThemePref(), restoreSession(), loadCachedConfig()]).finally(() => {
       setReady(true);
       SplashScreen.hide();
+      void flushErrorReports();
     });
   }, []);
 
@@ -45,14 +79,14 @@ export default function RootLayout() {
             <ThemeProvider value={navTheme}>
               <StatusBar style={dark ? 'light' : 'dark'} />
               {ready ? (
-                <>
+                <UpdateGate>
                   <SessionEffects />
                   <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.bg } }}>
                     <Stack.Screen name="(tabs)" />
                     <Stack.Screen name="ilan-ver" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
                     <Stack.Screen name="giris" options={{ presentation: 'modal' }} />
                   </Stack>
-                </>
+                </UpdateGate>
               ) : null}
               <ToastHost />
             </ThemeProvider>
@@ -63,18 +97,35 @@ export default function RootLayout() {
   );
 }
 
+/** The admin panel's lowest supported store version (Ayarlar → Mobil uygulama): older apps only see the update screen. */
+function UpdateGate({ children }: { children: React.ReactNode }) {
+  const { data } = useConfig();
+  const app = data?.mobileApp;
+  const min = Platform.OS === 'ios' ? app?.min_ios_version : app?.min_android_version;
+  if (Platform.OS !== 'web' && isOlderVersion(Constants.expoConfig?.version, min)) {
+    return <ForceUpdate storeUrl={Platform.OS === 'ios' ? app?.ios_store_url : app?.android_store_url} />;
+  }
+  return children;
+}
+
 /** Push registration while signed in, cache reset on sign-out, and notification taps. */
 function SessionEffects() {
   const session = useSession();
   const router = useRouter();
+  const pathname = usePathname();
   const userId = session.status === 'signedIn' ? session.user.id : null;
+  const previousUser = useRef(userId);
+
+  useEffect(() => {
+    setErrorScreen(pathname);
+  }, [pathname]);
 
   useEffect(() => {
     resetChatStream();
-    if (!userId) {
-      clearPrivateQueries();
-      return;
-    }
+    // However the session ended (sign-out, expired, deleted account), nothing of that account stays on screen.
+    if (previousUser.current && previousUser.current !== userId) clearPrivateQueries();
+    previousUser.current = userId;
+    if (!userId) return;
     void registerForPush().catch(() => undefined);
     // Live inbox: keep the tab badges and the conversation list current.
     return subscribeChatStream((event) => {
@@ -127,3 +178,8 @@ function AppBadge({ signedIn }: { signedIn: boolean }) {
   }, [total]);
   return null;
 }
+
+const styles = StyleSheet.create({
+  crash: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: space.xxl, gap: space.md },
+  crashText: { maxWidth: 320, marginBottom: space.sm },
+});

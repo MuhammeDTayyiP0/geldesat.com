@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,6 +16,9 @@ import { formatNumber } from '@/lib/format';
 import { CountDot, EmptyState, ErrorState, IconButton, Skeleton, Text, Wordmark, hairline, radius, space, toast, useTheme } from '@/ui';
 
 const PAGE = 20;
+
+/** Admin → Ayarlar → Mobil ana sayfa bölümleri; the server sends the same default. */
+const DEFAULT_SECTIONS = ['hero', 'categories', 'featured', 'recent', 'stats'];
 
 export default function DiscoverScreen() {
   const { c } = useTheme();
@@ -77,6 +80,63 @@ export default function DiscoverScreen() {
   };
 
   const announcement = config?.mobileApp?.announcement;
+  const sections = config?.homeSections ?? DEFAULT_SECTIONS;
+  const showStats = sections.includes('stats') && !!stats.data;
+  const statsLine = stats.data ? `${formatNumber(stats.data.listings)} ilan · ${formatNumber(stats.data.cities)} şehir` : '';
+  const showFeed = sections.includes('recent');
+
+  const searchBox = (
+    <Pressable
+      key="search"
+      accessibilityRole="search"
+      accessibilityLabel="İlan ara"
+      onPress={() => router.push({ pathname: '/ara', params: { focus: '1' } })}
+      style={[styles.search, { backgroundColor: c.surface, borderColor: c.border }]}
+    >
+      <Search size={20} color={c.subtle} />
+      <Text tone="subtle" style={styles.flex}>
+        Marka, model, ürün veya ilan no
+      </Text>
+    </Pressable>
+  );
+
+  // In the admin's order. Search stays even when the welcome block is hidden; the
+  // statistics join the welcome block when both are on; "Son eklenenler" is the feed below.
+  const blocks: Record<string, React.ReactNode> = {
+    hero: (
+      <View key="hero" style={styles.heroBlock}>
+        <View style={styles.hero}>
+          <Text variant="title">Ne arıyorsunuz?</Text>
+          <Text tone="muted">{showStats ? statsLine : 'Türkiye’nin ücretsiz ilan platformu'}</Text>
+        </View>
+        {searchBox}
+      </View>
+    ),
+    stats:
+      showStats && !sections.includes('hero') ? (
+        <Text key="stats" tone="muted" style={styles.hero}>
+          {statsLine}
+        </Text>
+      ) : null,
+    categories: <CategoryStrip key="categories" loading={roots.isLoading} roots={roots.data?.roots ?? []} counts={roots.data?.counts ?? {}} />,
+    featured: (
+      <View key="featured" style={styles.heroBlock}>
+        <ListingRail
+          title="Acil satılık"
+          subtitle="Sahibi hızlı satmak istiyor"
+          items={urgent.data?.listings}
+          loading={urgent.isLoading}
+          onSeeAll={() => router.push({ pathname: '/sonuclar', params: { urgent: '1', title: 'Acil satılık' } })}
+        />
+        <ListingRail
+          title="Vitrin"
+          items={featured.data?.listings}
+          loading={featured.isLoading}
+          onSeeAll={() => router.push({ pathname: '/sonuclar', params: { featured: '1', title: 'Vitrin ilanları' } })}
+        />
+      </View>
+    ),
+  };
 
   const header = (
     <View style={styles.header}>
@@ -89,41 +149,8 @@ export default function DiscoverScreen() {
         </View>
       ) : null}
 
-      <View style={styles.hero}>
-        <Text variant="title">Ne arıyorsunuz?</Text>
-        <Text tone="muted">
-          {stats.data ? `${formatNumber(stats.data.listings)} ilan · ${formatNumber(stats.data.cities)} şehir` : 'Türkiye’nin ücretsiz ilan platformu'}
-        </Text>
-      </View>
-
-      <Pressable
-        accessibilityRole="search"
-        accessibilityLabel="İlan ara"
-        onPress={() => router.push({ pathname: '/ara', params: { focus: '1' } })}
-        style={[styles.search, { backgroundColor: c.surface, borderColor: c.border }]}
-      >
-        <Search size={20} color={c.subtle} />
-        <Text tone="subtle" style={styles.flex}>
-          Marka, model, ürün veya ilan no
-        </Text>
-      </Pressable>
-
-      <CategoryStrip loading={roots.isLoading} roots={roots.data?.roots ?? []} counts={roots.data?.counts ?? {}} />
-
-      <ListingRail
-        title="Acil satılık"
-        subtitle="Sahibi hızlı satmak istiyor"
-        items={urgent.data?.listings}
-        loading={urgent.isLoading}
-        onSeeAll={() => router.push({ pathname: '/sonuclar', params: { urgent: '1', title: 'Acil satılık' } })}
-      />
-
-      <ListingRail
-        title="Vitrin"
-        items={featured.data?.listings}
-        loading={featured.isLoading}
-        onSeeAll={() => router.push({ pathname: '/sonuclar', params: { featured: '1', title: 'Vitrin ilanları' } })}
-      />
+      {sections.includes('hero') ? null : searchBox}
+      {sections.map((name) => blocks[name] ?? null)}
 
       {nearby.city ? (
         <View>
@@ -163,9 +190,11 @@ export default function DiscoverScreen() {
         <ListingRail title="Son baktıklarınız" items={recent} onSeeAll={() => router.push('/son-bakilanlar')} />
       ) : null}
 
-      <Text variant="subheading" style={styles.feedTitle}>
-        Yeni ilanlar
-      </Text>
+      {showFeed ? (
+        <Text variant="subheading" style={styles.feedTitle}>
+          Yeni ilanlar
+        </Text>
+      ) : null}
     </View>
   );
 
@@ -185,15 +214,15 @@ export default function DiscoverScreen() {
       </View>
 
       <ListingGrid
-        listings={latest}
-        loading={feed.isLoading}
+        listings={showFeed ? latest : []}
+        loading={showFeed && feed.isLoading}
         header={header}
         refreshing={refreshing}
         onRefresh={onRefresh}
-        onEndReached={() => feed.hasNextPage && !feed.isFetchingNextPage && feed.fetchNextPage()}
+        onEndReached={() => showFeed && feed.hasNextPage && !feed.isFetchingNextPage && feed.fetchNextPage()}
         loadingMore={feed.isFetchingNextPage}
         empty={
-          feed.isError ? (
+          !showFeed ? null : feed.isError && !feed.data ? (
             <ErrorState error={feed.error} onRetry={() => feed.refetch()} compact />
           ) : (
             <EmptyState
@@ -302,6 +331,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
   },
   hero: { paddingHorizontal: space.lg, gap: 2 },
+  heroBlock: { gap: space.xl },
   search: {
     marginHorizontal: space.lg,
     flexDirection: 'row',

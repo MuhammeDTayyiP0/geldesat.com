@@ -346,7 +346,7 @@ export default function ChatScreen() {
     );
   }
 
-  if (thread.isError) {
+  if (thread.isError && !thread.data) {
     return (
       <View style={[styles.flex, { backgroundColor: c.bg, paddingTop: insets.top }]}>
         <IconButton icon={ChevronLeft} label="Geri" onPress={() => router.back()} />
@@ -514,7 +514,7 @@ export default function ChatScreen() {
           >
             <ChevronDown size={22} color={c.fg} />
             {unseen ? (
-              <View style={[styles.toBottomBadge, { backgroundColor: c.primary }]}>
+              <View style={[styles.toBottomBadge, { backgroundColor: c.primarySolid }]}>
                 <Text variant="small" style={styles.toBottomText}>
                   {unseen > 99 ? '99+' : unseen}
                 </Text>

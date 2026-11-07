@@ -2,8 +2,10 @@ import * as Crypto from 'expo-crypto';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import { API_BASE_URL, SITE_URL } from '@/lib/config';
-import { ApiError, NETWORK_ERROR, request } from '@/api/client';
-import { clearSession, getToken, loadStoredSession, saveSession, setSignedIn, setSignedOut, type SessionUser } from './session';
+import { ApiError, request, timedFetch } from '@/api/client';
+import { registerForPush, takePushToken, unregisterPushToken } from '@/lib/push';
+import { clearDraft, clearSearches } from '@/lib/storage';
+import { clearSession, getSession, getToken, loadStoredSession, saveSession, setSignedIn, setSignedOut, type SessionUser } from './session';
 
 const OAUTH_REDIRECT = 'geldesat://oauth';
 
@@ -18,16 +20,11 @@ type AuthBody = {
 const originHeaders = { Origin: SITE_URL, Referer: `${SITE_URL}/` };
 
 async function authPost(path: string, body: unknown): Promise<{ data: AuthBody; token: string | null; status: number }> {
-  let response: Response;
-  try {
-    response = await fetch(`${API_BASE_URL}/api/auth${path}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...originHeaders },
-      body: JSON.stringify(body),
-    });
-  } catch {
-    throw new ApiError(NETWORK_ERROR, 0);
-  }
+  const response = await timedFetch(`${API_BASE_URL}/api/auth${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...originHeaders },
+    body: JSON.stringify(body),
+  });
   const data = ((await response.json().catch(() => ({}))) ?? {}) as AuthBody;
   if (!response.ok) throw new ApiError(translateAuthError(data, response.status), response.status);
   return { data, token: response.headers.get('set-auth-token') || data.token || null, status: response.status };
@@ -84,22 +81,21 @@ export async function requestPasswordReset(email: string): Promise<void> {
 
 export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
   const token = getToken();
-  let response: Response;
-  try {
-    response = await fetch(`${API_BASE_URL}/api/auth/change-password`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...originHeaders },
-      body: JSON.stringify({ currentPassword, newPassword, revokeOtherSessions: true }),
-    });
-  } catch {
-    throw new ApiError(NETWORK_ERROR, 0);
-  }
+  const response = await timedFetch(`${API_BASE_URL}/api/auth/change-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...originHeaders },
+    body: JSON.stringify({ currentPassword, newPassword, revokeOtherSessions: true }),
+  });
   const data = ((await response.json().catch(() => ({}))) ?? {}) as AuthBody;
   if (!response.ok) throw new ApiError(translateAuthError(data, response.status), response.status);
   // Revoking other sessions issues a fresh token for this one.
   const next = response.headers.get('set-auth-token') || data.token;
-  const session = await loadStoredSession();
-  if (next && session) await saveSession(session.user, next);
+  const session = getSession();
+  if (next && session.status === 'signedIn') {
+    await saveSession(session.user, next);
+    // Push tokens belong to a session; tie this phone's to the new one, without asking again.
+    void registerForPush({ ask: false }).catch(() => undefined);
+  }
 }
 
 export async function sendVerificationEmail(email: string): Promise<void> {
@@ -142,7 +138,11 @@ export async function signInWithGoogle(): Promise<SessionUser | null> {
   return user;
 }
 
-/** On launch: trust a stored session only after the server confirms it (keep it while offline). */
+/**
+ * On launch: open with the stored session at once and check it with the server
+ * in the background. Only a clear "no session" answer signs out; offline, a
+ * timeout or a maintenance page keep it (the next API 401 signs out).
+ */
 export async function restoreSession(): Promise<void> {
   const stored = await loadStoredSession();
   if (!stored) {
@@ -150,35 +150,57 @@ export async function restoreSession(): Promise<void> {
     return;
   }
   setSignedIn(stored.user, stored.token);
+  void confirmStoredSession(stored);
+}
+
+async function confirmStoredSession(stored: { user: SessionUser; token: string }) {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/auth/get-session`, {
-      headers: { Authorization: `Bearer ${stored.token}`, Accept: 'application/json' },
-    });
-    if (!response.ok) return;
-    const data = (await response.json().catch(() => null)) as { user?: AuthBody['user'] } | null;
-    if (!data?.user?.id) {
+    const response = await timedFetch(
+      `${API_BASE_URL}/api/auth/get-session`,
+      { headers: { Authorization: `Bearer ${stored.token}`, Accept: 'application/json' } },
+      10_000,
+    );
+    // Signed out or into another account meanwhile: this answer is about an old session.
+    if (getToken() !== stored.token) return;
+    if (response.status === 401) {
       await clearSession();
       return;
     }
-    await saveSession(toUser(data.user, stored.user.name), stored.token);
+    if (!response.ok) return;
+    let data: { user?: AuthBody['user'] } | null;
+    try {
+      data = JSON.parse(await response.text()) as { user?: AuthBody['user'] } | null;
+    } catch {
+      return; // Not JSON: a proxy or maintenance page, not an answer about the session.
+    }
+    if (data === null) {
+      await clearSession();
+      return;
+    }
+    if (data.user?.id) await saveSession(toUser(data.user, stored.user.name), stored.token);
   } catch {
-    // Offline: keep the stored session; the next API 401 signs out.
+    // Offline or timed out: keep the stored session.
   }
 }
 
-export async function signOut(beforeClear?: () => Promise<void>): Promise<void> {
+/**
+ * Sign out on this phone at once, then tell the server in the background: a
+ * bad network must not leave the account open. Drafts and recent searches go
+ * too; the root layout clears cached account data when the session ends.
+ */
+export async function signOut(): Promise<void> {
   const token = getToken();
-  try {
-    await beforeClear?.();
-  } catch {
-    // Best effort.
-  }
-  if (token) {
-    await fetch(`${API_BASE_URL}/api/auth/sign-out`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...originHeaders },
-      body: '{}',
-    }).catch(() => undefined);
-  }
+  const pushToken = await takePushToken();
   await clearSession();
+  await Promise.all([clearDraft(), clearSearches()]);
+  if (!token) return;
+  void (async () => {
+    // The push token first: removing it needs the session the sign-out ends.
+    if (pushToken) await unregisterPushToken(pushToken, token).catch(() => undefined);
+    await timedFetch(
+      `${API_BASE_URL}/api/auth/sign-out`,
+      { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...originHeaders }, body: '{}' },
+      8_000,
+    ).catch(() => undefined);
+  })();
 }

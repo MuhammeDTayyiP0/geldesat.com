@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
@@ -11,9 +12,19 @@ import { TURKEY_CITIES } from '@/data/locations';
 import { OptionPicker } from '@/features/location/OptionPicker';
 import { cleanPhone, maskPhoneInput } from '@/lib/format';
 import { pickPhotos, preparePhoto } from '@/lib/photos';
-import { Avatar, Button, Header, Input, ListRow, Loading, RowGroup, SelectField, Sheet, Text, space, toast, useTheme } from '@/ui';
+import { Avatar, Button, ErrorState, Header, Input, ListRow, Loading, RowGroup, SelectField, Sheet, Text, space, toast, useTheme } from '@/ui';
+import { RequireSignIn } from '@/auth/RequireSignIn';
 
-export default function ProfileSettings() {
+export default function ProfileSettingsScreen() {
+  return (
+    <RequireSignIn title="Profil bilgileri">
+      <ProfileSettings />
+    </RequireSignIn>
+  );
+}
+
+function ProfileSettings() {
+  const insets = useSafeAreaInsets();
   const { c } = useTheme();
   const router = useRouter();
   const me = useMe();
@@ -26,6 +37,8 @@ export default function ProfileSettings() {
   const [saving, setSaving] = useState(false);
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  // What to do once the photo sheet has closed: a picker opened while it is closing freezes the app.
+  const [afterSheet, setAfterSheet] = useState<'camera' | 'library' | 'remove' | null>(null);
 
   // Fill the form once, when the profile first arrives.
   const p = me.data?.profile;
@@ -89,7 +102,7 @@ export default function ProfileSettings() {
     return (
       <View style={{ flex: 1, backgroundColor: c.bg }}>
         <Header title="Profil bilgileri" />
-        <Loading />
+        {me.isError ? <ErrorState error={me.error} onRetry={() => void me.refetch()} /> : <Loading />}
       </View>
     );
   }
@@ -99,10 +112,10 @@ export default function ProfileSettings() {
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
       <Header title="Profil bilgileri" right={<Button title="Kaydet" size="sm" variant="ghost" loading={saving} onPress={() => void save()} />} />
-      <KeyboardAwareScrollView bottomOffset={24} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.body}>
+      <KeyboardAwareScrollView bottomOffset={24} keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + space.xxxl }]}>
         <Pressable onPress={() => setPicker('photo')} style={styles.avatarWrap} accessibilityRole="button" accessibilityLabel="Profil fotoğrafını değiştir">
           <Avatar name={name || 'Ü'} uri={me.data.profile?.avatar_url} size={96} />
-          <View style={[styles.camera, { backgroundColor: c.primary, borderColor: c.bg }]}>
+          <View style={[styles.camera, { backgroundColor: c.primarySolid, borderColor: c.bg }]}>
             {avatarBusy ? <ActivityIndicator color="#fff" size="small" /> : <Camera size={16} color="#fff" />}
           </View>
         </Pressable>
@@ -124,11 +137,21 @@ export default function ProfileSettings() {
 
       <OptionPicker visible={picker === 'city'} onClose={() => setPicker(null)} title="İl" value={city} onSelect={(v) => { setCity(v ?? ''); setDistrict(''); }} />
       <OptionPicker visible={picker === 'district'} onClose={() => setPicker(null)} title="İlçe" options={districts} value={district} onSelect={(v) => setDistrict(v ?? '')} />
-      <Sheet visible={picker === 'photo'} onClose={() => setPicker(null)} title="Profil fotoğrafı">
+      <Sheet
+        visible={picker === 'photo'}
+        onClose={() => setPicker(null)}
+        title="Profil fotoğrafı"
+        onDismissed={() => {
+          const next = afterSheet;
+          setAfterSheet(null);
+          if (next === 'remove') void removeAvatar();
+          else if (next) void changeAvatar(next);
+        }}
+      >
         <RowGroup>
-          <ListRow icon={Camera} label="Fotoğraf çek" onPress={() => void changeAvatar('camera')} />
-          <ListRow icon={UserRound} label="Galeriden seç" onPress={() => void changeAvatar('library')} />
-          {me.data.profile?.avatar_url ? <ListRow icon={Trash2} label="Fotoğrafı kaldır" danger onPress={() => void removeAvatar()} /> : null}
+          <ListRow icon={Camera} label="Fotoğraf çek" onPress={() => { setAfterSheet('camera'); setPicker(null); }} />
+          <ListRow icon={UserRound} label="Galeriden seç" onPress={() => { setAfterSheet('library'); setPicker(null); }} />
+          {me.data.profile?.avatar_url ? <ListRow icon={Trash2} label="Fotoğrafı kaldır" danger onPress={() => { setAfterSheet('remove'); setPicker(null); }} /> : null}
         </RowGroup>
         <Text variant="caption" tone="subtle" center>
           Fotoğraf kare olarak kırpılır ve küçültülür.

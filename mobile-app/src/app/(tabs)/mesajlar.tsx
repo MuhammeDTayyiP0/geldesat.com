@@ -131,7 +131,7 @@ export default function InboxScreen() {
 
       {inbox.isLoading ? (
         <Loading />
-      ) : inbox.isError ? (
+      ) : inbox.isError && !inbox.data ? (
         <ErrorState error={inbox.error} onRetry={() => inbox.refetch()} />
       ) : (
         <FlatList
@@ -278,7 +278,7 @@ function InboxRow({ cv, me, onPress, onLongPress }: { cv: Conversation; me: stri
             {previewText(cv.last_kind, cv.last_content, cv.last_deleted)}
           </Text>
           {cv.unread ? (
-            <View style={[styles.badge, { backgroundColor: c.primary }]}>
+            <View style={[styles.badge, { backgroundColor: c.primarySolid }]}>
               <Text variant="small" style={styles.badgeText}>
                 {cv.unread > 99 ? '99+' : cv.unread}
               </Text>

@@ -1,4 +1,5 @@
 import { FlatList, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Ban } from 'lucide-react-native';
 import { errorMessage } from '@/api/client';
@@ -7,9 +8,19 @@ import { keys, queryClient } from '@/api/queries';
 import type { BlockedUser } from '@/api/types';
 import { formatDate } from '@/lib/format';
 import { Avatar, Button, Divider, EmptyState, ErrorState, Header, Loading, Text, space, toast, useTheme } from '@/ui';
+import { RequireSignIn } from '@/auth/RequireSignIn';
 
-export default function BlockedUsersScreen() {
+export default function BlockedUsersScreenScreen() {
+  return (
+    <RequireSignIn title="Engellenen kullanıcılar">
+      <BlockedUsersScreen />
+    </RequireSignIn>
+  );
+}
+
+function BlockedUsersScreen() {
   const { c } = useTheme();
+  const insets = useSafeAreaInsets();
   const query = useQuery({ queryKey: keys.blocked, queryFn: account.blocked });
   const unblock = useMutation({
     mutationFn: (userId: string) => account.unblock(userId),
@@ -24,14 +35,14 @@ export default function BlockedUsersScreen() {
       <Header title="Engellenen kullanıcılar" />
       {query.isLoading ? (
         <Loading />
-      ) : query.isError ? (
+      ) : query.isError && !query.data ? (
         <ErrorState error={query.error} onRetry={() => query.refetch()} />
       ) : (
         <FlatList
           data={query.data ?? []}
           keyExtractor={(u) => u.id}
           ItemSeparatorComponent={() => <Divider inset={72} />}
-          contentContainerStyle={query.data?.length ? undefined : styles.grow}
+          contentContainerStyle={[query.data?.length ? undefined : styles.grow, { paddingBottom: insets.bottom }]}
           ListEmptyComponent={<EmptyState icon={Ban} title="Engellediğiniz kimse yok" message="Engellediğiniz kişiler size mesaj gönderemez." />}
           renderItem={({ item }) => (
             <View style={[styles.row, { backgroundColor: c.surface }]}>

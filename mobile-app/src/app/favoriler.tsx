@@ -34,7 +34,7 @@ export default function FavoritesScreen() {
           message="Beğendiğiniz ilanları kaydetmek ve her cihazda görmek için giriş yapın."
           action={<Button title="Giriş yap" onPress={() => router.push('/giris')} />}
         />
-      ) : favorites.isError ? (
+      ) : favorites.isError && !favorites.data ? (
         <ErrorState error={favorites.error} onRetry={() => favorites.refetch()} />
       ) : (
         <ListingGrid

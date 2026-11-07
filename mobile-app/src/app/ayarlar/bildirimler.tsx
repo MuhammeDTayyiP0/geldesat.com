@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Linking, ScrollView, StyleSheet, View } from 'react-native';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { BellRing, Mail } from 'lucide-react-native';
@@ -8,6 +9,7 @@ import { keys, queryClient } from '@/api/queries';
 import type { AccountSettings, NotifyPrefs, NotifyType } from '@/api/types';
 import { pushPermissionGranted, registerForPush } from '@/lib/push';
 import { Button, Card, ErrorState, Header, ListRow, Loading, RowGroup, Text, space, toast, useTheme } from '@/ui';
+import { RequireSignIn } from '@/auth/RequireSignIn';
 
 const TYPES: { type: NotifyType; label: string; hint: string; inappLocked?: boolean }[] = [
   { type: 'message', label: 'Yeni mesajlar', hint: 'Biri ilanınız hakkında yazdığında' },
@@ -16,7 +18,16 @@ const TYPES: { type: NotifyType; label: string; hint: string; inappLocked?: bool
   { type: 'expiry', label: 'Süre hatırlatması', hint: 'İlanınızın süresi dolmak üzereyken' },
 ];
 
-export default function NotificationSettings() {
+export default function NotificationSettingsScreen() {
+  return (
+    <RequireSignIn title="Bildirim tercihleri">
+      <NotificationSettings />
+    </RequireSignIn>
+  );
+}
+
+function NotificationSettings() {
+  const insets = useSafeAreaInsets();
   const { c } = useTheme();
   const settings = useQuery({ queryKey: keys.settings, queryFn: account.settings });
   const [edited, setPrefs] = useState<NotifyPrefs | null>(null);
@@ -55,13 +66,13 @@ export default function NotificationSettings() {
     <View style={{ flex: 1, backgroundColor: c.bg }}>
       <Header title="Bildirim tercihleri" />
       {settings.isLoading || !prefs ? (
-        settings.isError ? (
+        settings.isError && !settings.data ? (
           <ErrorState error={settings.error} onRetry={() => settings.refetch()} />
         ) : (
           <Loading />
         )
       ) : (
-        <ScrollView contentContainerStyle={styles.body}>
+        <ScrollView contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + space.xxxl }]}>
           {!systemOn ? (
             <Card style={[styles.warn, { backgroundColor: c.warnSoft, borderColor: c.warnSoft }]}>
               <View style={styles.row}>
