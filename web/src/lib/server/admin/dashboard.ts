@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { getSql } from "@/lib/db";
+import { liveSql } from "@/lib/listing-status";
 import { asJson, num } from "@/lib/utils";
 import { adminMiddleware, IST, likeTerm, ts, tsOrNull } from "./common";
 
@@ -86,7 +87,7 @@ export const adminDashboard = createServerFn({ method: "GET" })
            select c.id, t.root_id from categories c join tree t on c.parent_id = t.id
          )
          select r.id, r.name,
-                count(l.id) filter (where l.status = 'ACTIVE') as active,
+                count(l.id) filter (where ${liveSql()}) as active,
                 count(l.id) as total
          from tree t
          join categories r on r.id = t.root_id
@@ -94,11 +95,14 @@ export const adminDashboard = createServerFn({ method: "GET" })
          group by r.id, r.name, r.sort_order
          order by active desc, r.sort_order`,
       ),
-      sql.query<{ status: string; n: number }>("select status, count(*) as n from listings group by status"),
+      // Expired listings get their own slice instead of counting as live.
+      sql.query<{ status: string; n: number }>(
+        "select case when status = 'ACTIVE' and expires_at <= now() then 'EXPIRED' else status end as status, count(*) as n from listings group by 1",
+      ),
       sql.query<{ city: string; n: number }>(
-        `select city, count(*) as n from listings
-         where status = 'ACTIVE' and city is not null and city <> ''
-         group by city order by n desc limit 8`,
+        `select l.city, count(*) as n from listings l
+         where ${liveSql()} and l.city is not null and l.city <> ''
+         group by l.city order by n desc limit 8`,
       ),
       sql.query<Record<string, unknown>>(
         `select l.id, l.listing_no, l.title, l.price, l.currency, l.city, l.created_at,

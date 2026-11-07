@@ -60,40 +60,40 @@ Onaylarsan bu varsayılanlarla ilerlerim. Değiştirmek istediğini söylemen ye
 
 Yalnız web, anahtarsız, her biri testli. Migration'lar `0032`'den başlar. **Faz sonunda ilk deploy noktası.**
 
-- [ ] Yönlendirme: `safeRedirect` kontrol karakteri ve origin, admin bildirim linki de aynı işlevle (Madde 4; `users.ts:406`).
-- [ ] `attrs`: regex, tanımlara göre doğrulama, uzunluk ve anahtar sınırı, `city/district` sınırı, Yıl aralığı (Madde 5; `listing-write.ts:15-20`).
-- [ ] Puan: benzersizlik, sahiplik, transaction, hız sınırı, temizleme migration'ı (Madde 3; K12).
-- [ ] Şikayet: mesaj şikayetinde ilan kaldırmama, `on delete set null`, içerik kopyası, görsel gösterimi, `message_id` tekilleştirme, karşı tarafa doğru sayım (Madde 6, 7; 3.5 Şikayetler).
-- [ ] Kredi: koşullu güncelleme, tekil indeks, negatif bakiye, büyük tutar onayı, kendine yükleme (Madde 15; 3.5 Kullanıcılar).
-- [ ] CSV formül kaçışı (`admin/search.ts`).
-- [ ] Telefon: `revealListingPhone` günlük tavan, kayıt sorgusunda hız sınırı (3.7; K8).
-- [ ] Kayıt `image` alan kontrolü, avatar ve yükleme boyut sınırları, `resizeVariant` piksel sınırı, RPC gövde limiti (3.4, 3.7).
-- [ ] `getStore` ve `getSiteSettings` herkese açık yanıtlarından telefon ve IBAN'ı çıkar; askıdaki mağazayı mobilde gizle (3.1, 3.4, 3.7).
-- [ ] Tiles ve geo: hız sınırı, seri kuyruk, istek birleştirme, `toFixed(3)` (3.3, 3.7).
-- [ ] OAuth `done` akışını `start`'a bağla, `no-store` (3.7).
-- [ ] IP anahtarı: proxy doğrulamasından sonra tek güvenilir kaynak (Madde 14). Yanıtın gerçek 429 dönmesi.
-- [ ] Engel varken presence ve yazıyor sinyali, `respondOffer` denetimleri (3.3).
-- [ ] Sohbetten silinen içerik bildirimden de silinsin (3.3).
-- [ ] Oturum ömrü (60-90 gün) ve push token'ının oturum ve hesap kapanışında silinmesi (Madde 12; 3.7).
-- [ ] K1 kararına göre eski REST uçları; okundu sızıntısı, bildirim yağmuru ve EXIF açığı bununla kapanır (Madde 10; 3.7).
-- [ ] `db.ts`: bağlantı ve sorgu zaman aşımı; `errors.ts`: yalnız `PublicError` gösterimi.
-- [ ] Testler: durum geçişi, `attrs`, puan benzersizliği, yönlendirme.
+- [x] Yönlendirme: `safeRedirect` kontrol karakteri ve origin, admin bildirim linki de aynı işlevle (Madde 4; `users.ts:406`).
+- [x] `attrs`: regex, tanımlara göre doğrulama, uzunluk ve anahtar sınırı, `city/district` sınırı, Yıl aralığı (Madde 5; `listing-write.ts:15-20`).
+- [x] Puan: benzersizlik, sahiplik, transaction, hız sınırı, temizleme migration'ı (Madde 3; K12).
+- [x] Şikayet: mesaj şikayetinde ilan kaldırmama, `on delete set null`, içerik kopyası, görsel gösterimi, `message_id` tekilleştirme, karşı tarafa doğru sayım (Madde 6, 7; 3.5 Şikayetler).
+- [x] Kredi: koşullu güncelleme, tekil indeks, negatif bakiye, büyük tutar onayı, kendine yükleme (Madde 15; 3.5 Kullanıcılar).
+- [x] CSV formül kaçışı (`admin/search.ts`).
+- [x] Telefon: `revealListingPhone` günlük tavan, kayıt sorgusunda hız sınırı (3.7; K8).
+- [x] Kayıt `image` alan kontrolü, avatar ve yükleme boyut sınırları, `resizeVariant` piksel sınırı, RPC gövde limiti (3.4, 3.7).
+- [x] `getStore` ve `getSiteSettings` herkese açık yanıtlarından telefon ve IBAN'ı çıkar; askıdaki mağazayı mobilde gizle (3.1, 3.4, 3.7).
+- [x] Tiles ve geo: hız sınırı, seri kuyruk, istek birleştirme, `toFixed(3)` (3.3, 3.7).
+- [x] OAuth `done` akışını `start`'a bağla, `no-store` (3.7).
+- [x] IP anahtarı için `TRUSTED_IP_HEADER` ve gerçek 429 eklendi. **Senden bekliyor:** proxy zincirini doğrulayıp değişkeni Coolify'a girmek (Madde 14).
+- [x] Engel varken presence ve yazıyor sinyali, `respondOffer` denetimleri (3.3).
+- [x] Sohbetten silinen içerik bildirimden de silinsin (3.3).
+- [x] Oturum ömrü (60-90 gün) ve push token'ının oturum ve hesap kapanışında silinmesi (Madde 12; 3.7).
+- [x] K1 kararına göre eski REST uçları; okundu sızıntısı, bildirim yağmuru ve EXIF açığı bununla kapanır (Madde 10; 3.7).
+- [x] `db.ts`: bağlantı ve sorgu zaman aşımı; `errors.ts`: yalnız `PublicError` gösterimi.
+- [x] Testler: durum geçişi, `attrs`, puan benzersizliği, yönlendirme.
 
 ## Faz 2: İlan durum modeli
 
 Tek kaynak: sunucuda geçiş tablosu ve ortak "canlı" SQL parçası. Birçok bulgunun kök nedeni.
 
-- [ ] `lib/server/listing-status.ts`: izinli geçişler ve bunlardan türeyen eylem listesi; web ve mobil yanıtına eklenir.
-- [ ] Moderasyon atlatma ve `attrs` değişiminin incelemeye girmesi (Madde 1; 3.2).
-- [ ] `first_free` için kalıcı profil alanı ve backfill (Madde 2).
-- [ ] Uzatma durumu değiştirmesin, süresi dolmuş yayına alınamasın, sunucu reddetsin (Madde 30).
-- [ ] Toplu onay `PENDING` koşulu, askı kontrolü, atlananların sayısı; tüm admin kararları koşullu (Madde 9; 3.5).
-- [ ] `status_before_ban` temizliği ve geri yüklemede durum koşulu (Madde 8).
-- [ ] "Canlı" SQL'i dashboard, kullanıcı, mağaza, ilan ve şikayet sayılarına uygula (3.5).
-- [ ] Satılan ilan görünürlüğü ve metinleri (K2; 3.2); son bakılanlarda reddedilen ilan maskeleme.
-- [ ] Sahip bildirimi, admin onayında süre yenileme, transaction'lar (3.2, 3.7).
-- [ ] Admin'in site üzerinden yaptığı işlemlere audit ekle (3.5).
-- [ ] Geçiş tablosu testleri.
+- [x] `lib/server/listing-status.ts`: izinli geçişler ve bunlardan türeyen eylem listesi; web ve mobil yanıtına eklenir.
+- [x] Moderasyon atlatma ve `attrs` değişiminin incelemeye girmesi (Madde 1; 3.2).
+- [x] `first_free` için kalıcı profil alanı ve backfill (Madde 2).
+- [x] Uzatma durumu değiştirmesin, süresi dolmuş yayına alınamasın, sunucu reddetsin (Madde 30).
+- [x] Toplu onay `PENDING` koşulu, askı kontrolü, atlananların sayısı; tüm admin kararları koşullu (Madde 9; 3.5).
+- [x] `status_before_ban` temizliği ve geri yüklemede durum koşulu (Madde 8).
+- [x] "Canlı" SQL'i dashboard, kullanıcı, mağaza, ilan ve şikayet sayılarına uygula (3.5).
+- [x] Satılan ilan görünürlüğü ve metinleri (K2; 3.2); son bakılanlarda reddedilen ilan maskeleme.
+- [x] Sahip bildirimi, admin onayında süre yenileme, transaction'lar (3.2, 3.7).
+- [x] Admin'in site üzerinden yaptığı işlemlere audit ekle (3.5).
+- [x] Geçiş tablosu testleri.
 
 ## Faz 3: Web ortak altyapı
 

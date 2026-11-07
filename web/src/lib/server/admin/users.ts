@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { safeRedirect } from "@/lib/auth/sign-in-gate";
+import { liveSql } from "@/lib/listing-status";
 import { getSql } from "@/lib/db";
 import { newId, num } from "@/lib/utils";
 import { creditBalance, normalizeTrPhone, notify } from "../helpers";
@@ -53,7 +54,7 @@ const USER_SELECT = `
   p.banned_at, p.ban_reason, p.deletion_requested_at,
   u.email, u."emailVerified" as email_verified,
   (select count(*) from listings l where l.user_id = p.user_id) as listing_count,
-  (select count(*) from listings l where l.user_id = p.user_id and l.status = 'ACTIVE') as active_count,
+  (select count(*) from listings l where l.user_id = p.user_id and ${liveSql()}) as active_count,
   (select s.name from stores s where s.user_id = p.user_id limit 1) as store_name,
   coalesce((select json_agg(distinct a."providerId") from "account" a where a."userId" = p.user_id), '[]'::json) as providers`;
 
@@ -291,7 +292,7 @@ export const adminUnbanUser = createServerFn({ method: "POST" })
       }
       const rows = await tx.query<{ id: string }>(
         `update listings set status = status_before_ban, status_before_ban = null, updated_at = now()
-         where user_id = $1 and status_before_ban is not null returning id`,
+         where user_id = $1 and status_before_ban is not null and status = 'INACTIVE' returning id`,
         [data.userId],
       );
       return rows.length;

@@ -34,21 +34,21 @@ Temiz çıkan alanlar: admin server fonksiyonlarının tamamı yetki kontrollü 
 
 ### Güvenlik ve bütünlük
 
-- [ ] 1. **K · Moderasyon atlatma.** Onaylı ilan SATILDI yapılır, içeriği tamamen değiştirilir, sonra "Tekrar yayına al" ile incelemesiz yayına girer. `reReview` yalnızca ACTIVE/INACTIVE için çalışıyor. `W/lib/server/listing-write.ts:120`, `W/lib/server/account.ts:142`, `W/routes/api/mobile/my-listings/$id.ts:52` → `reReview`'i durumdan bağımsız yapıp `approved_at=null` yaz.
-- [ ] 2. **Y · Otomatik onay istismarı.** `first_free` mevcut ilan sayısına bakıyor, silme kalıcı. İlanı silip yenisini veren her seferinde otomatik onay alır. `listing-write.ts:145-146` → "daha önce onaylı ilanı oldu" bilgisini profilde kalıcı tut.
-- [ ] 3. **Y · Puan manipülasyonu.** `leaveReview` ilanın satıcıya ait olduğunu denetlemiyor, tekillik satıcı+yorumcu+ilan üçlüsünde. Tek sohbetle aynı satıcıya sınırsız puan yazılır. Hız sınırı da yok. `W/lib/server/social.ts:106-131` → `unique(seller_id, reviewer_id)`, sahiplik kontrolü, temizleme migration'ı.
-- [ ] 4. **Y · Açık yönlendirme.** `/login?redirect=/%09/evil.com` korumayı geçiyor ve `https://evil.com/` olarak çözülüyor (Node `URL` ile denendi, tarayıcıda denenmedi). `W/lib/auth/sign-in-gate.ts:17` → kontrol karakterlerini reddet, origin karşılaştır, teste ekle.
-- [ ] 5. **Y · Aramayı kilitleme.** Regex `^[0-9.]+$` "1.2.3" değerini geçirir, `::numeric` hata verir; `attrs` sunucuda doğrulanmıyor. Özel istekle yazılan tek değer KM, Yıl ve m² filtreli aramaları hataya düşürür. `W/lib/server/catalog.ts:132`, `listing-write.ts:20` → regex'i düzelt, `attrs`'ı tanımlara göre doğrula, boyut sınırı koy.
-- [ ] 6. **Y · Mağdur cezalandırma.** Mesaj şikayeti de `listing_id` taşıyor. "Kapat + ilanları kaldır" şikayet edenin kendi ilanını reddedebilir. `W/lib/server/admin/moderation.ts:155-162`, `W/lib/server/chat.ts:551` → kaldırmayı `conversation_id is null` ile sınırla.
-- [ ] 7. **Y · Şikayet kanıtı kayboluyor.** Şikayet ilana `on delete cascade` ile bağlı (0026 yalnızca NOT NULL'u kaldırıyor); şikayet edilen satıcı ilanı silince şikayet de silinir. Şikayet ekranı yalnız son 12 mesajı gösterir, "herkesten sil" içeriği kalıcı siler. `web/migrations/0002_schema.sql:120`, `moderation.ts:62-65`, `chat.ts:274-279` → `set null`, şikayet anında içerik kopyası.
-- [ ] 8. **Y · Reddedilen ilan askı kalkınca yayına dönüyor.** Admin reddi `status_before_ban`'ı temizlemiyor. `W/lib/server/admin/users.ts:288`, `W/lib/server/admin/listings.ts:292` → her admin durum değişikliğinde sıfırla.
+- [x] 1. **K · Moderasyon atlatma.** Onaylı ilan SATILDI yapılır, içeriği tamamen değiştirilir, sonra "Tekrar yayına al" ile incelemesiz yayına girer. `reReview` yalnızca ACTIVE/INACTIVE için çalışıyor. `W/lib/server/listing-write.ts:120`, `W/lib/server/account.ts:142`, `W/routes/api/mobile/my-listings/$id.ts:52` → `reReview`'i durumdan bağımsız yapıp `approved_at=null` yaz.
+- [x] 2. **Y · Otomatik onay istismarı.** `first_free` mevcut ilan sayısına bakıyor, silme kalıcı. İlanı silip yenisini veren her seferinde otomatik onay alır. `listing-write.ts:145-146` → "daha önce onaylı ilanı oldu" bilgisini profilde kalıcı tut.
+- [x] 3. **Y · Puan manipülasyonu.** `leaveReview` ilanın satıcıya ait olduğunu denetlemiyor, tekillik satıcı+yorumcu+ilan üçlüsünde. Tek sohbetle aynı satıcıya sınırsız puan yazılır. Hız sınırı da yok. `W/lib/server/social.ts:106-131` → `unique(seller_id, reviewer_id)`, sahiplik kontrolü, temizleme migration'ı.
+- [x] 4. **Y · Açık yönlendirme.** `/login?redirect=/%09/evil.com` korumayı geçiyor ve `https://evil.com/` olarak çözülüyor (Node `URL` ile denendi, tarayıcıda denenmedi). `W/lib/auth/sign-in-gate.ts:17` → kontrol karakterlerini reddet, origin karşılaştır, teste ekle.
+- [x] 5. **Y · Aramayı kilitleme.** Regex `^[0-9.]+$` "1.2.3" değerini geçirir, `::numeric` hata verir; `attrs` sunucuda doğrulanmıyor. Özel istekle yazılan tek değer KM, Yıl ve m² filtreli aramaları hataya düşürür. `W/lib/server/catalog.ts:132`, `listing-write.ts:20` → regex'i düzelt, `attrs`'ı tanımlara göre doğrula, boyut sınırı koy.
+- [x] 6. **Y · Mağdur cezalandırma.** Mesaj şikayeti de `listing_id` taşıyor. "Kapat + ilanları kaldır" şikayet edenin kendi ilanını reddedebilir. `W/lib/server/admin/moderation.ts:155-162`, `W/lib/server/chat.ts:551` → kaldırmayı `conversation_id is null` ile sınırla.
+- [x] 7. **Y · Şikayet kanıtı kayboluyor.** Şikayet ilana `on delete cascade` ile bağlı (0026 yalnızca NOT NULL'u kaldırıyor); şikayet edilen satıcı ilanı silince şikayet de silinir. Şikayet ekranı yalnız son 12 mesajı gösterir, "herkesten sil" içeriği kalıcı siler. `web/migrations/0002_schema.sql:120`, `moderation.ts:62-65`, `chat.ts:274-279` → `set null`, şikayet anında içerik kopyası.
+- [x] 8. **Y · Reddedilen ilan askı kalkınca yayına dönüyor.** Admin reddi `status_before_ban`'ı temizlemiyor. `W/lib/server/admin/users.ts:288`, `W/lib/server/admin/listings.ts:292` → her admin durum değişikliğinde sıfırla.
 - [ ] 9. **Y · Onay denetimsiz.** Toplu onay kaynak durumu ve satıcı askısını kontrol etmiyor: "Tümü"nden seçilince SATILDI, REDDEDİLDİ ve askıdaki satıcının ilanları yayına girer. `listings.ts:282-305` → `status='PENDING'` koşulu. Ayrıca `A` kısayolu `e.repeat` ve yükleme kontrolü yapmıyor; basılı tutmak sıradaki ilanı görmeden onaylar. `W/routes/admin/moderasyon.tsx:141-143`.
-- [ ] 10. **Y · Okundu gizliliği sızıyor.** Eski REST ucu `read_receipts` ayarına bakmadan `read_at` döndürüyor ve yayınlıyor. Mevcut uygulama bu ucu çağırmıyor, ama açık. `W/routes/api/mobile/conversations/$id.ts:23-41` → RPC mantığını uygula veya uçları kapat.
+- [x] 10. **Y · Okundu gizliliği sızıyor.** Eski REST ucu `read_receipts` ayarına bakmadan `read_at` döndürüyor ve yayınlıyor. Mevcut uygulama bu ucu çağırmıyor, ama açık. `W/routes/api/mobile/conversations/$id.ts:23-41` → RPC mantığını uygula veya uçları kapat.
 - [ ] 11. **Y · Satıcının WhatsApp ayarı uygulamada geçersiz.** "WhatsApp ile yaz" her zaman görünüyor, mobil API `show_whatsapp` döndürmüyor. `M/features/listing/ListingSheets.tsx:122`, `W/routes/api/mobile/listings/$id.ts` → alanı ekle, koşula bağla; web önce deploy edilmeli.
 - [ ] 12. **Y · Oturumu kapanmış telefona mesaj push'u.** 401'de, çevrimdışı çıkışta ve hesap silmede sunucudaki token kalıyor; şifre değişse bile çalınan telefon mesaj önizlemesi alır. `M/api/client.ts:68-70`, `M/lib/push.ts:47-48`, `M/app/ayarlar/guvenlik.tsx:125,159` → oturum kapanışında sunucuda sil, token'ı oturuma bağla.
 - [ ] 13. **Y · Hesap silme metni yanlış, veri kaybına yol açabilir.** Mobil "giriş yaparak geri alabilirsiniz" diyor; giriş geri almıyor, açık `restoreMyAccount` gerekiyor ve düğme yalnız Şifre ve güvenlik içinde. Kullanıcı geri aldığını sanar, 30 gün sonra veri silinir. `M/app/ayarlar/guvenlik.tsx:126,172`, `W/lib/server/settings.ts:132` → belirgin banner ve doğru metin.
 - [ ] 14. **Y (olası) · IP tabanlı sınırlar.** `x-forwarded-for` ilk değerine dayanıyor; proxy'ye göre sahtelenebilir veya herkes aynı IP'yi paylaşıp haksız 429 alabilir. `W/lib/server/helpers.ts` `viewerKey`, `web/docker-compose.yml:27` → gerçek zinciri doğrula, güvenilir tek kaynak kullan, portu kapat.
-- [ ] 15. **O · Kredi çift yükleme.** Durum transaction dışında okunuyor, `update` koşulsuz. Satış şu an kapalı, açılmadan düzeltilmeli. `W/lib/server/admin/business.ts:195-202`.
+- [x] 15. **O · Kredi çift yükleme.** Durum transaction dışında okunuyor, `update` koşulsuz. Satış şu an kapalı, açılmadan düzeltilmeli. `W/lib/server/admin/business.ts:195-202`.
 
 ### Kullanıcı akışını bozan hatalar
 
@@ -66,7 +66,7 @@ Temiz çıkan alanlar: admin server fonksiyonlarının tamamı yetki kontrollü 
 - [ ] 27. **Y · Hazır mesajlar silinebilir.** Liste yüklenemezken boş görünür, yeni ekleme tüm listenin üstüne yazar. `M/app/ayarlar/sablonlar.tsx:14-16,54`.
 - [ ] 28. **Y · 24 saatlik taslak fotoğrafı.** Sunucu bağlanmamış fotoğrafı 24 saatte siliyor; taslak bunu bilmiyor, Yayınla hangisi olduğunu söylemeden hata verir. `M/app/ilan-ver.tsx:123`, `W/lib/server/upload.server.ts:15-19`.
 - [ ] 29. **Y · Web'de taslak yok.** Yenileme veya geri tuşu tüm ilan formunu siler. `W/routes/ilan-ver.tsx:123-134`.
-- [ ] 30. **Y · "Süreyi uzat" gizli ilanı yayına alıyor.** Satıcının bilerek kapattığı ilan ve telefonu sessizce yayına döner; süresi dolmuş ilanda "Yayına al" başarı der ama ilan görünmez. Web ve mobil. `listing-write.ts:36-39`, `W/routes/ilanlarim.tsx:274-288`, `M/app/ilanlarim.tsx:167-174`, `W/routes/api/mobile/my-listings/$id.ts:51-55`.
+- [x] 30. **Y · "Süreyi uzat" gizli ilanı yayına alıyor.** Satıcının bilerek kapattığı ilan ve telefonu sessizce yayına döner; süresi dolmuş ilanda "Yayına al" başarı der ama ilan görünmez. Web ve mobil. `listing-write.ts:36-39`, `W/routes/ilanlarim.tsx:274-288`, `M/app/ilanlarim.tsx:167-174`, `W/routes/api/mobile/my-listings/$id.ts:51-55`.
 - [ ] 31. **Y · KVKK bağlantısı yanlış.** "Verilerimi indir" `/ayarlar/gizlilik`'i açıyor, indirme `/ayarlar/hesap` sayfasında. `M/app/ayarlar/gizlilik.tsx:77`.
 - [ ] 32. **Y · Fotoğraf balonunda menü açılmıyor.** İç `Pressable` uzun basmayı yutuyor; yanlış fotoğrafı silmek veya bildirmek pratikte erişilemez. `M/features/chat/Bubble.tsx:81,115,166`.
 
@@ -192,7 +192,7 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 - [ ] D · `Navbar.tsx:341,361` — `no-scrollbar` tanımsız, `py-0.2` geçersiz. D · Dosya sonlarında kalıntı yorumlar.
 - [ ] D · `BottomNav.tsx:65` — "İlan Ver" yazısı linkin dışında.
 - [ ] O · `CookieBanner.tsx:16-19` — Tercih hiç okunmuyor, iki düğme aynı; politika tarayıcı kaydını silmeyi öneriyor. D · `:17` — Depolama kapalıysa banner kapanmıyor.
-- [ ] D · `catalog.ts:510`, `Footer.tsx:38-46` — Footer için IBAN ve banka alanları da herkese dönüyor.
+- [x] D · `catalog.ts:510`, `Footer.tsx:38-46` — Footer için IBAN ve banka alanları da herkese dönüyor.
 - [ ] D · `styles.css:218-220`, `Footer.tsx:81` — Mobilde çift alt boşluk.
 - [ ] D · `NotFound.tsx:145-151` — Arama kutusunda etiket yok.
 - [ ] O · `ListingCard.tsx:99-105,137` — Favori düğmesi `<a>` içinde. D · `ListingCard.tsx:45-47,104` — Girişsiz favoride yalnız hata toast'ı, 36 px alan.
@@ -206,7 +206,7 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 ### 3.2 Web: ilan
 
 **İlan detay `routes/ilan/$slug.tsx`**
-- [ ] Y · `ListingSections.tsx:97`, `catalog.ts:335` — Sahibe "alıcılara Satıldı görünür" deniyor; alıcı 404 alıyor → SOLD'u aç ve noindex yap ya da metni düzelt.
+- [x] Y · `ListingSections.tsx:97`, `catalog.ts:335` — Sahibe "alıcılara Satıldı görünür" deniyor; alıcı 404 alıyor → SOLD'u aç ve noindex yap ya da metni düzelt.
 - [ ] O · `$slug.tsx:421`, `ListingSections.tsx:100,115` — Süresi dolmuş INACTIVE/SOLD'da sahip çıkmazda; metin "panelden yayına al" diyor.
 - [ ] O · `$slug.tsx:139-150,724-726` — `msg`, `review` ve açık durumlar başka ilana taşınıyor.
 - [ ] O · `ListingImageGallery.tsx:258` — Lightbox'ta dialog rolü ve odak yok.
@@ -219,7 +219,7 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 - [ ] D · `ListingSections.tsx:190` — Birim kayboluyor (aidat "1500"). D · `ListingDetailSkeleton.tsx:17,25` — İskelet farklı, sayfa zıplıyor.
 
 **İlan ver `routes/ilan-ver.tsx`**
-- [ ] O · `listing-write.ts:20,115-119` — `attrs` değişimi yeniden incelemeye girmiyor; onaylı ilana serbest metin eklenebilir.
+- [x] O · `listing-write.ts:20,115-119` — `attrs` değişimi yeniden incelemeye girmiyor; onaylı ilana serbest metin eklenebilir.
 - [ ] O · `PhotoUploader.tsx:258` — 10 fotoğrafta bırakılan dosyayı tarayıcı açıyor, form kaybolur.
 - [ ] O · `ilan-ver.tsx:381,416`, `listing-write.ts:14` — 10 hane kabul, sunucu 1 milyar; hata son adımda. Mobilde 13 hane (`M/lib/format.ts:19`).
 - [ ] O (olası) · `ilan-ver.tsx:262-263`, `listing-write.ts:12-13` — Boşluklu başlık ham Zod JSON'u gösterebilir.
@@ -239,11 +239,11 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 - [ ] O · `ilanlarim.tsx:65-69` — Hata "Yayında ilanınız yok" görünüyor; mükerrer ilana yol açabilir.
 - [ ] O · `ilanlarim.tsx:264,274`, `$slug.tsx:406,421` — SOLD için iki ekran farklı kural uyguluyor.
 - [ ] D · `account.ts:199-211` — Sayfalama yok, `l.*`. D · `ilanlarim.tsx:61` — Varsayılan sekme hep "Yayında". D · `:110-118,220` — Sekme ve görsel link erişilebilirliği.
-- [ ] D · `account.ts:148-156` — Sahibe "onaylandı" bildirimi. D · `account.ts:146-147` — Admin onayı süreyi yenilemiyor.
+- [x] D · `account.ts:148-156` — Sahibe "onaylandı" bildirimi. D · `account.ts:146-147` — Admin onayı süreyi yenilemiyor.
 - [ ] O · `social.ts:60`, `favoriler.tsx:53` — Satılan favori açıklamasız kayboluyor; web ve mobil.
 - [ ] O · `favoriler.tsx:32` — Hata "Henüz favori yok". D · `social.ts:55` — Limit yok, `l.*`.
 - [ ] O · `son-bakilanlar.tsx:107-110,123` — Rozetli satırlar 404'e gidiyor.
-- [ ] O · `recently-viewed.ts:29-37` — Reddedilen ve gizlenen ilanın başlığı, fiyatı ve fotoğrafı görünmeye devam ediyor.
+- [x] O · `recently-viewed.ts:29-37` — Reddedilen ve gizlenen ilanın başlığı, fiyatı ve fotoğrafı görünmeye devam ediyor.
 - [ ] O · `son-bakilanlar.tsx:37` — Hata boş görünüyor. D · `:125` — "şimdi baktınız", "5 Eki 2026 baktınız".
 
 ### 3.3 Web: mesajlaşma ve bildirim
@@ -278,16 +278,16 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 - [ ] D (olası) · `:101` — Uzun gövde kırılmıyor.
 
 **Sohbet sunucusu ve bileşenleri**
-- [ ] O · `chat.ts:389-390,450-451,485-494` — Engel varken çevrimiçi ve son görülme açık, `sendTyping` engeli denetlemiyor.
-- [ ] O · `chat.ts:227-246` — `respondOffer` engel, kapalı hesap, ilan durumu ve `status='pending'` denetlemiyor; satılmış ilanda teklif kabul edilebilir.
+- [x] O · `chat.ts:389-390,450-451,485-494` — Engel varken çevrimiçi ve son görülme açık, `sendTyping` engeli denetlemiyor.
+- [x] O · `chat.ts:227-246` — `respondOffer` engel, kapalı hesap, ilan durumu ve `status='pending'` denetlemiyor; satılmış ilanda teklif kabul edilebilir.
 - [ ] O · `chat.ts:423-439` — `pollThread` yalnız yeni mesaj getiriyor, yorumu aksini söylüyor.
-- [ ] O · `chat.ts:104,277-282` — "Herkesten sil" bildirimdeki ilk 80 karakteri silmiyor; IBAN kalır.
+- [x] O · `chat.ts:104,277-282` — "Herkesten sil" bildirimdeki ilk 80 karakteri silmiyor; IBAN kalır.
 - [ ] O · `chat.ts:328,387` — `other_closed` yasaklı hesabı içermiyor.
 - [ ] D · `chat.ts:565-567` — Arşivli işaretli sohbet rozete +1 ekliyor. `:545-549` — Yeni mesaj şikayeti kaydedilmiyor ama başarı dönüyor (mobil raporu bunu O sayıyor). `message-digest.ts:37` — Yasaklılar özete dahil. `user-blocks.ts:2` — Yinelenen işlev.
 - [ ] O · `Navbar.tsx:98-101,106` — Tek olay zincirleme istek üretiyor.
 - [ ] D · `lib/chat-stream.ts:20-21,47-53` — Geçersiz kimlikte 403 tüm akışı kesip 5 sn'de bir deniyor. `:61-67` — Gereksiz bağlantı.
 - [ ] D (olası) · `api/chat/stream.ts:13` — Oturum yalnız bağlantıda denetleniyor. `api/chat/image.ts:17-37` — HEIF boyut denetimini atlıyor, işleme üyelikten önce.
-- [ ] O · `api/tiles/$z/$x/$y.ts:34-62` — Kimliksiz, sınırsız OSM vekili; IP engellenirse harita herkes için bozulur.
+- [x] O · `api/tiles/$z/$x/$y.ts:34-62` — Kimliksiz, sınırsız OSM vekili; IP engellenirse harita herkes için bozulur.
 - [ ] D · `MapThumb.tsx:8-25` — OSM atfı yok.
 - [ ] O · `LocationPicker.tsx:81-92,131-137` — Seçilen yer adı ters kodlamayla eziliyor; mobilde de aynı (`M/features/chat/LocationPicker.tsx:87-99,118-124`).
 - [ ] O · `MessageBubble.tsx:170` — "Kabul et" koyu temada 2:1. D · `:220` — Kendi balonu 3,71:1.
@@ -299,7 +299,7 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 **Giriş ve şifre**
 - [ ] O · `login.tsx:41,68-75,134` — Onay yalnız istemcide, kaydedilmiyor; Google kutuyu atlıyor.
 - [ ] O · `lib/auth/server.ts:78-85` — Doğrulama linkinin sonucu bildirilmiyor, `?error=` okunmuyor.
-- [ ] O · `lib/auth/server.ts:57` — `session.expiresIn` yok, varsayılan 7 gün; uygulamayı 7 gün açmayan düşer.
+- [x] O · `lib/auth/server.ts:57` — `session.expiresIn` yok, varsayılan 7 gün; uygulamayı 7 gün açmayan düşer.
 - [ ] O · `lib/auth/server.ts:68-70` — Sıfırlama postası isteğin içinde; süreden hesap varlığı anlaşılır, SMTP takılırsa bekler.
 - [ ] D · `login.tsx:41` — Kayıt e-postanın varlığını açıklıyor. D (olası) · `:43,48`, `sifre-sifirla.tsx:110-111` — Başarı toast'ı tam sayfa geçişte kayboluyor.
 - [ ] D · `login.tsx:22-30` — Oturumlu kullanıcı yönlendirilmiyor. `:97` — Ad kırpılmıyor. `:84-89` — Seçili durum yok. `:34-37` — Ölü dal, düğme neden kapalı belli değil. `:112` — Şifre göster yok.
@@ -315,8 +315,8 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 - [ ] O · `ayarlar/hesap.tsx:47`, `verilerim.ts:21,86` — Sınır aşılınca hata JSON'u dosya olarak iniyor.
 - [ ] D · `hesap.tsx:29-32`, `guvenlik.tsx:43-46` — `hasPassword` hata durumunda yanlış; şifreli üye takılır. `hesap.tsx:92,98-99` — "Vazgeç" sonrası şifre alanda. `settings.ts:121-125` — Şifre denemesinde sınır yok. `hesap.tsx:101` — `SIL` kabul edilmiyor. `:47-51` — `<a><button>`.
 - [ ] O · `ayarlar/profil.tsx:67-74,150`, `account.ts:91` — `"a "` ham JSON toast'ı.
-- [ ] O · `account.ts:101-108`, `migrations/0009_ops.sql:15` — Telefon doğrulamasız benzersiz ayrılıyor; başkası numaranı kilitleyebilir, sınır yok, numara taranabilir.
-- [ ] O · `helpers.ts:206,238-241`, `satici/$id.tsx:169`, `csp.ts:14` — Kayıttaki serbest `image` herkese açık profile geçiyor; harici görsel ve IP toplama.
+- [x] O · `account.ts:101-108`, `migrations/0009_ops.sql:15` — Telefon doğrulamasız benzersiz ayrılıyor; başkası numaranı kilitleyebilir, sınır yok, numara taranabilir.
+- [x] O · `helpers.ts:206,238-241`, `satici/$id.tsx:169`, `csp.ts:14` — Kayıttaki serbest `image` herkese açık profile geçiyor; harici görsel ve IP toplama.
 - [ ] O (olası) · `api/avatar.ts:15-23` — Boyut `content-length`'e bağlı, HEIF'te yok, hız sınırı yok. D (olası) · `api/avatar/$id.ts:22` — Bir yıl `immutable`.
 - [ ] D · `guvenlik.tsx:99` — "Şifre kurtarma için doğrulanmış e-posta gerekir" yanlış. `:147` — "Son etkinlik: 3 gün". `:15,78`, `account-nav.ts:59` — Ad tutarsız. `:107,118` — Google kullanıcısına form görünüyor. `:47,131-153` — Hata yok. `:135-150` — Tek cihaz kapatılamıyor.
 - [ ] O · `guvenlik.tsx:81-86`, `auth/server.ts:62` — E-posta değiştirme yok.
@@ -334,7 +334,7 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 - [ ] D (olası) · `routes/admin.tsx:11` — `confirmedOnClient` sıfırlanmıyor.
 
 **Kontrol paneli**
-- [ ] O · `admin/dashboard.ts:89,97,100` — Süresi dolanlar "yayında" sayılıyor, iki farklı sayı.
+- [x] O · `admin/dashboard.ts:89,97,100` — Süresi dolanlar "yayında" sayılıyor, iki farklı sayı.
 - [ ] O (olası) · `dashboard.ts:23-25,33-34,68` — `created_at` indeksleri yok, 2 dakikada bir tarama.
 - [ ] D · `dashboard.ts:26`, `index.tsx:243` — "Yeni sohbet" `updated_at` ile sayılıyor. `index.tsx:240,247-248` — Haftalık kartta haftalık olmayanlar. `:69`, `moderasyon.tsx:59` — "5 gündır". `:112,121-122` — "0 toplam" yüklenirken. `dashboard.ts:12-35` — Kullanılmayan sorgular.
 - [ ] D (olası) · `index.tsx:40,150-156,185` — Grafikte sabit renk.
@@ -344,13 +344,13 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 - [ ] O · `listings.ts:338-374` — Sıra güncelle, satır satır `notify`, en son audit; zaman aşımında kayıt kalmaz.
 - [ ] O · `ListingSheet.tsx:331,347`, `listings.ts:386` — Boş fiyat 0, `1250.5` → `12505`.
 - [ ] O · `listings.ts:332-335,338-361` — Silme ve Satıldı'da satıcıya bildirim ve gerekçe yok.
-- [ ] O · `admin/search.ts:19-22` — CSV formül enjeksiyonu (`=HYPERLINK`).
+- [x] O · `admin/search.ts:19-22` — CSV formül enjeksiyonu (`=HYPERLINK`).
 - [ ] O · `hooks.tsx:267` — Silme metni şikayet ve doping kayıtlarını söylemiyor.
 - [ ] D · `hooks.tsx:258-259` — Gün "abc" → 1. `:280` — Her işlemde "İlan güncellendi". `:239`, `listings.ts:348` — Reddet dili çelişkili. `listings.ts:325-330` — Taşımada zorunlu alan yok. `:402` — İl boşaltılamıyor. `:246`, `ilanlar.tsx:262-271` — 200 sınırı. `ListingSheet.tsx:251-298` — İki yakın düğme.
 
 **Moderasyon**
 - [ ] O · `moderasyon.tsx:134-158` — `R` sonrası `1-7` input'a yazılıyor; fareyle Reddet'te `A` açık, `Esc` kapatmıyor.
-- [ ] O · `listings.ts:281-292` — İki moderatör çakışır, çelişkili bildirim gider → koşullu güncelle.
+- [x] O · `listings.ts:281-292` — İki moderatör çakışır, çelişkili bildirim gider → koşullu güncelle.
 - [ ] O (olası) · `moderasyon.tsx:78-79` — Telefonda liste panelin üstünde.
 - [ ] D · `:20`, `listings.ts:112-129` — Ağır yenileme. `:155` — Ok sayacı taşıyor. `:214-337` — Etiket eksikleri.
 
@@ -358,17 +358,17 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 - [ ] O · `users.ts:237-258,359` — Tek admin kademesi; ek doğrulama yok, eşzamanlı sıfır admin kalabilir.
 - [ ] O · `helpers.ts:228`, `users.ts:245`, `UserSheet.tsx:280` — Bootstrap e-postası yeniden ADMIN oluyor; arayüz aksini söylüyor.
 - [ ] O · `UserSheet.tsx:416-425`, `users.ts:316,327` — Not tüm profille kaydediliyor; yeni veriyi ezebilir.
-- [ ] O · `users.ts:161-163`, `listings.ts:186` — "Hakkında şikayet" ilan sahibine sayılıyor; mağdur riskli görünür.
-- [ ] O · `users.ts:380`, `UserSheet.tsx:515-521`, `finans.tsx:280` — ±100.000 onaysız kredi, negatif bakiye, kendine yükleme.
+- [x] O · `users.ts:161-163`, `listings.ts:186` — "Hakkında şikayet" ilan sahibine sayılıyor; mağdur riskli görünür.
+- [x] O · `users.ts:380`, `UserSheet.tsx:515-521`, `finans.tsx:280` — ±100.000 onaysız kredi, negatif bakiye, kendine yükleme.
 - [ ] O · `users.ts:336`, `business.ts:96`, `listings.ts:409` — Audit'te önce/sonra yok.
 - [ ] O (olası) · `account-purge.ts:23-24`, `business.ts:161-163` — Üye silinince ödeme kayıtları ve geçmiş gelir siliniyor; mali müşavire sorulmalı.
 - [ ] D · `users.ts:55`, `business.ts:29`, `listings.ts:184` — "Yayında" süre koşulsuz. `users.ts:406` — `//alan.com` kabul ediliyor. `kullanicilar.tsx:178`, `ilanlar.tsx:376` — `<tr onClick>`. `UserSheet.tsx:252-362` — Silinme iptali yok.
 
 **Şikayetler**
-- [ ] O · `moderation.ts:62`, `sikayetler.tsx:221` — Görsel şikayetinde moderatör görseli görmüyor.
-- [ ] O · `moderation.ts:44,109` — Askı rozeti ilan sahibinden hesaplanıyor.
+- [x] O · `moderation.ts:62`, `sikayetler.tsx:221` — Görsel şikayetinde moderatör görseli görmüyor.
+- [x] O · `moderation.ts:44,109` — Askı rozeti ilan sahibinden hesaplanıyor.
 - [ ] O · `sikayetler.tsx:85-87,107` — Taşan sayfa "Açık şikayet yok" gösteriyor.
-- [ ] O · `moderation.ts:46`, `listings.ts:73` — Sayılar mesaj şikayetlerini de içeriyor.
+- [x] O · `moderation.ts:46`, `listings.ts:73` — Sayılar mesaj şikayetlerini de içeriyor.
 - [ ] O · `sikayetler.tsx:31`, `moderation.ts:147` — Seçim kalıyor, kapalı kayıt yeniden kapanıyor; kapatan adı eziliyor.
 - [ ] D · `sikayetler.tsx:130` — Süresi dolan "Yayında". `moderation.ts:28` — Arama şikayet edileni kapsamıyor. `:147,151` — Eski not kalıyor. `:60-82` — N+1. `sikayetler.tsx:90-104,158` — Tümünü seç ve sonuç bildirimi yok.
 
@@ -376,7 +376,7 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 - [ ] O · `yorumlar.tsx:144` — Yorum kesik, açma yok, silme geri alınamaz. D · `:112,58,22` — Seçim tutarsız, `span` etiketi.
 - [ ] O · `business.ts:124-135` — Kapanışta bildirim yok, kayıt eksik.
 - [ ] D · `magazalar.tsx:84-94` — Aramada "Henüz mağaza yok". `business.ts:78,107-119` — Adres boşaltma; askıdakine mağaza. D (olası) · `magazalar.tsx:63` — Paketin etkisi yok. `ui.tsx:67,123` — `text-violet-700` koyu temada 2,5:1.
-- [ ] O · `account.ts:136-148,170-174`, `listing-write.ts:68` — Admin site üzerinden işlem yaparsa audit yazılmıyor.
+- [x] O · `account.ts:136-148,170-174`, `listing-write.ts:68` — Admin site üzerinden işlem yaparsa audit yazılmıyor.
 - [ ] D · `content.ts:279` — Eski admin süzülemiyor. `format.ts:127-128` — `user.unban` kırmızı, `listing.deactivate` yeşil. `kayitlar.tsx:70,88-99,33-47` — Klavyesiz; kırık "aç"; filtre yok. `AuditList.tsx:16` — Ölü prop.
 - [ ] D · `ui.tsx:235-246` — Debounce eski değeri URL'ye yazıyor. `dashboard.ts:195-207` — `#` ve boşluk normalize edilmiyor, indeks devre dışı. `AdminShell.tsx:153-163` — Mobil menüde odak ve Esc yok. `listings.ts:10`, `moderation.ts:41,124-127` — Ölü kod.
 - [ ] D (olası) · `format.ts:139-141` — Ham Zod JSON. `AdminShell.tsx:192-198` — Linux'ta ⌘; "Siteye git" mobilde gizli.
@@ -421,32 +421,32 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 
 ### 3.7 Web: mobil API ve sunucu
 
-- [ ] O (olası) · `api/mobile/rpc/$fn.ts:118` — `request.text()` oturumdan önce ve sınırsız; bellek tüketimi.
+- [x] O (olası) · `api/mobile/rpc/$fn.ts:118` — `request.text()` oturumdan önce ve sınırsız; bellek tüketimi.
 - [ ] D · `account.ts:103`, `api/mobile/profile.ts:129` — Telefon taraması mümkün.
 - [ ] D · `chat.ts:243` — `respondOffer` koşulsuz (bkz. 3.3).
-- [ ] O (olası) · `api/mobile/oauth/done.ts:11-17` — `/start` doğrulanmadan kod üretiliyor; `geldesat://` şemasını kaydeden kötü niyetli Android uygulaması tarayıcı oturumundan token alabilir → challenge'ı çereze bağla, App Links.
+- [x] O (olası) · `api/mobile/oauth/done.ts:11-17` — `/start` doğrulanmadan kod üretiliyor; `geldesat://` şemasını kaydeden kötü niyetli Android uygulaması tarayıcı oturumundan token alabilir → challenge'ı çereze bağla, App Links.
 - [ ] D · `oauth/done.ts:17` — Uygulama tarayıcıyla aynı token. `oauth/exchange.ts:22` — `no-store` yok.
-- [ ] O · `conversations.ts:77`, `conversations/$id.ts:68` — REST her mesajda `notify`, dakikada 40 push.
-- [ ] O · `conversations.ts:20-32` — Limit yok, üç alt sorgu.
-- [ ] D · `conversations/$id.ts:40` — `kind/meta` yok. `mobile-conversation-store.ts:38` — Transaction yok.
+- [x] O · `conversations.ts:77`, `conversations/$id.ts:68` — REST her mesajda `notify`, dakikada 40 push.
+- [x] O · `conversations.ts:20-32` — Limit yok, üç alt sorgu.
+- [x] D · `conversations/$id.ts:40` — `kind/meta` yok. `mobile-conversation-store.ts:38` — Transaction yok.
 - [ ] D · `api/mobile/listings.ts:11-12` — `limit=abc` 500.
 - [ ] O · `api/mobile/listings/$id.ts:27` — Eski slug ve `legacy_slug` çözülmüyor; web'de açılan link uygulamada "yayında değil" (mobil raporu Y).
 - [ ] O · `listings/$id.ts:58` — `phone_reveals(listing_id)` indeksi yok, her detayda tarama.
-- [ ] O · `listings/$id.ts:95`, `helpers.ts` — Günlük tavan yok; günde yaklaşık 43 bin telefon toplanabilir.
+- [x] O · `listings/$id.ts:95`, `helpers.ts` — Günlük tavan yok; günde yaklaşık 43 bin telefon toplanabilir.
 - [ ] D · `listings/$id.ts:27` — `listing_no::text` indeks kullanamıyor. `:74` — `has_phone` yok, "Ara" düğmesi hata veriyor (mobil O: `M/app/ilan/[id].tsx:351`).
 - [ ] D · `my-listings.ts:16-21` — Limit yok. `listing-write.ts:124-156` — Transaction yok. `my-listings/$id.ts:12` — Kullanılmayan GET.
-- [ ] O · `listing-write.ts:15-20` — `city`, `district`, `attrs` boyut sınırı yok.
-- [ ] O · `api/mobile/images.ts:27-32` — Eski uç filigran ve EXIF/GPS temizliğini atlıyor; fotoğraftaki konum açığa çıkabilir → 410 veya hattan geçir.
-- [ ] O (olası) · `image-pipeline.server.ts:229` — `resizeVariant` piksel sınırı yok. D (olası) · `images.ts:18` — `formData()` boyuttan önce.
+- [x] O · `listing-write.ts:15-20` — `city`, `district`, `attrs` boyut sınırı yok.
+- [x] O · `api/mobile/images.ts:27-32` — Eski uç filigran ve EXIF/GPS temizliğini atlıyor; fotoğraftaki konum açığa çıkabilir → 410 veya hattan geçir.
+- [x] O (olası) · `image-pipeline.server.ts:229` — `resizeVariant` piksel sınırı yok. D (olası) · `images.ts:18` — `formData()` boyuttan önce.
 - [ ] D · `image-serve.server.ts:42-43` — Silinen görsel önbellekten sunuluyor, bir yıl `immutable` (KVKK notu).
 - [ ] D · `profile.ts:18-19`, `account.ts:255-256` — `city` sınırı yok. `profile.ts:135-138`, `account.ts:109-113` — Gönderilmeyen alan NULL. `:101,127` — 400 yerine 500.
-- [ ] O · `api/mobile/stores/$slug.ts:12` — Askıdaki mağaza mobilde görünüyor, web gizliyor.
-- [ ] O · `api/mobile/reviews.ts:34-35`, `social.ts:121-130` — Sil-ekle transaction dışında, hata eski puanı kaybettiriyor.
+- [x] O · `api/mobile/stores/$slug.ts:12` — Askıdaki mağaza mobilde görünüyor, web gizliyor.
+- [x] O · `api/mobile/reviews.ts:34-35`, `social.ts:121-130` — Sil-ekle transaction dışında, hata eski puanı kaybettiriyor.
 - [ ] D (olası) · `reports.ts:30-31` — Çift rapor. D · `favorites.ts:15-22` — Limit yok. `notifications.ts:50` — Tanınmayan `action` hepsini okundu yapıyor. `blocks.ts:13` — Bozuk JSON 500.
-- [ ] D · `docker-compose.yml:28-44`, `env.ornek` — `CRON_SECRET` yok, süpürme yalnız trafikle çalışır.
-- [ ] O · `api/geo.ts:71` — 900 ms bekleme önbellekten önce ve kuyruk değil; Nominatim sınırı aşılır, IP engellenebilir.
-- [ ] D · `geo.ts:92-93` — Yorum 100 m, gerçek 11 m. `:87-88` — Parametresiz 0,0 sorgusu.
-- [ ] O · `lib/db.ts:113`, `auth/server.ts:52` — `connectionTimeout` ve `statement_timeout` yok.
+- [x] D · `docker-compose.yml:28-44`, `env.ornek` — `CRON_SECRET` yok, süpürme yalnız trafikle çalışır.
+- [x] O · `api/geo.ts:71` — 900 ms bekleme önbellekten önce ve kuyruk değil; Nominatim sınırı aşılır, IP engellenebilir.
+- [x] D · `geo.ts:92-93` — Yorum 100 m, gerçek 11 m. `:87-88` — Parametresiz 0,0 sorgusu.
+- [x] O · `lib/db.ts:113`, `auth/server.ts:52` — `connectionTimeout` ve `statement_timeout` yok.
 - [ ] O · `helpers.ts` `notify` — Mesaj yanıtı Expo'yu 2,5 sn'ye kadar bekliyor; push arka plana alınmalı.
 - [ ] O · `helpers.ts` rozet — Gizli ve arşivli sohbetleri sayıyor; silinen sohbetin rozeti düşmüyor.
 - [ ] D · `helpers.ts` `rateLimit` — 429 yerine 500/400. D (olası) · `errors.ts:13-20` — `code`suz iç hata istemciye gidiyor.

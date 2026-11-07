@@ -39,7 +39,16 @@ export async function recentListings(userId: string, limit = RECENT_LIMIT): Prom
      limit $2`,
     [userId, Math.min(Math.max(limit, 1), RECENT_LIMIT)],
   );
-  return rows.map((row) => ({ ...mapListing(row), viewed_at: String(row.viewed_at), live: Boolean(row.live) }));
+  return rows.map((row) => {
+    const listing = mapListing(row);
+    // A rejected or hidden listing must not keep showing through someone's history.
+    const hidden = listing.status === "REJECTED" || listing.status === "INACTIVE" || listing.status === "PENDING";
+    return {
+      ...(hidden ? { ...listing, title: "Bu ilan yayında değil", images: [], price: 0, description: "" } : listing),
+      viewed_at: String(row.viewed_at),
+      live: Boolean(row.live),
+    };
+  });
 }
 
 /** Remove one listing from the history, or all of it when `listingId` is null. */

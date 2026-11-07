@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { getSql } from "@/lib/db";
+import { liveSql } from "@/lib/listing-status";
 import { asJson, listingSlug, num } from "@/lib/utils";
 import { notify } from "../helpers";
 import { deleteUnusedListingImages } from "../upload.server";
@@ -181,7 +182,7 @@ export const adminListingDetail = createServerFn({ method: "POST" })
         `select p.user_id, p.display_name, p.phone, p.city, p.created_at, p.role, p.banned_at, p.avatar_url,
                 u.email, u."emailVerified" as email_verified,
                 (select count(*) from listings where user_id = p.user_id) as listings_total,
-                (select count(*) from listings where user_id = p.user_id and status = 'ACTIVE') as listings_active,
+                (select count(*) from listings l where l.user_id = p.user_id and ${liveSql()}) as listings_active,
                 (select count(*) from listings where user_id = p.user_id and status = 'REJECTED') as listings_rejected,
                 (select count(*) from reports r
                    left join listings l2 on l2.id = r.listing_id
@@ -268,18 +269,38 @@ const ACTION_LABEL: Record<z.infer<typeof BulkInput>["action"], string> = {
   delete: "silindi",
 };
 
+/** Which statuses each action applies to; actions not listed work on any listing. */
+const ACTION_FROM: Partial<Record<string, string[]>> = {
+  approve: ["PENDING"],
+  reject: ["PENDING", "ACTIVE", "INACTIVE"],
+  deactivate: ["ACTIVE"],
+  activate: ["INACTIVE", "PENDING", "REJECTED"],
+  sold: ["ACTIVE", "INACTIVE"],
+};
+/** Actions that put a listing live: never for a suspended owner, whose listings must stay hidden. */
+const GOES_LIVE = new Set(["approve", "activate"]);
+
 /** One action on up to 200 listings: moderation, visibility, duration, vitrin, category, delete. */
 export const adminListingsAction = createServerFn({ method: "POST" })
   .middleware([adminMiddleware])
   .validator(BulkInput)
   .handler(async ({ context, data }) => {
     const sql = await getSql();
-    const rows = await sql.query<{ id: string; user_id: string; slug: string; title: string; listing_no: number; images: unknown; status: string }>(
-      "select id, user_id, slug, title, listing_no, images, status from listings where id = any($1::text[])",
+    const found = await sql.query<{ id: string; user_id: string; slug: string; title: string; listing_no: number; images: unknown; status: string; owner_banned: boolean }>(
+      `select l.id, l.user_id, l.slug, l.title, l.listing_no, l.images, l.status, (p.banned_at is not null) as owner_banned
+       from listings l left join profiles p on p.user_id = l.user_id where l.id = any($1::text[])`,
       [data.ids],
     );
-    if (!rows.length) throw new Error("İlan bulunamadı.");
+    if (!found.length) throw new Error("İlan bulunamadı.");
+    // A bulk selection can hold anything; each action touches only the listings
+    // it makes sense for, and the updates repeat the check so two moderators
+    // deciding at once cannot overwrite each other.
+    const allowed = ACTION_FROM[data.action];
+    const rows = found.filter((r) => (!allowed || allowed.includes(r.status)) && !(GOES_LIVE.has(data.action) && r.owner_banned));
+    const skipped = found.length - rows.length;
+    if (!rows.length) throw new Error("Seçili ilanlar bu işleme uygun değil. Başka bir yönetici işlemiş olabilir.");
     const ids = rows.map((r) => r.id);
+    const statuses = allowed ?? [];
     const reason = data.reason?.trim() || "";
 
     switch (data.action) {
@@ -288,27 +309,27 @@ export const adminListingsAction = createServerFn({ method: "POST" })
         await sql.query(
           `update listings set status='ACTIVE', approved_at=now(), updated_at=now(),
              expires_at=greatest(coalesce(expires_at, now()), now() + interval '30 days')
-           where id = any($1::text[])`,
-          [ids],
+           where id = any($1::text[]) and status = any($2::text[])`,
+          [ids, statuses],
         );
         break;
       case "reject":
-        await sql.query("update listings set status='REJECTED', approved_at=null, updated_at=now() where id = any($1::text[])", [ids]);
+        await sql.query("update listings set status='REJECTED', approved_at=null, status_before_ban=null, updated_at=now() where id = any($1::text[]) and status = any($2::text[])", [ids, statuses]);
         break;
       case "deactivate":
-        await sql.query("update listings set status='INACTIVE', updated_at=now() where id = any($1::text[])", [ids]);
+        await sql.query("update listings set status='INACTIVE', status_before_ban=null, updated_at=now() where id = any($1::text[]) and status = any($2::text[])", [ids, statuses]);
         break;
       case "activate":
         // An admin putting a listing live approves it.
         await sql.query(
           `update listings set status='ACTIVE', approved_at=coalesce(approved_at, now()), updated_at=now(),
              expires_at=case when expires_at is null or expires_at < now() then now() + interval '30 days' else expires_at end
-           where id = any($1::text[])`,
-          [ids],
+           where id = any($1::text[]) and status = any($2::text[])`,
+          [ids, statuses],
         );
         break;
       case "sold":
-        await sql.query("update listings set status='SOLD', updated_at=now() where id = any($1::text[])", [ids]);
+        await sql.query("update listings set status='SOLD', status_before_ban=null, updated_at=now() where id = any($1::text[]) and status = any($2::text[])", [ids, statuses]);
         break;
       case "extend":
         await sql.query(
@@ -365,9 +386,9 @@ export const adminListingsAction = createServerFn({ method: "POST" })
     }
 
     const summary =
-      rows.length === 1
+      (rows.length === 1
         ? `#${rows[0].listing_no} "${rows[0].title}" ${ACTION_LABEL[data.action]}${reason ? ` — ${reason}` : ""}`
-        : `${rows.length} ilan ${ACTION_LABEL[data.action]}${reason ? ` — ${reason}` : ""}`;
+        : `${rows.length} ilan ${ACTION_LABEL[data.action]}${reason ? ` — ${reason}` : ""}`) + (skipped ? ` (${skipped} ilan uygun olmadığı için atlandı)` : "");
     for (const r of rows) {
       await audit(sql, context.adminId, `listing.${data.action}`, "listing", r.id, rows.length === 1 ? summary : `#${r.listing_no} "${r.title}" ${ACTION_LABEL[data.action]}`, {
         reason: reason || undefined,

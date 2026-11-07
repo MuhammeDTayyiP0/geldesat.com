@@ -1,9 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getSql } from "@/lib/db";
 import { getMobileUserId } from "@/lib/server/mobile-auth";
-import { mapListing, notify } from "@/lib/server/helpers";
+import { assertOwnerStatus, assertRenewable, isExpired } from "@/lib/listing-status";
 import { deleteUnusedListingImages } from "@/lib/server/upload.server";
-import { assertNotClosing, renewedStatus } from "@/lib/server/listing-write";
+import { assertNotClosing } from "@/lib/server/listing-write";
 import { errorStatus, publicErrorMessage } from "@/lib/server/errors";
 
 export const Route = createFileRoute("/api/mobile/my-listings/$id")({
@@ -15,7 +15,7 @@ export const Route = createFileRoute("/api/mobile/my-listings/$id")({
           if (!userId) return Response.json({ success: false, error: "Giriş yapmanız gerekiyor." }, { status: 401 });
           const body = await request.json() as { action?: unknown; status?: unknown };
           const sql = await getSql();
-          const rows = await sql.query<{ id: string; user_id: string; status: string; slug: string; images: string[]; approved_at: string | null }>("select id,user_id,status,slug,images,approved_at from listings where id=$1", [params.id]);
+          const rows = await sql.query<{ id: string; user_id: string; status: string; slug: string; images: string[]; approved_at: string | null; expires_at: string | null }>("select id,user_id,status,slug,images,approved_at,expires_at from listings where id=$1", [params.id]);
           if (!rows[0] || rows[0].user_id !== userId) return Response.json({ success: false, error: "İlan bulunamadı." }, { status: 404 });
           if (body.action === "delete") {
             await sql.query("delete from listings where id=$1 and user_id=$2", [params.id,userId]);
@@ -23,23 +23,21 @@ export const Route = createFileRoute("/api/mobile/my-listings/$id")({
             return Response.json({ success: true });
           }
           if (body.action === "renew") {
-            if (rows[0].status === "REJECTED") return Response.json({ success: false, error: "Reddedilen ilan yenilenemez." }, { status: 400 });
+            assertRenewable(rows[0].status);
             await assertNotClosing(sql, userId);
-            const status = renewedStatus(rows[0].status, rows[0].approved_at);
-            await sql.query("update listings set expires_at=now()+interval '30 days',status=$2,updated_at=now() where id=$1 and user_id=$3", [params.id,status,userId]);
+            await sql.query("update listings set expires_at=now()+interval '30 days',updated_at=now() where id=$1 and user_id=$2", [params.id,userId]);
             return Response.json({ success: true });
           }
           if (body.action === "status" && ["ACTIVE","INACTIVE","SOLD"].includes(String(body.status))) {
-            if ((rows[0].status === "PENDING" || rows[0].status === "REJECTED" || !rows[0].approved_at) && body.status === "ACTIVE") return Response.json({ success: false, error: "Onay bekleyen ilanı yayına alamazsınız." }, { status: 400 });
+            assertOwnerStatus(String(body.status), { status: rows[0].status, approved: Boolean(rows[0].approved_at), expired: isExpired(rows[0].expires_at) });
             if (body.status === "ACTIVE") await assertNotClosing(sql, userId);
             await sql.query("update listings set status=$2,updated_at=now() where id=$1 and user_id=$3", [params.id,body.status,userId]);
-            if (body.status === "ACTIVE") await notify(userId,"listing","İlanınız yayında","İlanınız tekrar yayına alındı.",`/ilan/${rows[0].slug}`);
             return Response.json({ success: true });
           }
           return Response.json({ success: false, error: "İşlem tanınmadı." }, { status: 400 });
         } catch (error) {
           const message = publicErrorMessage(error, "İlan güncellenemedi.");
-          return Response.json({ success: false, error: message }, { status: errorStatus(error, 500) });
+          return Response.json({ success: false, error: message }, { status: errorStatus(error, 400) });
         }
       },
     },

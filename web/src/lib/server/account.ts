@@ -18,7 +18,9 @@ import {
   viewerKey,
 } from "./helpers";
 import { getRequest } from "@tanstack/react-start/server";
-import { assertNotClosing, ListingInput, renewedStatus, saveListingRecord } from "./listing-write";
+import { assertOwnerStatus, assertRenewable, isExpired } from "@/lib/listing-status";
+import { audit } from "./admin/common";
+import { assertNotClosing, ListingInput, saveListingRecord } from "./listing-write";
 
 /** True only for a signed-in ADMIN; never throws, so routes can gate on it (e.g. 404 for everyone else). */
 export const isAdminSession = createServerFn({ method: "GET" }).handler(async () => {
@@ -130,25 +132,27 @@ export const setListingStatus = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     const me = await ensureProfile(context.userId);
-    const row = await sql.query<{ user_id: string; status: string; approved_at: string | null }>(
-      "select user_id, status, approved_at from listings where id=$1",
+    const row = await sql.query<{ user_id: string; status: string; approved_at: string | null; expires_at: unknown; title: string; listing_no: number }>(
+      "select user_id, status, approved_at, expires_at, title, listing_no from listings where id=$1",
       [data.id],
     );
     if (!row[0]) throw new Error("İlan bulunamadı");
     const isAdmin = me.role === "ADMIN";
-    if (row[0].user_id !== context.userId && !isAdmin) throw new Error("Yetkisiz işlem");
+    const isOwner = row[0].user_id === context.userId;
+    if (!isOwner && !isAdmin) throw new Error("Yetkisiz işlem");
     if (!isAdmin) {
       if (data.status === "ACTIVE") await assertNotClosing(sql, context.userId);
-      // Owners only toggle visibility; moderation states belong to admins.
-      if (data.status === "PENDING" || data.status === "REJECTED") throw new Error("Yetkisiz işlem");
-      if (data.status === "ACTIVE" && (row[0].status === "PENDING" || row[0].status === "REJECTED" || !row[0].approved_at)) {
-        throw new Error("Onay bekleyen ilanı siz yayına alamazsınız.");
-      }
+      assertOwnerStatus(data.status, { status: row[0].status, approved: Boolean(row[0].approved_at), expired: isExpired(row[0].expires_at as string | null) });
     }
-    // An admin publishing approves; an admin rejecting withdraws the approval.
+    // An admin publishing approves and starts the run; an admin rejecting withdraws the approval.
     const approval = isAdmin && data.status === "ACTIVE" ? "now()" : isAdmin && data.status === "REJECTED" ? "null" : "approved_at";
-    await sql.query(`update listings set status=$2, approved_at=${approval}, updated_at=now() where id=$1`, [data.id, data.status]);
-    if (data.status === "ACTIVE" || data.status === "REJECTED") {
+    const expiry = isAdmin && data.status === "ACTIVE" ? "greatest(coalesce(expires_at, now()), now() + interval '30 days')" : "expires_at";
+    await sql.query(`update listings set status=$2, approved_at=${approval}, expires_at=${expiry}, status_before_ban=null, updated_at=now() where id=$1`, [data.id, data.status]);
+    if (isAdmin && !isOwner) {
+      await audit(sql, context.userId, "listing.status", "listing", data.id, `#${row[0].listing_no} "${row[0].title}" site üzerinden ${data.status} yapıldı`, { from: row[0].status, to: data.status, reason: data.reason });
+    }
+    // Only a moderator's decision is news to the owner; their own switch is not.
+    if (isAdmin && !isOwner && (data.status === "ACTIVE" || data.status === "REJECTED")) {
       const slug = await sql.query<{ slug: string }>("select slug from listings where id=$1", [data.id]);
       const rejectReason = data.reason?.trim() || "İlanınız yönetim ve yayın politikalarımıza uygun bulunmadı.";
       await notify(
@@ -170,9 +174,12 @@ export const deleteListing = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     const me = await ensureProfile(context.userId);
-    const row = await sql.query<{ user_id: string; images: string[] }>("select user_id, images from listings where id=$1", [data.id]);
+    const row = await sql.query<{ user_id: string; images: string[]; title: string; listing_no: number }>("select user_id, images, title, listing_no from listings where id=$1", [data.id]);
     if (!row[0]) throw new Error("İlan bulunamadı");
     if (row[0].user_id !== context.userId && me.role !== "ADMIN") throw new Error("Yetkisiz işlem");
+    if (row[0].user_id !== context.userId) {
+      await audit(sql, context.userId, "listing.delete", "listing", data.id, `#${row[0].listing_no} "${row[0].title}" site üzerinden silindi`);
+    }
     await sql.query("delete from listings where id=$1", [data.id]);
     await deleteUnusedListingImages(sql, row[0].user_id, asJson<string[]>(row[0].images, []));
     return { ok: true };
@@ -183,18 +190,11 @@ export const renewListing = createServerFn({ method: "POST" })
   .validator(z.object({ id: z.string() }))
   .handler(async ({ context, data }) => {
     const sql = await getSql();
-    const row = await sql.query<{ user_id: string; status: string; approved_at: string | null }>(
-      "select user_id, status, approved_at from listings where id=$1",
-      [data.id],
-    );
+    const row = await sql.query<{ user_id: string; status: string }>("select user_id, status from listings where id=$1", [data.id]);
     if (!row[0] || row[0].user_id !== context.userId) throw new Error("İlan bulunamadı");
-    if (row[0].status === "REJECTED") throw new Error("Reddedilen ilan yenilenemez.");
+    assertRenewable(row[0].status);
     await assertNotClosing(sql, context.userId);
-    const nextStatus = renewedStatus(row[0].status, row[0].approved_at);
-    await sql.query(
-      `update listings set expires_at = now() + interval '30 days', status=$2, updated_at=now() where id=$1`,
-      [data.id, nextStatus],
-    );
+    await sql.query("update listings set expires_at = now() + interval '30 days', updated_at=now() where id=$1", [data.id]);
     return { ok: true };
   });
 

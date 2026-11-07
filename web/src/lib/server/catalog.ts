@@ -332,8 +332,8 @@ export const getListing = createServerFn({ method: "POST" })
     if (!rows[0]) return null;
     const listing = mapListing(rows[0]);
 
-    // Yayında olmayan ilanlar sadece sahibine veya admin'e görünür
-    const isPubliclyVisible = listing.status === "ACTIVE";
+    // Sold and expired listings stay readable (not indexed); the rest only for the owner or an admin.
+    const isPubliclyVisible = listing.status === "ACTIVE" || listing.status === "SOLD";
     if (!isPubliclyVisible) {
       const sessionUser = await getSessionUser();
       if (!sessionUser) return null;

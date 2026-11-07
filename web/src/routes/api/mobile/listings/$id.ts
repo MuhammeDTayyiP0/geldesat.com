@@ -31,8 +31,8 @@ export const Route = createFileRoute("/api/mobile/listings/$id")({
           if (!rows[0]) return Response.json({ success: false, error: "İlan bulunamadı." }, { status: 404 });
           const listing = mapListing(rows[0]);
           const userId = await sessionUserId(request);
-          const live = listing.status === "ACTIVE" && (!listing.expires_at || new Date(listing.expires_at).getTime() > Date.now());
-          if (!live && userId !== listing.user_id) {
+          // Same rule as the site: sold and expired listings stay readable, the rest only for the owner.
+          if (listing.status !== "ACTIVE" && listing.status !== "SOLD" && userId !== listing.user_id) {
             return Response.json({ success: false, error: "İlan yayında değil." }, { status: 404 });
           }
           if (userId && userId !== listing.user_id) await recordListingView(userId, listing.id);

@@ -2,10 +2,12 @@ import { z } from "zod";
 import { getSql } from "@/lib/db";
 import { CITY_COORDS } from "@/lib/data/geo";
 import { cleanAttrs, type AttrValues } from "@/lib/listing-attrs";
+import { needsReReview, sameAttrs } from "@/lib/listing-status";
 import { asJson, listingSlug, newId, num } from "@/lib/utils";
 import { inheritedAttributes, ensureProfile, rateLimit, assertImages, notify, normalizeTrPhone } from "./helpers";
 import { deleteUnusedListingImages } from "./upload.server";
 import { getAppConfig } from "./config";
+import { audit } from "./admin/common";
 
 export const ListingInput = z.object({
   id: z.string().optional(),
@@ -31,12 +33,6 @@ export async function assertNotClosing(sql: Pick<Awaited<ReturnType<typeof getSq
     [userId],
   );
   if (rows[0]?.pending) throw new Error("Hesabınız silinme sürecinde. Önce hesabınızı geri alın.");
-}
-
-/** Status after an owner renews: only an approved listing may go back live. */
-export function renewedStatus(status: string, approvedAt: string | null): string {
-  if (status === "SOLD" || status === "PENDING") return status;
-  return approvedAt ? "ACTIVE" : "PENDING";
 }
 
 /** Shared write path for web server functions and the native mobile API. */
@@ -118,22 +114,28 @@ export async function saveListingRecord(userId: string, data: ListingInputData) 
       existing.title !== data.title ||
       existing.description !== data.description ||
       existing.category_id !== data.categoryId ||
-      added.length > 0;
-    const reReview = !isAdmin && mode !== "none" && contentChanged && (existing.status === "ACTIVE" || existing.status === "INACTIVE");
+      added.length > 0 ||
+      !sameAttrs(attrs, asJson<AttrValues>(existing.attrs, {}));
+    const reReview = !isAdmin && mode !== "none" && contentChanged && needsReReview(existing.status);
     const nextStatus = existing.status === "REJECTED" || reReview ? "PENDING" : existing.status;
     // The URL follows the title; old links still resolve by the trailing listing number.
     const slug = listingSlug(data.title, existing.listing_no);
-    await sql.query(
-      `update listings set category_id=$2,title=$3,description=$4,price=$5,city=$6,district=$7,
-        neighborhood=$8,lat=$9,lng=$10,images=$11::jsonb,attrs=$12::jsonb,phone_override=$13,
-        store_id=$14,status=$15,approved_at=case when $16::boolean then null else approved_at end,
-        slug=$17,updated_at=now() where id=$1`,
-      [data.id,data.categoryId,data.title,data.description,data.price,data.city,data.district,data.neighborhood || null,
-        coords?.lat ?? null,coords?.lng ?? null,JSON.stringify(data.images),JSON.stringify(attrs),
-        phoneOverride,data.storeId || null,nextStatus,reReview,slug],
-    );
+    await sql.transaction(async (tx) => {
+      await tx.query(
+        `update listings set category_id=$2,title=$3,description=$4,price=$5,city=$6,district=$7,
+          neighborhood=$8,lat=$9,lng=$10,images=$11::jsonb,attrs=$12::jsonb,phone_override=$13,
+          store_id=$14,status=$15,approved_at=case when $16::boolean then null else approved_at end,
+          status_before_ban=null,slug=$17,updated_at=now() where id=$1`,
+        [data.id,data.categoryId,data.title,data.description,data.price,data.city,data.district,data.neighborhood || null,
+          coords?.lat ?? null,coords?.lng ?? null,JSON.stringify(data.images),JSON.stringify(attrs),
+          phoneOverride,data.storeId || null,nextStatus,reReview,slug],
+      );
+      if (num(existing.price) !== data.price) await tx.query("insert into price_history (listing_id,price) values ($1,$2)", [data.id,data.price]);
+    });
     await deleteUnusedListingImages(sql, ownerId, existingImages.filter((image) => !data.images.includes(image)));
-    if (num(existing.price) !== data.price) await sql.query("insert into price_history (listing_id,price) values ($1,$2)", [data.id,data.price]);
+    if (isAdmin && existing.user_id !== userId) {
+      await audit(sql, userId, "listing.edit", "listing", data.id, `#${existing.listing_no} "${data.title}" site üzerinden düzenlendi`, { from: existing.status, to: nextStatus });
+    }
     if (existing.status === "REJECTED" || reReview) {
       await notify(ownerId,"listing","İlanınız tekrar incelemede","Düzenlenen ilan onay kuyruğuna alındı.",`/ilan/${slug}`);
     }
@@ -144,17 +146,22 @@ export async function saveListingRecord(userId: string, data: ListingInputData) 
   const id = newId("lst");
   const listingNo = (await sql.query<{ n: string }>("select nextval('listing_no_seq')::text as n"))[0].n;
   const slug = listingSlug(data.title, listingNo);
-  const prior = await sql.query<{ n: number }>("select count(*)::int as n from listings where user_id=$1", [userId]);
-  const autoApprove = isAdmin || mode === "none" || (mode === "first_free" && (prior[0]?.n ?? 0) === 0);
-  const status = autoApprove ? "ACTIVE" : "PENDING";
-  await sql.query(
-    `insert into listings (id,slug,user_id,store_id,category_id,title,description,price,status,city,district,
-      neighborhood,lat,lng,images,attrs,phone_override,expires_at,approved_at,listing_no)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::jsonb,$16::jsonb,$17,now()+interval '30 days',
-       case when $9::text = 'ACTIVE' then now() end,$18::bigint)`,
-    [id,slug,userId,data.storeId || null,data.categoryId,data.title,data.description,data.price,status,data.city,data.district,
-      data.neighborhood || null,coords?.lat ?? null,coords?.lng ?? null,JSON.stringify(data.images),JSON.stringify(attrs),phoneOverride,listingNo],
-  );
-  await sql.query("insert into price_history (listing_id,price) values ($1,$2)", [id,data.price]);
+  const status = await sql.transaction(async (tx) => {
+    // Claimed in one statement, so two listings sent together cannot both be "the first".
+    const claimedFirst =
+      mode === "first_free" &&
+      Boolean((await tx.query("update profiles set first_listing_used=true where user_id=$1 and not first_listing_used returning user_id", [userId]))[0]);
+    const next = isAdmin || mode === "none" || claimedFirst ? "ACTIVE" : "PENDING";
+    await tx.query(
+      `insert into listings (id,slug,user_id,store_id,category_id,title,description,price,status,city,district,
+        neighborhood,lat,lng,images,attrs,phone_override,expires_at,approved_at,listing_no)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::jsonb,$16::jsonb,$17,now()+interval '30 days',
+         case when $9::text = 'ACTIVE' then now() end,$18::bigint)`,
+      [id,slug,userId,data.storeId || null,data.categoryId,data.title,data.description,data.price,next,data.city,data.district,
+        data.neighborhood || null,coords?.lat ?? null,coords?.lng ?? null,JSON.stringify(data.images),JSON.stringify(attrs),phoneOverride,listingNo],
+    );
+    await tx.query("insert into price_history (listing_id,price) values ($1,$2)", [id,data.price]);
+    return next;
+  });
   return { id, slug, status };
 }

@@ -80,7 +80,7 @@ export async function restoreAccount(userId: string): Promise<void> {
     await tx.query("update profiles set deletion_requested_at = null where user_id = $1", [userId]);
     await tx.query(
       `update listings set status = status_before_deletion, status_before_deletion = null, updated_at = now()
-       where user_id = $1 and status_before_deletion is not null`,
+       where user_id = $1 and status_before_deletion is not null and status = 'INACTIVE'`,
       [userId],
     );
   });

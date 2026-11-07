@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { getSql } from "@/lib/db";
+import { liveSql } from "@/lib/listing-status";
 import { newId, num, slugify } from "@/lib/utils";
 import { normalizeTrPhone, notify } from "../helpers";
 import { adminMiddleware, audit, likeTerm, paged, paging, PageInput, strOrNull, ts, tsOrNull, Where } from "./common";
@@ -26,7 +27,7 @@ export const adminListStores = createServerFn({ method: "POST" })
       sql.query<Record<string, unknown>>(
         `select s.*, coalesce(p.display_name, 'Üye') as owner_name, u.email as owner_email, (p.banned_at is not null) as owner_banned,
                 (select count(*) from listings l where l.store_id = s.id) as listing_count,
-                (select count(*) from listings l where l.store_id = s.id and l.status = 'ACTIVE') as active_count
+                (select count(*) from listings l where l.store_id = s.id and ${liveSql()}) as active_count
          ${from} ${w.sql} order by s.created_at desc limit ${limit} offset ${offset}`,
         w.params,
       ),
