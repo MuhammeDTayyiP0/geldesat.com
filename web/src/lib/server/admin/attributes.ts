@@ -62,7 +62,15 @@ export const adminAttributeUsage = createServerFn({ method: "POST" })
         [data.id],
       ),
       sql.query<{ id: string; name: string; parent_id: string | null }>("select id, name, parent_id from categories"),
-      sql.query<{ n: number }>("select count(*) as n from listings where attrs ? $1", [def[0].name]),
+      // Only in categories that use this definition: "Renk" exists many times over.
+      sql.query<{ n: number }>(
+        `with recursive scope as (
+           select category_id as id from category_attributes where attribute_id = $1
+           union
+           select c.id from categories c join scope s on c.parent_id = s.id
+         ) select count(*) as n from listings where attrs ? $2 and category_id in (select id from scope)`,
+        [data.id, def[0].name],
+      ),
     ]);
     const byId = new Map(cats.map((c) => [c.id, c]));
     const pathOf = (id: string) => {

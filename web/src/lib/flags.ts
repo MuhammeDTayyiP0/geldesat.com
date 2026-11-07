@@ -38,6 +38,9 @@ export type FlagContext = {
 export const FLAG_NAME_PATTERN = /^[a-z0-9_]{1,60}$/;
 export const VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
 
+/** Flags the code actually reads; the panel marks any other as having no effect. */
+export const KNOWN_FLAGS = ["doping_enabled", "harita_v2", "arama_v2", "ilan_formu_v2", "sohbet_v2"];
+
 export function fullRule(enabled: boolean, description = ""): FlagRule {
   return { enabled, rollout: 100, platforms: [], minAppVersion: null, admins: false, description };
 }

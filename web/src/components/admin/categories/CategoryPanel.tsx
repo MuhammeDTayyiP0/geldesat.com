@@ -35,7 +35,7 @@ import {
 } from "@/lib/server/admin/categories";
 import { usePickCategory, useRunner, type CategoryIndex } from "../hooks";
 import { ATTRIBUTE_TYPE_LABEL, n } from "../format";
-import { ErrorState, Field, FieldGroup, inputClass, MiniStat, Pill, Spinner, TabBar, textareaClass } from "../ui";
+import { useConfirm, ErrorState, Field, FieldGroup, inputClass, MiniStat, Pill, Spinner, TabBar, textareaClass } from "../ui";
 import { CATEGORY_ICONS, categoryIcon } from "./icons";
 
 type Tab = "info" | "children" | "attributes" | "manage";
@@ -289,7 +289,7 @@ function ChildrenTab({ id, index, onSelect }: { id: string; index: CategoryIndex
         <p className="mt-0.5 text-xs text-muted">Her satıra bir ad yazın veya Excel'den yapıştırın. Aynı adla var olanlar atlanır; yeni kategoriler listenin sonuna eklenir.</p>
         <textarea value={bulk} onChange={(e) => setBulk(e.target.value)} rows={5} placeholder={"Ör.\n520i\n520d\n530i xDrive"} className={cn(textareaClass, "mt-3 font-mono")} />
         <div className="mt-2 flex items-center justify-between">
-          <span className="text-xs text-muted">{lines.length ? `${lines.length} kategori eklenecek` : ""}</span>
+          <span className="text-xs text-muted">{lines.length > 500 ? `En fazla 500 kategori: ilk 500 satır eklenecek, ${lines.length - 500} satır atlanacak` : lines.length ? `${lines.length} kategori eklenecek` : ""}</span>
           <Button
             size="sm"
             disabled={busy || !lines.length}
@@ -463,6 +463,7 @@ function AttributesTab({ detail, onSelect }: { detail: AdminCategoryDetail; onSe
 
 function ManageTab({ id, index, detail, onRequestDelete }: { id: string; index: CategoryIndex; detail: AdminCategoryDetail; onRequestDelete: (id: string) => void }) {
   const { run, busy } = useRunner();
+  const { confirm } = useConfirm();
   const pick = usePickCategory();
   const node = index.byId.get(id)!;
   const c = detail.counts;
@@ -505,7 +506,15 @@ function ManageTab({ id, index, detail, onRequestDelete }: { id: string; index: 
           onClick={() =>
             void pick({ title: `${n(c.subtree_listings)} ilan hangi kategoriye aktarılsın?`, excludeSubtreeOf: id, confirmLabel: "İlanları aktar" }).then((p) => {
               if (!p || p === "root") return;
+              void confirm({
+                title: `${n(c.subtree_listings)} ilan taşınsın mı?`,
+                body: `Hedef: ${p.path ?? p.name}. Bu işlem toplu yapılır, geri alınamaz.`,
+                confirmLabel: "İlanları aktar",
+                danger: true,
+              }).then((ok) => {
+                if (!ok) return;
               void run(() => adminMoveCategoryListings({ data: { fromId: id, toId: p.id, includeSubtree: true } }), (r) => `${r.moved} ilan "${p.name}" kategorisine aktarıldı.`);
+              });
             })
           }
         >

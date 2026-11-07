@@ -1,5 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { gzipSync } from "node:zlib";
+import { promisify } from "node:util";
+import { gzip } from "node:zlib";
+
+const gzipAsync = promisify(gzip);
 import { getSql } from "@/lib/db";
 import { HASH_PATTERN } from "@/lib/server/ota";
 
@@ -38,7 +41,7 @@ export const Route = createFileRoute("/api/ota/assets/$hash")({
             if (!rows[0]) return new Response(null, { status: 404 });
             const raw = Buffer.from(rows[0].data);
             const type = rows[0].content_type;
-            entry = { type, raw, gz: COMPRESSIBLE.test(type) && raw.byteLength > 1024 ? gzipSync(raw, { level: 9 }) : null };
+            entry = { type, raw, gz: COMPRESSIBLE.test(type) && raw.byteLength > 1024 ? await gzipAsync(raw, { level: 9 }) : null };
             remember(params.hash, entry);
           } catch (err) {
             console.error("[ota] asset failed:", err);

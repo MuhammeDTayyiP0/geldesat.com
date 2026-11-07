@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -25,6 +26,15 @@ import { useListingActions, useRunner, useSheets } from "./hooks";
 import { dateTime, listingStatus, money, n, relative } from "./format";
 import { AuditList } from "./AuditList";
 import { Avatar, ErrorState, Field, inputClass, KeyValue, Menu, MenuItem, MenuSeparator, MiniStat, Pill, SheetHeader, Spinner, TabBar, textareaClass } from "./ui";
+
+/** "1250", "1.250" and "1250,50" as a whole number of liras; null when it is not a price. */
+function parsePrice(text: string): number | null {
+  const clean = text.trim().replace(/\s|TL/gi, "");
+  const plain = /^\d{1,3}(\.\d{3})+$/.test(clean) ? clean.replace(/\./g, "") : clean.replace(",", ".");
+  if (!/^\d+(\.\d+)?$/.test(plain)) return null;
+  const value = Math.round(Number(plain));
+  return value >= 1 ? value : null;
+}
 
 export function ListingSheetBody({ id, canGoBack }: { id: string; canGoBack: boolean }) {
   const { back, close, openUser } = useSheets();
@@ -327,8 +337,13 @@ function EditListingForm({ detail, onDone }: { detail: AdminListingDetail; onDon
       className="mb-5 space-y-3 rounded-xl border border-primary/30 bg-surface p-4"
       onSubmit={(e) => {
         e.preventDefault();
+        const amount = parsePrice(price);
+        if (!amount) {
+          toast.error("Geçerli bir fiyat girin.");
+          return;
+        }
         void run(
-          () => adminUpdateListing({ data: { id: l.id, title, description, price: Number(price.replace(/\D/g, "")) || 0, city, district } }),
+          () => adminUpdateListing({ data: { id: l.id, title, description, price: amount, city, district } }),
           "İlan güncellendi.",
         ).then((r) => {
           if (r) onDone();
@@ -347,7 +362,7 @@ function EditListingForm({ detail, onDone }: { detail: AdminListingDetail; onDon
           <input value={price} onChange={(e) => setPrice(e.target.value)} inputMode="numeric" className={inputClass} />
         </Field>
         <Field label="İl">
-          <input value={city} onChange={(e) => setCity(e.target.value)} className={inputClass} />
+          <input value={city} onChange={(e) => setCity(e.target.value)} required className={inputClass} />
         </Field>
         <Field label="İlçe">
           <input value={district} onChange={(e) => setDistrict(e.target.value)} className={inputClass} />

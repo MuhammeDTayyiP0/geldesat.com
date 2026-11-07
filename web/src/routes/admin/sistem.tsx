@@ -27,6 +27,7 @@ const TABLE_LABEL: Record<string, string> = {
   chat_images: "Sohbet fotoğrafları",
   user_avatars: "Profil fotoğrafları",
   mobile_push_tokens: "Mobil cihazlar",
+  ota_assets: "Güncelleme dosyaları",
   admin_audit_log: "İşlem kayıtları",
 };
 
@@ -43,11 +44,11 @@ function SystemPage() {
   const { confirm } = useConfirm();
 
   async function maintenance(task: "expiry" | "retention" | "digest", title: string, body: string) {
-    const ok = await confirm({ title, body, confirmLabel: "Şimdi çalıştır" });
+    const ok = await confirm({ title, body, confirmLabel: "Şimdi çalıştır", danger: task === "retention" });
     if (ok) await run(() => adminRunMaintenance({ data: { task } }), (r) => r.detail);
   }
 
-  if (q.error) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;
+  if (q.error && !q.data) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;
   const d = q.data;
 
   return (

@@ -695,6 +695,7 @@ type PromptOptions = ConfirmOptions & {
   defaultValue?: string;
   required?: boolean;
   multiline?: boolean;
+  inputType?: "text" | "password";
 };
 
 type DialogState =
@@ -776,6 +777,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
               {state.multiline === false ? (
                 <input
                   autoFocus
+                  type={state.inputType ?? "text"}
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                   placeholder={state.placeholder}

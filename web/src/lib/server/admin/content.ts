@@ -1,8 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { getSql, dbSource } from "@/lib/db";
+import { getSql, dbSource, type Sql } from "@/lib/db";
 import { newId, num, slugify } from "@/lib/utils";
-import { LIVE_PUSH_TOKEN, normalizeTrPhone } from "../helpers";
+import { firstInWindow, LIVE_PUSH_TOKEN } from "../helpers";
+import { broadcastUserInbox } from "../chat-bus";
 import { DEFAULT_FLAGS, getAppConfig, setAppConfig } from "../config";
 import { FLAG_NAME_PATTERN, FLAG_PLATFORMS, VERSION_PATTERN, normalizeFlags } from "@/lib/flags";
 import { clearSiteSettingsCache, loadSiteSettings } from "../catalog";
@@ -20,6 +21,8 @@ export const adminListPages = createServerFn({ method: "GET" })
     return rows.map((r) => ({ slug: r.slug, title: r.title, body: r.body, length: r.body.length }));
   });
 
+const LINKED_PAGES = new Set(["hakkimizda", "iletisim", "kvkk", "gizlilik", "cerez", "kullanim", "uyelik"]);
+
 export const adminSavePage = createServerFn({ method: "POST" })
   .middleware([adminMiddleware])
   .validator(
@@ -34,11 +37,19 @@ export const adminSavePage = createServerFn({ method: "POST" })
     const sql = await getSql();
     const slug = slugify(data.slug);
     if (!slug) throw new Error("Geçerli bir sayfa adresi girin.");
+    // Sign-up forms, the footer and the app link to these addresses.
+    if (data.originalSlug && slug !== data.originalSlug && LINKED_PAGES.has(data.originalSlug)) {
+      throw new Error("Bu sayfaya site içinden bağlantı veriliyor; adresi değiştirilemez.");
+    }
     if (slug !== data.originalSlug) {
       const taken = await sql.query("select 1 from legal_pages where slug = $1", [slug]);
       if (taken.length) throw new Error("Bu adreste başka bir sayfa var.");
     }
     if (data.originalSlug) {
+      await sql.query(
+        "insert into legal_page_revisions (slug, title, body, replaced_by) select slug, title, body, $2 from legal_pages where slug = $1",
+        [data.originalSlug, context.adminId],
+      );
       const rows = await sql.query<{ slug: string }>("update legal_pages set slug = $2, title = $3, body = $4, updated_at = now() where slug = $1 returning slug", [
         data.originalSlug,
         slug,
@@ -98,6 +109,27 @@ export const adminAudienceSizes = createServerFn({ method: "GET" })
   });
 
 /** In-app notification to a whole audience, optionally pushed to their phones. */
+/** Pushes in batches after the answer: Expo takes up to 100 per request, and a large audience takes a while. */
+async function sendBroadcastPush(sql: Sql, tokens: string[], title: string, body: string, link: string): Promise<void> {
+  for (let i = 0; i < tokens.length; i += 100) {
+    const batch = tokens.slice(i, i + 100);
+    try {
+      const res = await fetch("https://exp.host/--/api/v2/push/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify(batch.map((token) => ({ to: token, title, body, sound: "default", data: { link }, channelId: "default" }))),
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!res.ok) continue;
+      const tickets = (await res.json().catch(() => null)) as { data?: Array<{ status?: string; details?: { error?: string } }> } | null;
+      const stale = batch.filter((_, index) => tickets?.data?.[index]?.status === "error" && tickets.data[index]?.details?.error === "DeviceNotRegistered");
+      if (stale.length) await sql.query("delete from mobile_push_tokens where token = any($1::text[])", [stale]);
+    } catch (err) {
+      console.warn("[broadcast] push batch failed", err instanceof Error ? err.message : err);
+    }
+  }
+}
+
 export const adminBroadcast = createServerFn({ method: "POST" })
   .middleware([adminMiddleware])
   .validator(
@@ -112,33 +144,30 @@ export const adminBroadcast = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     const link = data.link && data.link.startsWith("/") ? data.link : "/bildirimler";
+    // A second press, or a retry after a timeout, must not notify everyone twice.
+    if (!firstInWindow(`broadcast:${data.audience}:${data.title}:${data.body}`, 10 * 60_000)) {
+      throw new Error("Bu duyuru az önce gönderildi.");
+    }
+    // Members who turned announcements off in their settings are skipped.
+    const wants = (channel: string) => `coalesce((select p.notify_prefs -> 'system' ->> '${channel}' from profiles p where p.user_id = a.user_id), 'true') <> 'false'`;
     const inserted = await sql.query<{ user_id: string }>(
       `insert into notifications (id, user_id, type, title, body, link)
        select 'ntf_' || substr(md5(random()::text || a.user_id), 1, 12), a.user_id, 'system', $1, $2, $3
        from (${AUDIENCE_SQL[data.audience]}) a
+       where ${wants("inapp")}
        returning user_id`,
       [data.title, data.body, link],
     );
+    for (const row of inserted) broadcastUserInbox(row.user_id, { type: "notification" });
     let pushed = 0;
     if (data.push) {
       const tokens = await sql.query<{ token: string }>(
-        `select t.token from mobile_push_tokens t where t.user_id in (${AUDIENCE_SQL[data.audience]}) and ${LIVE_PUSH_TOKEN}`,
+        `select t.token from mobile_push_tokens t
+         join (${AUDIENCE_SQL[data.audience]}) a on a.user_id = t.user_id
+         where ${LIVE_PUSH_TOKEN} and ${wants("push")}`,
       );
-      // Expo accepts up to 100 messages per request; delivery is best effort.
-      for (let i = 0; i < tokens.length; i += 100) {
-        const batch = tokens.slice(i, i + 100);
-        try {
-          const res = await fetch("https://exp.host/--/api/v2/push/send", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Accept: "application/json" },
-            body: JSON.stringify(batch.map(({ token }) => ({ to: token, title: data.title, body: data.body, sound: "default", data: { link }, channelId: "default" }))),
-            signal: AbortSignal.timeout(8000),
-          });
-          if (res.ok) pushed += batch.length;
-        } catch (err) {
-          console.warn("[broadcast] push batch failed", err instanceof Error ? err.message : err);
-        }
-      }
+      pushed = tokens.length;
+      void sendBroadcastPush(sql, tokens.map((t) => t.token), data.title, data.body, link);
     }
     await audit(sql, context.adminId, "broadcast.send", "broadcast", newId("bc"), `"${data.title}" → ${AUDIENCES[data.audience]} (${inserted.length} üye${data.push ? `, ${pushed} cihaz` : ""})`, {
       audience: data.audience,
@@ -184,9 +213,14 @@ export const adminSaveSiteSettings = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const iban = data.iban.replace(/\s+/g, "").toUpperCase();
     if (iban && !/^TR\d{24}$/.test(iban)) throw new Error("IBAN TR ile başlamalı ve 26 karakter olmalı.");
+    if (iban && !ibanChecks(iban)) throw new Error("IBAN hatalı görünüyor. Rakamları kontrol edin.");
     if (data.support_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.support_email)) throw new Error("Geçerli bir destek e-postası girin.");
-    const phone = data.support_phone ? normalizeTrPhone(data.support_phone) : "";
+    // A support line is often landline or 0850, unlike a member's mobile number.
+    const phoneDigits = data.support_phone?.replace(/\D/g, "") ?? "";
+    if (phoneDigits && !/^0?\d{10}$/.test(phoneDigits)) throw new Error("Geçerli bir telefon numarası girin.");
+    const phone = phoneDigits ? (phoneDigits.startsWith("0") ? phoneDigits : `0${phoneDigits}`) : "";
     const sql = await getSql();
+    const before = await loadSiteSettings();
     const values: Array<[string, string]> = [
       ["company_name", data.company_name || "GeldeSat"],
       ["support_email", data.support_email || "destek@geldesat.com"],
@@ -199,9 +233,21 @@ export const adminSaveSiteSettings = createServerFn({ method: "POST" })
       await sql.query("insert into site_settings (key, value) values ($1,$2) on conflict (key) do update set value = excluded.value", [key, value]);
     }
     clearSiteSettingsCache();
-    await audit(sql, context.adminId, "settings.site", "settings", "site", "Site ve iletişim bilgileri güncellendi");
+    await audit(sql, context.adminId, "settings.site", "settings", "site", "Site ve iletişim bilgileri güncellendi", {
+      changed: values.filter(([key, value]) => String(before[key as keyof typeof before] ?? "") !== value).map(([key]) => key),
+      iban_end: iban ? iban.slice(-4) : null,
+    });
     return { ok: true as const };
   });
+
+/** IBAN check digits (ISO 13616 mod-97): catches a single mistyped digit. */
+function ibanChecks(iban: string): boolean {
+  const moved = iban.slice(4) + iban.slice(0, 4);
+  const digits = moved.replace(/[A-Z]/g, (c) => String(c.charCodeAt(0) - 55));
+  let rest = 0;
+  for (const d of digits) rest = (rest * 10 + Number(d)) % 97;
+  return rest === 1;
+}
 
 const ConfigInput = z.discriminatedUnion("key", [
   z.object({
@@ -276,7 +322,11 @@ export const adminListAudit = createServerFn({ method: "POST" })
         w.params,
       ),
       sql.query<{ n: number }>(`select count(*) as n ${from} ${w.sql}`, w.params),
-      sql.query<{ user_id: string; display_name: string }>("select user_id, display_name from profiles where role = 'ADMIN' order by display_name"),
+      sql.query<{ user_id: string; display_name: string }>(
+        // Everyone who ever acted, including people who are no longer admins.
+        `select distinct a.admin_id as user_id, coalesce(p.display_name, 'Yönetici') as display_name
+         from admin_audit_log a left join profiles p on p.user_id = a.admin_id order by 2`,
+      ),
     ]);
     return { ...paged(rows.map(mapAudit), num(count[0]?.n), data.page, data.pageSize), admins };
   });
@@ -299,6 +349,7 @@ const TABLES = [
   "chat_images",
   "user_avatars",
   "mobile_push_tokens",
+  "ota_assets",
   "admin_audit_log",
 ] as const;
 
@@ -346,6 +397,7 @@ export const adminSystemInfo = createServerFn({ method: "GET" })
     const mem = process.memoryUsage();
     return {
       database: { source: dbSource, version: version.split(" on ")[0], size, imageBytes, sessions },
+      lastCronRun: await getAppConfig<string | null>("cron_last_run", null),
       counts,
       migrations,
       checks: [
@@ -354,6 +406,7 @@ export const adminSystemInfo = createServerFn({ method: "GET" })
         { key: "mail", label: "E-posta gönderimi (SMTP)", ok: mailConfigured },
         { key: "google", label: "Google ile giriş", ok: env("GOOGLE_CLIENT_ID") && env("GOOGLE_CLIENT_SECRET") },
         { key: "cron", label: "Zamanlanmış görevler (CRON_SECRET)", ok: env("CRON_SECRET") },
+        { key: "ota", label: "Uygulama güncellemeleri (OTA_PUBLISH_TOKEN)", ok: env("OTA_PUBLISH_TOKEN") },
         { key: "admins", label: "Önyükleme yöneticileri (ADMIN_EMAILS)", ok: env("ADMIN_EMAILS") },
       ],
       runtime: {
@@ -375,16 +428,17 @@ export const adminRunMaintenance = createServerFn({ method: "POST" })
     let detail = "";
     if (data.task === "expiry") {
       const { sweepExpiryReminders } = await import("../ops");
-      await sweepExpiryReminders(true);
-      detail = "Süre hatırlatmaları gönderildi";
+      const sent = await sweepExpiryReminders(true);
+      detail = `${sent} ilan için süre hatırlatması gönderildi`;
     } else if (data.task === "retention") {
       const { sweepRetention } = await import("../retention");
       await sweepRetention(true);
-      detail = "Hesap ve sohbet temizliği çalıştırıldı";
+      detail = "Hesap, sohbet ve eski güncelleme dosyası temizliği çalıştırıldı";
     } else {
       const { sweepMessageDigests } = await import("../message-digest");
-      await sweepMessageDigests(true);
-      detail = "Okunmamış mesaj e-postaları gönderildi";
+      if (!mailConfigured) throw new Error("E-posta gönderimi ayarlı değil (SMTP).");
+      const sent = await sweepMessageDigests(true);
+      detail = `${sent} üyeye okunmamış mesaj e-postası gönderildi`;
     }
     await audit(sql, context.adminId, `system.${data.task}`, "system", data.task, detail);
     return { ok: true as const, detail };

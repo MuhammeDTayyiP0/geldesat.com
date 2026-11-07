@@ -4,6 +4,7 @@ export const NOTIFY_TYPES = [
   { type: "favorite", label: "Favoriler", hint: "İlanınız favorilere eklendiğinde" },
   { type: "listing", label: "İlan durumu", hint: "Onay, ret ve tekrar inceleme", inappLocked: true },
   { type: "expiry", label: "Süre hatırlatması", hint: "İlanınızın süresi dolmak üzereyken" },
+  { type: "system", label: "Duyurular", hint: "GeldeSat'tan genel duyurular" },
 ] as const;
 
 export type NotifyType = (typeof NOTIFY_TYPES)[number]["type"];

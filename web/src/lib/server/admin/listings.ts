@@ -360,6 +360,19 @@ export const adminListingsAction = createServerFn({ method: "POST" })
         break;
     }
 
+    const summary =
+      (rows.length === 1
+        ? `#${rows[0].listing_no} "${rows[0].title}" ${ACTION_LABEL[data.action]}${reason ? ` — ${reason}` : ""}`
+        : `${rows.length} ilan ${ACTION_LABEL[data.action]}${reason ? ` — ${reason}` : ""}`) + (skipped ? ` (${skipped} ilan uygun olmadığı için atlandı)` : "");
+    for (const r of rows) {
+      await audit(sql, context.adminId, `listing.${data.action}`, "listing", r.id, rows.length === 1 ? summary : `#${r.listing_no} "${r.title}" ${ACTION_LABEL[data.action]}`, {
+        reason: reason || undefined,
+        days: data.days,
+        categoryId: data.categoryId,
+        from: r.status,
+      });
+    }
+    // The record goes first: a problem while notifying must not leave a change unrecorded.
     if (data.notify) {
       for (const r of rows) {
         const link = `/ilan/${r.slug}`;
@@ -373,6 +386,10 @@ export const adminListingsAction = createServerFn({ method: "POST" })
             `"${r.title}" şu gerekçeyle reddedildi: ${reason || "Yayın kurallarına uygun bulunmadı"}. Düzenleyip tekrar onaya gönderebilirsiniz.`,
             link,
           );
+        } else if (data.action === "delete") {
+          await notify(r.user_id, "listing", "İlanınız silindi", `"${r.title}" yönetim tarafından silindi.${reason ? ` Gerekçe: ${reason}` : ""}`, "/ilanlarim");
+        } else if (data.action === "sold") {
+          await notify(r.user_id, "listing", "İlanınız satıldı olarak işaretlendi", `"${r.title}" yönetim tarafından satıldı olarak işaretlendi.`, link);
         } else if (data.action === "deactivate") {
           await notify(
             r.user_id,
@@ -385,18 +402,6 @@ export const adminListingsAction = createServerFn({ method: "POST" })
       }
     }
 
-    const summary =
-      (rows.length === 1
-        ? `#${rows[0].listing_no} "${rows[0].title}" ${ACTION_LABEL[data.action]}${reason ? ` — ${reason}` : ""}`
-        : `${rows.length} ilan ${ACTION_LABEL[data.action]}${reason ? ` — ${reason}` : ""}`) + (skipped ? ` (${skipped} ilan uygun olmadığı için atlandı)` : "");
-    for (const r of rows) {
-      await audit(sql, context.adminId, `listing.${data.action}`, "listing", r.id, rows.length === 1 ? summary : `#${r.listing_no} "${r.title}" ${ACTION_LABEL[data.action]}`, {
-        reason: reason || undefined,
-        days: data.days,
-        categoryId: data.categoryId,
-        from: r.status,
-      });
-    }
     return { ok: true as const, count: rows.length, summary };
   });
 
@@ -408,7 +413,7 @@ export const adminUpdateListing = createServerFn({ method: "POST" })
       id: z.string().max(200),
       title: z.string().trim().min(5).max(100),
       description: z.string().trim().min(10).max(5000),
-      price: z.number().min(0).max(1_000_000_000),
+      price: z.number().min(1).max(1_000_000_000),
       city: z.string().trim().max(60).optional(),
       district: z.string().trim().max(60).optional(),
     }),

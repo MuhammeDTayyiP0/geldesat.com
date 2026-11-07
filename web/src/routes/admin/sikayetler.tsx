@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Ban, Check, ExternalLink, MessageCircle, MessageSquareWarning, PanelRightOpen, RotateCcw, ShieldX, User } from "lucide-react";
@@ -29,6 +29,12 @@ function ReportsPage() {
   const filter = { status: search.status ?? "OPEN", kind: search.kind ?? "all", q: search.q, page: search.page ?? 1, pageSize: 20 } as const;
   const query = useQuery({ queryKey: ["admin", "reports", filter], queryFn: () => adminListReports({ data: filter }), placeholderData: keepPreviousData });
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  useEffect(() => setSelected(new Set()), [filter.status, filter.kind, filter.q]);
+  // After the last reports of a page are closed, step back to one that has some.
+  const lastPage = query.data?.pages;
+  useEffect(() => {
+    if (lastPage && filter.page > lastPage) void navigate({ search: (prev) => ({ ...prev, page: lastPage > 1 ? lastPage : undefined }), replace: true });
+  }, [lastPage, filter.page, navigate]);
   const { run } = useRunner();
   const { prompt } = useConfirm();
   const rows = query.data?.rows ?? [];
@@ -127,7 +133,7 @@ function ReportCard({ report: r, selected, onSelect }: { report: AdminReportRow;
   const { prompt, confirm } = useConfirm();
   const { openListing, openUser } = useSheets();
   const open = r.status === "OPEN";
-  const ls = r.listing_status ? listingStatus(r.listing_status, null) : null;
+  const ls = r.listing_status ? listingStatus(r.listing_status, r.listing_expires_at) : null;
 
   async function close(takeDown: boolean) {
     const note = await prompt({

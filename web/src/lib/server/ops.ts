@@ -3,8 +3,8 @@ import { notify } from "./helpers";
 
 let lastSweep = 0;
 
-export async function sweepExpiryReminders(force = false) {
-  if (!force && Date.now() - lastSweep < 60_000) return;
+export async function sweepExpiryReminders(force = false): Promise<number> {
+  if (!force && Date.now() - lastSweep < 60_000) return 0;
   lastSweep = Date.now();
   const sql = await getSql();
   const rows = await sql.query<{ id: string; user_id: string; title: string; slug: string }>(
@@ -27,4 +27,5 @@ export async function sweepExpiryReminders(force = false) {
       `/ilan/${r.slug}`,
     );
   }
+  return rows.length;
 }

@@ -127,11 +127,17 @@ export const adminDeleteStore = createServerFn({ method: "POST" })
   .validator(z.object({ id: z.string().max(200) }))
   .handler(async ({ context, data }) => {
     const sql = await getSql();
-    const cur = (await sql.query<{ name: string }>("select name from stores where id = $1", [data.id]))[0];
+    const cur = (await sql.query<Record<string, unknown> & { name: string; user_id: string }>("select * from stores where id = $1", [data.id]))[0];
     if (!cur) throw new Error("Mağaza bulunamadı.");
     // Listings stay with the member; they just lose the store badge (on delete set null).
     await sql.query("delete from stores where id = $1", [data.id]);
-    await audit(sql, context.adminId, "store.delete", "store", data.id, `Mağaza "${cur.name}" kapatıldı`);
+    await audit(sql, context.adminId, "store.delete", "store", data.id, `Mağaza "${cur.name}" kapatıldı`, {
+      owner: cur.user_id,
+      slug: cur.slug,
+      plan: cur.plan,
+      city: cur.city,
+    });
+    await notify(cur.user_id, "system", "Mağazanız kapatıldı", `"${cur.name}" mağazanız kapatıldı. İlanlarınız yayında kalır. Sorularınız için destek ekibine yazın.`, "/ayarlar/magaza");
     return { ok: true as const };
   });
 

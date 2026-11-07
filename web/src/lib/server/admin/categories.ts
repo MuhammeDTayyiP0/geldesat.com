@@ -267,7 +267,14 @@ export const adminUpdateCategory = createServerFn({ method: "POST" })
     if (!cur) throw new Error("Kategori bulunamadı.");
     const slug = slugify(data.slug);
     if (!slug) throw new Error("Geçerli bir adres (slug) girin.");
+    if (data.name.trim() !== cur.name) {
+      const twin = await sql.query("select 1 from categories c join categories me on me.id = $1 where c.id <> me.id and c.parent_id is not distinct from me.parent_id and lower(c.name) = lower($2) limit 1", [data.id, data.name.trim()]);
+      if (twin[0]) throw new Error("Bu üst kategoride aynı adda bir kategori var.");
+    }
     if (slug !== cur.slug) {
+      // Links to the old address keep working.
+      await sql.query("insert into category_old_slugs (slug, category_id) values ($1, $2) on conflict (slug) do update set category_id = excluded.category_id", [cur.slug, data.id]);
+      await sql.query("delete from category_old_slugs where slug = $1", [slug]);
       const taken = await sql.query<{ id: string }>("select id from categories where slug = $1 and id <> $2", [slug, data.id]);
       if (taken[0]) throw new Error("Bu adres başka bir kategoride kullanılıyor.");
     }
@@ -297,12 +304,11 @@ export const adminMoveCategory = createServerFn({ method: "POST" })
     const rows = await sql.query<{ name: string; parent_id: string | null }>("select name, parent_id from categories where id = $1", [data.id]);
     const cur = rows[0];
     if (!cur) throw new Error("Kategori bulunamadı.");
-    if (data.parentId) {
-      const inside = await subtree(sql, data.id);
-      if (inside.includes(data.parentId)) throw new Error("Bir kategori kendi alt dalına taşınamaz.");
-    }
     const newParentName = await nameOf(sql, data.parentId);
     await sql.transaction(async (tx) => {
+      // Under the lock: two admins moving A into B and B into A at once would make a loop.
+      await tx.query("select pg_advisory_xact_lock(hashtext('category-move'))");
+      if (data.parentId && (await subtree(tx, data.id)).includes(data.parentId)) throw new Error("Bir kategori kendi alt dalına taşınamaz.");
       const sibs = (await siblings(tx, data.parentId)).map((s) => s.id).filter((id) => id !== data.id);
       const at = Math.min(Math.max(data.index ?? sibs.length, 0), sibs.length);
       sibs.splice(at, 0, data.id);
@@ -335,8 +341,13 @@ export const adminReorderCategories = createServerFn({ method: "POST" })
     const sql = await getSql();
     const parentName = await nameOf(sql, data.parentId);
     const sibs = await sql.query<{ id: string; name: string; n: number }>(
+      // Counts the whole branch, like the numbers shown next to each category.
       `select c.id, c.name,
-              (select count(*) from listings l where l.category_id = c.id) as n
+              (with recursive branch as (
+                 select c.id as id
+                 union all
+                 select k.id from categories k join branch b on k.parent_id = b.id
+               ) select count(*) from listings l where l.category_id in (select id from branch)) as n
        from categories c where c.parent_id is not distinct from $1 order by c.sort_order, c.name`,
       [data.parentId],
     );

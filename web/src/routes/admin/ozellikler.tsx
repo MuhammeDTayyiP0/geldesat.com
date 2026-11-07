@@ -200,6 +200,7 @@ function AttributesPage() {
 
 function AttributeModal({ attr, onClose }: { attr: AdminAttribute | null; onClose: () => void }) {
   const { run, busy } = useRunner();
+  const { confirm } = useConfirm();
   const [name, setName] = useState(attr?.name ?? "");
   const [type, setType] = useState<AttributeType>((attr?.type as AttributeType) ?? "SELECT");
   const [options, setOptions] = useState((attr?.options ?? []).join("\n"));

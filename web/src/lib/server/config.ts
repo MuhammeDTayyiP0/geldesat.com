@@ -5,8 +5,7 @@ import { evaluateFlags, fullRule, normalizeFlags, type FlagPlatform, type FlagRu
 
 /** Flags a fresh database starts with (the admin panel stores the real set under `features`). */
 export const DEFAULT_FLAGS: FlagRules = {
-  doping_enabled: fullRule(true, "Doping / vitrin satışı ekranları."),
-  mobile_bottom_nav: fullRule(true, "Mobil uygulamada alt gezinme çubuğu."),
+  doping_enabled: fullRule(false, "Doping / vitrin satışı ekranları."),
 };
 
 /** Get a config value from the database. */
@@ -77,12 +76,15 @@ export async function resolveFlags(req: FlagRequest): Promise<Record<string, boo
     const rules = await loadFlagRules();
     const needsRole = Boolean(req.userId) && Object.values(rules).some((r) => r.enabled && r.admins);
     const isAdmin = needsRole && req.userId ? await isAdminAccount(req.userId) : false;
-    return evaluateFlags(rules, {
+    const flags = evaluateFlags(rules, {
       unitId: req.userId ?? req.anonId ?? "guest",
       platform: req.platform,
       appVersion: req.appVersion ?? null,
       isAdmin,
     });
+    // Only what is on leaves the server: an off flag reads as false anyway, and
+    // its name would announce what is coming.
+    return Object.fromEntries(Object.entries(flags).filter(([, on]) => on));
   } catch (err) {
     console.error("[flags] resolve failed:", err);
     return {};
@@ -102,7 +104,10 @@ export const getWebFlags = createServerFn({ method: "GET" }).handler(async (): P
   const { getCookie, setCookie } = await import("@tanstack/react-start/server");
   const { getSessionUser } = await import("@/lib/auth/verify.server");
   let anonId = getCookie(ANON_COOKIE) ?? null;
-  if (!anonId || !/^[a-z0-9-]{8,64}$/i.test(anonId)) {
+  // The id exists only to keep a visitor in the same group during a percentage
+  // rollout; without one running, no cookie is set at all.
+  const rollingOut = Object.values(await loadFlagRules()).some((r) => r.enabled && r.rollout > 0 && r.rollout < 100);
+  if (rollingOut && (!anonId || !/^[a-z0-9-]{8,64}$/i.test(anonId))) {
     anonId = crypto.randomUUID();
     setCookie(ANON_COOKIE, anonId, {
       path: "/",

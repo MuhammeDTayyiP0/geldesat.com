@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { adminAudienceSizes, adminBroadcast, adminListAudit } from "@/lib/server/admin/content";
 import { useRunner } from "@/components/admin/hooks";
 import { dateTime, n, relative } from "@/components/admin/format";
-import { Card, CardHead, EmptyState, Field, FieldGroup, inputClass, PageHeader, Spinner, textareaClass, useConfirm } from "@/components/admin/ui";
+import { ErrorState, Card, CardHead, EmptyState, Field, FieldGroup, inputClass, PageHeader, Spinner, textareaClass, useConfirm } from "@/components/admin/ui";
 
 export const Route = createFileRoute("/admin/duyurular")({
   component: BroadcastPage,
@@ -43,12 +43,13 @@ function BroadcastPage() {
     if (!ok) return;
     const r = await run(
       () => adminBroadcast({ data: { audience, title: title.trim(), body: body.trim(), link: link || undefined, push } }),
-      (res) => `${n(res.recipients)} üyeye gönderildi${push ? `, ${n(res.pushed)} cihaza iletildi` : ""}.`,
+      (res) => `${n(res.recipients)} üyeye gönderildi${push ? `, ${n(res.pushed)} cihaza gönderiliyor` : ""}.`,
     );
     if (r) {
       setTitle("");
       setBody("");
       setLink("");
+      setPush(false);
     }
   }
 
@@ -159,6 +160,8 @@ function BroadcastPage() {
                   );
                 })}
               </ul>
+            ) : history.error ? (
+              <ErrorState error={history.error} onRetry={() => void history.refetch()} />
             ) : history.isLoading ? (
               <div className="p-4 text-sm text-muted">Yükleniyor…</div>
             ) : (

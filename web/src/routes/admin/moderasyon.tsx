@@ -131,14 +131,26 @@ function Reviewer({ id, position, total, onStep, onDecided }: { id: string; posi
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) {
-        if (e.key === "Escape") setRejecting(false);
+      if (e.key === "Escape") {
+        setRejecting(false);
         return;
       }
-      if (e.ctrlKey || e.metaKey || e.altKey || busy) return;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) {
+        // "R, then 1-7": with the box still empty a digit picks a ready reason.
+        const preset = t === reasonRef.current && !reasonRef.current.value && /^[1-7]$/.test(e.key) ? REJECT_REASONS[Number(e.key) - 1] : undefined;
+        if (preset) {
+          e.preventDefault();
+          void decide("reject", preset);
+        }
+        return;
+      }
+      // A held key repeats, and the next listing appears under it: only a fresh press
+      // on a fully loaded listing decides anything.
+      if (e.ctrlKey || e.metaKey || e.altKey || busy || e.repeat || !q.data) return;
       if (document.querySelector("[role=dialog]")) return;
       const key = e.key.toLowerCase();
       if (key === "a") {
+        if (rejecting) return;
         e.preventDefault();
         void decide("approve");
       } else if (key === "r") {
@@ -152,7 +164,7 @@ function Reviewer({ id, position, total, onStep, onDecided }: { id: string; posi
         e.preventDefault();
         onStep(-1);
       } else if (e.key === "ArrowRight") {
-        setPhoto((p) => p + 1);
+        setPhoto((p) => Math.min(p + 1, Math.max(0, (q.data?.listing.images.length ?? 1) - 1)));
       } else if (e.key === "ArrowLeft") {
         setPhoto((p) => Math.max(0, p - 1));
       } else if (rejecting && /^[1-7]$/.test(e.key)) {

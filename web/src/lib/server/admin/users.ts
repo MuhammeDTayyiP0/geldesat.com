@@ -4,7 +4,7 @@ import { safeRedirect } from "@/lib/auth/sign-in-gate";
 import { liveSql } from "@/lib/listing-status";
 import { getSql } from "@/lib/db";
 import { newId, num } from "@/lib/utils";
-import { creditBalance, normalizeTrPhone, notify } from "../helpers";
+import { creditBalance, isBootstrapAdmin, normalizeTrPhone, notify, rateLimit } from "../helpers";
 import { purgeUserData } from "../account-purge";
 import { adminMiddleware, audit, likeTerm, paged, paging, PageInput, strOrNull, ts, tsOrNull, Where } from "./common";
 import { mapAudit } from "./dashboard";
@@ -240,15 +240,49 @@ async function targetProfile(sql: Awaited<ReturnType<typeof getSql>>, userId: st
   return rows[0];
 }
 
+/**
+ * Changing who is an admin asks for the acting admin's password again, so a
+ * stolen session alone cannot take over the panel. Google-only accounts have no
+ * password to ask for.
+ */
+async function assertAdminPassword(sql: Awaited<ReturnType<typeof getSql>>, adminId: string, password: string | undefined) {
+  const credential = await sql.query('select 1 from "account" where "userId" = $1 and "providerId" = \'credential\' limit 1', [adminId]);
+  if (!credential[0]) return;
+  if (!password) throw new Error("Bu işlem için şifrenizi girin.");
+  rateLimit(`admin-password:${adminId}`, 5, 15 * 60_000);
+  const { auth } = await import("@/lib/auth/server");
+  const { getRequest } = await import("@tanstack/react-start/server");
+  try {
+    await auth.api.verifyPassword({ body: { password }, headers: getRequest()?.headers ?? new Headers() });
+  } catch {
+    throw new Error("Şifre hatalı.");
+  }
+}
+
 export const adminSetUserRole = createServerFn({ method: "POST" })
   .middleware([adminMiddleware])
-  .validator(z.object({ userId: z.string().max(200), role: z.enum(["USER", "ADMIN"]) }))
+  .validator(z.object({ userId: z.string().max(200), role: z.enum(["USER", "ADMIN"]), password: z.string().max(200).optional() }))
   .handler(async ({ context, data }) => {
     if (data.userId === context.adminId && data.role !== "ADMIN") throw new Error("Kendi yönetici yetkinizi kaldıramazsınız.");
     const sql = await getSql();
     const t = await targetProfile(sql, data.userId);
     if (t.banned_at && data.role === "ADMIN") throw new Error("Askıdaki bir hesap yönetici yapılamaz.");
-    await sql.query("update profiles set role = $2 where user_id = $1", [data.userId, data.role]);
+    await assertAdminPassword(sql, context.adminId, data.password);
+    if (data.role === "USER" && (await isBootstrapAdmin(sql, data.userId))) {
+      throw new Error("Bu hesap ADMIN_EMAILS listesinde olduğu için yetkisi geri gelir. Önce listeden çıkarın.");
+    }
+    await sql.transaction(async (tx) => {
+      // Locks the admin rows, so two admins demoting each other cannot leave nobody.
+      const others = await tx.query<{ user_id: string }>(
+        "select user_id from profiles where role = 'ADMIN' and banned_at is null and user_id <> $1 for update",
+        [data.userId],
+      );
+      if (data.role === "USER" && !others.length) throw new Error("Son yöneticinin yetkisi kaldırılamaz.");
+      await tx.query("update profiles set role = $2 where user_id = $1", [data.userId, data.role]);
+    });
+    if (t.role !== data.role) {
+      await notify(data.userId, "system", data.role === "ADMIN" ? "Yönetici yetkisi verildi" : "Yönetici yetkiniz kaldırıldı", "Hesabınızın yetkileri değişti. Bu değişikliği beklemiyorsanız hemen destek ekibine yazın.", "/profil");
+    }
     await audit(sql, context.adminId, "user.role", "user", data.userId, `${t.display_name}: rol ${t.role} → ${data.role}`);
     return { ok: true as const };
   });
@@ -260,6 +294,7 @@ export const adminBanUser = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     if (data.userId === context.adminId) throw new Error("Kendi hesabınızı askıya alamazsınız.");
     const sql = await getSql();
+    if ((await targetProfile(sql, data.userId)).role === "ADMIN") throw new Error("Önce yönetici yetkisini kaldırın.");
     const t = await targetProfile(sql, data.userId);
     if (t.role === "ADMIN") throw new Error("Yönetici hesabı askıya alınamaz. Önce rolünü üyeye çevirin.");
     const hidden = await sql.transaction(async (tx) => {
@@ -314,6 +349,31 @@ export const adminRevokeSessions = createServerFn({ method: "POST" })
     return { ok: true as const, count: rows.length };
   });
 
+/** The internal note on its own: saving it must not re-validate or overwrite the member's profile. */
+export const adminSetUserNote = createServerFn({ method: "POST" })
+  .middleware([adminMiddleware])
+  .validator(z.object({ userId: z.string().max(200), note: z.string().trim().max(2000) }))
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    const t = await targetProfile(sql, data.userId);
+    await sql.query("update profiles set admin_note = $2 where user_id = $1", [data.userId, data.note || null]);
+    await audit(sql, context.adminId, "user.note", "user", data.userId, `${t.display_name}: yönetici notu güncellendi`);
+    return { ok: true as const };
+  });
+
+/** Stops a pending account deletion on the member's behalf, for support requests. */
+export const adminCancelUserDeletion = createServerFn({ method: "POST" })
+  .middleware([adminMiddleware])
+  .validator(z.object({ userId: z.string().max(200) }))
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    const t = await targetProfile(sql, data.userId);
+    const { restoreAccount } = await import("../retention");
+    await restoreAccount(data.userId);
+    await audit(sql, context.adminId, "user.restore", "user", data.userId, `${t.display_name}: silinme talebi iptal edildi`);
+    return { ok: true as const };
+  });
+
 export const adminUpdateUser = createServerFn({ method: "POST" })
   .middleware([adminMiddleware])
   .validator(
@@ -324,22 +384,24 @@ export const adminUpdateUser = createServerFn({ method: "POST" })
       city: z.string().trim().max(40).optional(),
       district: z.string().trim().max(40).optional(),
       bio: z.string().trim().max(400).optional(),
-      admin_note: z.string().trim().max(2000).optional(),
     }),
   )
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     const t = await targetProfile(sql, data.userId);
     const phone = data.phone ? normalizeTrPhone(data.phone) : null;
+    const before = (await sql.query<Record<string, string | null>>("select display_name, phone, city, district, bio from profiles where user_id = $1", [data.userId]))[0];
     if (phone) {
       const taken = await sql.query<{ user_id: string }>("select user_id from profiles where phone = $1 and user_id <> $2", [phone, data.userId]);
       if (taken[0]) throw new Error("Bu telefon başka bir hesapta kayıtlı.");
     }
     await sql.query(
-      `update profiles set display_name=$2, phone=$3, city=$4, district=$5, bio=$6, admin_note=$7 where user_id=$1`,
-      [data.userId, data.display_name, phone, data.city || null, data.district || null, data.bio || null, data.admin_note || null],
+      `update profiles set display_name=$2, phone=$3, city=$4, district=$5, bio=$6 where user_id=$1`,
+      [data.userId, data.display_name, phone, data.city || null, data.district || null, data.bio || null],
     );
-    await audit(sql, context.adminId, "user.edit", "user", data.userId, `${t.display_name}: profil bilgileri düzenlendi`);
+    await audit(sql, context.adminId, "user.edit", "user", data.userId, `${t.display_name}: profil bilgileri düzenlendi`, {
+      changed: (["display_name", "phone", "city", "district", "bio"] as const).filter((key) => (before?.[key] ?? null) !== ({ display_name: data.display_name, phone, city: data.city || null, district: data.district || null, bio: data.bio || null })[key]),
+    });
     return { ok: true as const };
   });
 
@@ -362,6 +424,7 @@ export const adminDeleteUser = createServerFn({ method: "POST" })
     if (data.userId === context.adminId) throw new Error("Kendi hesabınızı silemezsiniz.");
     const sql = await getSql();
     const t = await targetProfile(sql, data.userId);
+    if (t.role === "ADMIN") throw new Error("Önce yönetici yetkisini kaldırın.");
     if (t.role === "ADMIN") throw new Error("Yönetici hesabı silinemez. Önce rolünü üyeye çevirin.");
     await purgeUserData(sql, data.userId, { deleteListings: data.deleteListings });
     await audit(sql, context.adminId, "user.delete", "user", data.userId, `${t.display_name} hesabı kalıcı olarak silindi`, {

@@ -101,7 +101,7 @@ export const adminRepublishOta = createServerFn({ method: "POST" })
     const copied = await sql.query<{ id: string; message: string }>(
       `insert into ota_updates (id, group_id, runtime_version, platform, channel, kind, launch_asset, assets, expo_client, message, rollout, critical, republished_from, created_by)
        select gen_random_uuid(), $2, runtime_version, platform, channel, kind, launch_asset, assets, expo_client,
-              left('Geri dönüş: ' || message, 300), 100, critical, group_id, $3
+              left('Geri dönüş: ' || message, 300), 100, false, group_id, $3
          from ota_updates where group_id = $1 and kind = 'update'
        returning id, message`,
       [data.groupId, groupId, context.adminId],
@@ -118,14 +118,14 @@ export const adminRollbackOtaToEmbedded = createServerFn({ method: "POST" })
     z.object({
       runtimeVersion: z.string().regex(RUNTIME_PATTERN),
       channel: z.string().regex(CHANNEL_PATTERN),
-      platforms: z.array(z.enum(["ios", "android"])).min(1).max(2),
     }),
   )
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     const groupId = newId("ota");
     await sql.transaction(async (tx) => {
-      for (const platform of new Set(data.platforms)) {
+      // "Every phone" means both platforms, whichever update the button was pressed on.
+      for (const platform of ["ios", "android"]) {
         await tx.query(
           `insert into ota_updates (id, group_id, runtime_version, platform, channel, kind, message, rollout, created_by)
            values (gen_random_uuid(), $1, $2, $3, $4, 'rollback', 'Mağaza sürümüne dönüş', 100, $5)`,

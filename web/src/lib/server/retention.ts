@@ -98,6 +98,17 @@ export async function sweepRetention(force = false): Promise<void> {
   if (!force && Date.now() - lastSweep < 60 * 60_000) return;
   lastSweep = Date.now();
   const sql = await getSql();
+  // Files of OTA updates nothing refers to any more; recent ones stay for a possible rollback.
+  await sql
+    .query(
+      `delete from ota_assets a
+       where a.created_at < now() - interval '30 days'
+         and not exists (
+           select 1 from ota_updates u
+           where u.launch_asset ->> 'hash' = a.hash or u.assets @> jsonb_build_array(jsonb_build_object('hash', a.hash))
+         )`,
+    )
+    .catch((err) => console.error("[retention] ota asset cleanup failed", err));
   const due = await sql.query<{ user_id: string }>(
     `select user_id from profiles
      where deletion_requested_at is not null and deletion_requested_at < now() - make_interval(days => $1)

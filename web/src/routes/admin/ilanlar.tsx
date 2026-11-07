@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
@@ -109,6 +109,10 @@ function ListingsPage() {
   const { openListing } = useSheets();
   const { act, busy } = useListingActions();
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  // Listings out of sight must not stay selected for a bulk action.
+  const { page: _page, ...filterOnly } = filter;
+  const filterKey = JSON.stringify(filterOnly);
+  useEffect(() => setSelected(new Set()), [filterKey]);
 
   const rows = query.data?.rows ?? [];
   const counts = query.data?.statusCounts;

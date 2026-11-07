@@ -27,6 +27,8 @@ import {
   adminRevokeSessions,
   adminSetUserRole,
   adminUnbanUser,
+  adminCancelUserDeletion,
+  adminSetUserNote,
   adminUpdateUser,
   adminUserDetail,
   adminVerifyEmail,
@@ -275,14 +277,23 @@ function UserActionBar({ detail, onModal }: { detail: AdminUserDetail; onModal: 
   }
 
   async function setRole(role: "ADMIN" | "USER") {
-    const ok = await confirm({
+    const password = await prompt({
       title: role === "ADMIN" ? "Yönetici yetkisi verilsin mi?" : "Yönetici yetkisi kaldırılsın mı?",
-      body: role === "ADMIN" ? `${u.display_name} tüm yönetim paneline ve üyelerin verilerine erişebilecek.` : `${u.display_name} artık yönetim paneline giremeyecek.`,
+      body: role === "ADMIN" ? `${u.display_name} tüm yönetim paneline ve üyelerin verilerine erişebilecek. Onaylamak için kendi şifrenizi girin.` : `${u.display_name} artık yönetim paneline giremeyecek. Onaylamak için kendi şifrenizi girin. Google ile giriş yapıyorsanız boş bırakın.`,
+      label: "Şifreniz",
+      inputType: "password",
+      multiline: false,
+      required: false,
       confirmLabel: role === "ADMIN" ? "Yönetici yap" : "Yetkiyi kaldır",
       danger: role === "ADMIN",
     });
-    if (!ok) return;
-    await run(() => adminSetUserRole({ data: { userId: u.user_id, role } }), "Rol güncellendi.");
+    if (password == null) return;
+    await run(() => adminSetUserRole({ data: { userId: u.user_id, role, password: password || undefined } }), "Rol güncellendi.");
+  }
+
+  async function cancelDeletion() {
+    const ok = await confirm({ title: "Silinme talebi iptal edilsin mi?", body: "Hesap ve gizlenen ilanları eski hâline döner.", confirmLabel: "İptal et" });
+    if (ok) await run(() => adminCancelUserDeletion({ data: { userId: u.user_id } }), "Silinme talebi iptal edildi.");
   }
 
   async function revoke() {
@@ -349,6 +360,11 @@ function UserActionBar({ detail, onModal }: { detail: AdminUserDetail; onModal: 
               E-postayı doğrulanmış say
             </MenuItem>
           ) : null}
+          {u.deletion_requested_at ? (
+            <MenuItem icon={LogOut} onSelect={() => void cancelDeletion()}>
+              Silinme talebini iptal et
+            </MenuItem>
+          ) : null}
           <MenuItem icon={LogOut} onSelect={() => void revoke()}>
             Tüm oturumları kapat
           </MenuItem>
@@ -411,21 +427,7 @@ function AdminNote({ user }: { user: AdminUserDetail["user"] }) {
             size="sm"
             disabled={busy}
             onClick={() =>
-              void run(
-                () =>
-                  adminUpdateUser({
-                    data: {
-                      userId: user.user_id,
-                      display_name: user.display_name,
-                      phone: user.phone ?? undefined,
-                      city: user.city ?? undefined,
-                      district: user.district ?? undefined,
-                      bio: user.bio ?? undefined,
-                      admin_note: value,
-                    },
-                  }),
-                "Not kaydedildi.",
-              )
+              void run(() => adminSetUserNote({ data: { userId: user.user_id, note: value } }), "Not kaydedildi.")
             }
           >
             Notu kaydet
@@ -461,7 +463,7 @@ function EditUserModal({ detail, onClose }: { detail: AdminUserDetail; onClose: 
             size="sm"
             disabled={busy || form.display_name.trim().length < 2}
             onClick={() =>
-              void run(() => adminUpdateUser({ data: { userId: u.user_id, ...form, admin_note: u.admin_note ?? undefined } }), "Profil güncellendi.").then((r) => {
+              void run(() => adminUpdateUser({ data: { userId: u.user_id, ...form } }), "Profil güncellendi.").then((r) => {
                 if (r) onClose();
               })
             }
@@ -496,6 +498,7 @@ function EditUserModal({ detail, onClose }: { detail: AdminUserDetail; onClose: 
 
 function CreditsModal({ detail, onClose }: { detail: AdminUserDetail; onClose: () => void }) {
   const { run, busy } = useRunner();
+  const { confirm } = useConfirm();
   const [amount, setAmount] = useState("10");
   const [reason, setReason] = useState("");
   const value = Number.parseInt(amount, 10) || 0;
@@ -515,8 +518,16 @@ function CreditsModal({ detail, onClose }: { detail: AdminUserDetail; onClose: (
             size="sm"
             disabled={busy || !value || reason.trim().length < 3}
             onClick={() =>
-              void run(() => adminGrantCredits({ data: { userId: detail.user.user_id, amount: value, reason } }), (r) => `Yeni bakiye: ${n(r.balance)} kredi`).then((r) => {
-                if (r) onClose();
+              void confirm({
+                title: `${value > 0 ? "+" : ""}${value} kredi işlensin mi?`,
+                body: `${detail.user.display_name} için ${value > 0 ? "yükleme" : "düşüm"} yapılacak. Gerekçe: ${reason}`,
+                confirmLabel: "Kredi işle",
+                danger: Math.abs(value) >= 100,
+              }).then((ok) => {
+                if (!ok) return;
+                void run(() => adminGrantCredits({ data: { userId: detail.user.user_id, amount: value, reason } }), (r) => `Yeni bakiye: ${n(r.balance)} kredi`).then((r) => {
+                  if (r) onClose();
+                });
               })
             }
           >

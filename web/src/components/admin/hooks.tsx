@@ -236,7 +236,7 @@ export function useListingActions() {
       } else if (action === "deactivate") {
         const r = await prompt({
           title: ids.length > 1 ? `${ids.length} ilanı yayından kaldır` : "İlanı yayından kaldır",
-          body: "İlan pasife alınır; onayı korunduğu için sahibi tekrar yayına alabilir. Kalıcı kaldırma için Reddet'i kullanın.",
+          body: "İlan pasife alınır; onayı korunduğu için sahibi tekrar yayına alabilir. Sahibinin de yayına alamaması için Reddet'i kullanın.",
           label: "Gerekçe (isteğe bağlı)",
           required: false,
           confirmLabel: "Yayından kaldır",
@@ -255,20 +255,27 @@ export function useListingActions() {
           confirmLabel: action === "extend" ? "Uzat" : "Vitrine al",
         });
         if (r == null) return false;
-        days = Math.max(1, Math.min(365, Number.parseInt(r, 10) || 0));
-        if (!days) return false;
+        const parsed = /^\d+$/.test(r.trim()) ? Number(r.trim()) : 0;
+        if (parsed < 1 || parsed > 365) {
+          toast.error("1 ile 365 arasında bir gün sayısı girin.");
+          return false;
+        }
+        days = parsed;
       } else if (action === "move") {
         const picked = await pick({ title: ids.length > 1 ? `${ids.length} ilanı taşı` : "İlanın kategorisini değiştir", confirmLabel: "Taşı" });
         if (!picked || picked === "root") return false;
         categoryId = picked.id;
       } else if (action === "delete") {
-        const ok = await confirm({
+        const r = await prompt({
           title: ids.length > 1 ? `${ids.length} ilan kalıcı olarak silinsin mi?` : "İlan kalıcı olarak silinsin mi?",
-          body: "İlan, fotoğrafları, favorileri ve fiyat geçmişi silinir. Bu işlem geri alınamaz.",
+          body: "İlan, fotoğrafları, favorileri, fiyat geçmişi ve doping kayıtları silinir; şikayetler ilan bilgisiyle kalır. Satıcıya gerekçeyle bildirim gider. Bu işlem geri alınamaz.",
+          label: "Silme gerekçesi (satıcıya gider)",
+          required: true,
           confirmLabel: "Kalıcı olarak sil",
           danger: true,
         });
-        if (!ok) return false;
+        if (r == null) return false;
+        reason = r;
       } else if (action === "sold" || action === "unfeature") {
         // No questions.
       } else if (ids.length > 5) {
@@ -277,7 +284,7 @@ export function useListingActions() {
       }
       const result = await run(
         () => adminListingsAction({ data: { ids, action, reason, days, categoryId, notify: true } }),
-        (r) => (r.count > 1 ? `${r.count} ilan güncellendi.` : "İlan güncellendi."),
+        (r) => r.summary,
       );
       return Boolean(result);
     },

@@ -135,7 +135,7 @@ function Orders({
       ) : query.isLoading ? (
         <SkeletonRows rows={5} />
       ) : !rows.length ? (
-        <EmptyState icon={Wallet} title="Talep yok" description="Kredi satışı açıldığında havale bildirimleri burada listelenir." />
+        <EmptyState icon={Wallet} title={search.q || search.status ? "Bu filtreyle eşleşen talep yok" : "Talep yok"} description="Kredi satışı şu an kapalı. Açıldığında havale bildirimleri burada listelenir." />
       ) : (
         <Table>
           <thead>
@@ -259,6 +259,7 @@ function GrantModal({ onClose }: { onClose: () => void }) {
   const [amount, setAmount] = useState("10");
   const [reason, setReason] = useState("");
   const { run, busy } = useRunner();
+  const { confirm } = useConfirm();
   const users = useQuery({
     queryKey: ["admin", "grant-user-search", q],
     queryFn: () => adminListUsers({ data: { q, role: "ALL", state: "all", sort: "newest", page: 1, pageSize: 8 } }),
@@ -282,8 +283,16 @@ function GrantModal({ onClose }: { onClose: () => void }) {
             disabled={busy || !user || !value || reason.trim().length < 3}
             onClick={() =>
               user &&
-              void run(() => adminGrantCredits({ data: { userId: user.user_id, amount: value, reason } }), (r) => `${user.display_name}: yeni bakiye ${n(r.balance)} kredi`).then((r) => {
-                if (r) onClose();
+              void confirm({
+                title: `${value > 0 ? "+" : ""}${value} kredi işlensin mi?`,
+                body: `${user.display_name} için ${value > 0 ? "yükleme" : "düşüm"} yapılacak. Gerekçe: ${reason}`,
+                confirmLabel: "Kredi işle",
+                danger: Math.abs(value) >= 100,
+              }).then((ok) => {
+                if (!ok) return;
+                void run(() => adminGrantCredits({ data: { userId: user.user_id, amount: value, reason } }), (r) => `${user.display_name}: yeni bakiye ${n(r.balance)} kredi`).then((r) => {
+                  if (r) onClose();
+                });
               })
             }
           >

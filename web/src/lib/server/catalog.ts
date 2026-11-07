@@ -1,3 +1,4 @@
+import { redirect } from "@tanstack/react-router";
 import { liveSql } from "@/lib/listing-status";
 import { foldTr, inferSearchCategoryId } from "@/lib/search-params";
 import { resolveFlags } from "./config";
@@ -291,6 +292,11 @@ export const getCategory = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const tree = await getCategoryTree();
     const cat = tree.bySlug.get(data.slug.toLowerCase());
+    if (!cat) {
+      const sql = await getSql();
+      const moved = (await sql.query<{ slug: string }>("select c.slug from category_old_slugs o join categories c on c.id = o.category_id where o.slug = $1", [data.slug.toLowerCase()]))[0];
+      if (moved) throw redirect({ to: "/category/$slug", params: { slug: moved.slug }, statusCode: 301 });
+    }
     if (!cat) return { category: null as CategoryRow | null, path: [] as CategoryRow[], children: [] as CategoryRow[], attributes: [] as Awaited<ReturnType<typeof inheritedAttributes>> };
     const attributes = await inheritedAttributes(cat.id);
     return {

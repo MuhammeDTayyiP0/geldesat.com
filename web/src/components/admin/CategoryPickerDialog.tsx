@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useCategoryTree, type PickedCategory } from "./hooks";
 import { n } from "./format";
-import { Modal, SearchInput, Spinner } from "./ui";
+import { ErrorState, Modal, SearchInput, Spinner } from "./ui";
 
 /** Browse or search the tree and pick one category (or the root). */
 export function CategoryPickerDialog({
@@ -14,7 +14,7 @@ export function CategoryPickerDialog({
   options: { title: string; description?: string; excludeSubtreeOf?: string; allowRoot?: boolean; confirmLabel?: string };
   resolve: (v: PickedCategory | "root" | undefined) => void;
 }) {
-  const { index, isLoading } = useCategoryTree();
+  const { index, isLoading, error, refetch } = useCategoryTree();
   const [q, setQ] = useState("");
   const [cwd, setCwd] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | "root" | null>(null);
@@ -93,7 +93,9 @@ export function CategoryPickerDialog({
         </div>
       ) : null}
       <div className="mt-2 max-h-[50vh] overflow-y-auto rounded-xl border border-border">
-        {isLoading || !index ? (
+        {error && !index ? (
+          <ErrorState error={error} onRetry={() => void refetch()} />
+        ) : isLoading || !index ? (
           <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted">
             <Spinner /> Kategoriler yükleniyor…
           </div>
@@ -130,11 +132,6 @@ export function CategoryPickerDialog({
                   <button
                     type="button"
                     onClick={() => setSelected(id)}
-                    onDoubleClick={() => {
-                      setSelected(id);
-                      const picked = index.byId.get(id);
-                      if (picked) resolve({ id: picked.id, name: picked.name, path: index.pathLabel(picked.id) });
-                    }}
                     className="min-w-0 flex-1 px-3 py-2 text-left"
                   >
                     <span className={cn("block truncate text-sm", selected === id ? "font-semibold text-primary" : "font-medium")}>{c.name}</span>

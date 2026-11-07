@@ -21,10 +21,25 @@ function OtaPage() {
   const live = new Set<string>();
   const seen = new Set<string>();
   for (const u of q.data?.updates ?? []) {
-    const lane = `${u.runtimeVersion}|${u.channel}`;
-    if (seen.has(lane) || u.rollout < 100) continue;
-    seen.add(lane);
-    live.add(u.groupId);
+    if (u.rollout < 100) continue;
+    // Platforms update separately: a new Android build must not hide the iOS one still serving.
+    for (const platform of u.platforms) {
+      const lane = `${u.runtimeVersion}|${u.channel}|${platform}`;
+      if (seen.has(lane)) continue;
+      seen.add(lane);
+      live.add(u.groupId);
+    }
+  }
+
+  /** Phones keep what they download, so widening is the step that cannot be taken back. */
+  async function openToAll(u: AdminOtaUpdate) {
+    const ok = await confirm({
+      title: "Güncelleme herkese açılsın mı?",
+      body: "Tüm telefonlar bir sonraki açılışta indirir. İndirenler kodu tutar; geri dönmek için yeniden yayın gerekir.",
+      confirmLabel: "Herkese aç",
+      danger: true,
+    });
+    if (ok) await run(() => adminSetOtaRollout({ data: { groupId: u.groupId, rollout: 100 } }), "Güncelleme herkese açıldı.");
   }
 
   async function setRollout(u: AdminOtaUpdate) {
@@ -68,7 +83,7 @@ function OtaPage() {
       confirmLabel: "Mağaza sürümüne dön",
       danger: true,
     });
-    if (ok) await run(() => adminRollbackOtaToEmbedded({ data: { runtimeVersion: u.runtimeVersion, channel: u.channel, platforms: u.platforms } }), "Telefonlar mağaza sürümüne döndürülüyor.");
+    if (ok) await run(() => adminRollbackOtaToEmbedded({ data: { runtimeVersion: u.runtimeVersion, channel: u.channel } }), "Telefonlar mağaza sürümüne döndürülüyor.");
   }
 
   return (
@@ -164,7 +179,7 @@ function OtaPage() {
                             Yüzdeyi değiştir
                           </MenuItem>
                           {u.rollout < 100 ? (
-                            <MenuItem icon={Play} onSelect={() => void run(() => adminSetOtaRollout({ data: { groupId: u.groupId, rollout: 100 } }), "Güncelleme herkese açıldı.")}>
+                            <MenuItem icon={Play} onSelect={() => void openToAll(u)}>
                               Herkese aç (%100)
                             </MenuItem>
                           ) : null}

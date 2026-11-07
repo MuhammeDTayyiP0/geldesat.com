@@ -156,17 +156,17 @@ Sonraki fazlar bunları kullanır.
 
 ## Faz 8: Admin (rapor 3.5, 3.6)
 
-- [ ] `FieldGroup` geçişi, kaydedilmemiş korumaları, seçim sıfırlama, taşan sayfa, `q.error && !q.data`.
-- [ ] Moderasyon kısayolları: `A` kilidi (Madde 9), ret modu, Esc, mobil düzen.
-- [ ] İlan işlemleri: fiyat doğrulama, sıra (audit önce, bildirim arka planda), gerekçe, bildirim, taşıma uyarısı, doğru metinler.
-- [ ] Kullanıcılar: rol koruması (K10), bootstrap, not ayrı işlev, silinme iptali.
-- [ ] Yorum genişletme, mağaza kapanış bildirimi, boş durumlar, kayıt filtresi, audit önce/sonra (Bölüm 2.15).
+- [x] `FieldGroup` geçişi, kaydedilmemiş korumaları, seçim sıfırlama, taşan sayfa, `q.error && !q.data`.
+- [x] Moderasyon kısayolları: `A` kilidi (Madde 9), ret modu, Esc, mobil düzen.
+- [x] İlan işlemleri: fiyat doğrulama, sıra (audit önce, bildirim arka planda), gerekçe, bildirim, taşıma uyarısı, doğru metinler.
+- [x] Kullanıcılar: rol koruması (K10), bootstrap, not ayrı işlev, silinme iptali.
+- [x] Yorum genişletme, mağaza kapanış bildirimi, boş durumlar, kayıt filtresi, audit önce/sonra (Bölüm 2.15).
 - [ ] Zorunlu güncelleme mobilde gerçekten çalışsın (Madde 33; mobil kısmı Faz 10).
 - [ ] `homeSections` ana ekrana bağlansın; `doping_enabled`, `mobile_bottom_nav` bağlansın; panelde kullanılmayan anahtar uyarısı (Madde 34).
-- [ ] OTA: mağaza sürümüne dönüş iki platforma (Madde 35), %100 onayı, platform bazlı "Yayında", `critical`, audit, `ota_assets` temizliği, async gzip.
-- [ ] Kategori: toplu aktarım onayı, özyinelemeli sıralama, döngü koruması, 301 için slug geçmişi.
-- [ ] Sayfalar: bağlı adres kilidi, sürüm geçmişi, ortak önizleme. Duyurular: tercih türü, arka plan işi, doğru sayaç.
-- [ ] Finans ve sistem: görev sonuçları, cron son çalışma, boş durumlar. Çerez `gs-uid` kapsamı.
+- [x] OTA: mağaza sürümüne dönüş iki platforma (Madde 35), %100 onayı, platform bazlı "Yayında", `critical`, audit, `ota_assets` temizliği, async gzip.
+- [x] Kategori: toplu aktarım onayı, özyinelemeli sıralama, döngü koruması, 301 için slug geçmişi.
+- [x] Sayfalar: bağlı adres kilidi, sürüm geçmişi, ortak önizleme. Duyurular: tercih türü, arka plan işi, doğru sayaç.
+- [x] Finans ve sistem: görev sonuçları, cron son çalışma, boş durumlar. Çerez `gs-uid` kapsamı.
 
 ## Faz 9: Kalan sunucu ve performans (rapor 3.7)
 

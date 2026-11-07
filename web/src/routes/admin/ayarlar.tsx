@@ -5,7 +5,7 @@ import { ArrowDown, ArrowUp, Building2, ChevronRight, Landmark, LayoutTemplate, 
 import { Button } from "@/components/ui/button";
 import { ToggleSwitch } from "@/components/ui/toggle-switch";
 import { cn } from "@/lib/utils";
-import { FLAG_PLATFORMS, type FlagPlatform, type FlagRule, type FlagRules } from "@/lib/flags";
+import { KNOWN_FLAGS as FLAGS_IN_CODE, FLAG_PLATFORMS, type FlagPlatform, type FlagRule, type FlagRules } from "@/lib/flags";
 import { adminGetSettings, adminSaveAppConfig, adminSaveSiteSettings, type MobileAppConfig, type ModerationMode } from "@/lib/server/admin/content";
 import { useRunner } from "@/components/admin/hooks";
 import type { Tone } from "@/components/admin/format";
@@ -17,7 +17,7 @@ export const Route = createFileRoute("/admin/ayarlar")({
 
 function SettingsPage() {
   const q = useQuery({ queryKey: ["admin", "settings"], queryFn: () => adminGetSettings() });
-  if (q.error) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;
+  if (q.error && !q.data) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;
   if (!q.data) {
     return (
       <div className="flex items-center justify-center gap-2 py-24 text-sm text-muted">
@@ -49,6 +49,7 @@ const MODES: Array<{ value: ModerationMode; title: string; body: string }> = [
 function ModerationCard({ mode }: { mode: ModerationMode }) {
   const [value, setValue] = useState(mode);
   const { run, busy } = useRunner();
+  const { confirm } = useConfirm();
   return (
     <Card>
       <CardHead title={<span className="inline-flex items-center gap-2"><ListChecks className="size-4 text-primary" /> İlan onay politikası</span>} description="Yeni ve düzenlenen ilanların yayına nasıl gireceği. Yöneticilerin ilanları her zaman doğrudan yayına girer." />
@@ -57,6 +58,7 @@ function ModerationCard({ mode }: { mode: ModerationMode }) {
           <button
             key={m.value}
             type="button"
+            aria-pressed={value === m.value}
             onClick={() => setValue(m.value)}
             className={cn("rounded-xl border p-3.5 text-left transition-colors", value === m.value ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-border hover:border-primary/40")}
           >
@@ -72,7 +74,14 @@ function ModerationCard({ mode }: { mode: ModerationMode }) {
       </div>
       {value !== mode ? (
         <div className="flex justify-end border-t border-border px-4 py-3">
-          <Button size="sm" disabled={busy} onClick={() => void run(() => adminSaveAppConfig({ data: { key: "moderation", value: { mode: value } } }), "Onay politikası güncellendi.")}>
+          <Button size="sm" disabled={busy} onClick={() =>
+            void (value === "none"
+              ? confirm({ title: "Moderasyon kapatılsın mı?", body: "Yeni ve düzenlenen ilanlar incelenmeden yayına girer.", confirmLabel: "Onaysız yayına geç", danger: true })
+              : Promise.resolve(true)
+            ).then((ok) => {
+              if (ok) void run(() => adminSaveAppConfig({ data: { key: "moderation", value: { mode: value } } }), "Onay politikası güncellendi.");
+            })
+          }>
             <Save className="size-4" /> Kaydet
           </Button>
         </div>
@@ -88,7 +97,7 @@ function SiteCard({ site }: { site: Awaited<ReturnType<typeof adminGetSettings>>
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, [k]: e.target.value }));
   return (
     <Card>
-      <CardHead title={<span className="inline-flex items-center gap-2"><Building2 className="size-4 text-primary" /> Site ve iletişim bilgileri</span>} description="Altbilgi, iletişim sayfası ve e-postalarda görünür." />
+      <CardHead title={<span className="inline-flex items-center gap-2"><Building2 className="size-4 text-primary" /> Site ve iletişim bilgileri</span>} description="Sitenin altbilgisinde görünür." />
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -109,7 +118,7 @@ function SiteCard({ site }: { site: Awaited<ReturnType<typeof adminGetSettings>>
         <div className="border-t border-border p-4">
           <p className="mb-3 flex items-center gap-2 text-sm font-semibold">
             <Landmark className="size-4 text-muted" /> Banka / havale bilgileri
-            <span className="text-xs font-normal text-muted">Doping havalesi için üyelere gösterilir (isteğe bağlı)</span>
+            <span className="text-xs font-normal text-muted">Kredi satışı açılırsa havale için kullanılır (isteğe bağlı)</span>
           </p>
           <div className="grid gap-4 md:grid-cols-3">
             <Field label="Banka">
@@ -141,7 +150,10 @@ function SiteCard({ site }: { site: Awaited<ReturnType<typeof adminGetSettings>>
 /** Descriptions for flags saved before flags carried their own. */
 const KNOWN_FLAGS: Record<string, string> = {
   doping_enabled: "Doping / vitrin satışı ekranları.",
-  mobile_bottom_nav: "Mobil uygulamada alt gezinme çubuğu.",
+  harita_v2: "Harita sayfasında il başına ilan sayılı gerçek harita.",
+  arama_v2: "Aramada kelime bazlı, Türkçe harften bağımsız eşleşme.",
+  ilan_formu_v2: "İlan formunda otomatik taslak ve çıkış uyarısı.",
+  sohbet_v2: "Sohbetin ilk okunmamışta açılması, görülünce okundu sayılması.",
 };
 
 const PLATFORM_LABEL: Record<FlagPlatform, string> = { web: "Web", ios: "iOS", android: "Android" };
@@ -215,6 +227,7 @@ function FeaturesCard({ features }: { features: FlagRules }) {
                         <button
                           key={step}
                           type="button"
+                          aria-pressed={rule.rollout === step}
                           onClick={() => patch(key, { rollout: step })}
                           className={cn(
                             "h-8 rounded-lg border px-2.5 text-xs font-semibold tabular-nums transition-colors",
@@ -278,6 +291,7 @@ function FeaturesCard({ features }: { features: FlagRules }) {
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
+                      {FLAGS_IN_CODE.includes(key) ? null : <Pill tone="warn">Kodda kullanılmıyor</Pill>}
                       <code className="hidden rounded bg-elevated px-2 py-1 text-[11px] text-muted sm:inline">useFlag("{key}")</code>
                       <Button type="button" size="sm" variant="ghost" className="text-danger" onClick={() => void remove(key)}>
                         <Trash2 className="size-4" /> Sil

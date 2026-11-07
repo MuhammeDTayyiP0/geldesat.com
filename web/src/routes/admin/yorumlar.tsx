@@ -38,6 +38,7 @@ function ReviewsPage() {
   const { run } = useRunner();
   const { prompt } = useConfirm();
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const rows = query.data?.rows ?? [];
   const dist = query.data?.distribution ?? {};
   const total = Object.values(dist).reduce((a, b) => a + b, 0);
@@ -55,7 +56,13 @@ function ReviewsPage() {
     });
     if (reason == null) return;
     const r = await run(() => adminDeleteReviews({ data: { ids, reason: reason || undefined } }), (res) => `${res.count} değerlendirme silindi.`);
-    if (r) setSelected(new Set());
+    if (r) {
+      setSelected((prev) => {
+        const next = new Set(prev);
+        for (const id of ids) next.delete(id);
+        return next;
+      });
+    }
   }
 
   return (
@@ -109,7 +116,16 @@ function ReviewsPage() {
                     label="Tümünü seç"
                     checked={rows.every((r) => selected.has(r.id))}
                     indeterminate={rows.some((r) => selected.has(r.id)) && !rows.every((r) => selected.has(r.id))}
-                    onChange={(v) => setSelected(v ? new Set(rows.map((r) => r.id)) : new Set())}
+                    onChange={(v) =>
+                      setSelected((prev) => {
+                        const next = new Set(prev);
+                        for (const r of rows) {
+                          if (v) next.add(r.id);
+                          else next.delete(r.id);
+                        }
+                        return next;
+                      })
+                    }
                   />
                 </Th>
                 <Th>Puan</Th>
@@ -141,7 +157,18 @@ function ReviewsPage() {
                     <Stars value={r.rating} />
                   </Td>
                   <Td className="max-w-[420px]">
-                    <p className="line-clamp-2 text-sm">{r.comment ?? <span className="text-subtle">Yorum yazılmamış</span>}</p>
+                    <p
+                      className={cn("text-sm", !expanded.has(r.id) && "line-clamp-2")}
+                      title={expanded.has(r.id) ? undefined : "Tamamını görmek için tıklayın"}
+                      onClick={() =>
+                        setExpanded((prev) => {
+                          const next = new Set(prev);
+                          if (!next.delete(r.id)) next.add(r.id);
+                          return next;
+                        })
+                      }
+                    >
+                      {r.comment ?? <span className="text-subtle">Yorum yazılmamış</span>}</p>
                     {r.listing_title ? <p className="truncate text-[11px] text-muted">İlan #{r.listing_no}: {r.listing_title}</p> : null}
                   </Td>
                   <Td>

@@ -1,5 +1,5 @@
 import { LegalBlocks } from "@/components/common/LegalBlocks";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Eye, FileText, Pencil, Plus, Save, Trash2 } from "lucide-react";
@@ -28,7 +28,14 @@ function PagesPage() {
   const pages = q.data ?? [];
   const selected = search.slug === "__new" ? null : (pages.find((p) => p.slug === search.slug) ?? (search.slug ? null : pages[0] ?? null));
   const isNew = search.slug === "__new";
-  const select = (slug: string | undefined) => void navigate({ search: { slug }, replace: true });
+  const dirtyRef = useRef(false);
+  const { confirm: confirmLeave } = useConfirm();
+  // Switching pages replaces the editor, so unsaved text needs a word first.
+  const select = (slug: string | undefined) => {
+    void (dirtyRef.current ? confirmLeave({ title: "Kaydedilmemiş değişiklikler silinsin mi?", confirmLabel: "Sil ve geç", danger: true }) : Promise.resolve(true)).then((ok) => {
+      if (ok) void navigate({ search: { slug }, replace: true });
+    });
+  };
 
   return (
     <div className="mx-auto max-w-[1400px]">
@@ -74,9 +81,9 @@ function PagesPage() {
             </ul>
           </Card>
           {isNew ? (
-            <Editor key="__new" page={null} onSaved={(slug) => select(slug)} />
+            <Editor key="__new" page={null} dirtyRef={dirtyRef} onSaved={(slug) => select(slug)} />
           ) : selected ? (
-            <Editor key={selected.slug} page={selected} onSaved={(slug) => select(slug)} onDeleted={() => select(undefined)} />
+            <Editor key={selected.slug} page={selected} dirtyRef={dirtyRef} onSaved={(slug) => select(slug)} onDeleted={() => select(undefined)} />
           ) : (
             <Card>
               <EmptyState icon={FileText} title="Sayfa seçin" />
@@ -88,15 +95,17 @@ function PagesPage() {
   );
 }
 
-function Editor({ page, onSaved, onDeleted }: { page: { slug: string; title: string; body: string } | null; onSaved: (slug: string) => void; onDeleted?: () => void }) {
+function Editor({ page, dirtyRef, onSaved, onDeleted }: { page: { slug: string; title: string; body: string } | null; dirtyRef: { current: boolean }; onSaved: (slug: string) => void; onDeleted?: () => void }) {
   const [title, setTitle] = useState(page?.title ?? "");
   const [slug, setSlug] = useState(page?.slug ?? "");
   const [body, setBody] = useState(page?.body ?? "");
   const [preview, setPreview] = useState(false);
   const { run, busy } = useRunner();
   const { confirm } = useConfirm();
-  const dirty = !page || title !== page.title || slug !== page.slug || body !== page.body;
+  // The server trims what it saves, so spaces at the ends are not a change.
+  const dirty = !page || title.trim() !== page.title || slug !== page.slug || body.trim() !== page.body;
   const linked = page && LINKED.has(page.slug);
+  dirtyRef.current = dirty && Boolean(page || title.trim() || body.trim());
 
   useEffect(() => {
     if (!dirty) return;
@@ -119,7 +128,8 @@ function Editor({ page, onSaved, onDeleted }: { page: { slug: string; title: str
           />
         </Field>
         <Field label="Adres" hint={linked ? undefined : "geldesat.com/sayfa/…"} error={linked && slug !== page?.slug ? "Bu sayfa site altbilgisinden bağlı; adresini değiştirmeyin." : null}>
-          <input value={slug} onChange={(e) => setSlug(e.target.value)} className={cn(inputClass, "font-mono")} />
+          <input
+            disabled={Boolean(linked)} value={slug} onChange={(e) => setSlug(e.target.value)} className={cn(inputClass, "font-mono")} />
         </Field>
       </div>
       <div className="flex items-center gap-1 border-b border-border px-4 py-2">
@@ -172,7 +182,10 @@ function Editor({ page, onSaved, onDeleted }: { page: { slug: string; title: str
           disabled={!dirty || busy || title.trim().length < 2 || body.trim().length < 10}
           onClick={() =>
             void run(() => adminSavePage({ data: { originalSlug: page?.slug, slug: slug || slugify(title), title: title.trim(), body } }), "Sayfa kaydedildi.").then((r) => {
-              if (r) onSaved(r.slug);
+              if (r) {
+                dirtyRef.current = false;
+                onSaved(r.slug);
+              }
             })
           }
         >

@@ -171,7 +171,7 @@ function bootstrapAdminEmails(): Set<string> {
   );
 }
 
-async function isBootstrapAdmin(sql: Awaited<ReturnType<typeof getSql>>, userId: string): Promise<boolean> {
+export async function isBootstrapAdmin(sql: Awaited<ReturnType<typeof getSql>>, userId: string): Promise<boolean> {
   const emails = bootstrapAdminEmails();
   if (!emails.size) return false;
   try {
