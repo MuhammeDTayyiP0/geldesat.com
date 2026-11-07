@@ -225,14 +225,22 @@ function AttributeModal({ attr, onClose }: { attr: AdminAttribute | null; onClos
           <Button
             size="sm"
             disabled={busy || !name.trim() || (needsOptions && optionList.length < 2)}
-            onClick={() =>
-              void run(
+            onClick={async () => {
+              if (attr && attr.type !== type) {
+                const ok = await confirm({
+                  title: "Özelliğin türü değişsin mi?",
+                  body: "İlanlarda kayıtlı değerler dönüştürülmez. Yeni türe uymayan değerler filtrelerde çalışmaz ve ilan düzenlenirken yeniden girilmesi gerekir.",
+                  confirmLabel: "Türü değiştir",
+                  danger: true,
+                });
+                if (!ok) return;
+              }
+              const r = await run(
                 () => adminSaveAttribute({ data: { id: attr?.id, name: name.trim(), type, options: needsOptions ? optionList : undefined, unit: unit || undefined, migrateValues: migrate } }),
-                (r) => (r.migrated ? `Kaydedildi; ${r.migrated} ilandaki değer yeni ada taşındı.` : "Özellik kaydedildi."),
-              ).then((r) => {
-                if (r) onClose();
-              })
-            }
+                (res) => (res.migrated ? `Kaydedildi; ${res.migrated} ilandaki değer yeni ada taşındı.` : "Özellik kaydedildi."),
+              );
+              if (r) onClose();
+            }}
           >
             {busy ? <Spinner /> : null} Kaydet
           </Button>
@@ -286,7 +294,9 @@ function UsageModal({ attr, onClose }: { attr: AdminAttribute; onClose: () => vo
   const q = useQuery({ queryKey: ["admin", "attribute-usage", attr.id], queryFn: () => adminAttributeUsage({ data: { id: attr.id } }) });
   return (
     <Modal open onOpenChange={(o) => !o && onClose()} title={`"${attr.name}" kullanımı`} description={q.data ? `${n(q.data.listingsWithValue)} ilanda bu özelliğe değer girilmiş.` : undefined} size="lg">
-      {q.isLoading ? (
+      {q.error ? (
+        <ErrorState error={q.error} onRetry={() => void q.refetch()} />
+      ) : q.isLoading ? (
         <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted">
           <Spinner /> Yükleniyor…
         </div>

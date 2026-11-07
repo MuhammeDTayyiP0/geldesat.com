@@ -67,8 +67,23 @@ function AuditPage() {
                 const expanded = open === e.id;
                 return (
                   <Fragment key={e.id}>
-                    <tr className="cursor-pointer hover:bg-elevated/50" onClick={() => setOpen(expanded ? null : e.id)}>
-                      <Td>{e.meta ? expanded ? <ChevronDown className="size-4 text-muted" /> : <ChevronRight className="size-4 text-muted" /> : null}</Td>
+                    <tr className={e.meta ? "cursor-pointer hover:bg-elevated/50" : undefined} onClick={e.meta ? () => setOpen(expanded ? null : e.id) : undefined}>
+                      <Td>
+                        {e.meta ? (
+                          <button
+                            type="button"
+                            aria-expanded={expanded}
+                            aria-label={expanded ? "Ayrıntıları gizle" : "Ayrıntıları göster"}
+                            onClick={(ev) => {
+                              ev.stopPropagation();
+                              setOpen(expanded ? null : e.id);
+                            }}
+                            className="flex"
+                          >
+                            {expanded ? <ChevronDown className="size-4 text-muted" /> : <ChevronRight className="size-4 text-muted" />}
+                          </button>
+                        ) : null}
+                      </Td>
                       <Td className="whitespace-nowrap text-xs">
                         <span className="block font-medium">{relative(e.created_at)}</span>
                         <span className="text-muted">{dateTime(e.created_at)}</span>
@@ -85,7 +100,8 @@ function AuditPage() {
                       </Td>
                       <Td className="max-w-[560px]">
                         <p className="text-sm">{e.summary}</p>
-                        {e.target_id && (e.target_type === "listing" || e.target_type === "user") ? (
+                        {/* A deleted record has nothing left to open. */}
+                        {e.action.endsWith(".delete") ? null : e.target_id && (e.target_type === "listing" || e.target_type === "user") ? (
                           <button
                             type="button"
                             onClick={(ev) => {

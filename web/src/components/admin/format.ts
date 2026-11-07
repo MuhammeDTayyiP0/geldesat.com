@@ -126,8 +126,10 @@ export const TARGET_LABEL: Record<string, string> = {
 
 /** Tone for an audit action, by its verb. */
 export function actionTone(action: string): Tone {
-  if (/delete|reject|ban|sessions/.test(action)) return "danger";
-  if (/approve|activate|unban|paid|create|verify/.test(action)) return "ok";
+  // Judge the verb alone: "user.unban" and "listing.deactivate" contain other verbs.
+  const verb = action.split(".").pop() ?? action;
+  if (/^(approve|activate|unban|paid|create|verify)/.test(verb)) return "ok";
+  if (/delete|reject|ban|sessions/.test(verb)) return "danger";
   if (/settings|system|broadcast/.test(action)) return "violet";
   return "primary";
 }
