@@ -40,6 +40,7 @@ export function getRouter() {
     // Start loading a page's code and data when the pointer rests on (or touches)
     // its link, so most navigations are already done by the click.
     defaultPreload: "intent",
+    scrollRestoration: true,
     // A route opened with new params starts clean: state from one listing or chat
     // (photo index, typed message, staged photos) must not carry over to the next.
     defaultRemountDeps: ({ params }) => params,

@@ -101,6 +101,24 @@ export function parseAttrs(raw?: string): Record<string, string[]> | undefined {
   }
 }
 
+/** Same result as the database's tr_fold(): case and Turkish letters do not matter when searching. */
+export function foldTr(text: string): string {
+  return text
+    .replace(/İ/g, "i")
+    .replace(/I/g, "ı")
+    .toLowerCase()
+    .replace(/\u0307/g, "")
+    .replace(/ı/g, "i")
+    .replace(/ş/g, "s")
+    .replace(/ğ/g, "g")
+    .replace(/ü/g, "u")
+    .replace(/ö/g, "o")
+    .replace(/ç/g, "c")
+    .replace(/â/g, "a")
+    .replace(/î/g, "i")
+    .replace(/û/g, "u");
+}
+
 const SORTS = ["date_desc", "date_asc", "price_asc", "price_desc", "views_desc"] as const;
 
 export function toFilters(s: CatalogSearch) {

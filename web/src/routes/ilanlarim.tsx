@@ -1,3 +1,4 @@
+import { useFlag } from "@/lib/use-flag";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { errorText } from "@/lib/error-text";
 import { useEffect, useMemo, useState } from "react";
@@ -207,6 +208,7 @@ function MyListingRow({
   onDelete: () => void;
 }) {
   const nav = useNavigate();
+  const dopingOn = useFlag("doping_enabled");
   const expired = isListingExpired(l);
   const live = l.status === "ACTIVE" && !expired;
   const left = daysLeft(l.expires_at);
@@ -283,7 +285,7 @@ function MyListingRow({
               <RefreshCw className="size-4" /> Süreyi 30 gün uzat
             </DropdownMenuItem>
           ) : null}
-          {l.status === "ACTIVE" ? (
+          {dopingOn && l.status === "ACTIVE" && !expired ? (
             <DropdownMenuItem onSelect={() => void nav({ to: "/doping" })}>
               <Rocket className="size-4" /> Öne çıkar (doping)
             </DropdownMenuItem>

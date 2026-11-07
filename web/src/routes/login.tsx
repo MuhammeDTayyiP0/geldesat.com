@@ -1,7 +1,7 @@
-import { authErrorText } from "@/lib/auth/errors";
+import { authErrorText, authRedirectErrorText } from "@/lib/auth/errors";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { errorText } from "@/lib/error-text";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { authClient, googleAuthEnabled } from "@/lib/auth/client";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
@@ -29,6 +29,10 @@ function Login() {
   const { redirect, mode: startMode, error: redirectError } = Route.useSearch();
   const next = safeRedirect(redirect);
   const [mode, setMode] = useState<"in" | "up">(startMode ?? "in");
+  // Google and e-mail links come back here with the reason they failed.
+  useEffect(() => {
+    if (redirectError) toast.error(authRedirectErrorText(redirectError));
+  }, [redirectError]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");

@@ -29,7 +29,7 @@ export function Filters({
 }: {
   value: FilterState;
   onChange: (next: FilterState) => void;
-  onApply: () => void;
+  onApply: (value: FilterState) => void;
   attributes?: AttrDef[];
   hideApplyButton?: boolean;
   hideSort?: boolean;
@@ -43,6 +43,21 @@ export function Filters({
     onChange({ ...value, [key]: v });
   }
 
+  /** Min above max can only mean a slip: swap them rather than show nothing without a reason. */
+  function applyChecked() {
+    const next = { ...value };
+    for (const [min, max] of [["minPrice", "maxPrice"], ["minYear", "maxYear"], ["minKm", "maxKm"], ["minM2", "maxM2"]] as const) {
+      const low = next[min];
+      const high = next[max];
+      if (low && high && Number(low) > Number(high)) {
+        next[min] = high;
+        next[max] = low;
+      }
+    }
+    if (next !== value) onChange(next);
+    onApply(next);
+  }
+
   function toggleAttr(name: string, opt: string, on: boolean) {
     const cur = value.attrs[name] ?? [];
     const next = on ? [...cur, opt] : cur.filter((x) => x !== opt);
@@ -50,10 +65,18 @@ export function Filters({
   }
 
   return (
-    <aside className="space-y-4 rounded-xl border border-border bg-surface p-4">
+    <form
+      className="space-y-4 rounded-xl border border-border bg-surface p-4"
+      aria-label="Filtreler"
+      onSubmit={(e) => {
+        e.preventDefault();
+        applyChecked();
+      }}
+    >
       <div>
-        <Label className="text-xs font-semibold uppercase tracking-wider text-muted">İl</Label>
+        <Label htmlFor="filtre-il" className="text-xs font-semibold uppercase tracking-wider text-muted">İl</Label>
         <Select
+          id="filtre-il"
           value={value.city ?? ""}
           onChange={(e) => onChange({ ...value, city: e.target.value || undefined, district: undefined })}
         >
@@ -67,8 +90,9 @@ export function Filters({
       </div>
 
       <div>
-        <Label className="text-xs font-semibold uppercase tracking-wider text-muted">İlçe</Label>
+        <Label htmlFor="filtre-ilce" className="text-xs font-semibold uppercase tracking-wider text-muted">İlçe</Label>
         <Select
+          id="filtre-ilce"
           value={value.district ?? ""}
           disabled={!value.city}
           onChange={(e) => onChange({ ...value, district: e.target.value || undefined })}
@@ -90,6 +114,7 @@ export function Filters({
             inputMode="numeric"
             pattern="[0-9]*"
             placeholder="En Az"
+            aria-label="En az fiyat"
             value={value.minPrice ?? ""}
             onChange={(e) => set("minPrice", e.target.value)}
           />
@@ -98,6 +123,7 @@ export function Filters({
             inputMode="numeric"
             pattern="[0-9]*"
             placeholder="En Çok"
+            aria-label="En çok fiyat"
             value={value.maxPrice ?? ""}
             onChange={(e) => set("maxPrice", e.target.value)}
           />
@@ -114,6 +140,7 @@ export function Filters({
                 inputMode="numeric"
                 pattern="[0-9]*"
                 placeholder="Min Yıl"
+              aria-label="En az yıl"
                 value={value.minYear ?? ""}
                 onChange={(e) => set("minYear", e.target.value)}
               />
@@ -122,6 +149,7 @@ export function Filters({
                 inputMode="numeric"
                 pattern="[0-9]*"
                 placeholder="Max Yıl"
+              aria-label="En çok yıl"
                 value={value.maxYear ?? ""}
                 onChange={(e) => set("maxYear", e.target.value)}
               />
@@ -135,6 +163,7 @@ export function Filters({
                 inputMode="numeric"
                 pattern="[0-9]*"
                 placeholder="Min KM"
+              aria-label="En az kilometre"
                 value={value.minKm ?? ""}
                 onChange={(e) => set("minKm", e.target.value)}
               />
@@ -143,6 +172,7 @@ export function Filters({
                 inputMode="numeric"
                 pattern="[0-9]*"
                 placeholder="Max KM"
+              aria-label="En çok kilometre"
                 value={value.maxKm ?? ""}
                 onChange={(e) => set("maxKm", e.target.value)}
               />
@@ -160,6 +190,7 @@ export function Filters({
               inputMode="numeric"
               pattern="[0-9]*"
               placeholder="Min m²"
+              aria-label="En az metrekare"
               value={value.minM2 ?? ""}
               onChange={(e) => set("minM2", e.target.value)}
             />
@@ -168,6 +199,7 @@ export function Filters({
               inputMode="numeric"
               pattern="[0-9]*"
               placeholder="Max m²"
+              aria-label="En çok metrekare"
               value={value.maxM2 ?? ""}
               onChange={(e) => set("maxM2", e.target.value)}
             />
@@ -222,6 +254,7 @@ export function Filters({
                         <button
                           key={opt}
                           type="button"
+                          aria-pressed={checked}
                           className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
                             checked
                               ? "border-primary bg-primary-solid text-primary-fg"
@@ -279,10 +312,10 @@ export function Filters({
       ) : null}
 
       {!hideApplyButton ? (
-        <Button className="h-11 w-full text-sm font-semibold" onClick={onApply}>
+        <Button type="submit" className="h-11 w-full text-sm font-semibold">
           Filtreleri Uygula
         </Button>
       ) : null}
-    </aside>
+    </form>
   );
 }

@@ -53,9 +53,9 @@ Temiz çıkan alanlar: admin server fonksiyonlarının tamamı yetki kontrollü 
 ### Kullanıcı akışını bozan hatalar
 
 - [x] 16. **Y · İlan ve sohbet state'i taşınıyor.** Route'ta `remountDeps` yok. 6. fotoğraftayken 3 fotoğraflı benzer ilana geçmek sayfayı hata ekranına düşürür (`photoSrc(undefined)`). Sohbette taslak, seçili fotoğraf ve yanıt başka kişinin sohbetine taşınır; IBAN veya özel fotoğraf yanlış kişiye gidebilir. `W/components/listing/ListingImageGallery.tsx:13,161`, `W/routes/mesajlar/$id.tsx:136,142,158` → `remountDeps` tek satırda ikisini de büyük ölçüde çözer.
-- [ ] 17. **Y · Sayısal URL parametreleri yok sayılıyor.** Router `?page=2` değerini sayıya çeviriyor, `str()` yalnız string kabul ediyor. Dış linkler bozuk, `rel=next` ve canonical 1. sayfayı döndürür, arama motoru derin sayfaları göremez. `W/lib/search-params.ts:64`, `W/lib/seo.ts:189-205` → `str()` sayıyı `String()` ile kabul etsin, test ekle.
-- [ ] 18. **Y · Uygulanan filtre geri alınıyor.** `closeFilterDrawer` 280 ms sonra eski `initial`'ı yazıyor; hızlı yanıtta panel eski değerlere döner, sonraki sayfada filtre URL'den silinir. `W/routes/search.tsx:155-161`.
-- [ ] 19. **Y · Ölü kategori linkleri tüm ilanları gösteriyor.** `projeler`, `ozel-araclar`, `elektronik`, `ev-yasam`, `oto-parca`, `moto-ekipman`, `tadilat`, `sektorler`, `evcil-hayvan` migration'larda yok; bilinmeyen kategoride filtre atlanıyor. 404 sayfasındaki `ikinci-el-ve-sifir-alisveris`, `ustalar-ve-hizmetler` ve menüdeki `/sayfa/yardim` da yok. `W/components/navbar/nav-data.ts`, `W/lib/server/catalog.ts:106-113`, `W/components/common/NotFound.tsx:32-33`, `W/components/navbar/MobileNavigationDrawer.tsx:268` → canlıda kontrol et, menüyü kategori ağacından besle, bilinmeyende boş sonuç dön.
+- [x] 17. **Y · Sayısal URL parametreleri yok sayılıyor.** Router `?page=2` değerini sayıya çeviriyor, `str()` yalnız string kabul ediyor. Dış linkler bozuk, `rel=next` ve canonical 1. sayfayı döndürür, arama motoru derin sayfaları göremez. `W/lib/search-params.ts:64`, `W/lib/seo.ts:189-205` → `str()` sayıyı `String()` ile kabul etsin, test ekle.
+- [x] 18. **Y · Uygulanan filtre geri alınıyor.** `closeFilterDrawer` 280 ms sonra eski `initial`'ı yazıyor; hızlı yanıtta panel eski değerlere döner, sonraki sayfada filtre URL'den silinir. `W/routes/search.tsx:155-161`.
+- [x] 19. **Y · Ölü kategori linkleri tüm ilanları gösteriyor.** `projeler`, `ozel-araclar`, `elektronik`, `ev-yasam`, `oto-parca`, `moto-ekipman`, `tadilat`, `sektorler`, `evcil-hayvan` migration'larda yok; bilinmeyen kategoride filtre atlanıyor. 404 sayfasındaki `ikinci-el-ve-sifir-alisveris`, `ustalar-ve-hizmetler` ve menüdeki `/sayfa/yardim` da yok. `W/components/navbar/nav-data.ts`, `W/lib/server/catalog.ts:106-113`, `W/components/common/NotFound.tsx:32-33`, `W/components/navbar/MobileNavigationDrawer.tsx:268` → canlıda kontrol et, menüyü kategori ağacından besle, bilinmeyende boş sonuç dön.
 - [ ] 20. **Y · Bildirimler kayboluyor.** Arka planda açık sekme "sohbeti izliyor" sayılıyor; push, zil ve e-posta kesiliyor. 2 dakikalık pencere okununca sıfırlanmıyor, hızlı yazışmada yanıt sessiz kalır. `W/lib/server/chat.ts:103`.
 - [ ] 21. **Y · Mobilde mesaj kaçıyor ve yanlış okundu.** Ön planda bağlantı kopup gelince telafi yok, yoklama yok; arkada kalan sohbet ekranı mesajları okundu yapıp push'u bastırıyor. `M/features/chat/stream.ts:32`, `M/app/mesaj/[id].tsx:89,162-173,183`.
 - [ ] 22. **Y · Dolandırıcılık uyarısı çalışmıyor.** `\b` Türkçe harfleri tanımıyor, ekleri kaçırıyor. Denenen 9 ifadeden 7'si yakalanmadı: "ön ödeme yapın", "ödeme linki atıyorum", "kaporayı gönder", "kaporası lazım", "önödeme lazım", "paparaya at", "whatsapptan yaz". `W/lib/chat-shared.ts:68-70`, `M/features/chat/shared.ts:31,34` → Unicode sınırı, ek toleransı, test.
@@ -82,10 +82,10 @@ Temiz çıkan alanlar: admin server fonksiyonlarının tamamı yetki kontrollü 
 - [x] 37. **Y · Hata ekranı İngilizce ve ham.** "Something went wrong" ile `error.message` gösteriyor, çıkış yolu yok, sabit `zinc` renk kullanıyor. `?sort=foo` ile herkes tetikleyebilir. `W/lib/error-component.tsx`, `W/lib/search-params.ts:113-114`.
 - [ ] 38. **Y · Giriş hataları İngilizce, Google hatası sessiz.** "Invalid email or password" doğrudan görünüyor; mobilde çeviri var, web'de yok. Bağlanamayan Google hesabı mesajsız ana sayfaya düşer. `W/routes/login.tsx:42-50,72`, `W/routes/sifre-sifirla.tsx:65,109`, `W/lib/auth/server.ts:57`.
 - [x] 39. **Y · Koyu temada logo görünmüyor.** `text-ink` koyu temada `#05070a`. `W/components/Navbar.tsx:178`, `MobileNavigationDrawer.tsx:68` → `text-brand` veya `text-fg`.
-- [ ] 40. **Y · Harita pinleri yanlış.** Aynı şehirdeki ilanlar tam üst üste, yalnız 24 ilan; pinler iframe üstüne doğrusal yüzdeyle konuyor, kaydırınca yerinde kalıyor. `W/routes/harita.tsx:37-41,60-69` → `/api/tiles` ile gerçek harita ve kümeleme.
-- [ ] 41. **Y · Arama kalitesi düşük.** Tek parça `ILIKE`; kelime bölme, Türkçe karakter eşleme ve kategori adı yok. "Honda Civic" sırası tutmazsa, "kiralik" hiç bulunmaz. `W/lib/server/catalog.ts:85-105`.
-- [ ] 42. **Y · Satıcı sayfası 24 ilanda duruyor.** "İlanlar (100)" yazarken 76 ilana ulaşılamıyor; web ve mobil. Yorumlar da 20'de kesiliyor. `W/routes/satici/$id.tsx:23,223`, `W/routes/api/mobile/sellers/$id.ts:32`, `W/lib/server/account.ts:342`.
-- [ ] 43. **O · Sitemap `lastmod` geçersiz.** `String(Date).slice(0,10)` "Sat Nov 07" üretir; `timestamptz` için parser yok. `web/server/middleware/seo.ts:206`, `W/lib/db.ts:107-109` → canlı sitemap'ten doğrula, `TO_CHAR`.
+- [x] 40. **Y · Harita pinleri yanlış.** Aynı şehirdeki ilanlar tam üst üste, yalnız 24 ilan; pinler iframe üstüne doğrusal yüzdeyle konuyor, kaydırınca yerinde kalıyor. `W/routes/harita.tsx:37-41,60-69` → `/api/tiles` ile gerçek harita ve kümeleme.
+- [x] 41. **Y · Arama kalitesi düşük.** Tek parça `ILIKE`; kelime bölme, Türkçe karakter eşleme ve kategori adı yok. "Honda Civic" sırası tutmazsa, "kiralik" hiç bulunmaz. `W/lib/server/catalog.ts:85-105`.
+- [x] 42. **Y · Satıcı sayfası 24 ilanda duruyor.** "İlanlar (100)" yazarken 76 ilana ulaşılamıyor; web ve mobil. Yorumlar da 20'de kesiliyor. `W/routes/satici/$id.tsx:23,223`, `W/routes/api/mobile/sellers/$id.ts:32`, `W/lib/server/account.ts:342`.
+- [x] 43. **O · Sitemap `lastmod` geçersiz.** `String(Date).slice(0,10)` "Sat Nov 07" üretir; `timestamptz` için parser yok. `web/server/middleware/seo.ts:206`, `W/lib/db.ts:107-109` → canlı sitemap'ten doğrula, `TO_CHAR`.
 - [ ] 44. **Y · Mağaza riski (olası).** iOS'ta Google girişi var, Apple ile giriş yok (native değişiklik ve mağaza sürümü gerekir). `.well-known` dosyaları üretimde 404, paylaşılan ilan linkleri uygulamayı açmaz. `M/app/giris.tsx:198`, `mobile-app/app.json:23,40-50`, `web/server/middleware/app-links.ts:18`.
 - [ ] 45. **Y · 360dp Android'de Ara ızgarası tek sütuna düşüyor (olası).** `width: 48.8%` + `gap: 8` sığmıyor. `M/app/(tabs)/ara.tsx:165,175`.
 
@@ -121,21 +121,21 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 
 **Ana sayfa `routes/index.tsx`**
 - [ ] O · `index.tsx:317`, `router.tsx:33` — `scrollRestoration` kapalı; 3. sayfadan ilana girip dönünce başa düşülüyor → aç, akış sayfasını sakla.
-- [ ] D · `catalog.ts:168` — "Yeni ilanlar" başında eski vitrin ilanları çıkabilir → saf `created_at`.
-- [ ] D · `index.tsx:184,192` — Uzun kök kategori adları `line-clamp-1` ile kesiliyor.
+- [x] D · `catalog.ts:168` — "Yeni ilanlar" başında eski vitrin ilanları çıkabilir → saf `created_at`.
+- [x] D · `index.tsx:184,192` — Uzun kök kategori adları `line-clamp-1` ile kesiliyor.
 - [ ] D (olası) · `index.tsx:220,353` — `NearbyRail` içeriği itiyor; ekran dışı görsele `priority` veriliyor.
-- [ ] D · `index.tsx:72,78` — HowTo şemasında "milyonlarca alıcı" iddiası; Google bu zengin sonucu kaldırdı.
-- [ ] D · `lib/nearby-city.ts:73-76` — Zaman aşımı da "izin verilmedi" görünüyor.
+- [x] D · `index.tsx:72,78` — HowTo şemasında "milyonlarca alıcı" iddiası; Google bu zengin sonucu kaldırdı.
+- [x] D · `lib/nearby-city.ts:73-76` — Zaman aşımı da "izin verilmedi" görünüyor.
 
 **Arama `routes/search.tsx`**
-- [ ] O · `search-params.ts:113-114`, `catalog.ts:37-38` — `?sort=foo`, `?page=-1` hata ekranı açıyor → normalize et.
-- [ ] O · `search.tsx:173-192,590`, `category/$slug.tsx:195-214` — Sayfalama ve çip, uygulanmamış panel değerlerini de URL'ye yazıyor.
-- [ ] O · `search.tsx:144`, `category/$slug.tsx:150` — `mobile-nav-lock` CSS'i yok, kaydırma kilidi çalışmıyor.
-- [ ] O · `search.tsx:684-801`, `category/$slug.tsx:332-391` — Çekmecelerde dialog rolü, Esc, odak yok.
-- [ ] O · `components/listing/Filters.tsx:55-103` — Etiketler bağlı değil, fiyat ve yıl alanları adsız.
-- [ ] D · `Filters.tsx:53,88-103` — Form değil, Enter çalışmıyor; en az > en çok kontrolü yok.
-- [ ] D · `Filters.tsx:222-233` — Çoklu seçimde `aria-pressed` yok.
-- [ ] D · `search.tsx:526-541` — `?page=999` "ilan yok" diyor → son sayfaya yönlendir.
+- [x] O · `search-params.ts:113-114`, `catalog.ts:37-38` — `?sort=foo`, `?page=-1` hata ekranı açıyor → normalize et.
+- [x] O · `search.tsx:173-192,590`, `category/$slug.tsx:195-214` — Sayfalama ve çip, uygulanmamış panel değerlerini de URL'ye yazıyor.
+- [x] O · `search.tsx:144`, `category/$slug.tsx:150` — `mobile-nav-lock` CSS'i yok, kaydırma kilidi çalışmıyor.
+- [x] O · `search.tsx:684-801`, `category/$slug.tsx:332-391` — Çekmecelerde dialog rolü, Esc, odak yok.
+- [x] O · `components/listing/Filters.tsx:55-103` — Etiketler bağlı değil, fiyat ve yıl alanları adsız.
+- [x] D · `Filters.tsx:53,88-103` — Form değil, Enter çalışmıyor; en az > en çok kontrolü yok.
+- [x] D · `Filters.tsx:222-233` — Çoklu seçimde `aria-pressed` yok.
+- [x] D · `search.tsx:526-541` — `?page=999` "ilan yok" diyor → son sayfaya yönlendir.
 - [ ] D · `search.tsx:369-375`, `catalog.ts:266-270` — Tahmin edilen kategori seçili gibi görünüyor, "Tüm Kategoriler" çalışmıyor.
 - [ ] D · `search.tsx:229,371,384` — Kategori değişince gizli filtreler kalıyor.
 - [ ] D · `search.tsx:673-676` — Harita linki `city` gönderiyor, `/harita` okumuyor.
@@ -145,63 +145,63 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 - [ ] D · `search.tsx:542-546`, `doping.tsx:22`, `satici/$id.tsx:148-158` — `<a>` içinde `<button>`.
 
 **Kategori `routes/category/$slug.tsx`**
-- [ ] O · `:291-326` — Sayfalama `<button>`, `href` yok; SEO ve yeni sekme kaybı → `Link`.
-- [ ] O · `:72`, `seo.ts` middleware `:134-156` — Yaklaşık 8.000 kategori, ilansızlar da indekste → `total===0` noindex.
-- [ ] O · `lib/seo.ts:96-100` — "Satılık Daire Konut İlanları" başlığı → yaprak adını kullan.
-- [ ] O · `lib/seo.ts:47-50,75,115-118,161`, `search.tsx:324` — "İş İlanları İlanları"; `GENERIC_ROOTS` ASCII yazıldığı için eşleşmiyor → slug ile kontrol.
-- [ ] O · `:274-280,356` — Filtre boşken "Bu kategoride ilan yok"; masaüstünde temizleme ve çip yok.
+- [x] O · `:291-326` — Sayfalama `<button>`, `href` yok; SEO ve yeni sekme kaybı → `Link`.
+- [x] O · `:72`, `seo.ts` middleware `:134-156` — Yaklaşık 8.000 kategori, ilansızlar da indekste → `total===0` noindex.
+- [x] O · `lib/seo.ts:96-100` — "Satılık Daire Konut İlanları" başlığı → yaprak adını kullan.
+- [x] O · `lib/seo.ts:47-50,75,115-118,161`, `search.tsx:324` — "İş İlanları İlanları"; `GENERIC_ROOTS` ASCII yazıldığı için eşleşmiyor → slug ile kontrol.
+- [x] O · `:274-280,356` — Filtre boşken "Bu kategoride ilan yok"; masaüstünde temizleme ve çip yok.
 - [ ] O · `:268`, `CategoryPicker.tsx` — Büyük kategorilerde seçici ilanların önüne geçiyor, `counts` verilmiyor.
 - [ ] D · `:386` — "Filtreleri Uygula (N)" mevcut sonucun sayısını gösteriyor.
-- [ ] D · `:195-214` — `apply` `neighborhood`, `q`, `urgent`, `featured` değerlerini düşürüyor.
-- [ ] D · `:311` — Aktif sayfa `bg-ink`, koyu temada 1,04:1 → `bg-primary`.
-- [ ] D · `:239`, `lib/seo.ts:179` — Sayı biçimsiz; "satılık ve kiralık" metni iş ilanlarına uymuyor.
+- [x] D · `:195-214` — `apply` `neighborhood`, `q`, `urgent`, `featured` değerlerini düşürüyor.
+- [x] D · `:311` — Aktif sayfa `bg-ink`, koyu temada 1,04:1 → `bg-primary`.
+- [x] D · `:239`, `lib/seo.ts:179` — Sayı biçimsiz; "satılık ve kiralık" metni iş ilanlarına uymuyor.
 - [ ] D · `:191-193,226` — Ölü kod; breadcrumb `aria-label` yok.
 - [x] D (olası) · `CategoryPicker.tsx:68` — `q` alt kategoriye geçince kalıyor → `key={cat.id}`.
 
 **Harita `routes/harita.tsx`**
-- [ ] O · `:9,25-29,80-85` — "İllere göre" sayıları son 48 ilandan hesaplanıyor → `group by city`.
-- [ ] D · `:78-88` — Boş durum yok. `:43-50,64-73` — Klavyesiz örtü, pin adı yalnız fiyat. `:86` — Ölü kod.
+- [x] O · `:9,25-29,80-85` — "İllere göre" sayıları son 48 ilandan hesaplanıyor → `group by city`.
+- [x] D · `:78-88` — Boş durum yok. `:43-50,64-73` — Klavyesiz örtü, pin adı yalnız fiyat. `:86` — Ölü kod.
 
 **Diğer sayfalar**
-- [ ] O · `routes/arsiv.tsx:18-28` — Herkese açık kalıntı: "zip'i indir" diyor, indirme yok, `KURULUM.md` yok → sil.
-- [ ] O · `routes/profil.tsx:102`, `ilanlarim.tsx:289-290` — Doping'e yönlendiriyor, sayfa "kapalı" diyor → girişleri gizle.
-- [ ] O · `routes/sayfa/$slug.tsx:96-124`, `migrations/0013_legal_pages.sql:30-34` — Boş satırsız liste tek paragrafa akıyor; KVKK başvuru şartları okunmuyor.
-- [ ] O · `sayfa/$slug.tsx:175` — "Son güncelleme: 16 Eylül 2026" sabit; `updated_at` yok.
-- [ ] D · `sayfa/$slug.tsx:173,204` — Hakkımızda ve İletişim'de de "Yasal belge" ve Adana mahkemeleri notu.
-- [ ] D · `sayfa/$slug.tsx:119-123`, `Footer.tsx:76` — E-posta tıklanamıyor.
+- [x] O · `routes/arsiv.tsx:18-28` — Herkese açık kalıntı: "zip'i indir" diyor, indirme yok, `KURULUM.md` yok → sil.
+- [x] O · `routes/profil.tsx:102`, `ilanlarim.tsx:289-290` — Doping'e yönlendiriyor, sayfa "kapalı" diyor → girişleri gizle.
+- [x] O · `routes/sayfa/$slug.tsx:96-124`, `migrations/0013_legal_pages.sql:30-34` — Boş satırsız liste tek paragrafa akıyor; KVKK başvuru şartları okunmuyor.
+- [x] O · `sayfa/$slug.tsx:175` — "Son güncelleme: 16 Eylül 2026" sabit; `updated_at` yok.
+- [x] D · `sayfa/$slug.tsx:173,204` — Hakkımızda ve İletişim'de de "Yasal belge" ve Adana mahkemeleri notu.
+- [x] D · `sayfa/$slug.tsx:119-123`, `Footer.tsx:76` — E-posta tıklanamıyor.
 - [ ] D (olası) · `sayfa/$slug.tsx:154,197` — Çapa başlığı üst menü altında kalabilir.
 - [ ] D (olası) · `account.ts:392` — `getStore` herkese açık yanıtta `phone` dönüyor (bkz. mağaza formu bulgusu).
-- [ ] O · `account.ts:342`, `satici/$id.tsx:224` — Yorum sayısı toplam, liste 20.
-- [ ] D · `satici/$id.tsx:220-240` — `tablist` eksik. D (olası) · `:69,74-83` — `Person` şemasında `aggregateRating`.
+- [x] O · `account.ts:342`, `satici/$id.tsx:224` — Yorum sayısı toplam, liste 20.
+- [x] D · `satici/$id.tsx:220-240` — `tablist` eksik. D (olası) · `:69,74-83` — `Person` şemasında `aggregateRating`.
 
 **Kök, stil, Navbar, layout**
-- [ ] O (olası) · `styles.css:103,111` — `html` ve `body` birlikte `overflow-x: hidden`; `sticky` menü yapışmayabilir → `clip`.
-- [ ] D · `__root.tsx:142-148` — "İçeriğe atla" yok. D · `__root.tsx:57-62`, `harita.tsx:10-17` — OG etiketleri ana sayfadan miras.
-- [ ] D · `styles.css:127` — Seçim rengi koyu temada okunmuyor. D (olası) · `styles.css:99` — `scroll-behavior: smooth` sayfa geçişini ağırlaştırıyor.
-- [ ] O · `nav-data.ts:144-177,192-251` — "Dizüstü", "Apple iPhone" kök kategoriye gidiyor; `bilgisayar`, `cep-telefonu` var.
+- [x] O (olası) · `styles.css:103,111` — `html` ve `body` birlikte `overflow-x: hidden`; `sticky` menü yapışmayabilir → `clip`.
+- [x] D · `__root.tsx:142-148` — "İçeriğe atla" yok. D · `__root.tsx:57-62`, `harita.tsx:10-17` — OG etiketleri ana sayfadan miras.
+- [x] D · `styles.css:127` — Seçim rengi koyu temada okunmuyor. D (olası) · `styles.css:99` — `scroll-behavior: smooth` sayfa geçişini ağırlaştırıyor.
+- [x] O · `nav-data.ts:144-177,192-251` — "Dizüstü", "Apple iPhone" kök kategoriye gidiyor; `bilgisayar`, `cep-telefonu` var.
 - [ ] O · `nav-data.ts:26-274`, `SearchBar.tsx:129-135` — `sanayi`, `ozel-ders`, `yardimci` menüde yok.
-- [ ] O · `Navbar.tsx:351`, `MegaMenu.tsx:47,59`, `MobileNavigationDrawer.tsx:224,238` — Menü noindex `/search?category=` adresine gidiyor → `/category/$slug`.
-- [ ] O · `Navbar.tsx:320-336` — "Tüm Kategoriler" yalnız fareyle açılıyor.
-- [ ] O · `MobileNavigationDrawer.tsx:40-44,51,54` — Kilit çalışmıyor, dialog adı, Esc, odak yok, kapanış animasyonu engelli.
-- [ ] O · `SearchBar.tsx:193,253-260,268` — `listbox` içinde `option` yok; silme düğmesi dokunmatikte görünmüyor.
-- [ ] D · `MobileNavigationDrawer.tsx:139-145`, `login.tsx:25` — "Kayıt Ol" giriş sekmesini açıyor.
-- [ ] D · `Navbar.tsx:227,244`, `BottomNav.tsx:70,89` — `/login`'e `redirect` verilmiyor.
-- [ ] D · `Navbar.tsx:184`, `SearchBar.tsx:28` — `initialQuery` yok, `/search?q=x`'te üst kutu boş.
-- [ ] D (olası) · `SearchBar.tsx:192-194,146,166` — Panel yükseklik sınırsız; çift X.
-- [ ] D · `SearchBar.tsx:156,283`, `nav-data.ts:276` — "kategori ile ara" ve "Popüler Aramalar" gerçeği yansıtmıyor.
-- [ ] D · `Navbar.tsx:341,361` — `no-scrollbar` tanımsız, `py-0.2` geçersiz. D · Dosya sonlarında kalıntı yorumlar.
+- [x] O · `Navbar.tsx:351`, `MegaMenu.tsx:47,59`, `MobileNavigationDrawer.tsx:224,238` — Menü noindex `/search?category=` adresine gidiyor → `/category/$slug`.
+- [x] O · `Navbar.tsx:320-336` — "Tüm Kategoriler" yalnız fareyle açılıyor.
+- [x] O · `MobileNavigationDrawer.tsx:40-44,51,54` — Kilit çalışmıyor, dialog adı, Esc, odak yok, kapanış animasyonu engelli.
+- [x] O · `SearchBar.tsx:193,253-260,268` — `listbox` içinde `option` yok; silme düğmesi dokunmatikte görünmüyor.
+- [x] D · `MobileNavigationDrawer.tsx:139-145`, `login.tsx:25` — "Kayıt Ol" giriş sekmesini açıyor.
+- [x] D · `Navbar.tsx:227,244`, `BottomNav.tsx:70,89` — `/login`'e `redirect` verilmiyor.
+- [x] D · `Navbar.tsx:184`, `SearchBar.tsx:28` — `initialQuery` yok, `/search?q=x`'te üst kutu boş.
+- [x] D (olası) · `SearchBar.tsx:192-194,146,166` — Panel yükseklik sınırsız; çift X.
+- [x] D · `SearchBar.tsx:156,283`, `nav-data.ts:276` — "kategori ile ara" ve "Popüler Aramalar" gerçeği yansıtmıyor.
+- [x] D · `Navbar.tsx:341,361` — `no-scrollbar` tanımsız, `py-0.2` geçersiz. D · Dosya sonlarında kalıntı yorumlar.
 - [ ] D · `BottomNav.tsx:65` — "İlan Ver" yazısı linkin dışında.
-- [ ] O · `CookieBanner.tsx:16-19` — Tercih hiç okunmuyor, iki düğme aynı; politika tarayıcı kaydını silmeyi öneriyor. D · `:17` — Depolama kapalıysa banner kapanmıyor.
+- [x] O · `CookieBanner.tsx:16-19` — Tercih hiç okunmuyor, iki düğme aynı; politika tarayıcı kaydını silmeyi öneriyor. D · `:17` — Depolama kapalıysa banner kapanmıyor.
 - [x] D · `catalog.ts:510`, `Footer.tsx:38-46` — Footer için IBAN ve banka alanları da herkese dönüyor.
-- [ ] D · `styles.css:218-220`, `Footer.tsx:81` — Mobilde çift alt boşluk.
+- [x] D · `styles.css:218-220`, `Footer.tsx:81` — Mobilde çift alt boşluk.
 - [ ] D · `NotFound.tsx:145-151` — Arama kutusunda etiket yok.
-- [ ] O · `ListingCard.tsx:99-105,137` — Favori düğmesi `<a>` içinde. D · `ListingCard.tsx:45-47,104` — Girişsiz favoride yalnız hata toast'ı, 36 px alan.
+- [x] O · `ListingCard.tsx:99-105,137` — Favori düğmesi `<a>` içinde. D · `ListingCard.tsx:45-47,104` — Girişsiz favoride yalnız hata toast'ı, 36 px alan.
 - [x] D · `components/ui/badge.tsx:19` — Koyu temada ACİL rozeti 2,8:1.
 
 **SEO ve katalog sunucusu**
-- [ ] D · `seo.ts` middleware `:95,116-124,224` — Statik `lastmod` her gün bugün; boş mağaza sitemap'i indekste.
-- [ ] D · `catalog.ts:88,151,165-168` — Ters bölü ve `attrs` LIKE kaçışı yok, sıralamada `id` eşitlik bozucusu yok.
-- [ ] D · `catalog.ts:106-113` — Bilinmeyen kategori filtresi yok sayılıyor (bkz. madde 19).
+- [x] D · `seo.ts` middleware `:95,116-124,224` — Statik `lastmod` her gün bugün; boş mağaza sitemap'i indekste.
+- [x] D · `catalog.ts:88,151,165-168` — Ters bölü ve `attrs` LIKE kaçışı yok, sıralamada `id` eşitlik bozucusu yok.
+- [x] D · `catalog.ts:106-113` — Bilinmeyen kategori filtresi yok sayılıyor (bkz. madde 19).
 
 ### 3.2 Web: ilan
 

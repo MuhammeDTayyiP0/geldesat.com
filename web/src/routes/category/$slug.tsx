@@ -181,7 +181,8 @@ function CategoryPage() {
   // The loader answers an unknown category with the 404 page.
   if (!cat.category) return null;
 
-  function apply(extra?: { page?: string }) {
+  function apply(extra?: { page?: string }, values: FilterState = filters) {
+    const filters = values;
     void nav({
       to: "/category/$slug",
       params: { slug },
@@ -258,7 +259,7 @@ function CategoryPage() {
       <SubcategoryGrid items={cat.children} />
       <div className="mt-8 grid gap-6 lg:grid-cols-[280px_1fr]">
         <div className="hidden lg:block">
-          <Filters value={filters} onChange={setFilters} onApply={() => apply()} attributes={cat.attributes} />
+          <Filters value={filters} onChange={setFilters} onApply={(applied) => apply(undefined, applied)} attributes={cat.attributes} />
         </div>
         <div>
           {result.listings.length === 0 ? (
@@ -340,7 +341,7 @@ function CategoryPage() {
               <Filters
                 value={filters}
                 onChange={setFilters}
-                onApply={() => apply()}
+                onApply={(applied) => apply(undefined, applied)}
                 attributes={cat.attributes}
                 hideApplyButton
               />

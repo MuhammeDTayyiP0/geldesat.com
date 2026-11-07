@@ -3,13 +3,14 @@ import { useState } from "react";
 import { BadgeCheck, CalendarDays, Eye, LayoutGrid, MapPin, Pencil, Share2, Star, Store as StoreIcon } from "lucide-react";
 import { toast } from "sonner";
 import { ProfilePageSkeleton } from "@/components/listing/ListingGridSkeleton";
-import { getSeller } from "@/lib/server/account";
+import { getSeller, getSellerReviews } from "@/lib/server/account";
+import { errorText } from "@/lib/error-text";
 import { searchCatalog } from "@/lib/server/catalog";
 import { ListingCard } from "@/components/listing/ListingCard";
 import { NotFound } from "@/components/common/NotFound";
 import { UserAvatar } from "@/components/account/AccountShell";
 import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { cn, formatDate } from "@/lib/utils";
 import { jsonLd } from "@/lib/seo";
@@ -71,7 +72,7 @@ export const Route = createFileRoute("/satici/$id")({
             description: about ?? desc,
             url: pageUrl,
             ...(seller.city ? { address: { "@type": "PostalAddress", addressLocality: seller.city, addressCountry: "TR" } } : {}),
-            ...(seller.rating_count > 0
+            ...(store && seller.rating_count > 0
               ? {
                   aggregateRating: {
                     "@type": "AggregateRating",
@@ -111,7 +112,40 @@ export const Route = createFileRoute("/satici/$id")({
 
 /** The one public profile: what everyone sees, with an owner bar when it is your own. */
 function SellerPage() {
-  const { seller, listings } = Route.useLoaderData();
+  const { seller, listings: firstListings } = Route.useLoaderData();
+  const [listings, setListings] = useState(firstListings);
+  const [reviews, setReviews] = useState(seller.reviews);
+  const [page, setPage] = useState(1);
+  const [busy, setBusy] = useState(false);
+
+  async function moreListings() {
+    setBusy(true);
+    try {
+      const next = await searchCatalog({ data: { userId: seller.id, limit: 24, page: page + 1 } });
+      setListings((prev) => {
+        const seen = new Set(prev.map((l) => l.id));
+        return [...prev, ...next.listings.filter((l) => !seen.has(l.id))];
+      });
+      setPage(page + 1);
+    } catch (err) {
+      toast.error(errorText(err, "İlanlar yüklenemedi"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function moreReviews() {
+    setBusy(true);
+    try {
+      const next = await getSellerReviews({ data: { id: seller.id, offset: reviews.length } });
+      setReviews((prev) => [...prev, ...next]);
+    } catch (err) {
+      toast.error(errorText(err, "Değerlendirmeler yüklenemedi"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const { user } = useCurrentUserState();
   const isOwner = user?.id === seller.id;
   const [tab, setTab] = useState<"listings" | "reviews">("listings");
@@ -213,7 +247,7 @@ function SellerPage() {
         {seller.bio ? <p className="mt-3 max-w-3xl whitespace-pre-wrap text-sm leading-relaxed">{seller.bio}</p> : null}
       </section>
 
-      <div role="tablist" aria-label="Profil" className="mt-6 flex gap-2">
+      <div aria-label="Profil" className="mt-6 flex gap-2">
         {(
           [
             ["listings", `İlanlar (${seller.listing_count})`],
@@ -223,8 +257,7 @@ function SellerPage() {
           <button
             key={key}
             type="button"
-            role="tab"
-            aria-selected={tab === key}
+            aria-pressed={tab === key}
             onClick={() => setTab(key)}
             className={cn(
               "h-9 rounded-full border px-4 text-sm font-medium transition-colors",
@@ -242,6 +275,13 @@ function SellerPage() {
             {listings.map((l) => (
               <ListingCard key={l.id} listing={l} />
             ))}
+            {listings.length < seller.listing_count ? (
+              <div className="col-span-full flex justify-center pt-2">
+                <Button variant="outline" disabled={busy} onClick={() => void moreListings()}>
+                  {busy ? "Yükleniyor…" : "Daha fazla ilan göster"}
+                </Button>
+              </div>
+            ) : null}
           </div>
         ) : (
           <div className="mt-4 rounded-[14px] border border-dashed border-border bg-surface p-10 text-center">
@@ -254,9 +294,9 @@ function SellerPage() {
             ) : null}
           </div>
         )
-      ) : seller.reviews.length ? (
+      ) : reviews.length ? (
         <ul className="mt-4 space-y-3">
-          {seller.reviews.map((r) => (
+          {reviews.map((r) => (
             <li key={r.id} className="rounded-[14px] border border-border bg-surface p-4">
               <div className="flex items-center gap-2 text-sm">
                 <span className="inline-flex">
@@ -270,6 +310,13 @@ function SellerPage() {
               {r.comment ? <p className="mt-1.5 text-sm text-muted">{r.comment}</p> : null}
             </li>
           ))}
+          {reviews.length < seller.rating_count ? (
+            <li className="flex justify-center pt-1">
+              <Button variant="outline" disabled={busy} onClick={() => void moreReviews()}>
+                {busy ? "Yükleniyor…" : "Daha fazla değerlendirme göster"}
+              </Button>
+            </li>
+          ) : null}
         </ul>
       ) : (
         <div className="mt-4 rounded-[14px] border border-dashed border-border bg-surface p-10 text-center">

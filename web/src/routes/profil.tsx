@@ -1,3 +1,4 @@
+import { useFlag } from "@/lib/use-flag";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { ChevronRight, Rocket, Settings, Star, Store } from "lucide-react";
@@ -21,6 +22,7 @@ type Me = Awaited<ReturnType<typeof getMe>>;
  * public profile (/satici/$id, "Profilimi gör"); editing lives under /ayarlar.
  */
 function AccountHub() {
+  const dopingOn = useFlag("doping_enabled");
   const { user, isPending } = useCurrentUserState();
   const [me, setMe] = useState<Me | null>(null);
   const { counts } = useAccountMeta();
@@ -99,7 +101,7 @@ function AccountHub() {
           {me?.store ? (
             <HubRow to="/ayarlar/magaza" icon={<Store className="size-4.5" />} label="Mağazam" hint={me.store.name} />
           ) : null}
-          <HubRow to="/doping" icon={<Rocket className="size-4.5" />} label="Doping" hint="İlanınızı öne çıkarın" />
+          {dopingOn ? <HubRow to="/doping" icon={<Rocket className="size-4.5" />} label="Doping" hint="İlanınızı öne çıkarın" /> : null}
         </ul>
 
         {/* On phones the account sidebar is hidden, so settings get their own row. */}

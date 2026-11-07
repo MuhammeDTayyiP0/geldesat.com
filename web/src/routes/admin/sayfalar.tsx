@@ -1,3 +1,4 @@
+import { LegalBlocks } from "@/components/common/LegalBlocks";
 import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
@@ -182,44 +183,19 @@ function Editor({ page, onSaved, onDeleted }: { page: { slug: string; title: str
   );
 }
 
-/** Same light markup the public page understands: ## headings, - bullets, 1. lists, blank-line paragraphs. */
+/** The page as visitors will see it: same section split and same text rules. */
 function LegalPreview({ body }: { body: string }) {
-  const blocks = body.split(/\n\n+/).filter(Boolean);
+  const [intro, ...sections] = body.split(/^## /m);
   return (
     <>
-      {blocks.map((chunk, i) => {
-        if (chunk.startsWith("## ")) {
-          const [head, ...rest] = chunk.split("\n");
-          return (
-            <div key={i}>
-              <h2 className="mb-2 mt-6 text-lg font-semibold">{head.slice(3)}</h2>
-              {rest.length ? <LegalPreview body={rest.join("\n")} /> : null}
-            </div>
-          );
-        }
-        const lines = chunk.split("\n");
-        if (lines.every((l) => /^[-*]\s/.test(l))) {
-          return (
-            <ul key={i} className="my-3 list-disc space-y-1 pl-5">
-              {lines.map((l, j) => (
-                <li key={j}>{l.replace(/^[-*]\s/, "")}</li>
-              ))}
-            </ul>
-          );
-        }
-        if (lines.every((l) => /^\d+\.\s/.test(l))) {
-          return (
-            <ol key={i} className="my-3 list-decimal space-y-1 pl-5">
-              {lines.map((l, j) => (
-                <li key={j}>{l.replace(/^\d+\.\s/, "")}</li>
-              ))}
-            </ol>
-          );
-        }
+      <LegalBlocks text={intro} />
+      {sections.map((section, i) => {
+        const end = section.indexOf("\n");
         return (
-          <p key={i} className="my-3 whitespace-pre-line">
-            {chunk}
-          </p>
+          <div key={i}>
+            <h2 className="mb-2 mt-6 text-lg font-semibold">{(end === -1 ? section : section.slice(0, end)).trim()}</h2>
+            <LegalBlocks text={end === -1 ? "" : section.slice(end + 1)} />
+          </div>
         );
       })}
     </>

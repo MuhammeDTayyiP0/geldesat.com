@@ -1,3 +1,4 @@
+import { LegalBlocks } from "@/components/common/LegalBlocks";
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { getLegal } from "@/lib/server/catalog";
 import { slugify } from "@/lib/utils";
@@ -92,42 +93,13 @@ function parseLegal(body: string) {
   return { intro, sections };
 }
 
-function Blocks({ text }: { text: string }) {
-  const chunks = text.split(/\n\n+/).filter(Boolean);
-  return (
-    <>
-      {chunks.map((chunk, i) => {
-        const lines = chunk.split("\n");
-        if (lines.length > 0 && lines.every((l) => /^[-*]\s/.test(l))) {
-          return (
-            <ul key={i} className="my-3 list-disc space-y-1 pl-5">
-              {lines.map((l) => (
-                <li key={l}>{l.replace(/^[-*]\s/, "")}</li>
-              ))}
-            </ul>
-          );
-        }
-        if (lines.length > 0 && lines.every((l) => /^\d+\.\s/.test(l))) {
-          return (
-            <ol key={i} className="my-3 list-decimal space-y-1 pl-5">
-              {lines.map((l) => (
-                <li key={l}>{l.replace(/^\d+\.\s/, "")}</li>
-              ))}
-            </ol>
-          );
-        }
-        return (
-          <p key={i} className="my-3">
-            {chunk}
-          </p>
-        );
-      })}
-    </>
-  );
-}
+const LEGAL_SLUGS = new Set(["kvkk", "gizlilik", "cerez", "kullanim", "uyelik"]);
+
+const formatDateLong = (value: string) => new Date(value).toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" });
 
 function LegalPage() {
   const page = Route.useLoaderData();
+  const isLegal = LEGAL_SLUGS.has(page.slug);
   const { slug } = Route.useParams();
   if (!page) {
     return (
@@ -170,12 +142,12 @@ function LegalPage() {
           </ul>
         </aside>
         <article className="order-1 rounded-lg border border-border bg-surface p-5 shadow-card md:p-10 lg:order-2">
-          <p className="text-xs font-medium uppercase tracking-wide text-primary">Yasal belge</p>
+          {isLegal ? <p className="text-xs font-medium uppercase tracking-wide text-primary">Yasal belge</p> : null}
           <h1 className="mt-2 text-3xl font-semibold tracking-tight">{page.title}</h1>
-          <p className="mt-2 text-sm text-muted">Son güncelleme: 16 Eylül 2026 · GeldeSat · Adana</p>
+          <p className="mt-2 text-sm text-muted">Son güncelleme: {formatDateLong(page.updated_at)} · GeldeSat · Adana</p>
           {intro ? (
             <div className="mt-6 text-sm leading-relaxed text-fg">
-              <Blocks text={intro} />
+              <LegalBlocks text={intro} />
             </div>
           ) : null}
           {sections.length > 1 ? (
@@ -196,12 +168,12 @@ function LegalPage() {
             {sections.map((s) => (
               <section key={s.id} id={s.id} className="scroll-mt-24 border-t border-border py-6 first:border-t-0">
                 <h2 className="text-lg font-semibold tracking-tight">{s.title}</h2>
-                <Blocks text={s.content} />
+                <LegalBlocks text={s.content} />
               </section>
             ))}
           </div>
           <p className="mt-6 border-t border-border pt-4 text-xs text-subtle">
-            Bu metin genel bilgilendirme amaçlıdır. Uyuşmazlıklarda Türk hukuku ve Adana mahkemeleri yetkilidir. Başvuru:{" "}
+            {isLegal ? "Bu metin genel bilgilendirme amaçlıdır. Uyuşmazlıklarda Türk hukuku ve Adana mahkemeleri yetkilidir. " : ""}Başvuru:{" "}
             <Link to="/sayfa/$slug" params={{ slug: "iletisim" }} className="text-primary hover:underline">
               iletişim
             </Link>

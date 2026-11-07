@@ -159,7 +159,8 @@ function SearchPage() {
     setTimeout(() => setMobileSortOpen(false), 280);
   }
 
-  function apply(extra?: Partial<CatalogSearch>) {
+  function apply(extra?: Partial<CatalogSearch>, values: FilterState = filters) {
+    const filters = values;
     const next: CatalogSearch = {
       ...search,
       category: filters.category,
@@ -516,7 +517,7 @@ function SearchPage() {
           <Filters
             value={filters}
             onChange={setFilters}
-            onApply={() => apply()}
+            onApply={(applied) => apply(undefined, applied)}
             attributes={attributes}
           />
         </div>
@@ -668,7 +669,7 @@ function SearchPage() {
               <Filters
                 value={filters}
                 onChange={setFilters}
-                onApply={() => apply()}
+                onApply={(applied) => apply(undefined, applied)}
                 attributes={attributes}
                 hideApplyButton
                 hideSort

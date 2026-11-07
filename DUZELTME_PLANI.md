@@ -110,17 +110,17 @@ Sonraki fazlar bunları kullanır.
 
 ## Faz 4: Web vitrin, arama, SEO (rapor 3.1)
 
-- [ ] `parseSearch` sayısal değerler, geçersiz `sort`/`page` normalize, bilinmeyen kategoride boş sonuç (Madde 17, 19, 37).
-- [ ] Filtre paneli: stale `initial`, sayfalama URL'den, gizli filtre temizliği, Enter ve aralık, kilit (Madde 18).
-- [ ] Arama ve kategoriyi ortak `CatalogPage`'e al; sayfalama `Link`, çip ve boş durum.
-- [ ] Menüyü kategori ağacından besle; ölü linkler, `/sayfa/yardim`, `NotFound` slug'ları; menü `/category/$slug`'a gitsin (Madde 19).
-- [ ] Navbar erişilebilirliği, `SearchBar` combobox, drawer, `redirect`, `initialQuery`, `styles.css` düzeltmeleri.
-- [ ] SEO başlık üretimi, ilansız kategori noindex, sitemap `lastmod`, boş sitemap, OG etiketleri, şema düzeltmeleri (Madde 43).
-- [ ] Ana sayfa: `scrollRestoration`, akış sırası, `priority`, konum hata metni.
-- [ ] Satıcı sayfası sayfalama, yorumlar, sekme (Madde 42).
-- [ ] Yasal sayfa ayrıştırıcısı ortak, `updated_at`, gerçek tarih, yalnız yasal sayfada not.
-- [ ] `arsiv` route'unu sil; doping girişlerini gizle (K11); Cookie banner; Footer; ListingCard.
-- [ ] `harita_v2` (K4; Madde 40) ve `arama_v2` (K5; Madde 41).
+- [x] `parseSearch` sayısal değerler, geçersiz `sort`/`page` normalize, bilinmeyen kategoride boş sonuç (Madde 17, 19, 37).
+- [x] Filtre paneli: stale `initial`, sayfalama URL'den, gizli filtre temizliği, Enter ve aralık, kilit (Madde 18).
+- [~] Ortak `CatalogPage` birleştirmesi yapılmadı: ekrana bakmadan 1200 satırı birleştirmek riskli. Sayfalama ortak `Pagination` oldu, kategori boş durumu düzeldi. Görsel kontrol sonrası ayrı iş.
+- [x] Menüyü kategori ağacından besle; ölü linkler, `/sayfa/yardim`, `NotFound` slug'ları; menü `/category/$slug`'a gitsin (Madde 19).
+- [x] Navbar erişilebilirliği, `SearchBar` combobox, drawer, `redirect`, `initialQuery`, `styles.css` düzeltmeleri.
+- [x] SEO başlık üretimi, ilansız kategori noindex, sitemap `lastmod`, boş sitemap, OG etiketleri, şema düzeltmeleri (Madde 43).
+- [x] Ana sayfa: `scrollRestoration`, akış sırası, `priority`, konum hata metni.
+- [x] Satıcı sayfası sayfalama, yorumlar, sekme (Madde 42).
+- [x] Yasal sayfa ayrıştırıcısı ortak, `updated_at`, gerçek tarih, yalnız yasal sayfada not.
+- [x] `arsiv` route'unu sil; doping girişlerini gizle (K11); Cookie banner; Footer; ListingCard.
+- [x] `harita_v2` (K4; Madde 40) ve `arama_v2` (K5; Madde 41).
 
 ## Faz 5: Web ilan akışı (rapor 3.2)
 

@@ -43,7 +43,14 @@ export function ListingCard({
     e.preventDefault();
     e.stopPropagation();
     if (!user) {
-      toast.error("Favorilere eklemek için lütfen giriş yapın");
+      toast.error("Favorilere eklemek için giriş yapın", {
+        action: {
+          label: "Giriş yap",
+          onClick: () => {
+            window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`;
+          },
+        },
+      });
       return;
     }
     setFavLoading(true);
@@ -101,7 +108,7 @@ export function ListingCard({
         onClick={handleFav}
         disabled={favLoading}
         aria-label={fav ? "Favorilerden çıkar" : "Favoriye ekle"}
-        className="absolute right-1 top-1 z-10 grid size-9 place-items-center transition-transform hover:scale-110 active:scale-95"
+        className="absolute right-0 top-0 z-10 grid size-11 place-items-center transition-transform hover:scale-110 active:scale-95"
       >
         <Heart
           className={cn("size-[18px] drop-shadow-[0_1px_2px_rgb(0_0_0/0.45)]", fav ? "fill-[#f04438] text-[#f04438]" : "fill-black/25 text-white")}
@@ -133,19 +140,25 @@ export function ListingCard({
     </div>
   );
 
+  // The heart is a button, so it cannot sit inside the card's link; the link
+  // covers the card from behind it instead.
   return (
-    <Link
-      to="/ilan/$slug"
-      params={{ slug: listing.slug }}
+    <div
       className={cn(
-        "group flex overflow-hidden rounded-[14px] border border-border bg-surface transition-[box-shadow,transform,border-color] duration-150 hover:-translate-y-px hover:shadow-lift",
+        "group relative flex overflow-hidden rounded-[14px] border border-border bg-surface transition-[box-shadow,transform,border-color] duration-150 hover:-translate-y-px hover:shadow-lift",
         variant === "list" ? "min-h-[110px] flex-row" : "flex-col",
         variant === "rail" && "w-[168px] shrink-0 snap-start sm:w-[200px]",
         acil && variant === "list" && "border-urgent",
       )}
     >
+      <Link
+        to="/ilan/$slug"
+        params={{ slug: listing.slug }}
+        aria-label={listing.title}
+        className="absolute inset-0 z-[1] rounded-[14px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+      />
       {media}
       {body}
-    </Link>
+    </div>
   );
 }

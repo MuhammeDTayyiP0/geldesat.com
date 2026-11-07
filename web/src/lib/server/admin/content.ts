@@ -39,7 +39,7 @@ export const adminSavePage = createServerFn({ method: "POST" })
       if (taken.length) throw new Error("Bu adreste başka bir sayfa var.");
     }
     if (data.originalSlug) {
-      const rows = await sql.query<{ slug: string }>("update legal_pages set slug = $2, title = $3, body = $4 where slug = $1 returning slug", [
+      const rows = await sql.query<{ slug: string }>("update legal_pages set slug = $2, title = $3, body = $4, updated_at = now() where slug = $1 returning slug", [
         data.originalSlug,
         slug,
         data.title,

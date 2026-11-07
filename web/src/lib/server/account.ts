@@ -341,6 +341,28 @@ export const revealPhone = createServerFn({ method: "POST" })
     return { phone: await revealListingPhone(data.listingId, user?.id ?? null) };
   });
 
+const mapReview = (r: Record<string, unknown>) => ({
+        id: String(r.id),
+        rating: num(r.rating),
+        comment: r.comment ? String(r.comment) : "",
+        reviewer: r.reviewer_name == null ? "Silinmiş kullanıcı" : String(r.reviewer_name),
+        at: String(r.created_at),
+      });
+
+/** One page of a seller's reviews, for "Daha fazla göster". */
+export const getSellerReviews = createServerFn({ method: "POST" })
+  .validator(z.object({ id: z.string(), offset: z.number().int().min(0).max(100_000) }))
+  .handler(async ({ data }) => {
+    const sql = await getSql();
+    const rows = await sql.query<Record<string, unknown>>(
+      `select r.*, pr.display_name as reviewer_name
+       from reviews r left join profiles pr on pr.user_id = r.reviewer_id
+       where r.seller_id=$1 order by r.created_at desc limit 20 offset $2`,
+      [data.id, data.offset],
+    );
+    return rows.map(mapReview);
+  });
+
 export const getSeller = createServerFn({ method: "POST" })
   .validator(z.object({ id: z.string() }))
   .handler(async ({ data }) => {
@@ -381,13 +403,7 @@ export const getSeller = createServerFn({ method: "POST" })
             logo: store[0].logo_url ? String(store[0].logo_url) : null,
           }
         : null,
-      reviews: reviews.map((r) => ({
-        id: String(r.id),
-        rating: num(r.rating),
-        comment: r.comment ? String(r.comment) : "",
-        reviewer: r.reviewer_name == null ? "Silinmiş kullanıcı" : String(r.reviewer_name),
-        at: String(r.created_at),
-      })),
+      reviews: reviews.map(mapReview),
     };
   });
 

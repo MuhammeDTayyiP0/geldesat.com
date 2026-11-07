@@ -75,7 +75,7 @@ export const Route = createFileRoute("/")({
             "@context": "https://schema.org",
             "@type": "HowTo",
             name: "GeldeSat'ta Ücretsiz İlan Nasıl Verilir?",
-            description: "GeldeSat'ta birkaç adımda ücretsiz ilan verin, milyonlarca alıcıya ulaşın.",
+            description: "GeldeSat'ta birkaç adımda ücretsiz ilan verin, alıcılarla doğrudan buluşun.",
             step: [
               { "@type": "HowToStep", position: 1, name: "Üye Olun", text: "Ücretsiz hesap oluşturun veya Google ile giriş yapın." },
               { "@type": "HowToStep", position: 2, name: "İlan Verin", text: "'İlan Ver' butonuna tıklayın ve kategori seçin." },
@@ -189,7 +189,7 @@ function CategoryStrip({
                 >
                   <Icon className="size-[26px]" strokeWidth={1.9} />
                 </span>
-                <span className="line-clamp-1 w-full text-xs font-medium text-fg">{c.name}</span>
+                <span className="line-clamp-2 w-full text-xs font-medium leading-tight text-fg">{c.name}</span>
                 {counts[c.id] ? <span className="-mt-1 text-[11px] text-subtle">{formatNumber(counts[c.id])}</span> : null}
               </Link>
             </li>
@@ -321,7 +321,7 @@ function LatestFeed({ initial, pages }: { initial: Listing[]; pages: number }) {
   async function more() {
     setBusy(true);
     try {
-      const r = await searchCatalog({ data: { page: page + 1, limit: 24, sort: "date_desc" } });
+      const r = await searchCatalog({ data: { page: page + 1, limit: 24, sort: "newest" } });
       setItems((prev) => {
         const seen = new Set(prev.map((x) => x.id));
         return [...prev, ...r.listings.filter((x) => !seen.has(x.id))];
@@ -349,8 +349,8 @@ function LatestFeed({ initial, pages }: { initial: Listing[]; pages: number }) {
       ) : (
         <>
           <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4">
-            {items.map((l, i) => (
-              <ListingCard key={l.id} listing={l} priority={i < 2} />
+            {items.map((l) => (
+              <ListingCard key={l.id} listing={l} />
             ))}
           </div>
           {busy ? <CardGridSkeleton count={4} className="mt-2.5 sm:mt-4 sm:grid-cols-3 lg:grid-cols-4" /> : null}

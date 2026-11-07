@@ -1,7 +1,10 @@
+import { liveSql } from "@/lib/listing-status";
+import { foldTr, inferSearchCategoryId } from "@/lib/search-params";
+import { resolveFlags } from "./config";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { getSql } from "@/lib/db";
-import { listingNoFromSlug, num } from "@/lib/utils";
+import { asIso, listingNoFromSlug, num } from "@/lib/utils";
 import type { PhoneVisibility } from "@/lib/notification-prefs";
 import {
   inheritedAttributes,
@@ -14,11 +17,11 @@ import {
   type ListingCard,
 } from "./helpers";
 import { CITY_COORDS } from "@/lib/data/geo";
-import { inferSearchCategoryId } from "@/lib/search-params";
 import {
   categoryPath,
   getCategoryCounts,
   getCategoryTree,
+  subtreeOf,
   pickCounts,
   type CategoryNode,
 } from "./category-cache";
@@ -34,7 +37,8 @@ const Filters = z.object({
   neighborhood: z.string().optional(),
   minPrice: z.number().optional(),
   maxPrice: z.number().optional(),
-  sort: z.enum(["date_desc", "date_asc", "price_asc", "price_desc", "views_desc"]).optional(),
+  // "newest" ignores vitrin promotion, for the home feed under the vitrin rail.
+  sort: z.enum(["date_desc", "date_asc", "price_asc", "price_desc", "views_desc", "newest"]).optional(),
   page: z.number().int().min(1).optional(),
   limit: z.number().int().min(1).max(48).optional(),
   attrs: z.record(z.string(), z.union([z.string(), z.array(z.string()), z.number()])).optional(),
@@ -60,6 +64,22 @@ export type SearchFilters = z.infer<typeof Filters> & {
   skipCount?: boolean;
 };
 
+const escapeLike = (text: string) => text.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+
+/** Whether this visitor searches with word matching (arama_v2). Without a flag the old search runs. */
+async function searchV2Enabled(): Promise<boolean> {
+  const user = await getSessionUser().catch(() => null);
+  let anonId: string | null = null;
+  try {
+    const { getCookie } = await import("@tanstack/react-start/server");
+    anonId = getCookie("gs-uid") ?? null;
+  } catch {
+    // Not inside a request with cookies.
+  }
+  const flags = await resolveFlags({ userId: user?.id ?? null, anonId, platform: "web" });
+  return Boolean(flags.arama_v2);
+}
+
 export async function searchListings(f: SearchFilters): Promise<{
   listings: ListingCard[];
   total: number;
@@ -82,10 +102,34 @@ export async function searchListings(f: SearchFilters): Promise<{
     conds.push("(l.expires_at is null or l.expires_at > now())");
   }
 
-  if (f.q?.trim()) {
+  if (f.q?.trim() && f.wordSearch) {
+    // Every word must appear somewhere: in the text, or as the listing's category.
+    const term = f.q.trim();
+    const words = foldTr(term).split(/\s+/).filter(Boolean).slice(0, 8);
+    const tree = await getCategoryTree();
+    const ands: string[] = [];
+    for (const word of words) {
+      params.push(`%${escapeLike(word)}%`);
+      const textCond = `l.search_text like $${params.length}`;
+      const named = tree.rows.filter((c) => foldTr(c.name).includes(word)).slice(0, 40);
+      const ids = [...new Set(named.flatMap((c) => subtreeOf(tree, c.id)))];
+      if (ids.length) {
+        params.push(ids);
+        ands.push(`(${textCond} or l.category_id = any($${params.length}::text[]))`);
+      } else ands.push(textCond);
+    }
+    params.push(`%${escapeLike(foldTr(term))}%`);
+    const ors = [`(${ands.join(" and ")})`, `l.store_id = any(array(select st.id from stores st where tr_fold(st.name) like $${params.length}))`];
+    const listingNo = /^#?\d{1,15}$/.test(term) ? term.replace("#", "") : null;
+    if (listingNo) {
+      params.push(listingNo);
+      ors.push(`l.listing_no = $${params.length}::bigint`);
+    }
+    conds.push(`(${ors.join(" or ")})`);
+  } else if (f.q?.trim()) {
     // Escape LIKE wildcards so user-typed % and _ are literal characters
     const term = f.q.trim();
-    const escaped = term.replace(/%/g, "\\%").replace(/_/g, "\\_");
+    const escaped = escapeLike(term);
     params.push(`%${escaped}%`);
     const i = params.length;
     // Each branch can use its own index (title/description trigram, store_id),
@@ -168,7 +212,9 @@ export async function searchListings(f: SearchFilters): Promise<{
           ? "l.created_at asc"
           : sort === "views_desc"
             ? "l.view_count desc, l.created_at desc"
-            : `(l.featured_until is not null and l.featured_until > now()) desc, l.created_at desc`;
+            : sort === "newest"
+              ? "l.created_at desc"
+              : `(l.featured_until is not null and l.featured_until > now()) desc, l.created_at desc`;
 
   // Snapshot params before appending limit/offset so COUNT uses the right set
   const countParams = [...params];
@@ -199,7 +245,7 @@ export async function searchListings(f: SearchFilters): Promise<{
        left join profiles p on p.user_id = l.user_id
        left join stores s on s.id = l.store_id
        ${where}
-       order by ${order}
+       order by ${order}, l.id
        limit $${lim} offset $${off}`,
       params,
     ),
@@ -255,7 +301,7 @@ export const getCategory = createServerFn({ method: "POST" })
 
 export const searchCatalog = createServerFn({ method: "POST" })
   .validator(Filters)
-  .handler(async ({ data }) => searchListings(data));
+  .handler(async ({ data }) => searchListings({ ...data, wordSearch: Boolean(data.q?.trim()) && (await searchV2Enabled()) }));
 
 /**
  * Search results plus, for a text search without a category, the category the
@@ -264,7 +310,7 @@ export const searchCatalog = createServerFn({ method: "POST" })
 export const searchCatalogWithContext = createServerFn({ method: "POST" })
   .validator(Filters)
   .handler(async ({ data }) => {
-    const result = await searchListings(data);
+    const result = await searchListings({ ...data, wordSearch: Boolean(data.q?.trim()) && (await searchV2Enabled()) });
     let inferredCategorySlug: string | null = null;
     if (!data.category && data.q?.trim()) {
       const tree = await getCategoryTree();
@@ -298,12 +344,23 @@ const homeRails = cached(20_000, async () => {
   const [urgent, featured, latest] = await Promise.all([
     searchListings({ limit: 12, page: 1, sort: "date_desc", urgent: true, skipCount: true }),
     searchListings({ limit: 12, page: 1, sort: "date_desc", featured: true, skipCount: true }),
-    searchListings({ limit: 24, page: 1, sort: "date_desc" }),
+    searchListings({ limit: 24, page: 1, sort: "newest" }),
   ]);
   return { urgent: urgent.listings, featured: featured.listings, latest: latest.listings, latestPages: latest.pages };
 });
 
 export const homeListings = createServerFn({ method: "GET" }).handler(() => homeRails());
+
+/** Live listings per city, for the map and the city list. */
+export const mapCityCounts = createServerFn({ method: "GET" }).handler(async () => {
+  const sql = await getSql();
+  const rows = await sql.query<{ city: string; n: number }>(
+    `select l.city, count(*)::int as n from listings l
+     where ${liveSql()} and l.city is not null and l.city <> ''
+     group by l.city order by n desc`,
+  );
+  return rows.map((r) => ({ city: r.city, n: num(r.n) }));
+});
 
 export const getListing = createServerFn({ method: "POST" })
   .validator(z.object({ slug: z.string().max(200) }))
@@ -442,11 +499,11 @@ export const getLegal = createServerFn({ method: "POST" })
   .validator(z.object({ slug: z.string() }))
   .handler(async ({ data }) => {
     const sql = await getSql();
-    const rows = await sql.query<{ slug: string; title: string; body: string }>(
-      "select slug, title, body from legal_pages where slug = $1",
+    const rows = await sql.query<{ slug: string; title: string; body: string; updated_at: unknown }>(
+      "select slug, title, body, updated_at from legal_pages where slug = $1",
       [data.slug],
     );
-    return rows[0] ?? null;
+    return rows[0] ? { ...rows[0], updated_at: asIso(rows[0].updated_at) } : null;
   });
 
 const homeStats = cached(60_000, async () => {

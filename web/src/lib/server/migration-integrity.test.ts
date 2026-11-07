@@ -58,3 +58,14 @@ test("0032 does not fail the deploy on an already duplicated paid order", async 
     await db.close();
   }
 });
+
+test("0035 search text ignores case and Turkish letters", async () => {
+  const db = await schemaBefore("0036");
+  try {
+    await db.query("insert into listings (id,slug,user_id,category_id,title,description,price) values ('l3','ilan-3','seller','cat','KİRALIK Işıklı Daire','Çok güzel',100)");
+    const rows = await db.query<{ search_text: string }>("select search_text from listings where id='l3'");
+    assert.equal(rows.rows[0].search_text, "kiralik isikli daire cok guzel");
+  } finally {
+    await db.close();
+  }
+});

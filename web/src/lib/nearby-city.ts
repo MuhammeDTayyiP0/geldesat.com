@@ -70,9 +70,9 @@ export function useNearbyCity() {
             write(found);
             resolve(null);
           },
-          () => {
+          (err) => {
             setLocating(false);
-            resolve("Konum izni verilmedi. Şehrinizi listeden seçebilirsiniz.");
+            resolve(err.code === err.PERMISSION_DENIED ? "Konum izni verilmedi. Şehrinizi listeden seçebilirsiniz." : "Konumunuz şu an alınamadı. Şehrinizi listeden seçebilirsiniz.");
           },
           { maximumAge: 60 * 60_000, timeout: 10_000 },
         );
