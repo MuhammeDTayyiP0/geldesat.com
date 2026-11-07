@@ -9,25 +9,6 @@ import { errorStatus, publicErrorMessage } from "@/lib/server/errors";
 export const Route = createFileRoute("/api/mobile/my-listings/$id")({
   server: {
     handlers: {
-      GET: async ({ request, params }) => {
-        try {
-          const userId = await getMobileUserId(request);
-          if (!userId) return Response.json({ success: false, error: "Giriş yapmanız gerekiyor." }, { status: 401 });
-          const sql = await getSql();
-          const rows = await sql.query<Record<string, unknown>>(
-            `select l.*,c.name as category_name,c.slug as category_slug,p.phone as profile_phone,
-                    coalesce((select json_agg(b.kind) from boosts b where b.listing_id=l.id and b.ends_at>now()),'[]'::json) as boosts
-             from listings l join categories c on c.id=l.category_id left join profiles p on p.user_id=l.user_id
-             where l.id=$1 and l.user_id=$2 limit 1`,
-            [params.id,userId],
-          );
-          if (!rows[0]) return Response.json({ success: false, error: "İlan bulunamadı." }, { status: 404 });
-          return Response.json({ success: true, listing: { ...mapListing(rows[0]), phone: rows[0].phone_override ?? rows[0].profile_phone ?? "" } }, { headers: { "Cache-Control": "private, no-store" } });
-        } catch (error) {
-          const message = publicErrorMessage(error, "İlan yüklenemedi.");
-          return Response.json({ success: false, error: message }, { status: errorStatus(error, 500) });
-        }
-      },
       POST: async ({ request, params }) => {
         try {
           const userId = await getMobileUserId(request);
