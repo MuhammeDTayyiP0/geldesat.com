@@ -1,3 +1,4 @@
+import { useModalPanel } from "@/lib/use-modal-panel";
 import { Link } from "@tanstack/react-router";
 import {
   Bell,
@@ -36,22 +37,19 @@ export function MobileNavigationDrawer({
   const { user } = useCurrentUserState();
   const [expandedCategoryId, setExpandedCategoryId] = useState<string | null>("emlak");
 
-  // Drawer açıkken body scroll kilidi
+  const panel = useModalPanel(isOpen, onClose);
+
+  // Drawer açıkken kaydırma kilidi (html de kaydırma kabı olabildiği için sınıfla)
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
-    }
-    return () => {
-      document.body.style.overflow = "";
-    };
+    const root = document.documentElement;
+    if (isOpen) root.classList.add("mobile-nav-lock");
+    return () => root.classList.remove("mobile-nav-lock");
   }, [isOpen]);
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 md:hidden flex" role="dialog" aria-modal="true">
+    <div ref={panel} tabIndex={-1} className="fixed inset-0 z-50 md:hidden flex" role="dialog" aria-modal="true" aria-label="Menü">
       {/* Karartma Arkalığı (Backdrop) */}
       <div
         className="fixed inset-0 bg-ink/50 backdrop-blur-xs transition-opacity animate-in fade-in-0 duration-200"
@@ -138,6 +136,7 @@ export function MobileNavigationDrawer({
               </Link>
               <Link
                 to="/login"
+                search={{ mode: "up" }}
                 onClick={onClose}
                 className="flex-1 flex items-center justify-center h-10 px-3 text-xs font-semibold rounded-lg border border-border bg-surface text-fg hover:bg-elevated transition-colors"
               >
@@ -221,8 +220,8 @@ export function MobileNavigationDrawer({
                 {isExpanded && (
                   <div className="p-3 bg-surface border-t border-border/60 space-y-3 animate-in fade-in-50 duration-150">
                     <Link
-                      to="/search"
-                      search={{ category: cat.slug }}
+                      to="/category/$slug"
+                      params={{ slug: cat.slug }}
                       onClick={onClose}
                       className="text-xs font-bold text-primary hover:underline block"
                     >
@@ -235,8 +234,8 @@ export function MobileNavigationDrawer({
                           {group.items.map((item) => (
                             <Link
                               key={item.name}
-                              to="/search"
-                              search={{ category: item.slug }}
+                              to="/category/$slug"
+                              params={{ slug: item.slug }}
                               onClick={onClose}
                               className="block py-1 text-xs text-fg/80 hover:text-primary transition-colors"
                             >
@@ -301,6 +300,3 @@ export function MobileNavigationDrawer({
   );
 }
 
-// ---------------------------------------------------------------------------
-// 6. Ana Web Navbar Bileşeni (Sabit 2 Katmanlı Yapı)
-// ---------------------------------------------------------------------------

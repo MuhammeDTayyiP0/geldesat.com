@@ -1,3 +1,6 @@
+import { listingsHeading } from "@/lib/seo";
+import { Pagination } from "@/components/listing/Pagination";
+import { useModalPanel } from "@/lib/use-modal-panel";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
   ArrowUpDown,
@@ -60,7 +63,7 @@ export const Route = createFileRoute("/search")({
     if (s.q) {
       title = `“${s.q}” İlanları | GeldeSat`;
     } else if (loaderData?.currentCategory?.name) {
-      title = `${loaderData.currentCategory.name} İlanları | GeldeSat`;
+      title = `${listingsHeading(loaderData.currentCategory.name)} | GeldeSat`;
     } else if (s.city) {
       title = `${s.city} İlanları | GeldeSat`;
     }
@@ -77,20 +80,6 @@ export const Route = createFileRoute("/search")({
   component: SearchPage,
 });
 
-/** Akıllı sayfalama: 1-2, current±1, son-2 + ... aralarında */
-function buildPageRange(page: number, pages: number): (number | "...")[] {
-  if (pages <= 8) return Array.from({ length: pages }, (_, i) => i + 1);
-  const near = new Set(
-    [1, 2, page - 1, page, page + 1, pages - 1, pages].filter((p) => p >= 1 && p <= pages),
-  );
-  const sorted = Array.from(near).sort((a, b) => a - b);
-  const out: (number | "...")[] = [];
-  for (let i = 0; i < sorted.length; i++) {
-    if (i > 0 && sorted[i] - sorted[i - 1] > 1) out.push("...");
-    out.push(sorted[i]);
-  }
-  return out;
-}
 
 function SearchPage() {
   const search = Route.useSearch();
@@ -138,6 +127,9 @@ function SearchPage() {
   const [filters, setFilters] = useState<FilterState>(initial);
   useEffect(() => setFilters(initial), [initial]);
 
+  const filterPanel = useModalPanel(mobileFilterOpen, () => cancelFilterDrawer());
+  const sortPanel = useModalPanel(mobileSortOpen, () => closeSortDrawer());
+
   // Lock body scroll when mobile modals are open
   useEffect(() => {
     const root = document.documentElement;
@@ -154,10 +146,7 @@ function SearchPage() {
 
   function closeFilterDrawer() {
     setMobileFilterVisible(false);
-    setTimeout(() => {
-      setMobileFilterOpen(false);
-      setFilters(initial);
-    }, 280);
+    setTimeout(() => setMobileFilterOpen(false), 280);
   }
 
   function openSortDrawer() {
@@ -200,6 +189,17 @@ function SearchPage() {
     apply({ q: keyword.trim() || undefined, page: "1" });
   }
 
+  /** Taking a chip off changes only that value; filters typed but not applied stay out of the URL. */
+  function removeFromSearch(change: Partial<CatalogSearch>) {
+    void nav({ to: "/search", search: { ...search, ...change, page: "1" } });
+  }
+
+  /** Closing without applying forgets what was changed in the panel. */
+  function cancelFilterDrawer() {
+    setFilters(initial);
+    closeFilterDrawer();
+  }
+
   function resetAllFilters() {
     setFilters({ attrs: {} });
     setKeyword("");
@@ -216,7 +216,7 @@ function SearchPage() {
       label: `“${search.q}”`,
       onRemove: () => {
         setKeyword("");
-        apply({ q: undefined });
+        removeFromSearch({ q: undefined });
       },
     });
   }
@@ -226,7 +226,7 @@ function SearchPage() {
     activeChips.push({
       id: "category",
       label: `Kategori: ${catName}`,
-      onRemove: () => apply({ category: undefined }),
+      onRemove: () => removeFromSearch({ category: undefined }),
     });
   }
 
@@ -234,7 +234,7 @@ function SearchPage() {
     activeChips.push({
       id: "city",
       label: `İl: ${search.city}`,
-      onRemove: () => apply({ city: undefined, district: undefined }),
+      onRemove: () => removeFromSearch({ city: undefined, district: undefined }),
     });
   }
 
@@ -242,7 +242,7 @@ function SearchPage() {
     activeChips.push({
       id: "district",
       label: `İlçe: ${search.district}`,
-      onRemove: () => apply({ district: undefined }),
+      onRemove: () => removeFromSearch({ district: undefined }),
     });
   }
 
@@ -252,7 +252,7 @@ function SearchPage() {
     activeChips.push({
       id: "price",
       label: `Fiyat: ${min} - ${max}`,
-      onRemove: () => apply({ minPrice: undefined, maxPrice: undefined }),
+      onRemove: () => removeFromSearch({ minPrice: undefined, maxPrice: undefined }),
     });
   }
 
@@ -260,7 +260,7 @@ function SearchPage() {
     activeChips.push({
       id: "year",
       label: `Yıl: ${search.minYear ?? "Min"} - ${search.maxYear ?? "Max"}`,
-      onRemove: () => apply({ minYear: undefined, maxYear: undefined }),
+      onRemove: () => removeFromSearch({ minYear: undefined, maxYear: undefined }),
     });
   }
 
@@ -268,7 +268,7 @@ function SearchPage() {
     activeChips.push({
       id: "km",
       label: `KM: ${search.minKm ? formatNumber(Number(search.minKm)) : "0"} - ${search.maxKm ? formatNumber(Number(search.maxKm)) : "∞"}`,
-      onRemove: () => apply({ minKm: undefined, maxKm: undefined }),
+      onRemove: () => removeFromSearch({ minKm: undefined, maxKm: undefined }),
     });
   }
 
@@ -276,16 +276,16 @@ function SearchPage() {
     activeChips.push({
       id: "m2",
       label: `m²: ${search.minM2 ?? "0"} - ${search.maxM2 ?? "∞"}`,
-      onRemove: () => apply({ minM2: undefined, maxM2: undefined }),
+      onRemove: () => removeFromSearch({ minM2: undefined, maxM2: undefined }),
     });
   }
 
   if (search.urgent) {
-    activeChips.push({ id: "urgent", label: "Acil satılık", onRemove: () => apply({ urgent: undefined }) });
+    activeChips.push({ id: "urgent", label: "Acil satılık", onRemove: () => removeFromSearch({ urgent: undefined }) });
   }
 
   if (search.featured) {
-    activeChips.push({ id: "featured", label: "Vitrin ilanları", onRemove: () => apply({ featured: undefined }) });
+    activeChips.push({ id: "featured", label: "Vitrin ilanları", onRemove: () => removeFromSearch({ featured: undefined }) });
   }
 
   if (search.sort && search.sort !== "date_desc") {
@@ -294,7 +294,7 @@ function SearchPage() {
       activeChips.push({
         id: "sort",
         label: `${opt.label}`,
-        onRemove: () => apply({ sort: "date_desc" }),
+        onRemove: () => removeFromSearch({ sort: "date_desc" }),
       });
     }
   }
@@ -321,7 +321,7 @@ function SearchPage() {
     if (search.q) return `“${search.q}” İlanları`;
     if (search.urgent && !currentCategory) return "Acil Satılık İlanlar";
     if (search.featured && !currentCategory) return "Vitrin İlanları";
-    if (currentCategory?.name) return `${currentCategory.name} İlanları`;
+    if (currentCategory?.name) return listingsHeading(currentCategory.name);
     if (search.city) return `${search.city}${search.district ? `, ${search.district}` : ""} İlanları`;
     return "Tüm İlanlar";
   }, [search.q, search.urgent, search.featured, currentCategory, search.city, search.district]);
@@ -576,75 +576,7 @@ function SearchPage() {
             </div>
           )}
 
-          {/* Sayfalama Kontrolleri */}
-          {result.pages > 1 ? (
-            <div className="mt-8">
-              {/* Mobil Kompakt Sayfalama */}
-              <div className="flex items-center justify-between gap-2 sm:hidden">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={result.page <= 1}
-                  onClick={() => apply({ page: String(result.page - 1) })}
-                  className="h-10 px-4 text-xs font-semibold rounded-xl"
-                >
-                  ← Önceki
-                </Button>
-                <span className="text-xs font-bold text-fg">
-                  Sayfa {result.page} / {result.pages}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={result.page >= result.pages}
-                  onClick={() => apply({ page: String(result.page + 1) })}
-                  className="h-10 px-4 text-xs font-semibold rounded-xl"
-                >
-                  Sonraki →
-                </Button>
-              </div>
-
-              {/* Masaüstü Tam Sayfalama */}
-              <div className="hidden sm:flex flex-wrap items-center justify-center gap-1">
-                <button
-                  type="button"
-                  disabled={result.page <= 1}
-                  onClick={() => apply({ page: String(result.page - 1) })}
-                  className="rounded-lg border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-elevated disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  ← Önceki
-                </button>
-                {buildPageRange(result.page, result.pages).map((p, i) =>
-                  p === "..." ? (
-                    <span key={`e${i}`} className="grid size-10 select-none place-items-center text-muted">
-                      …
-                    </span>
-                  ) : (
-                    <button
-                      key={p}
-                      type="button"
-                      onClick={() => apply({ page: String(p) })}
-                      className={`size-10 rounded-lg text-sm font-semibold transition-colors ${
-                        p === result.page
-                          ? "bg-primary-solid text-primary-fg shadow-2xs"
-                          : "border border-border hover:bg-elevated"
-                      }`}
-                    >
-                      {p}
-                    </button>
-                  ),
-                )}
-                <button
-                  type="button"
-                  disabled={result.page >= result.pages}
-                  onClick={() => apply({ page: String(result.page + 1) })}
-                  className="rounded-lg border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-elevated disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  Sonraki →
-                </button>
-              </div>
-            </div>
-          ) : null}
+          <Pagination page={result.page} pages={result.pages} search={search} />
         </div>
       </div>
 
@@ -684,13 +616,18 @@ function SearchPage() {
           className={`fixed inset-0 z-50 lg:hidden transition-opacity duration-300 ${
             mobileFilterVisible ? "bg-ink/50 backdrop-blur-xs opacity-100" : "bg-transparent opacity-0 pointer-events-none"
           }`}
-          onClick={closeFilterDrawer}
+          onClick={cancelFilterDrawer}
         >
           <div
             className={`absolute inset-x-0 bottom-0 flex max-h-[90dvh] flex-col rounded-t-3xl border-t border-border bg-surface shadow-2xl transition-transform duration-300 ${
               mobileFilterVisible ? "translate-y-0" : "translate-y-full"
             }`}
             onClick={(e) => e.stopPropagation()}
+            ref={filterPanel}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Filtreler"
+            tabIndex={-1}
           >
             {/* Sürükleme Çubuğu */}
             <div className="pt-2 pb-1 flex justify-center">
@@ -717,7 +654,7 @@ function SearchPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={closeFilterDrawer}
+                  onClick={cancelFilterDrawer}
                   className="grid size-8 place-items-center rounded-lg hover:bg-elevated text-muted hover:text-fg"
                   aria-label="Kapat"
                 >
@@ -761,6 +698,11 @@ function SearchPage() {
               mobileSortVisible ? "translate-y-0" : "translate-y-full"
             }`}
             onClick={(e) => e.stopPropagation()}
+            ref={sortPanel}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Sıralama"
+            tabIndex={-1}
           >
             <div className="pt-2 pb-1 flex justify-center">
               <div className="h-1.5 w-12 rounded-full bg-border" />

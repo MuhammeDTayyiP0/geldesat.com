@@ -2,6 +2,19 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { inferSearchCategoryId, parseAttrs, parseSearch, toFilters } from "./search-params";
 
+test("numeric query values the router parses stay usable, bad ones fall back", () => {
+  const parsed = parseSearch({ page: 2, minPrice: 1000, q: 1000005 });
+  assert.equal(parsed.page, "2");
+  assert.equal(parsed.q, "1000005");
+  assert.equal(toFilters(parsed).page, 2);
+  assert.equal(toFilters(parsed).minPrice, 1000);
+  for (const page of ["-1", "1.5x", "abc", "0"]) assert.equal(toFilters({ page }).page, 1, page);
+  assert.equal(toFilters({ page: "1.5" }).page, 1);
+  assert.equal(toFilters({ sort: "foo" }).sort, "date_desc");
+  assert.equal(toFilters({ sort: "price_asc" }).sort, "price_asc");
+  assert.equal(toFilters({ minPrice: "-5" }).minPrice, undefined);
+});
+
 const categories = [
   { id: "shopping", parent_id: null },
   { id: "phones", parent_id: "shopping" },

@@ -10,8 +10,12 @@ import { LogoMark } from "@/components/brand/LogoMark";
 import { safeRedirect } from "@/lib/auth/sign-in-gate";
 
 export const Route = createFileRoute("/login")({
-  validateSearch: (search: Record<string, unknown>): { redirect?: string } =>
-    typeof search.redirect === "string" ? { redirect: safeRedirect(search.redirect) } : {},
+  validateSearch: (search: Record<string, unknown>): { redirect?: string; mode?: "up"; error?: string } =>
+    ({
+      ...(typeof search.redirect === "string" ? { redirect: safeRedirect(search.redirect) } : {}),
+      ...(search.mode === "up" ? { mode: "up" as const } : {}),
+      ...(typeof search.error === "string" ? { error: search.error.slice(0, 60) } : {}),
+    }),
   head: () => ({
     meta: [
       { title: "Giriş Yap / Kayıt Ol | GeldeSat" },
@@ -22,9 +26,9 @@ export const Route = createFileRoute("/login")({
 });
 
 function Login() {
-  const { redirect } = Route.useSearch();
+  const { redirect, mode: startMode, error: redirectError } = Route.useSearch();
   const next = safeRedirect(redirect);
-  const [mode, setMode] = useState<"in" | "up">("in");
+  const [mode, setMode] = useState<"in" | "up">(startMode ?? "in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");

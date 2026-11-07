@@ -61,7 +61,8 @@ export function inferSearchCategoryId(
 }
 
 export function parseSearch(s: Record<string, unknown>): CatalogSearch {
-  const str = (k: string) => (typeof s[k] === "string" ? (s[k] as string) : undefined);
+  // The router parses "?page=2" into a number, so numbers are as valid as strings.
+  const str = (k: string) => (typeof s[k] === "string" ? (s[k] as string) : typeof s[k] === "number" ? String(s[k]) : undefined);
   return {
     q: str("q"),
     category: str("category"),
@@ -100,8 +101,12 @@ export function parseAttrs(raw?: string): Record<string, string[]> | undefined {
   }
 }
 
+const SORTS = ["date_desc", "date_asc", "price_asc", "price_desc", "views_desc"] as const;
+
 export function toFilters(s: CatalogSearch) {
-  const n = (v?: string) => (v && Number.isFinite(Number(v)) ? Number(v) : undefined);
+  // Links can hold anything: bad values fall back to defaults instead of failing the page.
+  const n = (v?: string) => (v && Number.isFinite(Number(v)) && Number(v) >= 0 ? Number(v) : undefined);
+  const page = Math.trunc(n(s.page) ?? 1);
   return {
     q: s.q,
     category: s.category,
@@ -110,8 +115,8 @@ export function toFilters(s: CatalogSearch) {
     neighborhood: s.neighborhood,
     minPrice: n(s.minPrice),
     maxPrice: n(s.maxPrice),
-    sort: (s.sort as "date_desc" | "date_asc" | "price_asc" | "price_desc" | "views_desc") || "date_desc",
-    page: n(s.page) || 1,
+    sort: SORTS.find((sort) => sort === s.sort) ?? "date_desc",
+    page: page >= 1 ? page : 1,
     minYear: n(s.minYear),
     maxYear: n(s.maxYear),
     minKm: n(s.minKm),

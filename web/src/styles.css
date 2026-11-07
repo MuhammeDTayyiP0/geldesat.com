@@ -113,11 +113,11 @@
 
 @layer base {
   html {
-    scroll-behavior: smooth;
+    
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     background: var(--color-bg);
-    overflow-x: hidden;
+    overflow-x: clip;
   }
   body {
     background: var(--color-bg);
@@ -125,7 +125,7 @@
     font-family: var(--font-sans);
     line-height: 1.5;
     min-height: 100dvh;
-    overflow-x: hidden;
+    overflow-x: clip;
   }
   h1,
   h2,
@@ -318,4 +318,15 @@ html {
   animation: skeleton-shimmer 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
+/* Keeps the page still behind mobile drawers. */
+html.mobile-nav-lock,
+html.mobile-nav-lock body {
+  overflow: hidden;
+}
 
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}

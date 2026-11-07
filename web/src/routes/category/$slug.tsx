@@ -1,9 +1,11 @@
+import { Pagination } from "@/components/listing/Pagination";
+import { useModalPanel } from "@/lib/use-modal-panel";
 import { createFileRoute, Link, useNavigate, notFound } from "@tanstack/react-router";
 import { ChevronRight, LayoutGrid, List as ListIcon, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { getCategory, searchCatalog } from "@/lib/server/catalog";
 import { attrsToSearch, parseAttrs, parseSearch, toFilters } from "@/lib/search-params";
-import { buildCategorySeo, getCategoryHierarchicalName, BASE_URL, DEFAULT_OG_IMAGE, jsonLd } from "@/lib/seo";
+import { buildCategorySeo, getCategoryHierarchicalName, BASE_URL, DEFAULT_OG_IMAGE, jsonLd, listingsHeading } from "@/lib/seo";
 
 import { ListingCard } from "@/components/listing/ListingCard";
 import { Filters, type FilterState } from "@/components/listing/Filters";
@@ -69,7 +71,8 @@ export const Route = createFileRoute("/category/$slug")({
       meta: [
         { title: seo.title },
         { name: "description", content: seo.description },
-        { name: "robots", content: "index,follow" },
+        // An empty category has nothing to rank with; thousands of them would dilute the site.
+        { name: "robots", content: result?.total ? "index,follow" : "noindex,follow" },
         // Open Graph
         { property: "og:site_name", content: "GeldeSat" },
         { property: "og:locale", content: "tr_TR" },
@@ -120,21 +123,6 @@ export const Route = createFileRoute("/category/$slug")({
   component: CategoryPage,
 });
 
-/** Akıllı sayfalama: 1-2, current±1, son-2 + ... aralarında */
-function buildPageRange(page: number, pages: number): (number | "...")[] {
-  if (pages <= 10) return Array.from({ length: pages }, (_, i) => i + 1);
-  const near = new Set(
-    [1, 2, page - 1, page, page + 1, pages - 1, pages].filter((p) => p >= 1 && p <= pages),
-  );
-  const sorted = Array.from(near).sort((a, b) => a - b);
-  const out: (number | "...")[] = [];
-  for (let i = 0; i < sorted.length; i++) {
-    if (i > 0 && sorted[i] - sorted[i - 1] > 1) out.push("...");
-    out.push(sorted[i]);
-  }
-  return out;
-}
-
 function CategoryPage() {
   const { slug } = Route.useParams();
   const search = Route.useSearch();
@@ -143,6 +131,8 @@ function CategoryPage() {
   const [view, setView] = useState<"list" | "grid">("list");
   const [mobile, setMobile] = useState(false);
   const [mobileVisible, setMobileVisible] = useState(false);
+
+  const panel = useModalPanel(mobile, () => closeMobile());
 
   // Lock body scroll when mobile filter is open
   useEffect(() => {
@@ -188,17 +178,18 @@ function CategoryPage() {
   const [filters, setFilters] = useState<FilterState>(initial);
   useEffect(() => setFilters(initial), [initial]);
 
-  if (!cat.category) {
-    return <p className="p-10 text-center text-muted">Kategori bulunamadı.</p>;
-  }
+  // The loader answers an unknown category with the 404 page.
+  if (!cat.category) return null;
 
   function apply(extra?: { page?: string }) {
     void nav({
       to: "/category/$slug",
       params: { slug },
       search: {
+        ...search,
         city: filters.city,
         district: filters.district,
+        neighborhood: filters.district === search.district && filters.city === search.city ? search.neighborhood : undefined,
         minPrice: filters.minPrice,
         maxPrice: filters.maxPrice,
         sort: filters.sort,
@@ -215,11 +206,10 @@ function CategoryPage() {
     closeMobile();
   }
 
+  const hasFilters = Object.entries(search).some(([key, value]) => key !== "page" && key !== "sort" && Boolean(value));
   const hierarchicalName = getCategoryHierarchicalName(cat.path, cat.category.name);
   const locationPrefix = [search.district, search.city].filter(Boolean).join(" ");
-  const pageHeading = locationPrefix
-    ? `${locationPrefix} ${hierarchicalName} İlanları`
-    : `${hierarchicalName} İlanları`;
+  const pageHeading = listingsHeading([locationPrefix, hierarchicalName].filter(Boolean).join(" "));
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
@@ -273,10 +263,21 @@ function CategoryPage() {
         <div>
           {result.listings.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border bg-surface p-16 text-center">
-              <p className="text-muted">Bu kategoride ilan yok.</p>
-              <Link to="/ilan-ver" className="mt-3 inline-block text-sm text-primary">
-                İlk ilanı siz verin
-              </Link>
+              {hasFilters ? (
+                <>
+                  <p className="text-muted">Bu filtrelerle eşleşen ilan yok.</p>
+                  <button type="button" onClick={resetFilters} className="mt-3 inline-block text-sm text-primary">
+                    Filtreleri temizle
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p className="text-muted">Bu kategoride henüz ilan yok.</p>
+                  <Link to="/ilan-ver" className="mt-3 inline-block text-sm text-primary">
+                    İlk ilanı siz verin
+                  </Link>
+                </>
+              )}
             </div>
           ) : (
             <div className={view === "grid" ? "grid grid-cols-2 gap-2.5 sm:gap-4 xl:grid-cols-3" : "grid gap-3"}>
@@ -285,47 +286,7 @@ function CategoryPage() {
               ))}
             </div>
           )}
-          {/* Sayfalama — sınırsız sayfa, Önceki/Sonraki butonları dahil */}
-          {result.pages > 1 ? (
-            <div className="mt-6 flex flex-wrap items-center justify-center gap-1">
-              <button
-                type="button"
-                disabled={result.page <= 1}
-                onClick={() => apply({ page: String(result.page - 1) })}
-                className="rounded-md border border-border px-3 py-2 text-sm transition-colors hover:bg-elevated disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                ← Önceki
-              </button>
-              {buildPageRange(result.page, result.pages).map((p, i) =>
-                p === "..." ? (
-                  <span key={`e${i}`} className="grid size-10 select-none place-items-center text-muted">
-                    …
-                  </span>
-                ) : (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => apply({ page: String(p) })}
-                    className={`size-10 rounded-md transition-colors ${
-                      p === result.page
-                        ? "bg-primary-solid text-primary-fg"
-                        : "border border-border hover:bg-elevated"
-                    }`}
-                  >
-                    {p}
-                  </button>
-                ),
-              )}
-              <button
-                type="button"
-                disabled={result.page >= result.pages}
-                onClick={() => apply({ page: String(result.page + 1) })}
-                className="rounded-md border border-border px-3 py-2 text-sm transition-colors hover:bg-elevated disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                Sonraki →
-              </button>
-            </div>
-          ) : null}
+          <Pagination page={result.page} pages={result.pages} search={search} slug={slug} />
         </div>
       </div>
       {/* Mobile filtre — modern alt çekmece */}
@@ -341,6 +302,11 @@ function CategoryPage() {
               mobileVisible ? "translate-y-0" : "translate-y-full"
             }`}
             onClick={(e) => e.stopPropagation()}
+            ref={panel}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Filtreler"
+            tabIndex={-1}
           >
             {/* Header: Başlık, Temizle ve Kapat */}
             <div className="flex items-center justify-between border-b border-border/80 px-4 py-3">

@@ -13,9 +13,13 @@ export function CookieBanner() {
   }, []);
   if (!show) return null;
 
-  function save(value: "essential" | "all") {
-    localStorage.setItem("geldesat-cookie", value);
+  function dismiss() {
     setShow(false);
+    try {
+      localStorage.setItem("geldesat-cookie", "essential");
+    } catch {
+      // Private mode: the banner simply comes back next time.
+    }
   }
 
   return (
@@ -24,20 +28,15 @@ export function CookieBanner() {
       <div className="fixed inset-x-0 bottom-[calc(4.25rem+env(safe-area-inset-bottom,0px))] md:bottom-0 z-50 px-3 pb-2 md:pb-3">
         <div className="mx-auto flex max-w-6xl flex-col gap-3 rounded-xl border border-border bg-surface p-4 shadow-lift sm:flex-row sm:items-center">
           <p className="flex-1 text-sm leading-snug text-muted">
-            Zorunlu çerezler oturum ve güvenlik içindir. Ayrıntı{" "}
+            Yalnızca oturum, güvenlik ve site tercihleri için zorunlu çerezler kullanıyoruz; reklam veya izleme çerezi yok. Ayrıntı{" "}
             <Link to="/sayfa/$slug" params={{ slug: "cerez" }} className="font-medium text-primary hover:underline">
               çerez politikası
             </Link>
             .
           </p>
-          <div className="flex shrink-0 gap-2">
-            <Button size="sm" variant="outline" onClick={() => save("essential")}>
-              Sadece zorunlu
-            </Button>
-            <Button size="sm" onClick={() => save("all")}>
-              Kabul et
-            </Button>
-          </div>
+          <Button size="sm" className="shrink-0" onClick={dismiss}>
+            Tamam
+          </Button>
         </div>
       </div>
     </>

@@ -12,6 +12,8 @@ export const Route = createFileRoute("/harita")({
       { title: "Harita İlanları | GeldeSat" },
       { name: "description", content: "GeldeSat Türkiye haritası üzerinde satılık ve kiralık ilanları inceleyin." },
       { name: "robots", content: "index,follow" },
+      { property: "og:title", content: "Harita İlanları | GeldeSat" },
+      { property: "og:url", content: "https://www.geldesat.com/harita" },
     ],
     links: [{ rel: "canonical", href: "https://www.geldesat.com/harita" }],
   }),

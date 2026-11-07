@@ -114,13 +114,13 @@ test("robots allows Google to read noindex on search pages in every serving conf
   }
 });
 
-test("the sitemap includes every real category route", async () => {
+test("the sitemap lists the categories that have live listings", async () => {
   const files = [
     new URL("../../server/middleware/seo.ts", import.meta.url),
   ];
   const contents = await Promise.all(files.map((url) => readFile(url, "utf8")));
   for (const content of contents) {
-    assert.match(content, /FROM categories c\s+LEFT JOIN cat_dates cd ON cd\.category_id = c\.id/);
+    assert.match(content, /FROM categories c\s+JOIN cat_dates cd ON cd\.category_id = c\.id/);
     assert.match(content, /\$\{BASE(?:_URL)?\}\/category\/\$\{c\.slug\}/);
     assert.doesNotMatch(content, /WHERE c\.parent_id IS NULL/);
     assert.match(content, /status = 'ACTIVE' AND \(expires_at IS NULL OR expires_at > now\(\)\)/);
@@ -136,7 +136,7 @@ test("category, listing, and search routes keep distinct index directives and ca
     readFile(new URL("../routes/search.tsx", import.meta.url), "utf8"),
   ]);
 
-  assert.match(categoryRoute, /name: "robots", content: "index,follow"/);
+  assert.match(categoryRoute, /name: "robots", content: result\?\.total \? "index,follow" : "noindex,follow"/);
   assert.match(categoryRoute, /links: seo\.paginationLinks/);
   assert.match(listingRoute, /isListingIndexable\(listing\.status, listing\.expires_at\) \? "index,follow" : "noindex,nofollow"/);
   assert.match(listingRoute, /href: seo\.canonicalUrl/);

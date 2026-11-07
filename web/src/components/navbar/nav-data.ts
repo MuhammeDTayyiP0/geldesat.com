@@ -65,15 +65,6 @@ export const MAIN_NAV_CATEGORIES: MegaCategory[] = [
           { name: "Kat Karşılığı Arsa", slug: "arsa" },
         ],
       },
-      {
-        title: "Projeler & Vitrin",
-        slug: "projeler",
-        items: [
-          { name: "Sıfır Konut Projeleri", slug: "emlak" },
-          { name: "Emlak Ofisleri", slug: "emlak" },
-          { name: "Bankadan & İcradan Satılık", slug: "emlak" },
-        ],
-      },
     ],
   },
   {
@@ -121,12 +112,11 @@ export const MAIN_NAV_CATEGORIES: MegaCategory[] = [
       },
       {
         title: "Özel Araçlar",
-        slug: "ozel-araclar",
+        slug: "vasita",
         items: [
-          { name: "Elektrikli Araçlar", slug: "vasita" },
-          { name: "Klasik Araçlar", slug: "vasita" },
-          { name: "Deniz Araçları & Tekne", slug: "vasita" },
-          { name: "Karavan & Kamp Araçları", slug: "vasita" },
+          { name: "Klasik Araçlar", slug: "klasik" },
+          { name: "Deniz Araçları & Tekne", slug: "deniz" },
+          { name: "Karavan & Kamp Araçları", slug: "karavan" },
         ],
       },
     ],
@@ -141,40 +131,40 @@ export const MAIN_NAV_CATEGORIES: MegaCategory[] = [
         title: "Bilgisayar & Donanım",
         slug: "bilgisayar",
         items: [
-          { name: "Dizüstü (Laptop)", slug: "alisveris" },
-          { name: "Masaüstü Bilgisayar", slug: "alisveris" },
-          { name: "Monitör & Ekran Kartı", slug: "alisveris" },
-          { name: "Tablet & Aksesuar", slug: "alisveris" },
+          { name: "Dizüstü (Laptop)", slug: "dizustu-laptop" },
+          { name: "Masaüstü Bilgisayar", slug: "bilgisayar-masaustu" },
+          { name: "Monitör & Ekran Kartı", slug: "bilgisayar-monitor" },
+          { name: "Tablet & Aksesuar", slug: "bilgisayar-tablet" },
         ],
       },
       {
         title: "Cep Telefonu & Aksesuar",
-        slug: "telefon",
+        slug: "cep-telefonu",
         items: [
-          { name: "Apple iPhone", slug: "alisveris" },
-          { name: "Samsung Galaxy", slug: "alisveris" },
-          { name: "Xiaomi & Diğerleri", slug: "alisveris" },
-          { name: "Akıllı Saat & Bileklik", slug: "alisveris" },
+          { name: "Apple iPhone", slug: "tel-apple" },
+          { name: "Samsung Galaxy", slug: "tel-samsung" },
+          { name: "Xiaomi & Diğerleri", slug: "tel-xiaomi" },
+          { name: "Akıllı Saat & Bileklik", slug: "akilli-saat" },
         ],
       },
       {
         title: "Ev Elektroniği & Beyaz Eşya",
-        slug: "elektronik",
+        slug: "ev-elektronigi",
         items: [
-          { name: "Televizyon & Ses", slug: "alisveris" },
-          { name: "Buzdolabı & Çamaşır Makinesi", slug: "alisveris" },
-          { name: "Oyun Konsolları (PS5 / Xbox)", slug: "alisveris" },
-          { name: "Klima & Isıtıcı", slug: "alisveris" },
+          { name: "Televizyon & Ses", slug: "ev-elektronigi" },
+          { name: "Buzdolabı & Çamaşır Makinesi", slug: "beyaz-esya" },
+          { name: "Oyun Konsolları (PS5 / Xbox)", slug: "oyun-konsol" },
+          { name: "Klima & Isıtıcı", slug: "beyaz-esya-klima" },
         ],
       },
       {
         title: "Ev & Yaşam / Moda",
-        slug: "ev-yasam",
+        slug: "alisveris",
         items: [
-          { name: "Mobilya & Dekorasyon", slug: "alisveris" },
-          { name: "Giyim & Ayakkabı", slug: "alisveris" },
-          { name: "Spor & Outdoor", slug: "alisveris" },
-          { name: "Kitap, Müzik & Hobi", slug: "alisveris" },
+          { name: "Mobilya & Dekorasyon", slug: "mobilya" },
+          { name: "Giyim & Ayakkabı", slug: "giyim" },
+          { name: "Spor & Outdoor", slug: "alisveris-spor" },
+          { name: "Kitap, Müzik & Hobi", slug: "alisveris-kitap-dergi-film" },
         ],
       },
     ],
@@ -187,21 +177,21 @@ export const MAIN_NAV_CATEGORIES: MegaCategory[] = [
     groups: [
       {
         title: "Otomotiv Ekipmanları",
-        slug: "oto-parca",
+        slug: "yp-oto",
         items: [
-          { name: "Jant & Lastik", slug: "yedek-parca" },
-          { name: "Ses & Müzik Sistemleri", slug: "yedek-parca" },
-          { name: "Motor & Mekanik Parça", slug: "yedek-parca" },
-          { name: "Aydınlatma & Far", slug: "yedek-parca" },
+          { name: "Jant & Lastik", slug: "yp-oto-jant-lastik" },
+          { name: "Ses & Müzik Sistemleri", slug: "yp-audio-goruntu" },
+          { name: "Motor & Mekanik Parça", slug: "yp-otomotiv-yedek-parca" },
+          { name: "Aydınlatma & Far", slug: "yp-otomotiv-yedek-parca" },
         ],
       },
       {
         title: "Motosiklet Ekipmanları",
-        slug: "moto-ekipman",
+        slug: "yp-moto",
         items: [
-          { name: "Kask & Güvenlik", slug: "yedek-parca" },
-          { name: "Motosiklet Montu & Eldiven", slug: "yedek-parca" },
-          { name: "Motosiklet Çantaları", slug: "yedek-parca" },
+          { name: "Kask & Güvenlik", slug: "yp-moto-kask-kiyafet-ekipman" },
+          { name: "Motosiklet Montu & Eldiven", slug: "yp-moto-kask-kiyafet-ekipman" },
+          { name: "Motosiklet Çantaları", slug: "yp-moto" },
         ],
       },
     ],
@@ -214,22 +204,20 @@ export const MAIN_NAV_CATEGORIES: MegaCategory[] = [
     groups: [
       {
         title: "Ev Tadilat & Dekorasyon",
-        slug: "tadilat",
+        slug: "tamir",
         items: [
-          { name: "Boya & Badana", slug: "hizmetler" },
-          { name: "Su & Doğalgaz Tesisatı", slug: "hizmetler" },
-          { name: "Elektrikçi & Aydınlatma", slug: "hizmetler" },
-          { name: "Marangoz & Mobilya Montaj", slug: "hizmetler" },
+          { name: "Boya & Badana", slug: "tamir-boyaci" },
+          { name: "Su & Doğalgaz Tesisatı", slug: "tamir-tesisatci" },
+          { name: "Elektrikçi & Aydınlatma", slug: "tamir-elektrikci" },
+          { name: "Marangoz & Mobilya Montaj", slug: "tamir-marangoz" },
         ],
       },
       {
         title: "Nakliyat & Araç Servisi",
         slug: "nakliyat",
         items: [
-          { name: "Evden Eve Nakliyat", slug: "hizmetler" },
-          { name: "Oto Ekspertiz & Bakım", slug: "hizmetler" },
-          { name: "Oto Kurtarma & Çekici", slug: "hizmetler" },
-          { name: "Temizlik Hizmetleri", slug: "hizmetler" },
+          { name: "Evden Eve Nakliyat", slug: "nakliyat-evden-eve" },
+          { name: "Temizlik Hizmetleri", slug: "temizlik-hiz" },
         ],
       },
     ],
@@ -242,7 +230,7 @@ export const MAIN_NAV_CATEGORIES: MegaCategory[] = [
     groups: [
       {
         title: "Sektörel İlanlar",
-        slug: "sektorler",
+        slug: "is-ilanlari",
         items: [
           { name: "Satış & Pazarlama", slug: "is-ilanlari" },
           { name: "Restoran & Kafe Personeli", slug: "is-ilanlari" },
@@ -261,7 +249,7 @@ export const MAIN_NAV_CATEGORIES: MegaCategory[] = [
     groups: [
       {
         title: "Evcil Hayvan & Bakım",
-        slug: "evcil-hayvan",
+        slug: "hayvanlar-alemi",
         items: [
           { name: "Evcil Hayvan Sahiplenme", slug: "hayvanlar-alemi" },
           { name: "Akvaryum & Balıklar", slug: "hayvanlar-alemi" },
@@ -288,6 +276,3 @@ export const POPULAR_SEARCH_TERMS = [
 
 export const RECENT_SEARCHES_KEY = "geldesat:recent_searches_v1";
 
-// ---------------------------------------------------------------------------
-// 2. Autocomplete Arama Kutusu Bileşeni
-// ---------------------------------------------------------------------------

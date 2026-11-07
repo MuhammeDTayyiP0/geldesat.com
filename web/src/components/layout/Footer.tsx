@@ -73,12 +73,12 @@ export function Footer() {
             <LogoMark className="size-8 text-primary-fg" />
             <span className="text-sm font-medium">{company}</span>
           </div>
-          <p className="text-sm text-primary-fg/80">{email}</p>
+          <a href={`mailto:${email}`} className="block text-sm text-primary-fg/80 hover:text-white">{email}</a>
           {phone ? <p className="text-sm text-primary-fg/80">{phone}</p> : null}
           <p className="text-sm text-primary-fg/80">Adana, Türkiye</p>
         </div>
       </div>
-      <div className="border-t border-primary-fg/10 px-4 py-4 pb-20 md:pb-4 text-center text-xs text-subtle">
+      <div className="border-t border-primary-fg/10 px-4 py-4 text-center text-xs text-subtle">
         © {new Date().getFullYear()} {company}. İlanlar kullanıcılar tarafından yayınlanır. GeldeSat alım satımın tarafı değildir.
       </div>
     </footer>

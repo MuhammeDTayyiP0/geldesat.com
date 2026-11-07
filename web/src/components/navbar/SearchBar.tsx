@@ -30,6 +30,9 @@ export function AutocompleteSearchBar({
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
 
+  // Shows the search being looked at, like /search?q=araba.
+  useEffect(() => setQuery(initialQuery), [initialQuery]);
+
   // localStorage'dan geçmiş aramaları yükle
   useEffect(() => {
     try {
@@ -190,8 +193,7 @@ export function AutocompleteSearchBar({
       {/* Autocomplete Dropdown Paneli */}
       {isOpen && (
         <div
-          role="listbox"
-          className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-surface rounded-xl border border-border shadow-lift overflow-hidden divide-y divide-border/60 animate-in fade-in-50 zoom-in-95 duration-100"
+          className="absolute left-0 right-0 top-full mt-1.5 z-50 max-h-[70dvh] overflow-y-auto bg-surface rounded-xl border border-border shadow-lift overflow-hidden divide-y divide-border/60 animate-in fade-in-50 zoom-in-95 duration-100"
         >
           {/* 1. Canlı Arama Hedefleri (Kullanıcı bir şey yazıyorsa) */}
           {query.trim().length > 0 && (
@@ -252,7 +254,15 @@ export function AutocompleteSearchBar({
                 {recentSearches.map((term) => (
                   <div
                     key={term}
+                    role="button"
+                    tabIndex={0}
                     onClick={() => {
+                      setQuery(term);
+                      executeSearch(term);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key !== "Enter" && e.key !== " ") return;
+                      e.preventDefault();
                       setQuery(term);
                       executeSearch(term);
                     }}
@@ -265,8 +275,8 @@ export function AutocompleteSearchBar({
                     <button
                       type="button"
                       onClick={(e) => removeRecentSearch(term, e)}
-                      className="p-1 text-subtle hover:text-danger rounded-md opacity-0 group-hover:opacity-100 transition-opacity"
-                      aria-label="Sil"
+                      className="p-1 text-subtle hover:text-danger rounded-md opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity"
+                      aria-label={`${term} aramasını sil`}
                     >
                       <X className="size-3" />
                     </button>
@@ -280,7 +290,7 @@ export function AutocompleteSearchBar({
           <div className="p-2">
             <div className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-muted">
               <TrendingUp className="size-3.5 text-warn" />
-              <span>Popüler Aramalar</span>
+              <span>Arama önerileri</span>
             </div>
             <div className="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-0.5">
               {filteredPopular.map((term) => (
@@ -318,6 +328,3 @@ export function AutocompleteSearchBar({
   );
 }
 
-// ---------------------------------------------------------------------------
-// 3. Kullanıcı Profil ve Hesap Açılır Menüsü (Better Auth Entegreli)
-// ---------------------------------------------------------------------------

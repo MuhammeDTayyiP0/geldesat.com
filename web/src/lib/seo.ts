@@ -74,7 +74,9 @@ export function getCategoryHierarchicalName(
   if (names.length === 0) return leafCategoryName || "Tüm Kategoriler";
   if (names.length === 1) return names[0];
 
-  const rootLower = names[0].toLowerCase();
+  const rootLower = names[0].toLocaleLowerCase("tr");
+  // GENERIC_ROOTS holds plain letters, so "İş İlanları" must match "is ilanlari".
+  const rootPlain = rootLower.replace(/ı/g, "i").replace(/ş/g, "s").replace(/ğ/g, "g").replace(/ü/g, "u").replace(/ö/g, "o").replace(/ç/g, "c").replace(/\u0307/g, "");
 
   // 1. Vasıta hiyerarşisi: [Vasıta, Otomobil, BMW, 5 Serisi, 520d]
   if (rootLower.includes("vasıt") || rootLower.includes("vasit")) {
@@ -94,16 +96,14 @@ export function getCategoryHierarchicalName(
       return sub;
     }
     if (names.length >= 3) {
-      // ["Konut", "Satılık"] -> "Satılık Konut"
-      const action = names[2];
-      const type = names[1];
-      return `${action} ${type}`;
+      // Emlak > Konut > Satılık Daire: the leaf already says it all.
+      return names[names.length - 1];
     }
     return names.slice(1).join(" ");
   }
 
   // 3. Alışveriş / Elektronik: [İkinci El..., Telefon, Cep Telefonu, Apple, iPhone 15]
-  if (GENERIC_ROOTS.has(rootLower) || rootLower.includes("alışveriş") || rootLower.includes("alisveris")) {
+  if (GENERIC_ROOTS.has(rootLower) || GENERIC_ROOTS.has(rootPlain) || rootLower.includes("alışveriş") || rootLower.includes("alisveris")) {
     if (names.length >= 4) {
       // Take brand + model or last 2-3 items
       return names.slice(-2).join(" ");
@@ -116,6 +116,11 @@ export function getCategoryHierarchicalName(
     return names.slice(-3).join(" ");
   }
   return names.join(" ");
+}
+
+/** "Otomobil" -> "Otomobil İlanları"; a name that already says it stays: "İş İlanları". */
+export function listingsHeading(name: string): string {
+  return /ilanları$/i.test(name) || name.toLocaleLowerCase("tr").endsWith("ilanları") ? name : `${name} İlanları`;
 }
 
 export interface CategorySeoInput {
@@ -157,9 +162,7 @@ export function buildCategorySeo(input: CategorySeoInput): CategorySeoOutput {
   const locationPrefix = [search?.district, search?.city].filter(Boolean).join(" ");
 
   // H1: Ekranda ve arama motorunda görünecek ana başlık
-  const h1 = locationPrefix
-    ? `${locationPrefix} ${hierarchicalName} İlanları`
-    : `${hierarchicalName} İlanları`;
+  const h1 = listingsHeading([locationPrefix, hierarchicalName].filter(Boolean).join(" "));
 
   // Title: Google SERP için maksimum tıklanma ve alaka sağlayan başlık
   // Örn: "BMW 5 Serisi 520d İlanları ve Fiyatları (3 İlan) | GeldeSat"
@@ -176,7 +179,12 @@ export function buildCategorySeo(input: CategorySeoInput): CategorySeoOutput {
   // Description: Arama sonuçlarında kullanıcıyı tıklamaya yönlendiren zengin açıklama
   const locText = locationPrefix ? `${locationPrefix} bölgesinde ` : "";
   const countText = totalCount > 0 ? `${totalCount.toLocaleString("tr-TR")} güncel` : "en güncel";
-  let description = `${SITE_NAME}'ta ${locText}${hierarchicalName} kategorisinde ${countText} ilan! Sahibinden ve yetkili satıcıdan satılık ve kiralık seçeneklerini inceleyin, fiyatları karşılaştırıp güvenle satın alın.`;
+  const root = path?.[0]?.slug;
+  const closing =
+    root === "is-ilanlari" || root === "hizmetler"
+      ? "İlanları inceleyin, ilan sahibiyle doğrudan iletişime geçin."
+      : "Sahibinden ve yetkili satıcıdan satılık ve kiralık seçeneklerini inceleyin, fiyatları karşılaştırıp güvenle satın alın.";
+  let description = `${SITE_NAME}'ta ${locText}${hierarchicalName} kategorisinde ${countText} ilan! ${closing}`;
   if (currentPage > 1) {
     description = `${hierarchicalName} ilanları listesi - Sayfa ${currentPage}. ${description}`;
   }

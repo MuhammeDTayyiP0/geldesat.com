@@ -29,8 +29,8 @@ export function MegaMenuOverlay({
             )}
           </div>
           <Link
-            to="/search"
-            search={{ category: activeCategory.slug }}
+            to="/category/$slug"
+            params={{ slug: activeCategory.slug }}
             onClick={onClose}
             className="text-xs font-semibold text-primary hover:underline flex items-center gap-1"
           >
@@ -44,8 +44,8 @@ export function MegaMenuOverlay({
           {activeCategory.groups.map((group) => (
             <div key={group.slug} className="space-y-2.5">
               <Link
-                to="/search"
-                search={{ category: group.slug }}
+                to="/category/$slug"
+                params={{ slug: group.slug }}
                 onClick={onClose}
                 className="text-xs font-bold uppercase tracking-wider text-muted hover:text-primary transition-colors flex items-center justify-between group"
               >
@@ -56,8 +56,8 @@ export function MegaMenuOverlay({
                 {group.items.map((item) => (
                   <li key={item.name}>
                     <Link
-                      to="/search"
-                      search={{ category: item.slug }}
+                      to="/category/$slug"
+                      params={{ slug: item.slug }}
                       onClick={onClose}
                       className="text-sm text-fg/80 hover:text-primary hover:font-medium transition-colors block py-0.5"
                     >
@@ -101,8 +101,8 @@ export function AllCategoriesMegaMenu({ onClose }: { onClose: () => void }) {
           {MAIN_NAV_CATEGORIES.map((cat) => (
             <div key={cat.id} className="p-3 rounded-xl border border-border/60 hover:border-primary/40 hover:bg-elevated/40 transition-all group">
               <Link
-                to="/search"
-                search={{ category: cat.slug }}
+                to="/category/$slug"
+                params={{ slug: cat.slug }}
                 onClick={onClose}
                 className="flex items-center gap-2.5 mb-2 font-bold text-sm text-fg group-hover:text-primary transition-colors"
               >
@@ -115,8 +115,8 @@ export function AllCategoriesMegaMenu({ onClose }: { onClose: () => void }) {
                 {cat.groups.flatMap((g) => g.items).slice(0, 4).map((subItem) => (
                   <Link
                     key={subItem.name}
-                    to="/search"
-                    search={{ category: subItem.slug }}
+                    to="/category/$slug"
+                    params={{ slug: subItem.slug }}
                     onClick={onClose}
                     className="block text-xs text-muted hover:text-fg truncate py-0.5"
                   >
@@ -132,6 +132,3 @@ export function AllCategoriesMegaMenu({ onClose }: { onClose: () => void }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// 5. Mobil Hamburger Drawer (Slide-Over Panel)
-// ---------------------------------------------------------------------------

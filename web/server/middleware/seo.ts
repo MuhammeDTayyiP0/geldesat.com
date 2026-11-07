@@ -33,7 +33,9 @@ function urlEntry(
   priority: string,
   image?: { loc: string; title?: string } | null,
 ): string {
-  let xml = `  <url>\n    <loc>${xmlEscape(loc)}</loc>\n    <lastmod>${lastmod}</lastmod>\n    <changefreq>${changefreq}</changefreq>\n    <priority>${priority}</priority>`;
+  // A date we do not really know is left out rather than claimed as today.
+  const stamp = lastmod ? `\n    <lastmod>${lastmod}</lastmod>` : "";
+  let xml = `  <url>\n    <loc>${xmlEscape(loc)}</loc>${stamp}\n    <changefreq>${changefreq}</changefreq>\n    <priority>${priority}</priority>`;
   if (image && image.loc) {
     xml += `\n    <image:image>\n      <image:loc>${xmlEscape(image.loc)}</image:loc>`;
     if (image.title) {
@@ -92,7 +94,6 @@ async function buildSitemapIndex(): Promise<string> {
       loc: `${BASE_URL}/sitemap-listings-${i + 1}.xml`,
       lastmod: today,
     })),
-    { loc: `${BASE_URL}/sitemap-stores.xml`, lastmod: today },
     { loc: `${BASE_URL}/sitemap-sellers.xml`, lastmod: today },
   ];
 
@@ -111,17 +112,16 @@ async function buildSitemapIndex(): Promise<string> {
 
 /** /sitemap-static.xml */
 function buildStaticSitemap(): string {
-  const today = new Date().toISOString().slice(0, 10);
   return wrapUrlset([
-    urlEntry(`${BASE_URL}/`, today, "daily", "1.0"),
-    urlEntry(`${BASE_URL}/harita`, today, "daily", "0.8"),
-    urlEntry(`${BASE_URL}/sayfa/hakkimizda`, today, "monthly", "0.5"),
-    urlEntry(`${BASE_URL}/sayfa/iletisim`, today, "monthly", "0.5"),
-    urlEntry(`${BASE_URL}/sayfa/kvkk`, today, "monthly", "0.3"),
-    urlEntry(`${BASE_URL}/sayfa/gizlilik`, today, "monthly", "0.3"),
-    urlEntry(`${BASE_URL}/sayfa/cerez`, today, "monthly", "0.3"),
-    urlEntry(`${BASE_URL}/sayfa/kullanim`, today, "monthly", "0.3"),
-    urlEntry(`${BASE_URL}/sayfa/uyelik`, today, "monthly", "0.3"),
+    urlEntry(`${BASE_URL}/`, "", "daily", "1.0"),
+    urlEntry(`${BASE_URL}/harita`, "", "daily", "0.8"),
+    urlEntry(`${BASE_URL}/sayfa/hakkimizda`, "", "monthly", "0.5"),
+    urlEntry(`${BASE_URL}/sayfa/iletisim`, "", "monthly", "0.5"),
+    urlEntry(`${BASE_URL}/sayfa/kvkk`, "", "monthly", "0.3"),
+    urlEntry(`${BASE_URL}/sayfa/gizlilik`, "", "monthly", "0.3"),
+    urlEntry(`${BASE_URL}/sayfa/cerez`, "", "monthly", "0.3"),
+    urlEntry(`${BASE_URL}/sayfa/kullanim`, "", "monthly", "0.3"),
+    urlEntry(`${BASE_URL}/sayfa/uyelik`, "", "monthly", "0.3"),
   ]);
 }
 
@@ -141,7 +141,7 @@ async function buildCategoriesSitemap(): Promise<string> {
        SELECT c.slug,
               COALESCE(TO_CHAR(cd.max_date, 'YYYY-MM-DD'), $1) as lastmod
        FROM categories c
-       LEFT JOIN cat_dates cd ON cd.category_id = c.id
+       JOIN cat_dates cd ON cd.category_id = c.id
        ORDER BY c.sort_order, c.name`,
       [today],
     );
@@ -203,7 +203,7 @@ async function buildListingsSitemap(page: number): Promise<string> {
         }
         return urlEntry(
           `${BASE_URL}/ilan/${l.slug}`,
-          l.updated_at ? String(l.updated_at).slice(0, 10) : today,
+          l.updated_at ? new Date(l.updated_at).toISOString().slice(0, 10) : today,
           "daily",
           "0.6",
           firstImg ? { loc: firstImg, title: l.title } : null,

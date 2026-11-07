@@ -1,4 +1,5 @@
-import { Link } from "@tanstack/react-router";
+import { signedInLink } from "@/lib/auth/login-link";
+import { Link, useRouterState } from "@tanstack/react-router";
 import {
   Bell,
   ChevronDown,
@@ -47,6 +48,12 @@ export function Navbar({ className }: NavbarProps) {
   // Mega menü hover kontrolü
   const [hoveredCategory, setHoveredCategory] = useState<MegaCategory | null>(null);
   const [allCategoriesHovered, setAllCategoriesHovered] = useState(false);
+  const currentQuery = useRouterState({
+    select: (s) => {
+      const q = (s.location.search as { q?: unknown }).q;
+      return typeof q === "string" || typeof q === "number" ? String(q) : "";
+    },
+  });
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Kategori şeridi taşıyorsa sağ kenarda solma efekti göster
@@ -181,7 +188,7 @@ export function Navbar({ className }: NavbarProps) {
 
           {/* Orta: Arama Çubuğu (Masaüstünde Geniş Autocomplete, Mobilde Buton) */}
           <div className="hidden md:flex flex-1 max-w-2xl mx-4">
-            <AutocompleteSearchBar />
+            <AutocompleteSearchBar initialQuery={currentQuery} />
           </div>
 
           {/* Sağ: İkonlar, Giriş/Profil ve İlan Ver Butonu */}
@@ -224,7 +231,7 @@ export function Navbar({ className }: NavbarProps) {
 
             {/* Masaüstü Mesajlar (Mobilde alt barda olduğu için md:grid ile gösterilir) */}
             <Link
-              to={user ? "/mesajlar" : "/login"}
+              {...signedInLink(Boolean(user), "/mesajlar")}
               className="relative hidden md:grid size-10 place-items-center rounded-lg text-muted hover:bg-elevated hover:text-fg transition-colors"
               aria-label={msgUnread > 0 ? `Mesajlar (${msgUnread} okunmamış)` : "Mesajlar"}
             >
@@ -241,7 +248,7 @@ export function Navbar({ className }: NavbarProps) {
 
             {/* Masaüstü Favoriler */}
             <Link
-              to={user ? "/favoriler" : "/login"}
+              {...signedInLink(Boolean(user), "/favoriler")}
               className="hidden md:grid size-10 place-items-center rounded-lg text-muted hover:bg-elevated hover:text-fg transition-colors"
               aria-label="Favorilerim"
             >
@@ -301,7 +308,7 @@ export function Navbar({ className }: NavbarProps) {
         {/* Mobilde Arama Çubuğu Açıldığında Gösterilen Panel */}
         {mobileSearchOpen && (
           <div className="p-3 border-t border-border bg-surface md:hidden animate-in fade-in-50 duration-150">
-            <AutocompleteSearchBar onSearchSubmit={() => setMobileSearchOpen(false)} />
+            <AutocompleteSearchBar initialQuery={currentQuery} onSearchSubmit={() => setMobileSearchOpen(false)} />
           </div>
         )}
       </div>
@@ -323,6 +330,9 @@ export function Navbar({ className }: NavbarProps) {
           >
             <button
               type="button"
+              aria-expanded={allCategoriesHovered}
+              aria-haspopup="true"
+              onClick={() => setAllCategoriesHovered((open) => !open)}
               className={cn(
                 "flex items-center gap-1.5 h-8 px-2.5 rounded-md text-xs font-bold transition-colors",
                 allCategoriesHovered ? "bg-primary-solid text-primary-fg" : "text-fg hover:bg-elevated",
@@ -348,8 +358,8 @@ export function Navbar({ className }: NavbarProps) {
                   className="relative h-full flex items-center"
                 >
                   <Link
-                    to="/search"
-                    search={{ category: cat.slug }}
+                    to="/category/$slug"
+                    params={{ slug: cat.slug }}
                     className={cn(
                       "flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium whitespace-nowrap transition-colors",
                       isHovered ? "bg-elevated text-primary font-semibold shadow-2xs" : "text-muted hover:text-fg hover:bg-elevated/70",
@@ -358,7 +368,7 @@ export function Navbar({ className }: NavbarProps) {
                     <cat.icon className={cn("size-3.5", isHovered ? "text-primary" : "text-muted")} />
                     <span>{cat.name}</span>
                     {cat.badge && (
-                      <span className="ml-0.5 px-1.5 py-0.2 text-[10px] font-bold text-warn bg-warn/10 rounded-full">
+                      <span className="ml-0.5 px-1.5 py-0.5 text-[10px] font-bold text-warn bg-warn/10 rounded-full">
                         {cat.badge}
                       </span>
                     )}

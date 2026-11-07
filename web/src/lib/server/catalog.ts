@@ -105,7 +105,9 @@ export async function searchListings(f: SearchFilters): Promise<{
   }
   if (f.category) {
     const ids = await subtreeIds(f.category);
-    if (ids.length) {
+    // An unknown category has no listings; ignoring it would show everything.
+    if (!ids.length) conds.push("false");
+    else {
       // One array parameter instead of thousands of placeholders for big subtrees.
       params.push(ids);
       conds.push(`l.category_id = any($${params.length}::text[])`);

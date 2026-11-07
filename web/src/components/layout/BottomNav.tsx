@@ -1,3 +1,4 @@
+import { signedInLink } from "@/lib/auth/login-link";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { Home, LayoutGrid, MessageCircle, Plus, User } from "lucide-react";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
@@ -67,7 +68,7 @@ export function BottomNav() {
 
         {/* 4. Mesajlar */}
         <Link
-          to={user ? "/mesajlar" : "/login"}
+          {...signedInLink(Boolean(user), "/mesajlar")}
           className={cn(
             "relative flex flex-col items-center justify-center gap-1 py-1 text-[11px] font-medium transition-colors",
             isMessages ? "text-primary font-bold" : "text-muted hover:text-fg",
@@ -86,7 +87,7 @@ export function BottomNav() {
 
         {/* 5. Hesabım */}
         <Link
-          to={user ? "/profil" : "/login"}
+          {...signedInLink(Boolean(user), "/profil")}
           className={cn(
             "flex flex-col items-center justify-center gap-1 py-1 text-[11px] font-medium transition-colors",
             isProfile ? "text-primary font-bold" : "text-muted hover:text-fg",

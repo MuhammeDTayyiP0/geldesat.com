@@ -29,8 +29,8 @@ export interface NotFoundProps {
 const POPULAR_CATEGORIES = [
   { slug: "emlak", label: "Emlak", icon: Building2 },
   { slug: "vasita", label: "Vasıta", icon: Car },
-  { slug: "ikinci-el-ve-sifir-alisveris", label: "İkinci El Alışveriş", icon: ShoppingBag },
-  { slug: "ustalar-ve-hizmetler", label: "Hizmetler", icon: Wrench },
+  { slug: "alisveris", label: "İkinci El Alışveriş", icon: ShoppingBag },
+  { slug: "hizmetler", label: "Hizmetler", icon: Wrench },
 ];
 
 export function NotFound({
