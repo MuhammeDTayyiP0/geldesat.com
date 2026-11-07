@@ -1,4 +1,6 @@
+import { authErrorText } from "@/lib/auth/errors";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { errorText } from "@/lib/error-text";
 import { useState } from "react";
 import { authClient, googleAuthEnabled } from "@/lib/auth/client";
 import { Button } from "@/components/ui/button";
@@ -39,15 +41,15 @@ function Login() {
     try {
       if (mode === "up") {
         const { error } = await authClient.signUp.email({ email, password, name });
-        if (error) throw new Error(error.message);
+        if (error) throw new Error(authErrorText(error));
         toast.success("Hesap oluşturuldu");
       } else {
         const { error } = await authClient.signIn.email({ email, password });
-        if (error) throw new Error(error.message);
+        if (error) throw new Error(authErrorText(error));
       }
       window.location.href = next;
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Giriş başarısız");
+      toast.error(errorText(err, "Giriş başarısız"));
     } finally {
       setBusy(false);
     }

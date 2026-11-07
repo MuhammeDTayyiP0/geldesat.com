@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { errorText } from "@/lib/error-text";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Camera, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -71,7 +72,7 @@ function ProfileSettings() {
       setSaved(form);
       toast.success("Profil bilgileri kaydedildi");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Kaydedilemedi");
+      toast.error(errorText(err, "Kaydedilemedi"));
     } finally {
       setBusy(false);
     }
@@ -86,7 +87,7 @@ function ProfileSettings() {
       setAvatar(url);
       toast.success("Profil fotoğrafı güncellendi");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Fotoğraf yüklenemedi");
+      toast.error(errorText(err, "Fotoğraf yüklenemedi"));
     } finally {
       setPhotoBusy(false);
     }
@@ -100,7 +101,7 @@ function ProfileSettings() {
       setAvatar(null);
       toast.success("Profil fotoğrafı kaldırıldı");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Kaldırılamadı");
+      toast.error(errorText(err, "Kaldırılamadı"));
     } finally {
       setPhotoBusy(false);
     }
@@ -136,7 +137,7 @@ function ProfileSettings() {
                 <Camera className="size-4" /> {avatar ? "Değiştir" : "Fotoğraf ekle"}
               </Button>
               {avatar ? (
-                <Button type="button" size="sm" variant="ghost" disabled={photoBusy} onClick={() => void onRemovePhoto()} className="text-danger hover:bg-danger/8">
+                <Button type="button" size="sm" variant="ghost" disabled={photoBusy} onClick={() => void onRemovePhoto()} className="text-danger hover:bg-danger-solid/8">
                   <Trash2 className="size-4" /> Kaldır
                 </Button>
               ) : null}

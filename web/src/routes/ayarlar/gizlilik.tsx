@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { errorText } from "@/lib/error-text";
 import { useEffect, useState } from "react";
 import { EyeOff, Globe, Users } from "lucide-react";
 import { toast } from "sonner";
@@ -47,7 +48,7 @@ function PrivacySettings() {
       toast.success("Kaydedildi");
     } catch (err) {
       setState(prev);
-      toast.error(err instanceof Error ? err.message : "Kaydedilemedi");
+      toast.error(errorText(err, "Kaydedilemedi"));
     } finally {
       setBusy(false);
     }
@@ -81,7 +82,7 @@ function PrivacySettings() {
                     <span className="mt-0.5 block text-xs text-muted">{body}</span>
                   </span>
                   <span className={cn("mt-1 grid size-4 shrink-0 place-items-center rounded-full border-2", on ? "border-primary" : "border-border")}>
-                    {on ? <span className="size-2 rounded-full bg-primary" /> : null}
+                    {on ? <span className="size-2 rounded-full bg-primary-solid" /> : null}
                   </span>
                 </button>
               );

@@ -175,7 +175,7 @@ export function Navbar({ className }: NavbarProps) {
 
             <Link to="/" className="flex items-center gap-2 group">
               <LogoMark className="size-8 text-brand transition-transform group-hover:scale-105" />
-              <span className="text-xl font-bold tracking-tight text-ink">GeldeSat</span>
+              <span className="text-xl font-bold tracking-tight text-brand">GeldeSat</span>
             </Link>
           </div>
 
@@ -217,7 +217,7 @@ export function Navbar({ className }: NavbarProps) {
               >
                 <Bell className="size-5" />
                 {noteUnread > 0 && (
-                  <span className="absolute right-2 top-2 size-2 rounded-full bg-danger ring-2 ring-surface" />
+                  <span className="absolute right-2 top-2 size-2 rounded-full bg-danger-solid ring-2 ring-surface" />
                 )}
               </Link>
             </SignedIn>
@@ -231,8 +231,8 @@ export function Navbar({ className }: NavbarProps) {
               <MessageCircle className={cn("size-5 transition-colors", msgUnread > 0 && "text-primary")} />
               {msgUnread > 0 && (
                 <span className="absolute -top-0.5 -right-0.5">
-                  <span className="absolute -inset-0.5 animate-ping rounded-full bg-primary opacity-40" />
-                  <span className="relative flex min-w-4.5 h-4.5 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold leading-none text-primary-fg tabular-nums shadow-xs">
+                  <span className="absolute -inset-0.5 animate-ping rounded-full bg-primary-solid opacity-40" />
+                  <span className="relative flex min-w-4.5 h-4.5 items-center justify-center rounded-full bg-primary-solid px-1 text-[10px] font-bold leading-none text-primary-fg tabular-nums shadow-xs">
                     {msgUnread > 99 ? "99+" : msgUnread}
                   </span>
                 </span>
@@ -257,7 +257,7 @@ export function Navbar({ className }: NavbarProps) {
               >
                 <Bell className="size-5" />
                 {noteUnread > 0 && (
-                  <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-danger ring-2 ring-surface" />
+                  <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-danger-solid ring-2 ring-surface" />
                 )}
               </Link>
             </SignedIn>
@@ -290,7 +290,7 @@ export function Navbar({ className }: NavbarProps) {
             {/* Masaüstü "İlan Ver" Butonu (Mobilde alt barda ortada havada duran yuvarlak buton olduğu için md:flex) */}
             <Link
               to="/ilan-ver"
-              className="ml-1 sm:ml-2 hidden md:flex items-center gap-1.5 h-10 px-3.5 sm:px-4.5 rounded-lg font-bold text-xs sm:text-sm text-primary-fg bg-primary hover:bg-primary/90 shadow-sm hover:shadow-md active:scale-95 transition-all duration-150"
+              className="ml-1 sm:ml-2 hidden md:flex items-center gap-1.5 h-10 px-3.5 sm:px-4.5 rounded-lg font-bold text-xs sm:text-sm text-primary-fg bg-primary-solid hover:bg-primary-solid/90 shadow-sm hover:shadow-md active:scale-95 transition-all duration-150"
             >
               <Plus className="size-4 stroke-[2.8]" />
               <span className="tracking-tight">İlan Ver</span>
@@ -325,7 +325,7 @@ export function Navbar({ className }: NavbarProps) {
               type="button"
               className={cn(
                 "flex items-center gap-1.5 h-8 px-2.5 rounded-md text-xs font-bold transition-colors",
-                allCategoriesHovered ? "bg-primary text-primary-fg" : "text-fg hover:bg-elevated",
+                allCategoriesHovered ? "bg-primary-solid text-primary-fg" : "text-fg hover:bg-elevated",
               )}
             >
               <LayoutGrid className="size-3.5" />

@@ -12,7 +12,7 @@ import {
   Card,
   EmptyState,
   ErrorState,
-  Field,
+  Field, FieldGroup,
   inputClass,
   Menu,
   MenuItem,
@@ -250,7 +250,7 @@ function AttributeModal({ attr, onClose }: { attr: AdminAttribute | null; onClos
             </span>
           </label>
         ) : null}
-        <Field label="Tür">
+        <FieldGroup label="Tür">
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
             {ATTRIBUTE_TYPES.map((t) => (
               <button
@@ -263,7 +263,7 @@ function AttributeModal({ attr, onClose }: { attr: AdminAttribute | null; onClos
               </button>
             ))}
           </div>
-        </Field>
+        </FieldGroup>
         {needsOptions ? (
           <Field label={`Seçenekler (${optionList.length})`} hint="Her satıra bir seçenek. Sıralama formdaki sırayı belirler.">
             <textarea value={options} onChange={(e) => setOptions(e.target.value)} rows={8} className={cn(textareaClass, "font-mono")} placeholder={"1+0\n1+1\n2+1"} />

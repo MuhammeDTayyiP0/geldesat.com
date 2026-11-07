@@ -35,7 +35,7 @@ import {
 } from "@/lib/server/admin/categories";
 import { usePickCategory, useRunner, type CategoryIndex } from "../hooks";
 import { ATTRIBUTE_TYPE_LABEL, n } from "../format";
-import { ErrorState, Field, inputClass, MiniStat, Pill, Spinner, TabBar, textareaClass } from "../ui";
+import { ErrorState, Field, FieldGroup, inputClass, MiniStat, Pill, Spinner, TabBar, textareaClass } from "../ui";
 import { CATEGORY_ICONS, categoryIcon } from "./icons";
 
 type Tab = "info" | "children" | "attributes" | "manage";
@@ -179,7 +179,7 @@ function InfoTab({ detail, isRoot }: { detail: AdminCategoryDetail; isRoot: bool
           </Button>
         </div>
       </Field>
-      <Field label="İkon" hint={isRoot ? "Ana kategorilerde menüde ve mobil uygulamada görünür." : "Alt kategorilerde genelde gerekmez."}>
+      <FieldGroup label="İkon" hint={isRoot ? "Ana kategorilerde menüde ve mobil uygulamada görünür." : "Alt kategorilerde genelde gerekmez."}>
         <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-6">
           <button
             type="button"
@@ -201,7 +201,7 @@ function InfoTab({ detail, isRoot }: { detail: AdminCategoryDetail; isRoot: bool
             </button>
           ))}
         </div>
-      </Field>
+      </FieldGroup>
       <div className="flex items-center gap-2">
         <Button type="submit" size="sm" disabled={!dirty || busy || !name.trim()}>
           {busy ? <Spinner /> : <Save className="size-4" />} Kaydet
@@ -353,7 +353,7 @@ function AttributesTab({ detail, onSelect }: { detail: AdminCategoryDetail; onSe
         <ul className="mt-3 divide-y divide-border overflow-hidden rounded-xl border border-border">
           {items.map((a) => (
             <li key={a.id} className="flex items-center gap-3 px-3 py-2 text-sm">
-              <SlidersHorizontal className="size-4 shrink-0 text-violet-600" />
+              <SlidersHorizontal className="size-4 shrink-0 text-violet" />
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium">
                   {a.name} {a.unit ? <span className="text-xs text-muted">({a.unit})</span> : null}
@@ -373,7 +373,7 @@ function AttributesTab({ detail, onSelect }: { detail: AdminCategoryDetail; onSe
                 />
                 Zorunlu
               </label>
-              <button type="button" onClick={() => setItems((list) => list.filter((x) => x.id !== a.id))} className="rounded p-1 text-muted hover:bg-danger/10 hover:text-danger" aria-label="Kaldır">
+              <button type="button" onClick={() => setItems((list) => list.filter((x) => x.id !== a.id))} className="rounded p-1 text-muted hover:bg-danger-solid/10 hover:text-danger" aria-label="Kaldır">
                 <X className="size-4" />
               </button>
             </li>
@@ -513,7 +513,7 @@ function ManageTab({ id, index, detail, onRequestDelete }: { id: string; index: 
         </Button>
       </section>
 
-      <section className="rounded-xl border border-danger/25 bg-danger/[0.03] p-4">
+      <section className="rounded-xl border border-danger/25 bg-danger-solid/[0.03] p-4">
         <h3 className="flex items-center gap-2 text-sm font-semibold text-danger">
           <Trash2 className="size-4" /> Kategoriyi sil
         </h3>

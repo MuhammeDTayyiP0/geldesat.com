@@ -15,8 +15,8 @@ export function Badge({
     ok: "bg-ok/10 text-ok",
     warn: "bg-warn/10 text-warn",
     danger: "bg-danger/10 text-danger",
-    ink: "bg-ink text-primary-fg",
-    urgent: "bg-urgent font-bold text-white",
+    ink: "bg-fg text-bg",
+    urgent: "bg-urgent-solid font-bold text-white",
   };
   return (
     <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", tones[tone], className)}>

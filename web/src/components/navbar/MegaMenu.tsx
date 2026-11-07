@@ -106,7 +106,7 @@ export function AllCategoriesMegaMenu({ onClose }: { onClose: () => void }) {
                 onClick={onClose}
                 className="flex items-center gap-2.5 mb-2 font-bold text-sm text-fg group-hover:text-primary transition-colors"
               >
-                <span className="p-1.5 rounded-lg bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-fg transition-colors">
+                <span className="p-1.5 rounded-lg bg-primary/10 text-primary group-hover:bg-primary-solid group-hover:text-primary-fg transition-colors">
                   <cat.icon className="size-4" />
                 </span>
                 <span>{cat.name}</span>

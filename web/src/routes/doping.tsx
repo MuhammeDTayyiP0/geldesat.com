@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Ban } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 
 export const Route = createFileRoute("/doping")({
   head: () => ({
@@ -19,9 +19,7 @@ function Doping() {
         <Ban className="mx-auto size-8 text-subtle" />
         <h1 className="mt-4 text-xl font-semibold tracking-tight">Doping</h1>
         <p className="mt-3 text-sm text-muted">Doping ve kredi satışı şu an kapalı. İlan vermek ücretsizdir.</p>
-        <Link to="/ilan-ver" className="mt-6 inline-block">
-          <Button>Ücretsiz ilan ver</Button>
-        </Link>
+        <Link to="/ilan-ver" className={buttonVariants({ className: "mt-6 inline-block" })}>Ücretsiz ilan ver</Link>
       </div>
     </div>
   );

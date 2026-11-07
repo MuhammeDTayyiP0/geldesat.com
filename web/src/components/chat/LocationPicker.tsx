@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { errorText } from "@/lib/error-text";
 import type { Map as LeafletMap } from "leaflet";
 import { Loader2, LocateFixed, MapPin, Search, Send, X } from "lucide-react";
 import { toast } from "sonner";
@@ -146,7 +147,7 @@ export function LocationPicker({
       await onSend({ label: label.slice(0, 120), lat: center.lat, lng: center.lng });
       onOpenChange(false);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Konum gönderilemedi");
+      toast.error(errorText(err, "Konum gönderilemedi"));
     } finally {
       setBusy(false);
     }

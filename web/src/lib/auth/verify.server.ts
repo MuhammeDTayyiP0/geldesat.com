@@ -4,7 +4,7 @@ import { auth } from "./server";
 export class UnauthorizedError extends Error {
   readonly status = 401;
   constructor() {
-    super("Unauthorized");
+    super("Oturumunuz sona erdi. Lütfen yeniden giriş yapın.");
     this.name = "UnauthorizedError";
   }
 }

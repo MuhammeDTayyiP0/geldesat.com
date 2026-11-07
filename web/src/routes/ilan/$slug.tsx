@@ -1,4 +1,5 @@
 import { createFileRoute, Link, notFound, redirect, useNavigate, useRouter } from "@tanstack/react-router";
+import { errorText } from "@/lib/error-text";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   Copy,
@@ -23,7 +24,7 @@ import { startConversation } from "@/lib/server/chat";
 import { deleteListing, renewListing, revealPhone, setListingStatus } from "@/lib/server/account";
 import { cleanPhone, cn, formatDate, formatNumber, formatPhone, formatPrice } from "@/lib/utils";
 import { REPORT_REASONS } from "@/lib/data/geo";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, Textarea } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -223,7 +224,7 @@ function ListingPage() {
     try {
       setPhone((await revealPhone({ data: { listingId: listing.id } })).phone);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Telefon numarası alınamadı");
+      toast.error(errorText(err, "Telefon numarası alınamadı"));
     } finally {
       setPhoneBusy(false);
     }
@@ -252,7 +253,7 @@ function ListingPage() {
       const res = await startConversation({ data: { listingId: listing.id, content } });
       void nav({ to: "/mesajlar/$id", params: { id: res.conversationId } });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Mesaj gönderilemedi");
+      toast.error(errorText(err, "Mesaj gönderilemedi"));
     } finally {
       setMsgBusy(false);
     }
@@ -265,7 +266,7 @@ function ListingPage() {
       toast.success(done);
       await router.invalidate();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "İşlem başarısız oldu");
+      toast.error(errorText(err, "İşlem başarısız oldu"));
     } finally {
       setOwnerBusy(false);
     }
@@ -282,7 +283,7 @@ function ListingPage() {
       toast.success("İlan silindi");
       void nav({ to: "/ilanlarim" });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "İlan silinemedi");
+      toast.error(errorText(err, "İlan silinemedi"));
       setOwnerBusy(false);
     }
   }
@@ -403,11 +404,9 @@ function ListingPage() {
                 ))}
               </dl>
               <div className="mt-4 grid gap-2">
-                <Link to="/ilan-ver" search={{ id: listing.id }} className="block">
-                  <Button className="w-full">
+                <Link to="/ilan-ver" search={{ id: listing.id }} className={buttonVariants({ className: "block w-full" })}>
                     <Pencil className="size-4" /> İlanı düzenle
-                  </Button>
-                </Link>
+                  </Link>
                 {isLive ? (
                   <div className="grid grid-cols-2 gap-2">
                     <Button variant="outline" size="sm" disabled={ownerBusy} onClick={() => void setStatus("SOLD", "İlan satıldı olarak işaretlendi")}>
@@ -427,7 +426,7 @@ function ListingPage() {
                   <Button variant="ghost" size="sm" onClick={() => void onShare()}>
                     <Share2 className="size-4" /> Paylaş
                   </Button>
-                  <Button variant="ghost" size="sm" className="text-danger hover:bg-danger/10" disabled={ownerBusy} onClick={() => setDeleteOpen(true)}>
+                  <Button variant="ghost" size="sm" className="text-danger hover:bg-danger-solid/10" disabled={ownerBusy} onClick={() => setDeleteOpen(true)}>
                     <Trash2 className="size-4" /> Sil
                   </Button>
                 </div>
@@ -555,11 +554,9 @@ function ListingPage() {
         <div className="mx-auto flex max-w-xl items-center gap-2">
           {isOwner ? (
             <>
-              <Link to="/ilan-ver" search={{ id: listing.id }} className="flex-1">
-                <Button className="w-full">
+              <Link to="/ilan-ver" search={{ id: listing.id }} className={buttonVariants({ className: "flex-1 w-full" })}>
                   <Pencil className="size-4" /> Düzenle
-                </Button>
-              </Link>
+                </Link>
               <Button variant="outline" onClick={() => ownerPanelRef.current?.scrollIntoView({ behavior: "smooth" })}>
                 <MoreHorizontal className="size-4" /> Yönet
               </Button>
@@ -578,11 +575,9 @@ function ListingPage() {
               </Button>
               {has_phone ? (
                 phone ? (
-                  <a href={`tel:${cleanPhone(phone)}`} className="flex-1">
-                    <Button variant="outline" className="w-full">
+                  <a href={`tel:${cleanPhone(phone)}`} className={buttonVariants({ variant: "outline", className: "flex-1 w-full" })}>
                       <Phone className="size-4 text-ok" /> Ara
-                    </Button>
-                  </a>
+                    </a>
                 ) : (
                   <Button variant="outline" className="flex-1" disabled={phoneBusy} onClick={() => void onRevealPhone()}>
                     <Phone className="size-4 text-ok" /> {phoneBusy ? "…" : "Telefon"}
@@ -661,7 +656,7 @@ function ReportDialog({ open, onOpenChange, listingId }: { open: boolean; onOpen
       toast.success("Şikayetiniz incelemeye alındı. Teşekkürler.");
       onOpenChange(false);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Şikayet gönderilemedi");
+      toast.error(errorText(err, "Şikayet gönderilemedi"));
     } finally {
       setBusy(false);
     }
@@ -733,7 +728,7 @@ function ReviewDialog({
       toast.success("Değerlendirmeniz kaydedildi");
       onOpenChange(false);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Değerlendirme kaydedilemedi");
+      toast.error(errorText(err, "Değerlendirme kaydedilemedi"));
     } finally {
       setBusy(false);
     }

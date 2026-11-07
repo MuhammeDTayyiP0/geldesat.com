@@ -308,7 +308,7 @@ function CategoryPage() {
                     onClick={() => apply({ page: String(p) })}
                     className={`size-10 rounded-md transition-colors ${
                       p === result.page
-                        ? "bg-ink text-primary-fg"
+                        ? "bg-primary-solid text-primary-fg"
                         : "border border-border hover:bg-elevated"
                     }`}
                   >
@@ -354,7 +354,7 @@ function CategoryPage() {
                 <button
                   type="button"
                   onClick={resetFilters}
-                  className="rounded-lg px-2.5 py-1 text-xs font-semibold text-muted hover:text-danger hover:bg-danger/10 transition-colors"
+                  className="rounded-lg px-2.5 py-1 text-xs font-semibold text-muted hover:text-danger hover:bg-danger-solid/10 transition-colors"
                 >
                   Temizle
                 </button>

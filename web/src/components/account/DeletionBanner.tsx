@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { errorText } from "@/lib/error-text";
 import { useRouter } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
@@ -34,7 +35,7 @@ export function DeletionBanner() {
       toast.success("Hesabınız geri alındı. İlanlarınız eski durumuna döndü.");
       await router.invalidate();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Hesap geri alınamadı");
+      toast.error(errorText(err, "Hesap geri alınamadı"));
     } finally {
       setBusy(false);
     }

@@ -37,7 +37,7 @@ const SERIES = {
 } as const;
 type SeriesKey = keyof typeof SERIES;
 
-const BAR = "#2a78d6";
+const BAR = "var(--color-primary)";
 
 function Dashboard() {
   const q = useQuery({ queryKey: ["admin", "dashboard"], queryFn: () => adminDashboard(), refetchInterval: 120_000 });
@@ -94,10 +94,10 @@ function Dashboard() {
               to={a.to}
               className={
                 a.tone === "danger"
-                  ? "flex items-center gap-2.5 rounded-xl border border-danger/20 bg-danger/5 px-3.5 py-2.5 text-sm text-danger hover:bg-danger/10"
+                  ? "flex items-center gap-2.5 rounded-xl border border-danger/20 bg-danger/5 px-3.5 py-2.5 text-sm text-danger hover:bg-danger-solid/10"
                   : a.tone === "warn"
                     ? "flex items-center gap-2.5 rounded-xl border border-warn/25 bg-warn/5 px-3.5 py-2.5 text-sm text-warn hover:bg-warn/10"
-                    : "flex items-center gap-2.5 rounded-xl border border-primary/20 bg-primary/5 px-3.5 py-2.5 text-sm text-primary hover:bg-primary/10"
+                    : "flex items-center gap-2.5 rounded-xl border border-primary/20 bg-primary/5 px-3.5 py-2.5 text-sm text-primary hover:bg-primary-solid/10"
               }
             >
               <AlertTriangle className="size-4 shrink-0" />
@@ -147,13 +147,13 @@ function Dashboard() {
             {d ? (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chart} margin={{ top: 4, right: 12, left: -12, bottom: 0 }} barCategoryGap={2}>
-                  <CartesianGrid vertical={false} stroke="#e7ebf0" />
-                  <XAxis dataKey="label" tickLine={false} axisLine={{ stroke: "#d8dee6" }} tick={{ fontSize: 11, fill: "#8a929e" }} interval="preserveStartEnd" minTickGap={18} />
+                  <CartesianGrid vertical={false} stroke="var(--color-border)" />
+                  <XAxis dataKey="label" tickLine={false} axisLine={{ stroke: "var(--color-border)" }} tick={{ fontSize: 11, fill: "#8a929e" }} interval="preserveStartEnd" minTickGap={18} />
                   <YAxis allowDecimals={false} tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#8a929e" }} width={40} />
                   <Tooltip
                     cursor={{ fill: "rgba(42,120,214,0.08)" }}
-                    contentStyle={{ borderRadius: 10, border: "1px solid #d8dee6", fontSize: 12, boxShadow: "0 8px 24px -12px rgba(13,17,23,.25)" }}
-                    labelStyle={{ fontWeight: 600, color: "#12151c" }}
+                    contentStyle={{ borderRadius: 10, border: "1px solid var(--color-border)", background: "var(--color-surface)", fontSize: 12, boxShadow: "0 8px 24px -12px rgba(13,17,23,.25)" }}
+                    labelStyle={{ fontWeight: 600, color: "var(--color-fg)" }}
                     formatter={(value) => [n(Number(value)), SERIES[series].label]}
                   />
                   <Bar dataKey={series} fill={BAR} radius={[4, 4, 0, 0]} maxBarSize={22} />
@@ -182,7 +182,7 @@ function Dashboard() {
                         <span className="font-semibold tabular-nums group-hover:text-primary">{n(value)}</span>
                       </div>
                       <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-elevated">
-                        <div className="h-full rounded-full bg-[#2a78d6]" style={{ width: `${(value / statusTotal) * 100}%` }} />
+                        <div className="h-full rounded-full bg-primary-solid" style={{ width: `${(value / statusTotal) * 100}%` }} />
                       </div>
                     </Link>
                   </li>
@@ -223,7 +223,7 @@ function Dashboard() {
                     </div>
                   </button>
                   <div className="flex shrink-0 gap-1">
-                    <Button size="sm" className="h-8 bg-ok px-2.5 text-white hover:bg-ok/90" disabled={busy} onClick={() => void act([l.id], "approve", l.title)} aria-label="Onayla">
+                    <Button size="sm" className="h-8 bg-ok-solid px-2.5 text-white hover:bg-ok-solid/90" disabled={busy} onClick={() => void act([l.id], "approve", l.title)} aria-label="Onayla">
                       <Check className="size-4" />
                     </Button>
                     <Button size="sm" variant="outline" className="h-8 px-2.5 text-danger" disabled={busy} onClick={() => void act([l.id], "reject", l.title)} aria-label="Reddet">
@@ -271,7 +271,7 @@ function Dashboard() {
                     </span>
                   </div>
                   <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-elevated">
-                    <div className="h-full rounded-full bg-[#2a78d6]" style={{ width: `${(r.active / maxRoot) * 100}%` }} />
+                    <div className="h-full rounded-full bg-primary-solid" style={{ width: `${(r.active / maxRoot) * 100}%` }} />
                   </div>
                 </Link>
               </li>
@@ -296,7 +296,7 @@ function Dashboard() {
                       <span className="font-semibold tabular-nums">{n(c.n)}</span>
                     </div>
                     <div className="ml-6 mt-1 h-1.5 overflow-hidden rounded-full bg-elevated">
-                      <div className="h-full rounded-full bg-[#2a78d6]" style={{ width: `${(c.n / maxCity) * 100}%` }} />
+                      <div className="h-full rounded-full bg-primary-solid" style={{ width: `${(c.n / maxCity) * 100}%` }} />
                     </div>
                   </Link>
                 </li>

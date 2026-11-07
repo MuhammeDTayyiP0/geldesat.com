@@ -76,7 +76,7 @@ function ReviewsPage() {
               <button key={r} type="button" onClick={() => set({ rating: active ? undefined : r })} className={cn("flex w-full items-center gap-3 rounded-lg px-2 py-1 text-left text-sm", active ? "bg-primary/8" : "hover:bg-elevated")}>
                 <span className="w-10 shrink-0 font-medium tabular-nums">{r} ★</span>
                 <span className="h-2 flex-1 overflow-hidden rounded-full bg-elevated">
-                  <span className="block h-full rounded-full bg-[#2a78d6]" style={{ width: `${total ? (c / total) * 100 : 0}%` }} />
+                  <span className="block h-full rounded-full bg-primary-solid" style={{ width: `${total ? (c / total) * 100 : 0}%` }} />
                 </span>
                 <span className="w-12 shrink-0 text-right text-xs tabular-nums text-muted">{n(c)}</span>
               </button>
@@ -158,7 +158,7 @@ function ReviewsPage() {
                     <span title={dateTime(r.created_at)}>{relative(r.created_at)}</span>
                   </Td>
                   <Td>
-                    <button type="button" onClick={() => void remove([r.id])} className="rounded-lg p-1.5 text-muted hover:bg-danger/10 hover:text-danger" aria-label="Sil">
+                    <button type="button" onClick={() => void remove([r.id])} className="rounded-lg p-1.5 text-muted hover:bg-danger-solid/10 hover:text-danger" aria-label="Sil">
                       <Trash2 className="size-4" />
                     </button>
                   </Td>

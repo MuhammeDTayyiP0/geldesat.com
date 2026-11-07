@@ -38,16 +38,17 @@ export type CurrentUserState = {
  */
 export function useCurrentUserState(): CurrentUserState {
   const { data, isPending } = authClient.useSession();
-  const rawUser = data?.user;
-  const user = useMemo<AppUser | null>(() => {
-    if (!rawUser) return null;
-    return {
-      id: rawUser.id,
-      displayName: rawUser.name ?? null,
-      primaryEmail: rawUser.email ?? null,
-      profileImageUrl: rawUser.image ?? null,
-    };
-  }, [rawUser]);
+  // The session is refetched whenever the tab regains focus, with a new object
+  // each time. Keeping `user` stable until a shown field really changes stops
+  // every screen reloading and forms losing what was typed.
+  const id = data?.user?.id;
+  const displayName = data?.user?.name ?? null;
+  const primaryEmail = data?.user?.email ?? null;
+  const profileImageUrl = data?.user?.image ?? null;
+  const user = useMemo<AppUser | null>(
+    () => (id ? { id, displayName, primaryEmail, profileImageUrl } : null),
+    [id, displayName, primaryEmail, profileImageUrl],
+  );
 
   // The server always renders the "still loading" state, so the first client
   // render must too or hydration mismatches; the real state follows on mount.

@@ -443,9 +443,9 @@ export const CategoryTree = forwardRef<CategoryTreeHandle, Props>(function Categ
                 dropHere === "inside" && "bg-primary/15 ring-2 ring-inset ring-primary",
               )}
             >
-              {dropHere === "before" ? <span className="pointer-events-none absolute inset-x-2 top-0 h-0.5 rounded bg-primary" style={{ left: 4 + row.depth * 18 }} /> : null}
-              {dropHere === "after" ? <span className="pointer-events-none absolute inset-x-2 bottom-0 h-0.5 rounded bg-primary" style={{ left: 4 + row.depth * 18 }} /> : null}
-              {selected ? <span className="absolute inset-y-1 left-0 w-0.5 rounded-r bg-primary" /> : null}
+              {dropHere === "before" ? <span className="pointer-events-none absolute inset-x-2 top-0 h-0.5 rounded bg-primary-solid" style={{ left: 4 + row.depth * 18 }} /> : null}
+              {dropHere === "after" ? <span className="pointer-events-none absolute inset-x-2 bottom-0 h-0.5 rounded bg-primary-solid" style={{ left: 4 + row.depth * 18 }} /> : null}
+              {selected ? <span className="absolute inset-y-1 left-0 w-0.5 rounded-r bg-primary-solid" /> : null}
 
               <GripVertical className="size-3.5 shrink-0 cursor-grab text-subtle opacity-0 group-hover:opacity-100" aria-hidden />
               {kids ? (
@@ -490,7 +490,7 @@ export const CategoryTree = forwardRef<CategoryTreeHandle, Props>(function Categ
               {!renaming ? (
                 <>
                   {c.attrs ? (
-                    <span className="hidden shrink-0 items-center gap-0.5 text-[10px] text-violet-700 sm:inline-flex" title={`${c.attrs} özellik tanımlı`}>
+                    <span className="hidden shrink-0 items-center gap-0.5 text-[10px] text-violet sm:inline-flex" title={`${c.attrs} özellik tanımlı`}>
                       <SlidersHorizontal className="size-3" />
                       {c.attrs}
                     </span>
@@ -592,7 +592,7 @@ function Highlight({ text, needle }: { text: string; needle: string }) {
   return (
     <>
       {text.slice(0, i)}
-      <mark className="rounded bg-amber-200/70 px-0.5 text-fg">{text.slice(i, i + needle.length)}</mark>
+      <mark className="rounded bg-warn/25 px-0.5 text-fg">{text.slice(i, i + needle.length)}</mark>
       {text.slice(i + needle.length)}
     </>
   );

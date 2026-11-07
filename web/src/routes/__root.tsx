@@ -140,10 +140,13 @@ function Shell() {
 
   return (
     <div className={isChatThread ? "flex app-chat-shell flex-col overflow-hidden" : isChat ? "flex h-dvh flex-col overflow-hidden" : "flex min-h-dvh flex-1 flex-col"}>
+      <a href="#icerik" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[100] focus:rounded-md focus:bg-surface focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:shadow-lg">
+        İçeriğe atla
+      </a>
       <TopProgressBar />
       <Header className={isChatThread ? "hidden md:block" : undefined} />
       {isChatThread ? null : <DeletionBanner />}
-      <main className={isChat ? "flex min-h-0 flex-1 flex-col overflow-hidden" : "flex-1 mobile-content-space md:pb-12"}>
+      <main id="icerik" tabIndex={-1} className={isChat ? "flex min-h-0 flex-1 flex-col overflow-hidden" : "flex-1 mobile-content-space md:pb-12"}>
         <Outlet />
       </main>
       {isChat ? null : <Footer />}

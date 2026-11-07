@@ -1,4 +1,6 @@
+import { authErrorText } from "@/lib/auth/errors";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { errorText } from "@/lib/error-text";
 import { useEffect, useState, type FormEvent } from "react";
 import { CheckCircle2, Laptop, Mail, MailWarning, Smartphone } from "lucide-react";
 import { toast } from "sonner";
@@ -58,10 +60,10 @@ function SecuritySettings() {
     setVerifyBusy(true);
     try {
       const { error } = await authClient.sendVerificationEmail({ email: user.primaryEmail, callbackURL: "/ayarlar/guvenlik" });
-      if (error) throw new Error(error.message || "Gönderilemedi");
+      if (error) throw new Error(authErrorText(error, "Gönderilemedi"));
       toast.success("Doğrulama bağlantısı e-postanıza gönderildi");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Doğrulama e-postası gönderilemedi");
+      toast.error(errorText(err, "Doğrulama e-postası gönderilemedi"));
     } finally {
       setVerifyBusy(false);
     }
@@ -69,7 +71,7 @@ function SecuritySettings() {
 
   async function signOutOthers() {
     const { error } = await authClient.revokeOtherSessions();
-    if (error) return toast.error(error.message || "Oturumlar kapatılamadı");
+    if (error) return toast.error(authErrorText(error, "Oturumlar kapatılamadı"));
     toast.success("Diğer cihazlardaki oturumlar kapatıldı");
     void loadSessions();
   }
@@ -172,14 +174,14 @@ function PasswordForm({ onChanged }: { onChanged: () => void }) {
     setBusy(true);
     try {
       const { error } = await authClient.changePassword({ currentPassword: current, newPassword: next, revokeOtherSessions: others });
-      if (error) throw new Error(error.status === 400 || error.status === 401 ? "Mevcut şifre hatalı." : error.message || "Şifre değiştirilemedi");
+      if (error) throw new Error(error.status === 400 || error.status === 401 ? "Mevcut şifre hatalı." : authErrorText(error, "Şifre değiştirilemedi"));
       toast.success(others ? "Şifre güncellendi, diğer cihazlardan çıkış yapıldı" : "Şifre güncellendi");
       setCurrent("");
       setNext("");
       setConfirm("");
       onChanged();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Şifre değiştirilemedi");
+      toast.error(errorText(err, "Şifre değiştirilemedi"));
     } finally {
       setBusy(false);
     }

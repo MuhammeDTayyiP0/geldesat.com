@@ -65,7 +65,7 @@ export function MobileNavigationDrawer({
         <div className="flex items-center justify-between p-4 border-b border-border bg-elevated/40">
           <Link to="/" onClick={onClose} className="flex items-center gap-2">
             <LogoMark className="size-7 text-brand" />
-            <span className="text-lg font-bold tracking-tight text-ink">GeldeSat</span>
+            <span className="text-lg font-bold tracking-tight text-brand">GeldeSat</span>
           </Link>
           <button
             type="button"
@@ -82,7 +82,7 @@ export function MobileNavigationDrawer({
           <Link
             to="/ilan-ver"
             onClick={onClose}
-            className="w-full flex items-center justify-center gap-2 h-11 px-4 rounded-xl font-bold text-sm text-primary-fg bg-primary hover:bg-primary/90 shadow-md active:scale-98 transition-all"
+            className="w-full flex items-center justify-center gap-2 h-11 px-4 rounded-xl font-bold text-sm text-primary-fg bg-primary-solid hover:bg-primary-solid/90 shadow-md active:scale-98 transition-all"
           >
             <Plus className="size-5 stroke-[2.5]" />
             <span>Ücretsiz İlan Ver</span>
@@ -105,7 +105,7 @@ export function MobileNavigationDrawer({
                     className="size-10 rounded-full object-cover ring-1 ring-border"
                   />
                 ) : (
-                  <div className="size-10 rounded-full bg-primary text-primary-fg font-bold grid place-items-center text-sm shadow-xs">
+                  <div className="size-10 rounded-full bg-primary-solid text-primary-fg font-bold grid place-items-center text-sm shadow-xs">
                     {(user.displayName || user.primaryEmail || "U")
                       .slice(0, 1)
                       .toLocaleUpperCase("tr")}
@@ -132,7 +132,7 @@ export function MobileNavigationDrawer({
               <Link
                 to="/login"
                 onClick={onClose}
-                className="flex-1 flex items-center justify-center h-10 px-3 text-xs font-semibold rounded-lg bg-primary text-primary-fg hover:bg-primary/90 transition-colors shadow-xs"
+                className="flex-1 flex items-center justify-center h-10 px-3 text-xs font-semibold rounded-lg bg-primary-solid text-primary-fg hover:bg-primary-solid/90 transition-colors shadow-xs"
               >
                 Giriş Yap
               </Link>
@@ -165,7 +165,7 @@ export function MobileNavigationDrawer({
             <MessageCircle className="size-5 text-muted" />
             <span>Mesajlar</span>
             {unreadMsgCount > 0 && (
-              <span className="absolute top-1.5 right-4 size-2 rounded-full bg-primary ring-2 ring-surface" />
+              <span className="absolute top-1.5 right-4 size-2 rounded-full bg-primary-solid ring-2 ring-surface" />
             )}
           </Link>
           <Link
@@ -184,7 +184,7 @@ export function MobileNavigationDrawer({
             <Bell className="size-5 text-muted" />
             <span>Bildirimler</span>
             {unreadNoteCount > 0 && (
-              <span className="absolute top-1.5 right-4 size-2 rounded-full bg-danger ring-2 ring-surface" />
+              <span className="absolute top-1.5 right-4 size-2 rounded-full bg-danger-solid ring-2 ring-surface" />
             )}
           </Link>
         </div>
@@ -289,7 +289,7 @@ export function MobileNavigationDrawer({
                 onClose();
                 void signOut();
               }}
-              className="w-full flex items-center gap-2 p-2 text-danger hover:bg-danger/10 rounded-lg text-left font-medium"
+              className="w-full flex items-center gap-2 p-2 text-danger hover:bg-danger-solid/10 rounded-lg text-left font-medium"
             >
               <LogOut className="size-4" />
               <span>Güvenli Çıkış Yap</span>

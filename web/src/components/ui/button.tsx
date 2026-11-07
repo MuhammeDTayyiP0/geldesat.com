@@ -7,11 +7,11 @@ export const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-fg hover:bg-primary/90",
-        ink: "bg-ink text-primary-fg hover:bg-ink/90",
+        default: "bg-primary-solid text-primary-fg hover:bg-primary-solid/90",
+        ink: "bg-fg text-bg hover:bg-fg/90",
         outline: "border border-border bg-surface text-fg hover:bg-elevated",
         ghost: "text-fg hover:bg-elevated",
-        danger: "bg-danger text-primary-fg hover:bg-danger/90",
+        danger: "bg-danger-solid text-primary-fg hover:bg-danger-solid/90",
       },
       size: {
         sm: "h-9 rounded-md px-3 text-sm",

@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { errorText } from "@/lib/error-text";
 import { useEffect, useState } from "react";
 import { Info } from "lucide-react";
 import { toast } from "sonner";
@@ -47,7 +48,7 @@ function NotificationSettings() {
       setPrefs(res.prefs);
     } catch (err) {
       setPrefs(prev);
-      toast.error(err instanceof Error ? err.message : "Kaydedilemedi");
+      toast.error(errorText(err, "Kaydedilemedi"));
     } finally {
       setBusy(false);
     }

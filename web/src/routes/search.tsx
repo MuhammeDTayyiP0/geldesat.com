@@ -18,7 +18,7 @@ import { attrsToSearch, parseAttrs, parseSearch, toFilters, type CatalogSearch }
 import { ListingCard } from "@/components/listing/ListingCard";
 import { Filters, type FilterState } from "@/components/listing/Filters";
 import { ListingGridSkeleton } from "@/components/listing/ListingGridSkeleton";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn, formatNumber } from "@/lib/utils";
 import { CategoryButtons } from "@/components/listing/CategoryPicker";
@@ -415,7 +415,7 @@ function SearchPage() {
             <button
               type="button"
               onClick={resetAllFilters}
-              className="hidden lg:flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-danger hover:bg-danger/10 transition-colors"
+              className="hidden lg:flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-danger hover:bg-danger-solid/10 transition-colors"
             >
               <RotateCcw className="size-3.5" />
               Temizle
@@ -432,7 +432,7 @@ function SearchPage() {
             <SlidersHorizontal className="size-3.5" />
             <span>Filtrele</span>
             {activeFilterCount > 0 ? (
-              <span className="grid size-4.5 place-items-center rounded-full bg-primary text-[10px] text-primary-fg font-bold">
+              <span className="grid size-4.5 place-items-center rounded-full bg-primary-solid text-[10px] text-primary-fg font-bold">
                 {activeFilterCount}
               </span>
             ) : null}
@@ -539,11 +539,9 @@ function SearchPage() {
                     Filtreleri Temizle ({activeFilterCount})
                   </Button>
                 ) : null}
-                <Link to="/ilan-ver">
-                  <Button className="rounded-xl">
+                <Link to="/ilan-ver" className={buttonVariants({ className: "rounded-xl" })}>
                     İlan Ver
-                  </Button>
-                </Link>
+                  </Link>
               </div>
               <div className="mt-6 border-t border-border/60 pt-6">
                 <p className="text-xs font-medium uppercase tracking-wider text-muted">Popüler Aramalar</p>
@@ -628,7 +626,7 @@ function SearchPage() {
                       onClick={() => apply({ page: String(p) })}
                       className={`size-10 rounded-lg text-sm font-semibold transition-colors ${
                         p === result.page
-                          ? "bg-primary text-primary-fg shadow-2xs"
+                          ? "bg-primary-solid text-primary-fg shadow-2xs"
                           : "border border-border hover:bg-elevated"
                       }`}
                     >
@@ -655,7 +653,7 @@ function SearchPage() {
         <button
           type="button"
           onClick={openFilterDrawer}
-          className="flex items-center gap-1.5 rounded-full bg-primary px-3.5 py-2 text-xs font-semibold text-primary-fg shadow-sm transition-transform active:scale-95"
+          className="flex items-center gap-1.5 rounded-full bg-primary-solid px-3.5 py-2 text-xs font-semibold text-primary-fg shadow-sm transition-transform active:scale-95"
         >
           <SlidersHorizontal className="size-3.5" />
           <span>Filtrele {activeFilterCount > 0 ? `(${activeFilterCount})` : ""}</span>
@@ -713,7 +711,7 @@ function SearchPage() {
                 <button
                   type="button"
                   onClick={resetAllFilters}
-                  className="rounded-lg px-2.5 py-1 text-xs font-semibold text-muted hover:text-danger hover:bg-danger/10 transition-colors"
+                  className="rounded-lg px-2.5 py-1 text-xs font-semibold text-muted hover:text-danger hover:bg-danger-solid/10 transition-colors"
                 >
                   Tümünü Temizle
                 </button>

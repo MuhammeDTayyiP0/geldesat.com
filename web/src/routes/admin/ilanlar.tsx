@@ -347,7 +347,7 @@ function FilterChip({ children, onClear, icon: Icon }: { children: React.ReactNo
     <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-primary/25 bg-primary/5 py-1 pl-2.5 pr-1 text-xs font-medium text-primary">
       <Icon className="size-3.5 shrink-0" />
       <span className="truncate">{children}</span>
-      <button type="button" onClick={onClear} className="rounded-full p-0.5 hover:bg-primary/15" aria-label="Filtreyi kaldır">
+      <button type="button" onClick={onClear} className="rounded-full p-0.5 hover:bg-primary-solid/15" aria-label="Filtreyi kaldır">
         <X className="size-3" />
       </button>
     </span>
@@ -409,7 +409,7 @@ function ListingRow({
         >
           {r.seller_name}
         </button>
-        {r.store_name ? <span className="block truncate text-[11px] text-violet-700">{r.store_name}</span> : null}
+        {r.store_name ? <span className="block truncate text-[11px] text-violet">{r.store_name}</span> : null}
         {r.seller_banned ? <span className="block text-[11px] font-semibold text-danger">askıda</span> : null}
       </Td>
       <Td>

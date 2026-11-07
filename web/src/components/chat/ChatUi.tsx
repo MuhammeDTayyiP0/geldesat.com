@@ -52,7 +52,7 @@ export function ChatAvatar({
         </span>
       )}
       {online && !closed ? (
-        <span className="absolute bottom-0 right-0 size-3 rounded-full border-2 border-surface bg-ok" aria-label="Çevrimiçi" />
+        <span className="absolute bottom-0 right-0 size-3 rounded-full border-2 border-surface bg-ok-solid" aria-label="Çevrimiçi" />
       ) : null}
     </span>
   );

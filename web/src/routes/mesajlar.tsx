@@ -1,4 +1,5 @@
 import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
+import { errorText } from "@/lib/error-text";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Archive, ArchiveRestore, Mail, MailOpen, MessageCircle, MoreHorizontal, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -144,7 +145,7 @@ function MessagesLayout() {
       toast.success(done);
     } catch (e) {
       setRows((prev) => prev.map((x) => (x.id === c.id ? c : x)));
-      toast.error(e instanceof Error ? e.message : "İşlem başarısız oldu");
+      toast.error(errorText(e, "İşlem başarısız oldu"));
     }
   }
 
@@ -175,7 +176,7 @@ function MessagesLayout() {
                     onClick={() => setTab(t.key)}
                     className={cn(
                       "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition-colors",
-                      tab === t.key ? "border-primary bg-primary text-primary-fg" : "border-border text-muted hover:bg-elevated hover:text-fg",
+                      tab === t.key ? "border-primary bg-primary-solid text-primary-fg" : "border-border text-muted hover:bg-elevated hover:text-fg",
                     )}
                   >
                     {t.label}
@@ -202,7 +203,7 @@ function MessagesLayout() {
             </span>
             <p className="mt-3 text-sm font-semibold">Henüz mesajınız yok</p>
             <p className="mt-1 text-xs text-muted">İlgilendiğiniz bir ilanın sayfasından satıcıya soru sorabilirsiniz.</p>
-            <Link to="/search" className="mt-4 inline-flex rounded-lg bg-primary px-3.5 py-2 text-xs font-semibold text-primary-fg hover:opacity-90">
+            <Link to="/search" className="mt-4 inline-flex rounded-lg bg-primary-solid px-3.5 py-2 text-xs font-semibold text-primary-fg hover:opacity-90">
               İlanlara göz atın
             </Link>
           </div>
@@ -259,11 +260,11 @@ function MessagesLayout() {
                       <div className="mt-0.5 flex items-center justify-between gap-2">
                         <p className={cn("truncate text-[13px]", flagged ? "font-semibold text-fg" : "text-muted", c.last_deleted && "italic")}>{preview}</p>
                         {unread > 0 ? (
-                          <span className="grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-primary px-1.5 text-[11px] font-bold text-primary-fg">
+                          <span className="grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-primary-solid px-1.5 text-[11px] font-bold text-primary-fg">
                             {unread > 99 ? "99+" : unread}
                           </span>
                         ) : flagged ? (
-                          <span className="size-2.5 shrink-0 rounded-full bg-primary" aria-label="Okunmadı olarak işaretli" />
+                          <span className="size-2.5 shrink-0 rounded-full bg-primary-solid" aria-label="Okunmadı olarak işaretli" />
                         ) : null}
                       </div>
                     </div>
@@ -332,7 +333,7 @@ function MessagesLayout() {
             toast.success("Sohbet silindi");
             if (c.id === activeId) void navigate({ to: "/mesajlar" });
           } catch (e) {
-            toast.error(e instanceof Error ? e.message : "Sohbet silinemedi");
+            toast.error(errorText(e, "Sohbet silinemedi"));
           }
         }}
       />

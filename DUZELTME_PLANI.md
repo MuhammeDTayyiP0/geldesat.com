@@ -99,14 +99,14 @@ Tek kaynak: sunucuda geçiş tablosu ve ortak "canlı" SQL parçası. Birçok bu
 
 Sonraki fazlar bunları kullanır.
 
-- [ ] Router `remountDeps`; ilan ve sohbet state taşınması, galeri çökmesi (Madde 16).
-- [ ] Türkçe hata ekranı, yeniden dene ve ana sayfa (Madde 37).
-- [ ] Zod hatası normalize, şemalara Türkçe mesaj; `validationMessage` ortak (Bölüm 2.6).
+- [x] Router `remountDeps`; ilan ve sohbet state taşınması, galeri çökmesi (Madde 16).
+- [x] Türkçe hata ekranı, yeniden dene ve ana sayfa (Madde 37).
+- [x] Zod hatası normalize, şemalara Türkçe mesaj; `validationMessage` ortak (Bölüm 2.6).
 - [ ] `translateAuthError` web'e; `?error=` okuma; "Unauthorized" (Madde 38).
 - [ ] Ortak `ErrorState`, sayfalama ve seçim yardımcıları, `useDirtyGuard`, `FieldGroup`, erişilebilir `Drawer` (Bölüm 2.4, 2.14; Madde 36).
-- [ ] `[user]` yerine `user?.id` (Bölüm 2.5; mağaza formu veri kaybı).
-- [ ] Tema: `text-subtle`, koyu `primary`, `ok`, `urgent`, `violet` token'ları; `text-ink`/`bg-ink` kullanımı, logo (Madde 39; Bölüm 2.13).
-- [ ] `<Link><Button>` için `buttonVariants`/`asChild`, iç içe `<main>`, "İçeriğe atla", `dialog.tsx` "Kapat".
+- [x] `useCurrentUser` kararlı hâle getirildi; sekme dönüşünde ekranlar yeniden yüklenmiyor (Bölüm 2.5; mağaza formu veri kaybı).
+- [x] Tema: `text-subtle`, koyu `primary`, `ok`, `urgent`, `violet` token'ları; `text-ink`/`bg-ink` kullanımı, logo (Madde 39; Bölüm 2.13).
+- [x] `<Link><Button>` için `buttonVariants`/`asChild`, iç içe `<main>`, "İçeriğe atla", `dialog.tsx` "Kapat".
 
 ## Faz 4: Web vitrin, arama, SEO (rapor 3.1)
 

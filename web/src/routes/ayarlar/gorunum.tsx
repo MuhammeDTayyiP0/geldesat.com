@@ -37,7 +37,7 @@ function AppearanceSettings() {
                   onClick={() => setThemePref(o.value)}
                   className="flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left hover:bg-elevated/60"
                 >
-                  <span className={cn("grid size-10 shrink-0 place-items-center rounded-xl", selected ? "bg-primary text-primary-fg" : "bg-elevated text-muted")}>
+                  <span className={cn("grid size-10 shrink-0 place-items-center rounded-xl", selected ? "bg-primary-solid text-primary-fg" : "bg-elevated text-muted")}>
                     <Icon className="size-5" />
                   </span>
                   <span className="min-w-0 flex-1">
@@ -47,7 +47,7 @@ function AppearanceSettings() {
                   <span
                     className={cn(
                       "grid size-6 place-items-center rounded-full border-2",
-                      selected ? "border-primary bg-primary text-primary-fg" : "border-border",
+                      selected ? "border-primary bg-primary-solid text-primary-fg" : "border-border",
                     )}
                   >
                     {selected ? <Check className="size-3.5" strokeWidth={3} /> : null}

@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { errorText } from "@/lib/error-text";
 import { useEffect, useState, type FormEvent } from "react";
 import { ExternalLink, Store } from "lucide-react";
 import { toast } from "sonner";
@@ -8,7 +9,7 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { TURKEY_CITIES } from "@/lib/data/locations";
 import { cleanPhone, maskPhone10 } from "@/lib/utils";
 import { BrandSpinner } from "@/components/brand/BrandSpinner";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { AccountShell } from "@/components/account/AccountShell";
@@ -71,7 +72,7 @@ function StoreSettings() {
       setStore((prev) => ({ slug: res.slug, userId: prev?.userId ?? user?.id ?? "" }));
       setSaved(form);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Kaydedilemedi");
+      toast.error(errorText(err, "Kaydedilemedi"));
     } finally {
       setBusy(false);
     }
@@ -83,12 +84,10 @@ function StoreSettings() {
       description={store ? "Profilinizin üstünde mağaza olarak görünen bilgiler." : undefined}
       actions={
         store ? (
-          <Link to="/satici/$id" params={{ id: store.userId }}>
-            <Button size="sm" variant="outline">
+          <Link to="/satici/$id" params={{ id: store.userId }} className={buttonVariants({ variant: "outline", size: "sm" })}>
               <ExternalLink className="size-3.5" />{" "}
               <span className="hidden sm:inline">Mağazayı gör</span>
-            </Button>
-          </Link>
+            </Link>
         ) : null
       }
     >
@@ -103,9 +102,7 @@ function StoreSettings() {
             sayfanızda toplayabilirsiniz. Mağazalar, işletme bilgileri kontrol edildikten sonra
             GeldeSat ekibi tarafından açılır.
           </p>
-          <Link to="/sayfa/$slug" params={{ slug: "iletisim" }} className="mt-5 inline-block">
-            <Button>Mağaza başvurusu için iletişime geçin</Button>
-          </Link>
+          <Link to="/sayfa/$slug" params={{ slug: "iletisim" }} className={buttonVariants({ className: "mt-5 inline-block" })}>Mağaza başvurusu için iletişime geçin</Link>
         </div>
       ) : (
         <form

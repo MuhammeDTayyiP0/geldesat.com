@@ -110,7 +110,7 @@ function StoresPage() {
                 <tr key={s.id} className="hover:bg-elevated/50">
                   <Td>
                     <div className="flex items-center gap-3">
-                      <span className="flex size-10 items-center justify-center rounded-lg bg-violet-500/10 text-violet-700">
+                      <span className="flex size-10 items-center justify-center rounded-lg bg-violet-500/10 text-violet">
                         <Store className="size-5" />
                       </span>
                       <div className="min-w-0">

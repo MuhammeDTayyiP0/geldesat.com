@@ -249,7 +249,7 @@ function ListingActionBar({ detail, onEdit }: { detail: AdminListingDetail; onEd
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface px-5 py-2.5">
       {l.status === "PENDING" || l.status === "REJECTED" || l.status === "INACTIVE" ? (
-        <Button size="sm" className="bg-ok text-white hover:bg-ok/90" disabled={busy} onClick={() => void act(ids, "approve", l.title)}>
+        <Button size="sm" className="bg-ok-solid text-white hover:bg-ok-solid/90" disabled={busy} onClick={() => void act(ids, "approve", l.title)}>
           <Check className="size-4" /> {l.status === "PENDING" ? "Onayla" : "Onayla ve yayına al"}
         </Button>
       ) : null}

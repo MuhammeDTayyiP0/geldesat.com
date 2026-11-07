@@ -224,7 +224,7 @@ export function Filters({
                           type="button"
                           className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
                             checked
-                              ? "border-primary bg-primary text-primary-fg"
+                              ? "border-primary bg-primary-solid text-primary-fg"
                               : "border-border bg-surface text-fg hover:border-primary/50"
                           }`}
                           onClick={() => toggleAttr(a.name, opt, !checked)}

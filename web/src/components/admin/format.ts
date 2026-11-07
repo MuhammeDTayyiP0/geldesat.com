@@ -1,3 +1,5 @@
+import { errorText } from "@/lib/error-text";
+
 /** Display helpers shared by the admin console screens. */
 
 export type Tone = "muted" | "primary" | "ok" | "warn" | "danger" | "ink" | "violet";
@@ -137,7 +139,7 @@ export function initials(name: string | null | undefined): string {
 }
 
 export function errorMessage(err: unknown, fallback = "İşlem başarısız."): string {
-  return err instanceof Error && err.message ? err.message : fallback;
+  return errorText(err, fallback);
 }
 
 /** % change between two periods; null when there is nothing to compare against. */

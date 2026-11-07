@@ -101,7 +101,7 @@ function Notes() {
                     {n.body ? <span className="block text-sm text-muted">{n.body}</span> : null}
                     <span className="mt-1 block text-xs text-subtle">{timeAgo(n.created_at)}</span>
                   </span>
-                  {!n.read ? <span className="mt-2 size-2.5 shrink-0 rounded-full bg-primary" aria-label="Yeni" /> : null}
+                  {!n.read ? <span className="mt-2 size-2.5 shrink-0 rounded-full bg-primary-solid" aria-label="Yeni" /> : null}
                 </button>
               </li>
             );

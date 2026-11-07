@@ -55,7 +55,7 @@ export function BottomNav() {
           <Link
             to="/ilan-ver"
             className={cn(
-              "group relative -mt-6 flex size-12.5 items-center justify-center rounded-full bg-primary text-primary-fg ring-4 ring-surface shadow-md shadow-primary/25 transition-transform active:scale-95",
+              "group relative -mt-6 flex size-12.5 items-center justify-center rounded-full bg-primary-solid text-primary-fg ring-4 ring-surface shadow-md shadow-primary/25 transition-transform active:scale-95",
               isPost && "ring-primary/30",
             )}
             aria-label="İlan Ver"
@@ -76,7 +76,7 @@ export function BottomNav() {
           <div className="relative">
             <MessageCircle className={cn("size-5 transition-transform", isMessages && "scale-110")} />
             {msgUnread > 0 ? (
-              <span className="absolute -right-2.5 -top-1.5 flex min-w-4 h-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-fg">
+              <span className="absolute -right-2.5 -top-1.5 flex min-w-4 h-4 items-center justify-center rounded-full bg-primary-solid px-1 text-[9px] font-bold text-primary-fg">
                 {msgUnread > 99 ? "99+" : msgUnread}
               </span>
             ) : null}

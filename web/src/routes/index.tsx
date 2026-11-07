@@ -128,7 +128,7 @@ function Home() {
           </Button>
           <Link
             to="/ilan-ver"
-            className="hidden h-12 items-center gap-1.5 rounded-xl border border-primary/30 bg-primary/10 px-4 text-sm font-semibold text-primary transition-colors hover:bg-primary/15 md:inline-flex"
+            className="hidden h-12 items-center gap-1.5 rounded-xl border border-primary/30 bg-primary/10 px-4 text-sm font-semibold text-primary transition-colors hover:bg-primary-solid/15 md:inline-flex"
           >
             <Plus className="size-4 stroke-[2.6]" /> Ücretsiz İlan Ver
           </Link>

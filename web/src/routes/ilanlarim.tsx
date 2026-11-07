@@ -1,11 +1,12 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { errorText } from "@/lib/error-text";
 import { useEffect, useMemo, useState } from "react";
 import { CircleCheck, Eye, EyeOff, ImageIcon, LayoutGrid, MoreVertical, Pencil, Plus, RefreshCw, Rocket, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { deleteListing, myListings, renewListing, setListingStatus } from "@/lib/server/account";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CardListSkeleton } from "@/components/listing/ListingGridSkeleton";
 import { AccountShell } from "@/components/account/AccountShell";
@@ -87,7 +88,7 @@ function Mine() {
       toast.success(done);
       reload();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "İşlem başarısız oldu");
+      toast.error(errorText(e, "İşlem başarısız oldu"));
     } finally {
       setBusy(false);
     }
@@ -100,11 +101,9 @@ function Mine() {
       title="İlanlarım"
       description={rows ? `${rows.length} ilan` : "Yayındaki, onay bekleyen ve pasif ilanlarınızı yönetin."}
       actions={
-        <Link to="/ilan-ver">
-          <Button size="sm">
+        <Link to="/ilan-ver" className={buttonVariants({ size: "sm" })}>
             <Plus className="size-4" /> Yeni
-          </Button>
-        </Link>
+          </Link>
       }
     >
       <div role="tablist" aria-label="İlan durumu" className="-mx-1 mb-3 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -120,7 +119,7 @@ function Mine() {
               onClick={() => setTab(t.key)}
               className={cn(
                 "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium transition-colors",
-                selected ? "border-primary bg-primary text-primary-fg" : "border-border bg-surface text-fg hover:bg-elevated",
+                selected ? "border-primary bg-primary-solid text-primary-fg" : "border-border bg-surface text-fg hover:bg-elevated",
               )}
             >
               {t.label}
@@ -143,11 +142,9 @@ function Mine() {
           {tab === "live" ? (
             <>
               <p className="mt-1 text-sm text-muted">İlan vermek ücretsiz. Birkaç dakikada ilanınızı yayınlayın.</p>
-              <Link to="/ilan-ver" className="mt-4 inline-block">
-                <Button>
+              <Link to="/ilan-ver" className={buttonVariants({ className: "mt-4 inline-block" })}>
                   <Plus className="size-4" /> İlan ver
-                </Button>
-              </Link>
+                </Link>
             </>
           ) : null}
         </div>

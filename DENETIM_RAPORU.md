@@ -52,7 +52,7 @@ Temiz çıkan alanlar: admin server fonksiyonlarının tamamı yetki kontrollü 
 
 ### Kullanıcı akışını bozan hatalar
 
-- [ ] 16. **Y · İlan ve sohbet state'i taşınıyor.** Route'ta `remountDeps` yok. 6. fotoğraftayken 3 fotoğraflı benzer ilana geçmek sayfayı hata ekranına düşürür (`photoSrc(undefined)`). Sohbette taslak, seçili fotoğraf ve yanıt başka kişinin sohbetine taşınır; IBAN veya özel fotoğraf yanlış kişiye gidebilir. `W/components/listing/ListingImageGallery.tsx:13,161`, `W/routes/mesajlar/$id.tsx:136,142,158` → `remountDeps` tek satırda ikisini de büyük ölçüde çözer.
+- [x] 16. **Y · İlan ve sohbet state'i taşınıyor.** Route'ta `remountDeps` yok. 6. fotoğraftayken 3 fotoğraflı benzer ilana geçmek sayfayı hata ekranına düşürür (`photoSrc(undefined)`). Sohbette taslak, seçili fotoğraf ve yanıt başka kişinin sohbetine taşınır; IBAN veya özel fotoğraf yanlış kişiye gidebilir. `W/components/listing/ListingImageGallery.tsx:13,161`, `W/routes/mesajlar/$id.tsx:136,142,158` → `remountDeps` tek satırda ikisini de büyük ölçüde çözer.
 - [ ] 17. **Y · Sayısal URL parametreleri yok sayılıyor.** Router `?page=2` değerini sayıya çeviriyor, `str()` yalnız string kabul ediyor. Dış linkler bozuk, `rel=next` ve canonical 1. sayfayı döndürür, arama motoru derin sayfaları göremez. `W/lib/search-params.ts:64`, `W/lib/seo.ts:189-205` → `str()` sayıyı `String()` ile kabul etsin, test ekle.
 - [ ] 18. **Y · Uygulanan filtre geri alınıyor.** `closeFilterDrawer` 280 ms sonra eski `initial`'ı yazıyor; hızlı yanıtta panel eski değerlere döner, sonraki sayfada filtre URL'den silinir. `W/routes/search.tsx:155-161`.
 - [ ] 19. **Y · Ölü kategori linkleri tüm ilanları gösteriyor.** `projeler`, `ozel-araclar`, `elektronik`, `ev-yasam`, `oto-parca`, `moto-ekipman`, `tadilat`, `sektorler`, `evcil-hayvan` migration'larda yok; bilinmeyen kategoride filtre atlanıyor. 404 sayfasındaki `ikinci-el-ve-sifir-alisveris`, `ustalar-ve-hizmetler` ve menüdeki `/sayfa/yardim` da yok. `W/components/navbar/nav-data.ts`, `W/lib/server/catalog.ts:106-113`, `W/components/common/NotFound.tsx:32-33`, `W/components/navbar/MobileNavigationDrawer.tsx:268` → canlıda kontrol et, menüyü kategori ağacından besle, bilinmeyende boş sonuç dön.
@@ -75,13 +75,13 @@ Temiz çıkan alanlar: admin server fonksiyonlarının tamamı yetki kontrollü 
 - [ ] 33. **Y · Zorunlu güncelleme çalışmıyor.** "Altındaki sürümler güncellemeye zorlanır" yazıyor; mobil bu alanları yalnız tipte tutuyor. `W/routes/admin/ayarlar.tsx:398`, `M/api/types.ts:274`.
 - [ ] 34. **O · Etkisiz ayarlar ve anahtarlar.** Mobil ana sayfa bölümleri (`homeSections`) yalnız tipte; `doping_enabled`, `mobile_bottom_nav` görünüyor ama kodda hiçbir `useFlag` çağrısı yok (web ve mobil). `W/routes/admin/ayarlar.tsx:337`, `W/lib/server/config.ts:8`.
 - [ ] 35. **Y · Mağaza sürümüne dönüş eksik platforma gidebilir.** Metin "tüm telefonlar" diyor, istek `u.platforms` gönderiyor. Yalnız Android satırından tetiklenirse iOS bozuk kodda kalır. `W/routes/admin/guncellemeler.tsx:71`.
-- [ ] 36. **O · `Field` label hatası.** Buton grubunu saran `<label>`: etikete veya boşluğa tıklamak ilk butonu tetikler. Duyuruda kitle "Tüm üyeler" olur, anahtar yüzdesi sessizce %0'a düşer. `W/components/admin/ui.tsx:315`, `ayarlar.tsx:212,242`, `duyurular.tsx:62`, `ozellikler.tsx:254` → `FieldGroup`.
+- [x] 36. **O · `Field` label hatası.** Buton grubunu saran `<label>`: etikete veya boşluğa tıklamak ilk butonu tetikler. Duyuruda kitle "Tüm üyeler" olur, anahtar yüzdesi sessizce %0'a düşer. `W/components/admin/ui.tsx:315`, `ayarlar.tsx:212,242`, `duyurular.tsx:62`, `ozellikler.tsx:254` → `FieldGroup`.
 
 ### Görünür kalite, SEO ve mağaza
 
-- [ ] 37. **Y · Hata ekranı İngilizce ve ham.** "Something went wrong" ile `error.message` gösteriyor, çıkış yolu yok, sabit `zinc` renk kullanıyor. `?sort=foo` ile herkes tetikleyebilir. `W/lib/error-component.tsx`, `W/lib/search-params.ts:113-114`.
+- [x] 37. **Y · Hata ekranı İngilizce ve ham.** "Something went wrong" ile `error.message` gösteriyor, çıkış yolu yok, sabit `zinc` renk kullanıyor. `?sort=foo` ile herkes tetikleyebilir. `W/lib/error-component.tsx`, `W/lib/search-params.ts:113-114`.
 - [ ] 38. **Y · Giriş hataları İngilizce, Google hatası sessiz.** "Invalid email or password" doğrudan görünüyor; mobilde çeviri var, web'de yok. Bağlanamayan Google hesabı mesajsız ana sayfaya düşer. `W/routes/login.tsx:42-50,72`, `W/routes/sifre-sifirla.tsx:65,109`, `W/lib/auth/server.ts:57`.
-- [ ] 39. **Y · Koyu temada logo görünmüyor.** `text-ink` koyu temada `#05070a`. `W/components/Navbar.tsx:178`, `MobileNavigationDrawer.tsx:68` → `text-brand` veya `text-fg`.
+- [x] 39. **Y · Koyu temada logo görünmüyor.** `text-ink` koyu temada `#05070a`. `W/components/Navbar.tsx:178`, `MobileNavigationDrawer.tsx:68` → `text-brand` veya `text-fg`.
 - [ ] 40. **Y · Harita pinleri yanlış.** Aynı şehirdeki ilanlar tam üst üste, yalnız 24 ilan; pinler iframe üstüne doğrusal yüzdeyle konuyor, kaydırınca yerinde kalıyor. `W/routes/harita.tsx:37-41,60-69` → `/api/tiles` ile gerçek harita ve kümeleme.
 - [ ] 41. **Y · Arama kalitesi düşük.** Tek parça `ILIKE`; kelime bölme, Türkçe karakter eşleme ve kategori adı yok. "Honda Civic" sırası tutmazsa, "kiralik" hiç bulunmaz. `W/lib/server/catalog.ts:85-105`.
 - [ ] 42. **Y · Satıcı sayfası 24 ilanda duruyor.** "İlanlar (100)" yazarken 76 ilana ulaşılamıyor; web ve mobil. Yorumlar da 20'de kesiliyor. `W/routes/satici/$id.tsx:23,223`, `W/routes/api/mobile/sellers/$id.ts:32`, `W/lib/server/account.ts:342`.
@@ -156,7 +156,7 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 - [ ] D · `:311` — Aktif sayfa `bg-ink`, koyu temada 1,04:1 → `bg-primary`.
 - [ ] D · `:239`, `lib/seo.ts:179` — Sayı biçimsiz; "satılık ve kiralık" metni iş ilanlarına uymuyor.
 - [ ] D · `:191-193,226` — Ölü kod; breadcrumb `aria-label` yok.
-- [ ] D (olası) · `CategoryPicker.tsx:68` — `q` alt kategoriye geçince kalıyor → `key={cat.id}`.
+- [x] D (olası) · `CategoryPicker.tsx:68` — `q` alt kategoriye geçince kalıyor → `key={cat.id}`.
 
 **Harita `routes/harita.tsx`**
 - [ ] O · `:9,25-29,80-85` — "İllere göre" sayıları son 48 ilandan hesaplanıyor → `group by city`.
@@ -196,7 +196,7 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 - [ ] D · `styles.css:218-220`, `Footer.tsx:81` — Mobilde çift alt boşluk.
 - [ ] D · `NotFound.tsx:145-151` — Arama kutusunda etiket yok.
 - [ ] O · `ListingCard.tsx:99-105,137` — Favori düğmesi `<a>` içinde. D · `ListingCard.tsx:45-47,104` — Girişsiz favoride yalnız hata toast'ı, 36 px alan.
-- [ ] D · `components/ui/badge.tsx:19` — Koyu temada ACİL rozeti 2,8:1.
+- [x] D · `components/ui/badge.tsx:19` — Koyu temada ACİL rozeti 2,8:1.
 
 **SEO ve katalog sunucusu**
 - [ ] D · `seo.ts` middleware `:95,116-124,224` — Statik `lastmod` her gün bugün; boş mağaza sitemap'i indekste.
@@ -208,7 +208,7 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 **İlan detay `routes/ilan/$slug.tsx`**
 - [x] Y · `ListingSections.tsx:97`, `catalog.ts:335` — Sahibe "alıcılara Satıldı görünür" deniyor; alıcı 404 alıyor → SOLD'u aç ve noindex yap ya da metni düzelt.
 - [ ] O · `$slug.tsx:421`, `ListingSections.tsx:100,115` — Süresi dolmuş INACTIVE/SOLD'da sahip çıkmazda; metin "panelden yayına al" diyor.
-- [ ] O · `$slug.tsx:139-150,724-726` — `msg`, `review` ve açık durumlar başka ilana taşınıyor.
+- [x] O · `$slug.tsx:139-150,724-726` — `msg`, `review` ve açık durumlar başka ilana taşınıyor.
 - [ ] O · `ListingImageGallery.tsx:258` — Lightbox'ta dialog rolü ve odak yok.
 - [ ] O · `ListingImageGallery.tsx:337` — `justify-center` + `overflow-x-auto`, soldaki küçük resimlere ulaşılamıyor.
 - [ ] D · `ListingImageGallery.tsx:123,261` — Çapraz kaydırma fotoğraf değiştiriyor. `:341` — Küçük resim düğmeleri adsız. `:297` — Telefonda tam master indiriliyor.
@@ -255,7 +255,7 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 - [ ] D (olası) · `:76-94` — `known` güncelleyici içinde okunuyor.
 
 **Sohbet `routes/mesajlar/$id.tsx`**
-- [ ] Y · `:482-485,558-560,379-382,1184-1186` — Devam eden sonuçlar açık sohbete yazılıyor; A'nın mesajı B'de görünür (bkz. madde 16).
+- [x] Y · `:482-485,558-560,379-382,1184-1186` — Devam eden sonuçlar açık sohbete yazılıyor; A'nın mesajı B'de görünür (bkz. madde 16).
 - [ ] O · `:224-240,482-485` — SSE önce gelirse mesaj çift görünür, sıra karışabilir.
 - [ ] O · `:229-234` — Listede olmayan `message_update` sona ekleniyor; eski teklif en alta düşer.
 - [ ] O · `:460-477` — Eski görünümde gönderim hatasında metin kaybolur.
@@ -290,7 +290,7 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 - [x] O · `api/tiles/$z/$x/$y.ts:34-62` — Kimliksiz, sınırsız OSM vekili; IP engellenirse harita herkes için bozulur.
 - [ ] D · `MapThumb.tsx:8-25` — OSM atfı yok.
 - [ ] O · `LocationPicker.tsx:81-92,131-137` — Seçilen yer adı ters kodlamayla eziliyor; mobilde de aynı (`M/features/chat/LocationPicker.tsx:87-99,118-124`).
-- [ ] O · `MessageBubble.tsx:170` — "Kabul et" koyu temada 2:1. D · `:220` — Kendi balonu 3,71:1.
+- [x] O · `MessageBubble.tsx:170` — "Kabul et" koyu temada 2:1. D · `:220` — Kendi balonu 3,71:1.
 - [ ] D · `MessageBubble.tsx:237` — Silinmiş mesaj alıntısı. `:267` — Başarısız balonda menü yok. `LocationPicker.tsx:84-110` — Takılı gösterge, yarış. `components/ui/dialog.tsx:73` — İngilizce "Close".
 - [ ] D (olası) · `MapThumb.tsx:8` — 256 px taşabilir. `LocationPicker.tsx:179` — 15 px, iOS yakınlaştırır.
 
@@ -306,7 +306,7 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 - [ ] D · `sifre-sifirla.tsx:108-113` — Süresi dolan token'da yeni bağlantı yolu yok.
 
 **Profil ve ayarlar**
-- [ ] Y · `ayarlar/magaza.tsx:35-50`, `use-current-user.ts:40-50` — Sekmeye dönünce kaydedilmemiş mağaza formu siliniyor → `user?.id`.
+- [x] Y · `ayarlar/magaza.tsx:35-50`, `use-current-user.ts:40-50` — Sekmeye dönünce kaydedilmemiş mağaza formu siliniyor → `user?.id`.
 - [ ] O · `magaza.tsx:41-42`, `account.ts:262,392-412` — Kişisel numara alana dolduruluyor, kaydedilince `stores.phone` olup herkese açık yanıtta dönüyor. O · `magaza.tsx:49-52` — Sonsuz yükleme. D · `:41,28,44,71,86-90` — İl önerisi kafa karıştırıyor, ölü `slug`, `<a><button>`.
 - [ ] O · `profil.tsx:31-33,47` — `getMe` hatası sonsuz iskelet. O · `api/avatar.ts:39`, `ayarlar/profil.tsx:85`, `AccountShell.tsx:10-11` — `user.image` ve `avatar_url` ayrışıyor.
 - [ ] D · `profil.tsx:88,102` — Kontrast; doping satırı.
@@ -314,7 +314,7 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 - [ ] O · `api/hesap/verilerim.ts:25-51` — KVKK dışa aktarımı eksik: konum, `kind/meta`, sohbet görselleri, şablonlar, kredi, doping, cihazlar. Yorum "her şey" diyor.
 - [ ] O · `ayarlar/hesap.tsx:47`, `verilerim.ts:21,86` — Sınır aşılınca hata JSON'u dosya olarak iniyor.
 - [ ] D · `hesap.tsx:29-32`, `guvenlik.tsx:43-46` — `hasPassword` hata durumunda yanlış; şifreli üye takılır. `hesap.tsx:92,98-99` — "Vazgeç" sonrası şifre alanda. `settings.ts:121-125` — Şifre denemesinde sınır yok. `hesap.tsx:101` — `SIL` kabul edilmiyor. `:47-51` — `<a><button>`.
-- [ ] O · `ayarlar/profil.tsx:67-74,150`, `account.ts:91` — `"a "` ham JSON toast'ı.
+- [x] O · `ayarlar/profil.tsx:67-74,150`, `account.ts:91` — `"a "` ham JSON toast'ı.
 - [x] O · `account.ts:101-108`, `migrations/0009_ops.sql:15` — Telefon doğrulamasız benzersiz ayrılıyor; başkası numaranı kilitleyebilir, sınır yok, numara taranabilir.
 - [x] O · `helpers.ts:206,238-241`, `satici/$id.tsx:169`, `csp.ts:14` — Kayıttaki serbest `image` herkese açık profile geçiyor; harici görsel ve IP toplama.
 - [ ] O (olası) · `api/avatar.ts:15-23` — Boyut `content-length`'e bağlı, HEIF'te yok, hız sınırı yok. D (olası) · `api/avatar/$id.ts:22` — Bir yıl `immutable`.

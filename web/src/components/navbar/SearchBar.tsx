@@ -180,7 +180,7 @@ export function AutocompleteSearchBar({
         {/* Arama İkon Butonu (Görsel ve Hızlı Tetikleyici) */}
         <button
           type="submit"
-          className="ml-2 hidden sm:flex items-center justify-center h-10 px-4 bg-primary hover:bg-primary/90 text-primary-fg text-sm font-semibold rounded-lg shadow-xs transition-all active:scale-95"
+          className="ml-2 hidden sm:flex items-center justify-center h-10 px-4 bg-primary-solid hover:bg-primary-solid/90 text-primary-fg text-sm font-semibold rounded-lg shadow-xs transition-all active:scale-95"
           aria-label="Ara"
         >
           <span>Ara</span>

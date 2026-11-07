@@ -9,7 +9,7 @@ import { FLAG_PLATFORMS, type FlagPlatform, type FlagRule, type FlagRules } from
 import { adminGetSettings, adminSaveAppConfig, adminSaveSiteSettings, type MobileAppConfig, type ModerationMode } from "@/lib/server/admin/content";
 import { useRunner } from "@/components/admin/hooks";
 import type { Tone } from "@/components/admin/format";
-import { Card, CardHead, ErrorState, Field, inputClass, PageHeader, Pill, Spinner, useConfirm } from "@/components/admin/ui";
+import { Card, CardHead, ErrorState, Field, FieldGroup, inputClass, PageHeader, Pill, Spinner, useConfirm } from "@/components/admin/ui";
 
 export const Route = createFileRoute("/admin/ayarlar")({
   component: SettingsPage,
@@ -62,7 +62,7 @@ function ModerationCard({ mode }: { mode: ModerationMode }) {
           >
             <span className="flex items-center gap-2">
               <span className={cn("flex size-4 items-center justify-center rounded-full border-2", value === m.value ? "border-primary" : "border-border")}>
-                {value === m.value ? <span className="size-2 rounded-full bg-primary" /> : null}
+                {value === m.value ? <span className="size-2 rounded-full bg-primary-solid" /> : null}
               </span>
               <span className="text-sm font-semibold">{m.title}</span>
             </span>
@@ -209,7 +209,7 @@ function FeaturesCard({ features }: { features: FlagRules }) {
                   <Field label="Açıklama">
                     <input value={rule.description} onChange={(e) => patch(key, { description: e.target.value })} maxLength={200} className={inputClass} placeholder={KNOWN_FLAGS[key] ?? "Bu anahtar neyi açıyor?"} />
                   </Field>
-                  <Field label="Kimler görsün?" hint="Aynı üye her zaman aynı sonucu alır; yüzdeyi artırınca önceden görenler görmeye devam eder.">
+                  <FieldGroup label="Kimler görsün?" hint="Aynı üye her zaman aynı sonucu alır; yüzdeyi artırınca önceden görenler görmeye devam eder.">
                     <div className="flex flex-wrap items-center gap-1.5">
                       {ROLLOUT_STEPS.map((step) => (
                         <button
@@ -237,9 +237,9 @@ function FeaturesCard({ features }: { features: FlagRules }) {
                         %
                       </span>
                     </div>
-                  </Field>
+                  </FieldGroup>
                   <div className="grid gap-4 md:grid-cols-2">
-                    <Field label="Platformlar" hint="Hiçbiri seçili değilse hepsinde çalışır.">
+                    <FieldGroup label="Platformlar" hint="Hiçbiri seçili değilse hepsinde çalışır.">
                       <div className="flex gap-1.5">
                         {FLAG_PLATFORMS.map((p) => {
                           const on = rule.platforms.includes(p);
@@ -259,7 +259,7 @@ function FeaturesCard({ features }: { features: FlagRules }) {
                           );
                         })}
                       </div>
-                    </Field>
+                    </FieldGroup>
                     <Field label="En düşük uygulama sürümü" hint="Bu sürümden eski uygulamalarda kapalı kalır (web'i etkilemez).">
                       <input
                         value={rule.minAppVersion ?? ""}

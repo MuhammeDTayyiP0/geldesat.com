@@ -1,4 +1,6 @@
+import { authErrorText } from "@/lib/auth/errors";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { errorText } from "@/lib/error-text";
 import { useState } from "react";
 import { toast } from "sonner";
 import { authClient } from "@/lib/auth/client";
@@ -62,10 +64,10 @@ function RequestForm() {
         email,
         redirectTo: `${window.location.origin}/sifre-sifirla`,
       });
-      if (error) throw new Error(error.message);
+      if (error) throw new Error(authErrorText(error));
       setSent(true);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "İstek gönderilemedi");
+      toast.error(errorText(err, "İstek gönderilemedi"));
     } finally {
       setBusy(false);
     }
@@ -106,11 +108,11 @@ function NewPasswordForm({ token }: { token: string }) {
     setBusy(true);
     try {
       const { error } = await authClient.resetPassword({ newPassword: password, token });
-      if (error) throw new Error(error.message);
+      if (error) throw new Error(authErrorText(error));
       toast.success("Şifreniz güncellendi. Yeni şifrenizle giriş yapabilirsiniz.");
       window.location.href = "/login";
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Şifre güncellenemedi");
+      toast.error(errorText(err, "Şifre güncellenemedi"));
     } finally {
       setBusy(false);
     }

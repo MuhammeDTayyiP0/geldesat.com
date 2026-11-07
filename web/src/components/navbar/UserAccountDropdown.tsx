@@ -50,7 +50,7 @@ export function UserAccountDropdown({ admin }: { admin: boolean }) {
             className="size-7 rounded-full object-cover ring-1 ring-border"
           />
         ) : (
-          <span className="grid size-7 place-items-center rounded-full bg-primary text-primary-fg text-xs font-bold shadow-xs">
+          <span className="grid size-7 place-items-center rounded-full bg-primary-solid text-primary-fg text-xs font-bold shadow-xs">
             {userInitial}
           </span>
         )}
@@ -165,7 +165,7 @@ export function UserAccountDropdown({ admin }: { admin: boolean }) {
                   setSigningOut(true);
                   void signOut().catch(() => setSigningOut(false));
                 }}
-                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-danger hover:bg-danger/10 rounded-lg transition-colors font-medium text-left"
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-danger hover:bg-danger-solid/10 rounded-lg transition-colors font-medium text-left"
               >
                 <LogOut className="size-4 text-danger shrink-0" />
                 <span>{signingOut ? "Çıkış Yapılıyor…" : "Güvenli Çıkış"}</span>

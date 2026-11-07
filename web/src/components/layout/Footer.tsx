@@ -45,7 +45,7 @@ export function Footer() {
       .catch(() => undefined);
   }, []);
   return (
-    <footer className="mt-auto border-t border-border bg-ink text-primary-fg">
+    <footer className="mt-auto border-t border-border bg-ink text-white">
       <div className="mx-auto grid max-w-6xl grid-cols-2 gap-8 px-4 py-12 md:grid-cols-4">
         {cols.map((col) => (
           <div key={col.title}>

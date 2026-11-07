@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { adminAudienceSizes, adminBroadcast, adminListAudit } from "@/lib/server/admin/content";
 import { useRunner } from "@/components/admin/hooks";
 import { dateTime, n, relative } from "@/components/admin/format";
-import { Card, CardHead, EmptyState, Field, inputClass, PageHeader, Spinner, textareaClass, useConfirm } from "@/components/admin/ui";
+import { Card, CardHead, EmptyState, Field, FieldGroup, inputClass, PageHeader, Spinner, textareaClass, useConfirm } from "@/components/admin/ui";
 
 export const Route = createFileRoute("/admin/duyurular")({
   component: BroadcastPage,
@@ -59,7 +59,7 @@ function BroadcastPage() {
         <Card>
           <CardHead title="Yeni duyuru" description="Önce yalnızca yöneticilere göndererek deneyebilirsiniz." />
           <div className="space-y-4 p-4">
-            <Field label="Alıcılar">
+            <FieldGroup label="Alıcılar">
               <div className="grid gap-2 sm:grid-cols-2">
                 {(Object.keys(sizes.data ?? {}) as Audience[]).map((key) => {
                   const a = sizes.data![key];
@@ -83,7 +83,7 @@ function BroadcastPage() {
                   </div>
                 ) : null}
               </div>
-            </Field>
+            </FieldGroup>
             <Field label="Başlık">
               <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} className={inputClass} placeholder="Ör. Yeni özellik: ilanınızı öne çıkarın" />
             </Field>

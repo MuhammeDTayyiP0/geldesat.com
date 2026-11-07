@@ -9,7 +9,7 @@ import { ListingCard } from "@/components/listing/ListingCard";
 import { NotFound } from "@/components/common/NotFound";
 import { UserAvatar } from "@/components/account/AccountShell";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { cn, formatDate } from "@/lib/utils";
 import { jsonLd } from "@/lib/seo";
@@ -145,17 +145,13 @@ function SellerPage() {
             <span className="text-muted">Alıcılar sayfanızı böyle görür.</span>
           </p>
           <div className="flex gap-2">
-            <Link to="/ayarlar/profil">
-              <Button size="sm" variant="outline">
+            <Link to="/ayarlar/profil" className={buttonVariants({ variant: "outline", size: "sm" })}>
                 <Pencil className="size-3.5" /> Profili düzenle
-              </Button>
-            </Link>
-            {store ? (
-              <Link to="/ayarlar/magaza">
-                <Button size="sm" variant="outline">
-                  <StoreIcon className="size-3.5" /> Mağaza
-                </Button>
               </Link>
+            {store ? (
+              <Link to="/ayarlar/magaza" className={buttonVariants({ variant: "outline", size: "sm" })}>
+                  <StoreIcon className="size-3.5" /> Mağaza
+                </Link>
             ) : null}
           </div>
         </div>
@@ -232,7 +228,7 @@ function SellerPage() {
             onClick={() => setTab(key)}
             className={cn(
               "h-9 rounded-full border px-4 text-sm font-medium transition-colors",
-              tab === key ? "border-primary bg-primary text-primary-fg" : "border-border bg-surface hover:bg-elevated",
+              tab === key ? "border-primary bg-primary-solid text-primary-fg" : "border-border bg-surface hover:bg-elevated",
             )}
           >
             {label}

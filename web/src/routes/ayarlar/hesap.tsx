@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { errorText } from "@/lib/error-text";
 import { useEffect, useState, type FormEvent } from "react";
 import { Download, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -111,7 +112,7 @@ function DeleteDialog({ open, onOpenChange, needsPassword }: { open: boolean; on
       toast.success("Hesabınız 30 gün içinde silinecek. Bu sürede giriş yaparak geri alabilirsiniz.");
       setTimeout(() => (window.location.href = "/"), 1200);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Hesap silinemedi");
+      toast.error(errorText(err, "Hesap silinemedi"));
       setBusy(false);
     }
   }

@@ -166,7 +166,7 @@ function Orders({
                   </Td>
                   <Td className="text-xs">
                     <span className="font-mono">{o.sku}</span>
-                    <span className="block font-semibold text-violet-700">{n(o.credits)} kredi</span>
+                    <span className="block font-semibold text-violet">{n(o.credits)} kredi</span>
                   </Td>
                   <Td className="text-right font-semibold tabular-nums">{money(o.price)}</Td>
                   <Td>
@@ -181,7 +181,7 @@ function Orders({
                   <Td className="text-right">
                     {o.status === "PENDING" ? (
                       <div className="flex justify-end gap-1.5">
-                        <Button size="sm" className="h-8 bg-ok px-2.5 text-white hover:bg-ok/90" disabled={busy} onClick={() => void resolve(o.id, "PAID", o.credits, o.price)}>
+                        <Button size="sm" className="h-8 bg-ok-solid px-2.5 text-white hover:bg-ok-solid/90" disabled={busy} onClick={() => void resolve(o.id, "PAID", o.credits, o.price)}>
                           <Check className="size-4" /> Onayla
                         </Button>
                         <Button size="sm" variant="outline" className="h-8 px-2.5 text-danger" disabled={busy} onClick={() => void resolve(o.id, "REJECTED", o.credits, o.price)}>

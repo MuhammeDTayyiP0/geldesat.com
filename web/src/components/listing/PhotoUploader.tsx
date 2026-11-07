@@ -1,3 +1,4 @@
+import { errorText } from "@/lib/error-text";
 import {
   useEffect,
   useRef,
@@ -147,7 +148,7 @@ export function PhotoUploader({ images, setImages, originals, onBusyChange, requ
     } catch (e) {
       if (ctrl.signal.aborted) return;
       batch.current.failed++;
-      patch(p.key, { status: "error", error: e instanceof Error ? e.message : "Fotoğraf yüklenemedi" });
+      patch(p.key, { status: "error", error: errorText(e, "Fotoğraf yüklenemedi") });
     } finally {
       controllers.current.delete(p.key);
     }
@@ -240,7 +241,7 @@ export function PhotoUploader({ images, setImages, originals, onBusyChange, requ
       setImages((prev) => prev.map((u) => (u === url ? next : u)));
       discardPhoto(url);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Fotoğraf döndürülemedi");
+      toast.error(errorText(e, "Fotoğraf döndürülemedi"));
     } finally {
       setRotating(null);
     }
@@ -305,7 +306,7 @@ export function PhotoUploader({ images, setImages, originals, onBusyChange, requ
           </p>
           <div className="mt-1 flex gap-0.5" aria-hidden="true">
             {Array.from({ length: MAX_PHOTOS }, (_, i) => (
-              <span key={i} className={cn("h-1.5 w-2 rounded-full", i < used ? "bg-primary" : "bg-elevated")} />
+              <span key={i} className={cn("h-1.5 w-2 rounded-full", i < used ? "bg-primary-solid" : "bg-elevated")} />
             ))}
           </div>
         </div>
@@ -397,7 +398,7 @@ export function PhotoUploader({ images, setImages, originals, onBusyChange, requ
                       type="button"
                       onClick={() => removeImage(url)}
                       aria-label={`Fotoğraf ${i + 1}'i sil`}
-                      className="grid size-8 place-items-center rounded-full bg-ink/65 text-white backdrop-blur-sm transition-colors hover:bg-danger"
+                      className="grid size-8 place-items-center rounded-full bg-ink/65 text-white backdrop-blur-sm transition-colors hover:bg-danger-solid"
                     >
                       <Trash2 className="size-4" />
                     </button>
@@ -478,7 +479,7 @@ export function PhotoUploader({ images, setImages, originals, onBusyChange, requ
                   type="button"
                   onClick={() => removePending(p.key)}
                   aria-label="Fotoğrafı kaldır"
-                  className="absolute right-1.5 top-1.5 grid size-8 place-items-center rounded-full bg-ink/65 text-white hover:bg-danger sm:right-2 sm:top-2"
+                  className="absolute right-1.5 top-1.5 grid size-8 place-items-center rounded-full bg-ink/65 text-white hover:bg-danger-solid sm:right-2 sm:top-2"
                 >
                   <Trash2 className="size-4" />
                 </button>
@@ -491,7 +492,7 @@ export function PhotoUploader({ images, setImages, originals, onBusyChange, requ
               <button
                 type="button"
                 onClick={() => inputRef.current?.click()}
-                className="flex flex-col items-center justify-center gap-1 text-sm font-medium text-muted transition-colors hover:bg-primary/5 hover:text-primary"
+                className="flex flex-col items-center justify-center gap-1 text-sm font-medium text-muted transition-colors hover:bg-primary-solid/5 hover:text-primary"
               >
                 <ImagePlus className="size-6" />
                 Fotoğraf ekle

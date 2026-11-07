@@ -18,12 +18,19 @@
   --color-bg: #f3f5f8;
   --color-fg: #12151c;
   --color-muted: #5a6270;
-  --color-subtle: #8a929e;
+  --color-subtle: #667085;
   --color-surface: #ffffff;
   --color-elevated: #eef1f5;
   --color-border: #d8dee6;
   --color-primary: #1a4fd8;
   --color-primary-fg: #f7f8fc;
+  /* Fills that carry text. In dark mode --color-primary and friends are lightened
+     to read as text on dark surfaces, which makes them too light behind white. */
+  --color-primary-solid: #1a4fd8;
+  --color-danger-solid: #b42318;
+  --color-ok-solid: #1f7a4d;
+  --color-urgent-solid: #d92d20;
+  --color-violet: #6d28d9;
   --color-ink: #0d1117;
   /* Logo navy, as in favicon.svg (light in dark mode). */
   --color-brand: #0a2342;
@@ -61,6 +68,11 @@
   --color-border: #262e3b;
   --color-primary: #4f7cff;
   --color-primary-fg: #ffffff;
+  --color-primary-solid: #3565ea;
+  --color-danger-solid: #b42318;
+  --color-ok-solid: #1f7a4d;
+  --color-urgent-solid: #d92d20;
+  --color-violet: #a78bfa;
   --color-ink: #05070a;
   --color-brand: #f7f8fc;
   --color-danger: #f97066;
@@ -83,6 +95,11 @@
     --color-border: #262e3b;
     --color-primary: #4f7cff;
     --color-primary-fg: #ffffff;
+    --color-primary-solid: #3565ea;
+    --color-danger-solid: #b42318;
+    --color-ok-solid: #1f7a4d;
+    --color-urgent-solid: #d92d20;
+    --color-violet: #a78bfa;
     --color-ink: #05070a;
     --color-brand: #f7f8fc;
     --color-danger: #f97066;

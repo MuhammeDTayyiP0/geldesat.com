@@ -1,6 +1,7 @@
 import * as DialogPrimitive from "@radix-ui/react-dialog";
+import { errorText } from "@/lib/error-text";
 import * as MenuPrimitive from "@radix-ui/react-dropdown-menu";
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { AlertTriangle, ChevronLeft, ChevronRight, Inbox, Loader2, MoreHorizontal, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -63,8 +64,8 @@ const PILL: Record<Tone, string> = {
   ok: "bg-ok/8 text-ok ring-ok/20",
   warn: "bg-warn/10 text-warn ring-warn/25",
   danger: "bg-danger/8 text-danger ring-danger/20",
-  ink: "bg-ink text-white ring-ink",
-  violet: "bg-violet-500/10 text-violet-700 ring-violet-500/20",
+  ink: "bg-fg text-bg ring-fg",
+  violet: "bg-violet-500/10 text-violet ring-violet-500/20",
 };
 
 export function Pill({ tone = "muted", children, className, dot }: { tone?: Tone; children: ReactNode; className?: string; dot?: boolean }) {
@@ -119,8 +120,8 @@ export function StatCard({
     ok: "bg-ok/10 text-ok",
     warn: "bg-warn/10 text-warn",
     danger: "bg-danger/10 text-danger",
-    ink: "bg-ink text-white",
-    violet: "bg-violet-500/10 text-violet-700",
+    ink: "bg-fg text-bg",
+    violet: "bg-violet-500/10 text-violet",
   };
   const Comp = onClick ? "button" : "div";
   return (
@@ -173,7 +174,7 @@ export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () =>
         <AlertTriangle className="size-6" />
       </span>
       <p className="mt-3 text-sm font-semibold">Veriler yüklenemedi</p>
-      <p className="mt-1 max-w-sm text-xs text-muted">{error instanceof Error ? error.message : "Bilinmeyen bir hata oluştu."}</p>
+      <p className="mt-1 max-w-sm text-xs text-muted">{errorText(error, "Bilinmeyen bir hata oluştu.")}</p>
       {onRetry ? (
         <Button size="sm" variant="outline" className="mt-4" onClick={onRetry}>
           Tekrar dene
@@ -310,6 +311,22 @@ export function SelectBox({
   );
 }
 
+/**
+ * Field for a group of buttons. A <label> around buttons activates the first
+ * one when its text or a gap is clicked, which silently changed audiences and
+ * rollout percentages.
+ */
+export function FieldGroup({ label, hint, children, className }: { label: ReactNode; hint?: ReactNode; children: ReactNode; className?: string }) {
+  const id = useId();
+  return (
+    <div role="group" aria-labelledby={id} className={cn("block", className)}>
+      <span id={id} className="mb-1.5 block text-xs font-semibold text-fg">{label}</span>
+      {children}
+      {hint ? <span className="mt-1 block text-xs text-muted">{hint}</span> : null}
+    </div>
+  );
+}
+
 export function Field({ label, hint, children, className, error }: { label: ReactNode; hint?: ReactNode; children: ReactNode; className?: string; error?: string | null }) {
   return (
     <label className={cn("block", className)}>
@@ -350,7 +367,7 @@ export function Segmented<T extends string>({
             onClick={() => onChange(item.value)}
             className={cn(
               "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-colors",
-              active ? "bg-ink text-white shadow-xs" : "text-muted hover:bg-surface hover:text-fg",
+              active ? "bg-fg text-bg shadow-xs" : "text-muted hover:bg-surface hover:text-fg",
             )}
           >
             {item.label}
@@ -358,7 +375,7 @@ export function Segmented<T extends string>({
               <span
                 className={cn(
                   "rounded-full px-1.5 py-px text-[10px] tabular-nums",
-                  active ? "bg-white/20 text-white" : item.tone === "warn" && item.count > 0 ? "bg-warn/15 text-warn" : item.tone === "danger" && item.count > 0 ? "bg-danger/10 text-danger" : "bg-elevated text-muted",
+                  active ? "bg-bg/20 text-bg" : item.tone === "warn" && item.count > 0 ? "bg-warn/15 text-warn" : item.tone === "danger" && item.count > 0 ? "bg-danger/10 text-danger" : "bg-elevated text-muted",
                 )}
               >
                 {n(item.count)}

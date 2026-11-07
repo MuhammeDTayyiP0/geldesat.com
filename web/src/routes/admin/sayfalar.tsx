@@ -122,10 +122,10 @@ function Editor({ page, onSaved, onDeleted }: { page: { slug: string; title: str
         </Field>
       </div>
       <div className="flex items-center gap-1 border-b border-border px-4 py-2">
-        <button type="button" onClick={() => setPreview(false)} className={cn("inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold", !preview ? "bg-ink text-white" : "text-muted hover:bg-elevated")}>
+        <button type="button" onClick={() => setPreview(false)} className={cn("inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold", !preview ? "bg-fg text-bg" : "text-muted hover:bg-elevated")}>
           <Pencil className="size-3.5" /> Düzenle
         </button>
-        <button type="button" onClick={() => setPreview(true)} className={cn("inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold", preview ? "bg-ink text-white" : "text-muted hover:bg-elevated")}>
+        <button type="button" onClick={() => setPreview(true)} className={cn("inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold", preview ? "bg-fg text-bg" : "text-muted hover:bg-elevated")}>
           <Eye className="size-3.5" /> Önizle
         </button>
         {linked ? <Pill tone="primary">Altbilgide bağlı</Pill> : null}

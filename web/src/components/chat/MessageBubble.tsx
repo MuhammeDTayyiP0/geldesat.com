@@ -167,7 +167,7 @@ export function MessageBubble({
             type="button"
             disabled={offerBusy}
             onClick={() => void respond(true)}
-            className="h-9 rounded-lg bg-ok text-sm font-semibold text-white hover:bg-ok/90 disabled:opacity-50"
+            className="h-9 rounded-lg bg-ok-solid text-sm font-semibold text-white hover:bg-ok-solid/90 disabled:opacity-50"
           >
             Kabul et
           </button>
@@ -175,7 +175,7 @@ export function MessageBubble({
             type="button"
             disabled={offerBusy}
             onClick={onCounterOffer}
-            className="col-span-2 h-9 rounded-lg border border-primary/30 text-sm font-semibold text-primary hover:bg-primary/5 disabled:opacity-50"
+            className="col-span-2 h-9 rounded-lg border border-primary/30 text-sm font-semibold text-primary hover:bg-primary-solid/5 disabled:opacity-50"
           >
             Karşı teklif ver
           </button>
@@ -217,7 +217,7 @@ export function MessageBubble({
         <div
           className={cn(
             "rounded-2xl px-3.5 py-2 text-[15px] shadow-2xs transition-shadow md:text-sm",
-            mine ? "rounded-br-md bg-primary text-primary-fg" : "rounded-bl-md border border-border/80 bg-surface text-fg",
+            mine ? "rounded-br-md bg-primary-solid text-primary-fg" : "rounded-bl-md border border-border/80 bg-surface text-fg",
             offer && !mine && "border-warn/40 bg-warn/5",
             pending && "opacity-70",
             failed && "ring-2 ring-danger/60",

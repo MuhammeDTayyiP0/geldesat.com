@@ -1,4 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { errorText } from "@/lib/error-text";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   Archive,
@@ -281,7 +282,7 @@ function Thread() {
       })
       .catch((e) => {
         if (stop) return;
-        setError(e instanceof Error ? e.message : "Sohbet açılamadı");
+        setError(errorText(e, "Sohbet açılamadı"));
         setLoading(false);
       });
 
@@ -489,7 +490,7 @@ function Thread() {
       setMessages((prev) =>
         prev.map((m) => (m.id === tempId ? { ...m, localState: "failed" } : m)),
       );
-      toast.error(err instanceof Error ? err.message : "Mesaj gönderilemedi");
+      toast.error(errorText(err, "Mesaj gönderilemedi"));
     }
   }
 
@@ -559,7 +560,7 @@ function Thread() {
           stickRef.current = true;
           merge([msg]);
         } catch (err) {
-          toast.error(err instanceof Error ? err.message : "Fotoğraf gönderilemedi");
+          toast.error(errorText(err, "Fotoğraf gönderilemedi"));
         }
       }
       pingInbox();
@@ -581,7 +582,7 @@ function Thread() {
         toast.success("Kullanıcı engellendi");
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "İşlem başarısız oldu");
+      toast.error(errorText(e, "İşlem başarısız oldu"));
     }
   }
 
@@ -931,7 +932,7 @@ function Thread() {
                       merge([await respondOffer({ data: { messageId: m.id, accept } })]);
                       toast.success(accept ? "Teklif kabul edildi" : "Teklif reddedildi");
                     } catch (e) {
-                      toast.error(e instanceof Error ? e.message : "İşlem başarısız oldu");
+                      toast.error(errorText(e, "İşlem başarısız oldu"));
                     }
                   }}
                   onRetry={() =>
@@ -970,7 +971,7 @@ function Thread() {
           <button
             type="button"
             onClick={backToLatest}
-            className="rounded-full bg-primary px-4 py-1.5 text-xs font-semibold text-primary-fg shadow"
+            className="rounded-full bg-primary-solid px-4 py-1.5 text-xs font-semibold text-primary-fg shadow"
           >
             {newWhileDetached ? "Yeni mesajlar var · En yeniye git" : "En yeni mesajlara git"}
           </button>
@@ -1246,7 +1247,7 @@ function Thread() {
             toast.success("Sohbet silindi");
             void navigate({ to: "/mesajlar" });
           } catch (e) {
-            toast.error(e instanceof Error ? e.message : "Sohbet silinemedi");
+            toast.error(errorText(e, "Sohbet silinemedi"));
           }
         }}
       />
@@ -1273,7 +1274,7 @@ function Thread() {
           try {
             merge([await deleteMessage({ data: { messageId: dialog.deleteMessage } })]);
           } catch (e) {
-            toast.error(e instanceof Error ? e.message : "Mesaj silinemedi");
+            toast.error(errorText(e, "Mesaj silinemedi"));
           }
         }}
       />
@@ -1322,7 +1323,7 @@ function OfferDialog({
               await onSend(amount);
               onOpenChange(false);
             } catch (err) {
-              toast.error(err instanceof Error ? err.message : "Teklif gönderilemedi");
+              toast.error(errorText(err, "Teklif gönderilemedi"));
             } finally {
               setBusy(false);
             }
@@ -1417,7 +1418,7 @@ function ReportDialog({
               setDetails("");
               onOpenChange(false);
             } catch (err) {
-              toast.error(err instanceof Error ? err.message : "Şikayet gönderilemedi");
+              toast.error(errorText(err, "Şikayet gönderilemedi"));
             } finally {
               setBusy(false);
             }
@@ -1494,7 +1495,7 @@ function TemplatesDialog({
     try {
       setItems(await saveChatTemplates({ data: { templates: next } }));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Kaydedilemedi");
+      toast.error(errorText(err, "Kaydedilemedi"));
     } finally {
       setBusy(false);
     }
@@ -1531,7 +1532,7 @@ function TemplatesDialog({
                   disabled={busy}
                   onClick={() => void save(items.filter((_, j) => j !== i))}
                   aria-label="Hazır cevabı sil"
-                  className="grid size-7 shrink-0 place-items-center rounded-full text-muted hover:bg-danger/10 hover:text-danger"
+                  className="grid size-7 shrink-0 place-items-center rounded-full text-muted hover:bg-danger-solid/10 hover:text-danger"
                 >
                   <Trash2 className="size-3.5" />
                 </button>

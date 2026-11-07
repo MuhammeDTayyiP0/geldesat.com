@@ -1,6 +1,11 @@
 import { createMiddleware, createStart } from "@tanstack/react-start";
 import { isNotFound, isRedirect } from "@tanstack/react-router";
+import { z } from "zod";
+import tr from "zod/v4/locales/tr.js";
 import { publicErrorMessage } from "@/lib/server/errors";
+
+// Validation messages reach people, so they are in Turkish.
+z.config(tr());
 
 /**
  * Every server function's errors reach the browser. Messages the app throws on

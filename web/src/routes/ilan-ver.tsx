@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { errorText } from "@/lib/error-text";
 import { useEffect, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { browseCategories } from "@/lib/server/catalog";
 import { getCategoryAttrs, getListingForEdit, getMe, saveListing } from "@/lib/server/account";
@@ -221,7 +222,7 @@ function PostForm() {
       })
       .catch((e) => {
         if (cancelled) return;
-        toast.error(e instanceof Error ? e.message : "İlan yüklenemedi");
+        toast.error(errorText(e, "İlan yüklenemedi"));
         void nav({ to: "/ilanlarim" });
       });
     return () => {
@@ -282,7 +283,7 @@ function PostForm() {
       );
       void nav({ to: "/ilan/$slug", params: { slug: result.slug } });
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Kayıt başarısız");
+      toast.error(errorText(e, "Kayıt başarısız"));
     } finally {
       setBusy(false);
     }
@@ -754,7 +755,7 @@ function Stepper({ step, onPick, locked }: { step: number; onPick: (i: number) =
         </div>
         <div className="mt-2 grid grid-cols-4 gap-1.5" aria-hidden="true">
           {STEPS.map((s, i) => (
-            <span key={s.label} className={cn("h-1.5 rounded-full", i <= step ? "bg-primary" : "bg-elevated")} />
+            <span key={s.label} className={cn("h-1.5 rounded-full", i <= step ? "bg-primary-solid" : "bg-elevated")} />
           ))}
         </div>
       </div>
@@ -775,8 +776,8 @@ function Stepper({ step, onPick, locked }: { step: number; onPick: (i: number) =
                 <span
                   className={cn(
                     "grid size-9 shrink-0 place-items-center rounded-full text-sm font-semibold transition-colors",
-                    done && "bg-primary text-primary-fg group-enabled:group-hover:bg-primary/85",
-                    current && "bg-primary text-primary-fg ring-4 ring-primary/15",
+                    done && "bg-primary-solid text-primary-fg group-enabled:group-hover:bg-primary-solid/85",
+                    current && "bg-primary-solid text-primary-fg ring-4 ring-primary/15",
                     !done && !current && "border border-border bg-surface text-muted",
                   )}
                 >
@@ -789,7 +790,7 @@ function Stepper({ step, onPick, locked }: { step: number; onPick: (i: number) =
                 <span className={cn("text-sm font-medium lg:hidden", current || done ? "text-fg" : "text-muted")}>{s.label}</span>
               </button>
               {i < STEPS.length - 1 ? (
-                <span className={cn("mx-4 h-0.5 flex-1 rounded-full", done ? "bg-primary" : "bg-border")} aria-hidden="true" />
+                <span className={cn("mx-4 h-0.5 flex-1 rounded-full", done ? "bg-primary-solid" : "bg-border")} aria-hidden="true" />
               ) : null}
             </li>
           );

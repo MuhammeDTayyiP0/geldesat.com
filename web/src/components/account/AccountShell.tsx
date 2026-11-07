@@ -33,7 +33,7 @@ function NavRow({ item, active, count }: { item: AccountNavItem; active: boolean
       <Icon className={cn("size-4.5 shrink-0", active ? "text-primary" : "text-muted")} />
       <span className="flex-1 truncate">{item.label}</span>
       {count > 0 ? (
-        <span className="min-w-5 rounded-full bg-primary px-1.5 text-center text-[11px] font-bold leading-5 text-primary-fg">
+        <span className="min-w-5 rounded-full bg-primary-solid px-1.5 text-center text-[11px] font-bold leading-5 text-primary-fg">
           {count > 99 ? "99+" : count}
         </span>
       ) : null}
@@ -98,7 +98,7 @@ function AccountSidebar() {
         <Link to="/sayfa/$slug" params={{ slug: "yardim" }} className="flex h-10 items-center gap-3 rounded-lg px-3 text-sm hover:bg-elevated">
           <HelpCircle className="size-4.5 text-muted" /> Yardım
         </Link>
-        <SignOutButton className="flex h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-sm text-danger hover:bg-danger/8" />
+        <SignOutButton className="flex h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-sm text-danger hover:bg-danger-solid/8" />
       </div>
     </nav>
   );
@@ -150,7 +150,7 @@ export function AccountShell({
             <AccountSidebar />
           </div>
         </aside>
-        <main className="min-w-0">
+        <div className="min-w-0">
           <header className={cn("mb-5 flex items-center justify-between gap-3", hub && "md:mb-6")}>
             <div className="flex min-w-0 items-center gap-1">
               {!hub ? (
@@ -170,7 +170,7 @@ export function AccountShell({
             {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
           </header>
           {children}
-        </main>
+        </div>
       </div>
     </div>
   );
@@ -194,7 +194,7 @@ export function MenuRows({ items, counts }: { items: AccountNavItem[]; counts?: 
                 {item.hint ? <span className="block truncate text-xs text-muted">{item.hint}</span> : null}
               </span>
               {count > 0 ? (
-                <span className="min-w-5 rounded-full bg-primary px-1.5 text-center text-[11px] font-bold leading-5 text-primary-fg">
+                <span className="min-w-5 rounded-full bg-primary-solid px-1.5 text-center text-[11px] font-bold leading-5 text-primary-fg">
                   {count > 99 ? "99+" : count}
                 </span>
               ) : null}

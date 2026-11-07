@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { errorText } from "@/lib/error-text";
 import { useEffect, useState } from "react";
 import { Ban } from "lucide-react";
 import { toast } from "sonner";
@@ -40,7 +41,7 @@ function BlockedUsers() {
       setRows((prev) => (prev ?? []).filter((x) => x.id !== r.id));
       toast.success(`${r.name} engeli kaldırıldı`);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Engel kaldırılamadı");
+      toast.error(errorText(e, "Engel kaldırılamadı"));
     } finally {
       setBusy(null);
     }

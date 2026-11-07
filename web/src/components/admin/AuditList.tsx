@@ -3,13 +3,13 @@ import { cn } from "@/lib/utils";
 import { actionTone, dateTime, relative, TARGET_LABEL } from "./format";
 
 const DOT: Record<string, string> = {
-  danger: "bg-danger",
-  ok: "bg-ok",
+  danger: "bg-danger-solid",
+  ok: "bg-ok-solid",
   violet: "bg-violet-500",
-  primary: "bg-primary",
+  primary: "bg-primary-solid",
   warn: "bg-warn",
   muted: "bg-subtle",
-  ink: "bg-ink",
+  ink: "bg-fg",
 };
 
 /** Timeline of admin actions. */

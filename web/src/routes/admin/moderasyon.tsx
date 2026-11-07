@@ -321,7 +321,7 @@ function Reviewer({ id, position, total, onStep, onDecided }: { id: string; posi
                   type="button"
                   disabled={busy}
                   onClick={() => void decide("reject", r)}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-left text-xs hover:border-danger/40 hover:bg-danger/5 hover:text-danger"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-left text-xs hover:border-danger/40 hover:bg-danger-solid/5 hover:text-danger"
                 >
                   <Kbd>{i + 1}</Kbd> {r}
                 </button>
@@ -345,7 +345,7 @@ function Reviewer({ id, position, total, onStep, onDecided }: { id: string; posi
           </div>
         ) : (
           <div className="flex flex-wrap items-center gap-2">
-            <Button className="bg-ok text-white hover:bg-ok/90" disabled={busy} onClick={() => void decide("approve")}>
+            <Button className="bg-ok-solid text-white hover:bg-ok-solid/90" disabled={busy} onClick={() => void decide("approve")}>
               {busy ? <Spinner /> : <Check className="size-4" />} Onayla <Kbd>A</Kbd>
             </Button>
             <Button variant="outline" className="text-danger" disabled={busy} onClick={() => setRejecting(true)}>

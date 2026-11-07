@@ -89,7 +89,7 @@ function SettingsHome() {
         {!term ? (
           <ul className="overflow-hidden rounded-2xl border border-border bg-surface">
             <li>
-              <SignOutButton className="flex min-h-13 w-full items-center gap-3 px-4 text-left font-medium text-danger hover:bg-danger/8" />
+              <SignOutButton className="flex min-h-13 w-full items-center gap-3 px-4 text-left font-medium text-danger hover:bg-danger-solid/8" />
             </li>
           </ul>
         ) : null}

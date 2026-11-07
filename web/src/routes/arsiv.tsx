@@ -21,7 +21,7 @@ function Arsiv() {
         </p>
         <Link
           to="/"
-          className="mt-6 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary text-sm font-medium text-primary-fg hover:opacity-90"
+          className="mt-6 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary-solid text-sm font-medium text-primary-fg hover:opacity-90"
         >
           Anasayfaya dön
         </Link>
