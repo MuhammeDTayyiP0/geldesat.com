@@ -12,10 +12,12 @@ type Props = {
   onRetry: (key: string) => void;
   onMove: (key: string, delta: -1 | 1) => void;
   onCover: (key: string) => void;
+  /** Show photo `index` full screen. */
+  onOpen: (index: number) => void;
   required: boolean;
 };
 
-export function PhotoStep({ photos, onAdd, onRemove, onRetry, onMove, onCover, required }: Props) {
+export function PhotoStep({ photos, onAdd, onRemove, onRetry, onMove, onCover, onOpen, required }: Props) {
   const { c } = useTheme();
   const { width } = useWindowDimensions();
   const size = Math.floor((width - space.lg * 2 - space.sm * 2) / 3);
@@ -36,7 +38,9 @@ export function PhotoStep({ photos, onAdd, onRemove, onRetry, onMove, onCover, r
           const uri = p.localUri ?? mediaUrl(p.url, 480);
           return (
             <View key={p.key} style={[styles.tile, { width: size, height: size, backgroundColor: c.elevated }]}>
-              {uri ? <Image source={uri} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}
+              <Pressable accessibilityRole="imagebutton" accessibilityLabel={`${i + 1}. fotoğrafı büyüt`} onPress={() => onOpen(i)} style={StyleSheet.absoluteFill}>
+                {uri ? <Image source={uri} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}
+              </Pressable>
               {i === 0 ? <Badge label="KAPAK" tone="primary" style={styles.cover} /> : null}
               {p.status === 'uploading' ? (
                 <View style={[styles.overlay, { backgroundColor: c.overlay }]}>
@@ -92,7 +96,7 @@ export function PhotoStep({ photos, onAdd, onRemove, onRetry, onMove, onCover, r
       <View style={[styles.tips, { backgroundColor: c.elevated }]}>
         <Text variant="label">İpuçları</Text>
         <Text variant="caption" tone="muted">
-          • Gün ışığında, ürünün tamamını gösteren fotoğraflar çekin.{'\n'}• En net fotoğrafı kapak yapın; ilk izlenim önemlidir.{'\n'}•
+          • Gün ışığında, ürünün tamamını gösteren fotoğraflar çekin.{'\n'}• Seçtiğiniz fotoğrafları eklemeden önce büyük görüp döndürebilirsiniz.{'\n'}• En net fotoğrafı kapak yapın; ilk izlenim önemlidir.{'\n'}•
           Fotoğraflar oranı korunarak küçültülür ve filigran eklenir.
         </Text>
       </View>

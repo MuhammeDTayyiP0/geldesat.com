@@ -39,6 +39,20 @@ export async function pickPhotos(source: 'camera' | 'library', limit: number): P
   return result.assets.slice(0, limit).map((a) => ({ uri: a.uri, width: a.width, height: a.height, mimeType: a.mimeType, fileName: a.fileName }));
 }
 
+/**
+ * Turn a photo a quarter turn clockwise, as a new local file. Also shrinks it to
+ * the upload size, so further turns and the upload itself stay quick.
+ */
+export async function rotatePhoto(photo: PickedPhoto): Promise<PickedPhoto> {
+  const context = ImageManipulator.manipulate(photo.uri).rotate(90);
+  // After the turn width and height swap.
+  const [w, h] = [photo.height, photo.width];
+  if (Math.max(w, h) > MAX_EDGE) context.resize(w >= h ? { width: MAX_EDGE } : { height: MAX_EDGE });
+  const image = await context.renderAsync();
+  const saved = await image.saveAsync({ compress: 0.92, format: SaveFormat.JPEG });
+  return { uri: saved.uri, width: saved.width, height: saved.height, mimeType: 'image/jpeg', fileName: photo.fileName };
+}
+
 /** Shrink very large photos to JPEG before upload so it is quick on mobile data. */
 export async function preparePhoto(photo: PickedPhoto): Promise<{ uri: string; mimeType: string; fileName: string }> {
   const longEdge = Math.max(photo.width, photo.height);

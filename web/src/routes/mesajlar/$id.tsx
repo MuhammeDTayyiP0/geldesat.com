@@ -10,6 +10,7 @@ import {
   ImageIcon,
   ImagePlus,
   Mail,
+  Plus,
   MapPin,
   MessageSquareText,
   MoreVertical,
@@ -83,6 +84,11 @@ type Thread = Awaited<ReturnType<typeof getThread>>;
 type Msg = ChatMessage & { localState?: "pending" | "failed" };
 
 const SAFETY_KEY = "geldesat:chat-safety-dismissed";
+
+/** Photos per send; the server allows 20 chat photos per 10 minutes. */
+const MAX_CHAT_PHOTOS = 5;
+type StagedPhoto = { key: string; file: File; url: string };
+let stagedSeq = 0;
 const REPORT_REASONS = [
   "Dolandırıcılık şüphesi",
   "Hakaret veya taciz",
@@ -132,6 +138,11 @@ function Thread() {
   const [error, setError] = useState("");
   const [safetyHidden, setSafetyHidden] = useState(true);
   const [uploading, setUploading] = useState(false);
+  /** Photos picked but not sent yet; they go out with the next "Gönder". */
+  const [staged, setStaged] = useState<StagedPhoto[]>([]);
+  const stagedRef = useRef(staged);
+  stagedRef.current = staged;
+  useEffect(() => () => stagedRef.current.forEach((p) => URL.revokeObjectURL(p.url)), []);
   const [dialog, setDialog] = useState<
     | null
     | "offer"
@@ -484,28 +495,65 @@ function Thread() {
 
   function submit() {
     const content = text.trim();
-    if (!content) return;
+    const photos = staged;
+    if (!content && !photos.length) return;
+    if (photos.length && uploading) return;
     setText("");
     if (box.current) box.current.style.height = "auto";
-    const quoted = replyTo;
-    setReplyTo(null);
+    // Photos cannot quote a message; a reply waits for the text that goes with them.
+    const quoted = content ? replyTo : null;
+    if (content) setReplyTo(null);
+    if (photos.length) {
+      setStaged([]);
+      // Photos first, then the text as their caption.
+      void sendPhotos(photos.map((p) => p.file)).then(() => {
+        photos.forEach((p) => URL.revokeObjectURL(p.url));
+        if (content) void send(content, undefined, quoted);
+      });
+      return;
+    }
     void send(content, undefined, quoted);
   }
 
-  /** Send up to 5 photos, one after another, in the order picked. */
-  async function sendPhotos(list: FileList | null) {
-    const files = Array.from(list ?? []);
+  /** Hold picked, pasted or dropped photos above the composer until "Gönder". */
+  function stagePhotos(list: FileList | File[] | null) {
+    const files = Array.from(list ?? []).filter((f) => f.type.startsWith("image/") || /\.(heic|heif)$/i.test(f.name));
     if (!files.length) return;
-    if (files.length > 5)
-      toast.warning("Tek seferde en fazla 5 fotoğraf gönderilebilir; ilk 5'i gönderiliyor.");
+    const room = MAX_CHAT_PHOTOS - staged.length;
+    if (room <= 0) {
+      toast.warning(`Tek seferde en fazla ${MAX_CHAT_PHOTOS} fotoğraf gönderilebilir.`);
+      return;
+    }
+    if (files.length > room) toast.warning(`Tek seferde en fazla ${MAX_CHAT_PHOTOS} fotoğraf gönderilebilir; ilk ${room} tanesi eklendi.`);
+    const next: StagedPhoto[] = [];
+    for (const file of files.slice(0, room)) {
+      const problem = checkPhotoFile(file);
+      if (problem) {
+        toast.error(`${file.name}: ${problem}`);
+        continue;
+      }
+      next.push({ key: `s${++stagedSeq}`, file, url: URL.createObjectURL(file) });
+    }
+    if (next.length) {
+      setStaged((prev) => [...prev, ...next]);
+      box.current?.focus();
+    }
+  }
+
+  function unstage(key: string) {
+    setStaged((prev) => {
+      const gone = prev.find((p) => p.key === key);
+      if (gone) URL.revokeObjectURL(gone.url);
+      return prev.filter((p) => p.key !== key);
+    });
+  }
+
+  /** Send photos one after another, in the order picked. */
+  async function sendPhotos(files: File[]) {
+    if (!files.length) return;
     setUploading(true);
     try {
-      for (const file of files.slice(0, 5)) {
-        const problem = checkPhotoFile(file);
-        if (problem) {
-          toast.error(`${file.name}: ${problem}`);
-          continue;
-        }
+      for (const file of files.slice(0, MAX_CHAT_PHOTOS)) {
         try {
           const msg = (await uploadChatPhoto(id, await preparePhoto(file))) as ChatMessage;
           stickRef.current = true;
@@ -983,11 +1031,51 @@ function Thread() {
               </button>
             </div>
           ) : null}
+          {staged.length ? (
+            <div className="border-b border-border/60 px-3 pb-2 pt-2.5">
+              <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:thin]">
+                {staged.map((p) => (
+                  <div key={p.key} className="relative size-16 shrink-0 overflow-hidden rounded-lg border border-border bg-elevated">
+                    <img src={p.url} alt="" className="size-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => unstage(p.key)}
+                      aria-label="Fotoğrafı kaldır"
+                      className="absolute right-0.5 top-0.5 grid size-6 place-items-center rounded-full bg-ink/70 text-white hover:bg-ink"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  </div>
+                ))}
+                {staged.length < MAX_CHAT_PHOTOS ? (
+                  <button
+                    type="button"
+                    onClick={() => fileRef.current?.click()}
+                    aria-label="Fotoğraf ekle"
+                    className="grid size-16 shrink-0 place-items-center rounded-lg border border-dashed border-border text-muted hover:border-primary/40 hover:text-fg"
+                  >
+                    <Plus className="size-5" />
+                  </button>
+                ) : null}
+              </div>
+              <p className="mt-1 text-xs text-muted">
+                {staged.length} fotoğraf hazır, henüz gönderilmedi. İsterseniz açıklama yazın, sonra gönderin.
+              </p>
+            </div>
+          ) : null}
           <form
             className="chat-composer flex items-end gap-2 p-2.5"
             onSubmit={(e) => {
               e.preventDefault();
               submit();
+            }}
+            onDragOver={(e) => {
+              if (e.dataTransfer.types.includes("Files")) e.preventDefault();
+            }}
+            onDrop={(e) => {
+              if (!e.dataTransfer.files.length) return;
+              e.preventDefault();
+              stagePhotos(e.dataTransfer.files);
             }}
           >
             <input
@@ -997,7 +1085,7 @@ function Thread() {
               multiple
               className="hidden"
               onChange={(e) => {
-                void sendPhotos(e.target.files);
+                stagePhotos(e.target.files);
                 e.target.value = "";
               }}
             />
@@ -1015,7 +1103,7 @@ function Thread() {
               </DropdownMenuTrigger>
               <MenuContent align="start" side="top">
                 <MenuItem onSelect={() => fileRef.current?.click()}>
-                  <ImagePlus /> Fotoğraf gönder
+                  <ImagePlus /> Fotoğraf ekle
                 </MenuItem>
                 <MenuItem onSelect={() => setDialog("location")}>
                   <MapPin /> Konum paylaş
@@ -1054,7 +1142,13 @@ function Thread() {
                   submit();
                 }
               }}
-              placeholder="Mesaj yazın…"
+              onPaste={(e) => {
+                const files = Array.from(e.clipboardData.files);
+                if (!files.length) return;
+                e.preventDefault();
+                stagePhotos(files);
+              }}
+              placeholder={staged.length ? "Açıklama ekleyin (isteğe bağlı)…" : "Mesaj yazın…"}
               aria-label="Mesaj"
               maxLength={2000}
               rows={1}
@@ -1063,8 +1157,8 @@ function Thread() {
             <Button
               type="submit"
               size="icon"
-              disabled={!text.trim()}
-              aria-label="Gönder"
+              disabled={staged.length ? uploading : !text.trim()}
+              aria-label={staged.length ? `${staged.length} fotoğrafı gönder` : "Gönder"}
               className="size-11 shrink-0 rounded-xl"
             >
               <Send className="size-4" />

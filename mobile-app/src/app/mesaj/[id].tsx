@@ -38,9 +38,10 @@ import { LocationPicker } from '@/features/chat/LocationPicker';
 import { BUYER_QUICK_REPLIES, CHAT_REPORT_REASONS, DELETE_WINDOW_MS, SELLER_QUICK_REPLIES } from '@/features/chat/shared';
 import { onStreamResume, subscribeChatStream } from '@/features/chat/stream';
 import { PhotoViewer } from '@/features/listing/Gallery';
+import { PhotoReview } from '@/features/photos/PhotoReview';
 import { mediaUrl } from '@/lib/config';
 import { dayLabel, formatPrice, formatTime, lastSeenLabel, maskThousands, parseMasked } from '@/lib/format';
-import { pickPhotos, preparePhoto } from '@/lib/photos';
+import { pickPhotos, preparePhoto, type PickedPhoto } from '@/lib/photos';
 import {
   Avatar,
   Button,
@@ -66,6 +67,9 @@ import {
 
 type Row = { type: 'message'; message: ChatMessage; grouped: boolean } | { type: 'day'; key: string; label: string };
 type SheetName = 'attach' | 'offer' | 'location' | 'menu' | 'report' | 'search' | 'actions' | 'info' | null;
+
+/** Photos per send; the server allows 20 chat photos per 10 minutes. */
+const MAX_CHAT_PHOTOS = 5;
 
 function sortMessages(list: ChatMessage[]): ChatMessage[] {
   const byId = new Map<string, ChatMessage>();
@@ -93,6 +97,8 @@ export default function ChatScreen() {
   const [text, setText] = useState('');
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const [sending, setSending] = useState(false);
+  /** Photos picked for sending, shown full screen first (caption, turn, remove). */
+  const [review, setReview] = useState<PickedPhoto[] | null>(null);
   const [quick, setQuick] = useState(false);
   const [typing, setTyping] = useState(false);
   const [presence, setPresence] = useState<{ online: boolean; lastSeen: string | null }>({ online: false, lastSeen: null });
@@ -257,17 +263,37 @@ export default function ChatScreen() {
 
   const sendPhoto = async (source: 'camera' | 'library') => {
     setSheet(null);
-    const [picked] = await pickPhotos(source, 1);
-    if (!picked) return;
+    const picked = await pickPhotos(source, MAX_CHAT_PHOTOS);
+    if (picked.length) setReview(picked);
+  };
+
+  /** Sent only after the review screen: the photos in order, then the caption as a message. */
+  const sendReviewed = async (photos: PickedPhoto[], caption: string) => {
+    setReview(null);
     setSending(true);
+    // Photos cannot quote a message; a reply goes with the caption.
+    const reply = caption ? replyTo : null;
+    if (caption) setReplyTo(null);
+    let sent = 0;
     try {
-      const prepared = await preparePhoto(picked);
-      appendOwn(await uploads.chatPhoto(id, prepared));
-      void queryClient.invalidateQueries({ queryKey: keys.inbox });
+      for (const photo of photos) {
+        const prepared = await preparePhoto(photo);
+        appendOwn(await uploads.chatPhoto(id, prepared));
+        sent += 1;
+      }
+      if (caption) appendOwn(await chat.send(id, caption, reply?.id));
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } catch (e) {
-      toast.error(errorMessage(e));
+      const rest = photos.length - sent;
+      toast.error(rest > 0 && sent > 0 ? `${sent} fotoğraf gönderildi, ${rest} tanesi gönderilemedi. ${errorMessage(e)}` : errorMessage(e));
+      // Keep a caption that did not go out, so it is not lost.
+      if (caption && sent === photos.length) {
+        setText(caption);
+        setReplyTo(reply);
+      }
     } finally {
       setSending(false);
+      void queryClient.invalidateQueries({ queryKey: keys.inbox });
     }
   };
 
@@ -594,6 +620,7 @@ export default function ChatScreen() {
       </KeyboardAvoidingView>
 
       <PhotoViewer images={viewer ? [viewer] : []} start={viewer ? 0 : null} headers={authHeaders} onClose={() => setViewer(null)} />
+      <PhotoReview photos={review} mode="chat" max={MAX_CHAT_PHOTOS} onCancel={() => setReview(null)} onConfirm={(photos, caption) => void sendReviewed(photos, caption)} />
 
       <Sheet visible={sheet === 'attach'} onClose={() => setSheet(null)} onDismissed={runAfterClose} title="Gönder">
         <RowGroup>

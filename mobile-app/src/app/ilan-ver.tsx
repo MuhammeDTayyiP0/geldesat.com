@@ -15,6 +15,8 @@ import { TURKEY_CITIES } from '@/data/locations';
 import { categoryIcon } from '@/features/catalog/categoryIcon';
 import { OptionPicker } from '@/features/location/OptionPicker';
 import { AttrField } from '@/features/post/AttrField';
+import { PhotoReview } from '@/features/photos/PhotoReview';
+import { PhotoViewer } from '@/features/listing/Gallery';
 import { PhotoStep } from '@/features/post/PhotoStep';
 import { MAX_PHOTOS, STEP_TITLES, emptyDraft, needsPhoto, stepError, type Draft, type PhotoItem, type StepKey } from '@/features/post/draft';
 import { mediaUrl } from '@/lib/config';
@@ -55,6 +57,9 @@ function PostForm({ editId }: { editId?: string }) {
   const [ready, setReady] = useState(!editId);
   const [busy, setBusy] = useState(false);
   const [picker, setPicker] = useState<'city' | 'district' | 'neighborhood' | null>(null);
+  /** Photos just picked, shown full screen before anything uploads. */
+  const [review, setReview] = useState<PickedPhoto[] | null>(null);
+  const [viewing, setViewing] = useState<number | null>(null);
   const originalImages = useRef<string[]>([]);
   const pending = useRef(new Map<string, PickedPhoto>());
   const scrollRef = useRef<KeyboardAwareScrollViewRef>(null);
@@ -168,7 +173,12 @@ function PostForm({ editId }: { editId?: string }) {
 
   const addPhotos = async (source: 'camera' | 'library') => {
     const picked = await pickPhotos(source, MAX_PHOTOS - draft.photos.length);
-    if (!picked.length) return;
+    if (picked.length) setReview(picked);
+  };
+
+  /** The person checked the photos and tapped "ekle": now they upload, in the background. */
+  const acceptPhotos = async (picked: PickedPhoto[]) => {
+    setReview(null);
     const items = picked.map((p, i) => ({ key: `${Date.now()}-${i}`, photo: p }));
     setDraft((d) => ({ ...d, photos: [...d.photos, ...items.map(({ key, photo }) => ({ key, localUri: photo.uri, status: 'uploading' as const }))] }));
     for (const { key, photo } of items) {
@@ -319,6 +329,7 @@ function PostForm({ editId }: { editId?: string }) {
             }}
             onMove={movePhoto}
             onCover={makeCover}
+            onOpen={setViewing}
           />
         ) : null}
 
@@ -455,6 +466,20 @@ function PostForm({ editId }: { editId?: string }) {
         value={draft.neighborhood}
         allLabel="Belirtmek istemiyorum"
         onSelect={(v) => update({ neighborhood: v ?? '' })}
+      />
+
+      <PhotoReview
+        photos={review}
+        mode="listing"
+        max={MAX_PHOTOS - draft.photos.length}
+        existing={draft.photos.length}
+        onCancel={() => setReview(null)}
+        onConfirm={(photos) => void acceptPhotos(photos)}
+      />
+      <PhotoViewer
+        images={draft.photos.map((p) => p.localUri ?? p.url ?? '')}
+        start={viewing}
+        onClose={() => setViewing(null)}
       />
     </View>
   );
