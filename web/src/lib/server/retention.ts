@@ -123,4 +123,5 @@ export async function sweepRetention(force = false): Promise<void> {
     }
   }
   await sql.query("delete from conversations where purge_after is not null and purge_after < now()");
+  await sql.query("delete from client_errors where created_at < now() - interval '30 days'");
 }

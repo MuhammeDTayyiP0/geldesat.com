@@ -402,9 +402,10 @@ function HomeSectionsCard({ sections }: { sections: string[] }) {
 }
 
 function MobileCard({ config }: { config: MobileAppConfig }) {
-  const [form, setForm] = useState({ ...config, announcement: config.announcement ?? "" });
+  const initial = () => ({ ...config, announcement: config.announcement ?? "", ios_store_url: config.ios_store_url ?? "", android_store_url: config.android_store_url ?? "" });
+  const [form, setForm] = useState(initial);
   const { run, busy } = useRunner();
-  const dirty = form.min_ios_version !== config.min_ios_version || form.min_android_version !== config.min_android_version || (form.announcement || null) !== (config.announcement || null);
+  const dirty = JSON.stringify(form) !== JSON.stringify(initial());
   return (
     <Card>
       <CardHead title={<span className="inline-flex items-center gap-2"><Smartphone className="size-4 text-primary" /> Mobil uygulama</span>} description="Zorunlu güncelleme sürümleri ve uygulama içi duyuru bandı." />
@@ -419,15 +420,23 @@ function MobileCard({ config }: { config: MobileAppConfig }) {
           <input value={form.announcement} onChange={(e) => setForm((f) => ({ ...f, announcement: e.target.value }))} maxLength={300} className={inputClass} placeholder="Ör. Bakım çalışması: 02:00-03:00" />
         </Field>
       </div>
+      <div className="grid gap-4 px-4 pb-4 md:grid-cols-2">
+        <Field label="App Store bağlantısı" hint="Güncelleme ekranındaki düğme buraya gider. Boşsa App Store'da arama açılır.">
+          <input value={form.ios_store_url} onChange={(e) => setForm((f) => ({ ...f, ios_store_url: e.target.value }))} className={inputClass} placeholder="https://apps.apple.com/tr/app/…" />
+        </Field>
+        <Field label="Google Play bağlantısı" hint="Boşsa uygulamanın Play sayfası açılır.">
+          <input value={form.android_store_url} onChange={(e) => setForm((f) => ({ ...f, android_store_url: e.target.value }))} className={inputClass} placeholder="https://play.google.com/store/apps/details?id=com.geldesat.app" />
+        </Field>
+      </div>
       {dirty ? (
         <div className="flex justify-end gap-2 border-t border-border px-4 py-3">
-          <Button size="sm" variant="ghost" onClick={() => setForm({ ...config, announcement: config.announcement ?? "" })}>
+          <Button size="sm" variant="ghost" onClick={() => setForm(initial())}>
             Geri al
           </Button>
           <Button
             size="sm"
             disabled={busy}
-            onClick={() => void run(() => adminSaveAppConfig({ data: { key: "mobile_app", value: { ...form, announcement: form.announcement.trim() || null } } }), "Mobil uygulama ayarları kaydedildi.")}
+            onClick={() => void run(() => adminSaveAppConfig({ data: { key: "mobile_app", value: { ...form, announcement: form.announcement.trim() || null, ios_store_url: form.ios_store_url.trim() || null, android_store_url: form.android_store_url.trim() || null } } }), "Mobil uygulama ayarları kaydedildi.")}
           >
             <Save className="size-4" /> Kaydet
           </Button>

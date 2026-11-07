@@ -135,6 +135,7 @@ function OtaPage() {
                 <Th>Platform</Th>
                 <Th>Yayılım</Th>
                 <Th>Boyut</Th>
+                <Th>Hata raporu</Th>
                 <Th className="w-10" />
               </tr>
             </thead>
@@ -170,6 +171,17 @@ function OtaPage() {
                     )}
                   </Td>
                   <Td className="text-xs tabular-nums text-muted">{u.kind === "rollback" ? "—" : bytes(u.bytes)}</Td>
+                  <Td className="text-xs tabular-nums">
+                    {u.kind === "rollback" ? (
+                      <span className="text-muted">—</span>
+                    ) : u.errors ? (
+                      <span className="font-medium text-danger">
+                        {u.errors} hata · {u.errorDevices} cihaz
+                      </span>
+                    ) : (
+                      <span className="text-muted">Yok</span>
+                    )}
+                  </Td>
                   <Td>
                     <Menu>
                       {u.kind === "update" ? (
@@ -205,6 +217,34 @@ function OtaPage() {
           </Table>
         )}
       </Card>
+
+      {q.data ? (
+        <Card className="mt-4">
+          <CardHead
+            title="Uygulamadan gelen son hatalar"
+            description="Uygulama çöktüğünde ya da bir ekran açılamadığında gönderilir. Yayılımı genişletmeden önce yeni güncellemenin satırına bakın. 30 gün saklanır."
+          />
+          {!q.data.recentErrors.length ? (
+            <EmptyState icon={Smartphone} title="Hata raporu yok" />
+          ) : (
+            <ul className="divide-y divide-border">
+              {q.data.recentErrors.map((e, i) => (
+                <li key={`${e.createdAt}-${i}`} className="px-4 py-2.5">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {e.fatal ? <Pill tone="danger">Çökme</Pill> : <Pill>Hata</Pill>}
+                    <span className="break-all text-sm">{e.message}</span>
+                  </div>
+                  <p className="mt-0.5 text-xs text-muted" title={dateTime(e.createdAt)}>
+                    {relative(e.createdAt)} · {PLATFORM_LABEL[e.platform]} {e.appVersion ?? ""}
+                    {e.updateId ? ` · güncelleme ${e.updateId.slice(0, 8)}` : " · mağaza sürümü"}
+                    {e.screen ? ` · ${e.screen}` : ""}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      ) : null}
     </div>
   );
 }

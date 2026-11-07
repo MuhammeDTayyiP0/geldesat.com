@@ -20,6 +20,20 @@ export type AdminOtaUpdate = {
   republishedFrom: string | null;
   /** Total size of the files this update needs, in bytes. */
   bytes: number;
+  /** Errors the app reported while running this update, and on how many devices. */
+  errors: number;
+  errorDevices: number;
+};
+
+/** One error report from the app, newest first. */
+export type AdminClientError = {
+  createdAt: string;
+  platform: "ios" | "android";
+  appVersion: string | null;
+  updateId: string | null;
+  fatal: boolean;
+  message: string;
+  screen: string | null;
 };
 
 export const adminListOtaUpdates = createServerFn({ method: "GET" })
@@ -40,6 +54,8 @@ export const adminListOtaUpdates = createServerFn({ method: "GET" })
       creator: string | null;
       republished_from: string | null;
       bytes: number | string | null;
+      errors: number;
+      error_devices: number;
     }>(
       `select u.group_id, min(u.kind) as kind, min(u.runtime_version) as runtime_version, min(u.channel) as channel,
               array_agg(u.platform order by u.platform) as platforms, min(u.message) as message,
@@ -50,7 +66,10 @@ export const adminListOtaUpdates = createServerFn({ method: "GET" })
                   select x.launch_asset->>'hash' from ota_updates x where x.group_id = u.group_id
                   union
                   select e->>'hash' from ota_updates x, jsonb_array_elements(x.assets) e where x.group_id = u.group_id
-                )) as bytes
+                )) as bytes,
+              (select count(*)::int from client_errors e where e.update_id in (select x.id from ota_updates x where x.group_id = u.group_id)) as errors,
+              (select count(distinct e.device_id)::int from client_errors e
+                where e.update_id in (select x.id from ota_updates x where x.group_id = u.group_id)) as error_devices
          from ota_updates u
          left join profiles p on p.user_id = u.created_by
         group by u.group_id
@@ -70,9 +89,30 @@ export const adminListOtaUpdates = createServerFn({ method: "GET" })
       createdBy: r.created_by === "script" ? "Yayın scripti" : (r.creator ?? r.created_by),
       republishedFrom: r.republished_from,
       bytes: Number(r.bytes ?? 0),
+      errors: Number(r.errors ?? 0),
+      errorDevices: Number(r.error_devices ?? 0),
+    }));
+    const errorRows = await sql.query<{
+      created_at: string | Date;
+      platform: "ios" | "android";
+      app_version: string | null;
+      update_id: string | null;
+      fatal: boolean;
+      message: string;
+      screen: string | null;
+    }>("select created_at, platform, app_version, update_id, fatal, message, screen from client_errors order by created_at desc limit 30");
+    const recentErrors: AdminClientError[] = errorRows.map((r) => ({
+      createdAt: new Date(r.created_at).toISOString(),
+      platform: r.platform,
+      appVersion: r.app_version,
+      updateId: r.update_id,
+      fatal: r.fatal,
+      message: r.message,
+      screen: r.screen,
     }));
     return {
       updates,
+      recentErrors,
       publishingEnabled: (process.env.OTA_PUBLISH_TOKEN?.trim().length ?? 0) >= 24,
     };
   });

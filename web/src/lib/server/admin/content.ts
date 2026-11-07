@@ -183,7 +183,13 @@ export const adminBroadcast = createServerFn({ method: "POST" })
 /* ───────────────────────────── Settings ───────────────────────────── */
 
 export type ModerationMode = "first_free" | "all" | "none";
-export type MobileAppConfig = { min_ios_version: string; min_android_version: string; announcement: string | null };
+export type MobileAppConfig = {
+  min_ios_version: string;
+  min_android_version: string;
+  announcement: string | null;
+  ios_store_url?: string | null;
+  android_store_url?: string | null;
+};
 
 export const adminGetSettings = createServerFn({ method: "GET" })
   .middleware([adminMiddleware])
@@ -272,6 +278,9 @@ const ConfigInput = z.discriminatedUnion("key", [
       min_ios_version: z.string().trim().regex(/^\d+\.\d+\.\d+$/, "Sürüm 1.2.3 biçiminde olmalı"),
       min_android_version: z.string().trim().regex(/^\d+\.\d+\.\d+$/, "Sürüm 1.2.3 biçiminde olmalı"),
       announcement: z.string().trim().max(300).nullable(),
+      // Where the "Güncelleme gerekli" screen sends people; empty uses the store search.
+      ios_store_url: z.union([z.literal(""), z.string().trim().url().max(300).startsWith("https://apps.apple.com/")]).nullish(),
+      android_store_url: z.union([z.literal(""), z.string().trim().url().max(300).startsWith("https://play.google.com/")]).nullish(),
     }),
   }),
   z.object({ key: z.literal("home_sections"), value: z.array(z.enum(["hero", "categories", "featured", "recent", "stats"])).max(10) }),

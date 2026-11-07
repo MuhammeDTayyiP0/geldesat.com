@@ -68,6 +68,7 @@ import { Route as ApiHesapVerilerimRouteImport } from './routes/api/hesap/verile
 import { Route as ApiMobileBlocksRouteImport } from './routes/api/mobile/blocks'
 import { Route as ApiMobileCategoriesRouteImport } from './routes/api/mobile/categories'
 import { Route as ApiMobileCategoryAttributesRouteImport } from './routes/api/mobile/category-attributes'
+import { Route as ApiMobileClientErrorsRouteImport } from './routes/api/mobile/client-errors'
 import { Route as ApiMobileConfigRouteImport } from './routes/api/mobile/config'
 import { Route as ApiMobileConversationsRouteImport } from './routes/api/mobile/conversations'
 import { Route as ApiMobileFavoritesRouteImport } from './routes/api/mobile/favorites'
@@ -391,6 +392,11 @@ const ApiMobileCategoryAttributesRoute =
     path: '/api/mobile/category-attributes',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiMobileClientErrorsRoute = ApiMobileClientErrorsRouteImport.update({
+  id: '/api/mobile/client-errors',
+  path: '/api/mobile/client-errors',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiMobileConfigRoute = ApiMobileConfigRouteImport.update({
   id: '/api/mobile/config',
   path: '/api/mobile/config',
@@ -583,6 +589,7 @@ export interface FileRoutesByFullPath {
   '/api/mobile/blocks': typeof ApiMobileBlocksRoute
   '/api/mobile/categories': typeof ApiMobileCategoriesRoute
   '/api/mobile/category-attributes': typeof ApiMobileCategoryAttributesRoute
+  '/api/mobile/client-errors': typeof ApiMobileClientErrorsRoute
   '/api/mobile/config': typeof ApiMobileConfigRoute
   '/api/mobile/conversations': typeof ApiMobileConversationsRouteWithChildren
   '/api/mobile/favorites': typeof ApiMobileFavoritesRoute
@@ -668,6 +675,7 @@ export interface FileRoutesByTo {
   '/api/mobile/blocks': typeof ApiMobileBlocksRoute
   '/api/mobile/categories': typeof ApiMobileCategoriesRoute
   '/api/mobile/category-attributes': typeof ApiMobileCategoryAttributesRoute
+  '/api/mobile/client-errors': typeof ApiMobileClientErrorsRoute
   '/api/mobile/config': typeof ApiMobileConfigRoute
   '/api/mobile/conversations': typeof ApiMobileConversationsRouteWithChildren
   '/api/mobile/favorites': typeof ApiMobileFavoritesRoute
@@ -756,6 +764,7 @@ export interface FileRoutesById {
   '/api/mobile/blocks': typeof ApiMobileBlocksRoute
   '/api/mobile/categories': typeof ApiMobileCategoriesRoute
   '/api/mobile/category-attributes': typeof ApiMobileCategoryAttributesRoute
+  '/api/mobile/client-errors': typeof ApiMobileClientErrorsRoute
   '/api/mobile/config': typeof ApiMobileConfigRoute
   '/api/mobile/conversations': typeof ApiMobileConversationsRouteWithChildren
   '/api/mobile/favorites': typeof ApiMobileFavoritesRoute
@@ -845,6 +854,7 @@ export interface FileRouteTypes {
     | '/api/mobile/blocks'
     | '/api/mobile/categories'
     | '/api/mobile/category-attributes'
+    | '/api/mobile/client-errors'
     | '/api/mobile/config'
     | '/api/mobile/conversations'
     | '/api/mobile/favorites'
@@ -930,6 +940,7 @@ export interface FileRouteTypes {
     | '/api/mobile/blocks'
     | '/api/mobile/categories'
     | '/api/mobile/category-attributes'
+    | '/api/mobile/client-errors'
     | '/api/mobile/config'
     | '/api/mobile/conversations'
     | '/api/mobile/favorites'
@@ -1017,6 +1028,7 @@ export interface FileRouteTypes {
     | '/api/mobile/blocks'
     | '/api/mobile/categories'
     | '/api/mobile/category-attributes'
+    | '/api/mobile/client-errors'
     | '/api/mobile/config'
     | '/api/mobile/conversations'
     | '/api/mobile/favorites'
@@ -1086,6 +1098,7 @@ export interface RootRouteChildren {
   ApiMobileBlocksRoute: typeof ApiMobileBlocksRoute
   ApiMobileCategoriesRoute: typeof ApiMobileCategoriesRoute
   ApiMobileCategoryAttributesRoute: typeof ApiMobileCategoryAttributesRoute
+  ApiMobileClientErrorsRoute: typeof ApiMobileClientErrorsRoute
   ApiMobileConfigRoute: typeof ApiMobileConfigRoute
   ApiMobileConversationsRoute: typeof ApiMobileConversationsRouteWithChildren
   ApiMobileFavoritesRoute: typeof ApiMobileFavoritesRoute
@@ -1524,6 +1537,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiMobileCategoryAttributesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/mobile/client-errors': {
+      id: '/api/mobile/client-errors'
+      path: '/api/mobile/client-errors'
+      fullPath: '/api/mobile/client-errors'
+      preLoaderRoute: typeof ApiMobileClientErrorsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/mobile/config': {
       id: '/api/mobile/config'
       path: '/api/mobile/config'
@@ -1876,6 +1896,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiMobileBlocksRoute: ApiMobileBlocksRoute,
   ApiMobileCategoriesRoute: ApiMobileCategoriesRoute,
   ApiMobileCategoryAttributesRoute: ApiMobileCategoryAttributesRoute,
+  ApiMobileClientErrorsRoute: ApiMobileClientErrorsRoute,
   ApiMobileConfigRoute: ApiMobileConfigRoute,
   ApiMobileConversationsRoute: ApiMobileConversationsRouteWithChildren,
   ApiMobileFavoritesRoute: ApiMobileFavoritesRoute,
