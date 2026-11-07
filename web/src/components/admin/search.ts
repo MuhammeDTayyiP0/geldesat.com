@@ -17,7 +17,9 @@ export function oneOf<T extends string>(v: unknown, values: readonly T[]): T | u
 /** Downloads rows as a UTF-8 CSV that Excel opens with Turkish characters intact. */
 export function downloadCsv(filename: string, header: string[], rows: Array<Array<string | number | null | undefined>>) {
   const escape = (v: string | number | null | undefined) => {
-    const s = v == null ? "" : String(v);
+    let s = v == null ? "" : String(v);
+    // Member-written text must not run as a formula when the file opens in Excel.
+    if (typeof v === "string" && /^[=+\-@\t\r]/.test(s)) s = `'${s}`;
     return /[";\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   const body = [header, ...rows].map((r) => r.map(escape).join(";")).join("\r\n");

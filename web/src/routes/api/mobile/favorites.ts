@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { getSql } from "@/lib/db";
 import { getMobileUserId } from "@/lib/server/mobile-auth";
 import { ensureProfile, firstInWindow, mapListing, notify } from "@/lib/server/helpers";
-import { publicErrorMessage } from "@/lib/server/errors";
+import { errorStatus, publicErrorMessage } from "@/lib/server/errors";
 
 export const Route = createFileRoute("/api/mobile/favorites")({
   server: {
@@ -23,7 +23,7 @@ export const Route = createFileRoute("/api/mobile/favorites")({
           return Response.json({ success: true, listings: rows.map(mapListing) }, { headers: { "Cache-Control": "private, no-store" } });
         } catch (error) {
           const message = publicErrorMessage(error, "Favoriler yüklenemedi.");
-          return Response.json({ success: false, error: message }, { status: 500 });
+          return Response.json({ success: false, error: message }, { status: errorStatus(error, 500) });
         }
       },
       POST: async ({ request }) => {
@@ -52,7 +52,7 @@ export const Route = createFileRoute("/api/mobile/favorites")({
           return Response.json({ success: true, favorite: true });
         } catch (error) {
           const message = publicErrorMessage(error, "Favori güncellenemedi.");
-          return Response.json({ success: false, error: message }, { status: 500 });
+          return Response.json({ success: false, error: message }, { status: errorStatus(error, 500) });
         }
       },
     },

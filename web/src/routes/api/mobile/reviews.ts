@@ -1,9 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { auth } from "@/lib/auth/server";
 import { getSql } from "@/lib/db";
-import { canReviewSeller, ensureProfile, REVIEW_NOT_ELIGIBLE } from "@/lib/server/helpers";
-import { newId } from "@/lib/utils";
-import { publicErrorMessage } from "@/lib/server/errors";
+import { canReviewSeller, ensureProfile, REVIEW_NOT_ELIGIBLE, saveReview } from "@/lib/server/helpers";
+import { errorStatus, publicErrorMessage } from "@/lib/server/errors";
 
 async function sessionUserId(request: Request) {
   const session = await auth.api.getSession({ headers: request.headers });
@@ -31,12 +30,11 @@ export const Route = createFileRoute("/api/mobile/reviews")({
           if (listing.user_id === userId) return Response.json({ success: false, error: "Kendinizi puanlayamazsınız." }, { status: 400 });
           if (!(await canReviewSeller(sql, userId, listing.user_id))) return Response.json({ success: false, error: REVIEW_NOT_ELIGIBLE }, { status: 403 });
           await ensureProfile(userId);
-          await sql.query("delete from reviews where seller_id=$1 and reviewer_id=$2 and listing_id=$3", [listing.user_id, userId, listing.id]);
-          await sql.query("insert into reviews (id,seller_id,reviewer_id,listing_id,rating,comment) values ($1,$2,$3,$4,$5,$6)", [newId("rev"), listing.user_id, userId, listing.id, rating, comment || null]);
+          await saveReview(sql, userId, listing.user_id, listing.id, rating, comment || null);
           return Response.json({ success: true });
         } catch (error) {
           const message = publicErrorMessage(error, "Değerlendirme kaydedilemedi.");
-          return Response.json({ success: false, error: message }, { status: 500 });
+          return Response.json({ success: false, error: message }, { status: errorStatus(error, 500) });
         }
       },
     },

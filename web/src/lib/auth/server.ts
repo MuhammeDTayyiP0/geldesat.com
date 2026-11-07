@@ -49,7 +49,7 @@ const googleClientId = env("GOOGLE_CLIENT_ID");
 const googleClientSecret = env("GOOGLE_CLIENT_SECRET");
 export const googleAuthConfigured = Boolean(googleClientId && googleClientSecret);
 const database = databaseUrl
-  ? new Pool({ connectionString: databaseUrl })
+  ? new Pool({ connectionString: databaseUrl, connectionTimeoutMillis: 10_000 })
   : { dialect: pgliteDialect(() => getPglite()), type: "postgres" as const };
 
 export const SESSION_TOKEN_COOKIE = "__Host-geldesat-auth.session_token";
@@ -59,6 +59,8 @@ export const auth = betterAuth({
   secret: authSecret(),
   database,
   trustedOrigins,
+  // People open a classifieds app every few weeks; the 7-day default signs them out.
+  session: { expiresIn: 60 * 60 * 24 * 60, updateAge: 60 * 60 * 24 },
   emailAndPassword: {
     enabled: true,
     revokeSessionsOnPasswordReset: true,

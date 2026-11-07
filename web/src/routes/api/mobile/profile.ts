@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { getSql } from "@/lib/db";
 import { auth } from "@/lib/auth/server";
-import { ensureProfile, normalizeTrPhone } from "@/lib/server/helpers";
+import { ensureProfile, normalizeTrPhone, PHONE_UNAVAILABLE } from "@/lib/server/helpers";
 import { publicErrorMessage } from "@/lib/server/errors";
 
 const ProfileInput = z.object({
@@ -130,7 +130,7 @@ export const Route = createFileRoute("/api/mobile/profile")({
               "select user_id from profiles where phone=$1 and user_id<>$2",
               [phone, userId],
             );
-            if (existing[0]) return Response.json({ success: false, error: "Bu telefon başka bir hesaba kayıtlı." }, { status: 409 });
+            if (existing[0]) return Response.json({ success: false, error: PHONE_UNAVAILABLE }, { status: 409 });
           }
           await sql.query(
             `update profiles set display_name=$2, phone=$3, bio=$4, city=$5, district=$6 where user_id=$1`,

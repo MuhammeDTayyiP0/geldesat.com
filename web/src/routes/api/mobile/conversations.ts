@@ -6,7 +6,7 @@ import { ensureProfile, notify, rateLimit } from "@/lib/server/helpers";
 import { broadcastChatMessage, broadcastUserInbox } from "@/lib/server/chat-bus";
 import { createOrGetConversation, insertConversationMessage } from "@/lib/server/mobile-conversation-store";
 import { hasUserBlock } from "@/lib/server/user-blocks";
-import { publicErrorMessage } from "@/lib/server/errors";
+import { errorStatus, publicErrorMessage } from "@/lib/server/errors";
 import { chatVisibleTo, DELETED_USER_NAME, isClosedAccount } from "@/lib/server/retention";
 
 export const Route = createFileRoute("/api/mobile/conversations")({
@@ -45,7 +45,7 @@ export const Route = createFileRoute("/api/mobile/conversations")({
           return Response.json({ success: true, conversations }, { headers: { "Cache-Control": "private, no-store" } });
         } catch (error) {
           const message = publicErrorMessage(error, "Konuşmalar yüklenemedi.");
-          return Response.json({ success: false, error: message }, { status: 500 });
+          return Response.json({ success: false, error: message }, { status: errorStatus(error, 500) });
         }
       },
       POST: async ({ request }) => {
@@ -78,7 +78,7 @@ export const Route = createFileRoute("/api/mobile/conversations")({
           return Response.json({ success: true, conversationId, message: msg });
         } catch (error) {
           const message = publicErrorMessage(error, "Mesaj gönderilemedi.");
-          return Response.json({ success: false, error: message }, { status: 500 });
+          return Response.json({ success: false, error: message }, { status: errorStatus(error, 500) });
         }
       },
     },

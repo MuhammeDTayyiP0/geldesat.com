@@ -67,6 +67,7 @@ export async function requestAccountDeletion(userId: string): Promise<string> {
       [userId],
     );
     await tx.query('delete from "session" where "userId" = $1', [userId]);
+    await tx.query("delete from mobile_push_tokens where user_id = $1", [userId]);
     return rows[0]?.until ?? "";
   });
   return until;

@@ -226,5 +226,5 @@ export async function processAvatar(input: Uint8Array): Promise<Buffer> {
 
 /** Smaller copy of a stored photo for cards and thumbnails. */
 export async function resizeVariant(input: Uint8Array, width: number): Promise<Buffer> {
-  return sharp(input).resize({ width, withoutEnlargement: true }).webp({ quality: 74, effort: 3 }).toBuffer();
+  return sharp(input, { limitInputPixels: MAX_INPUT_PIXELS }).resize({ width, withoutEnlargement: true }).webp({ quality: 74, effort: 3 }).toBuffer();
 }

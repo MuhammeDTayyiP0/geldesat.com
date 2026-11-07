@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { safeRedirect } from "@/lib/auth/sign-in-gate";
 import { getSql } from "@/lib/db";
 import { newId, num } from "@/lib/utils";
 import { creditBalance, normalizeTrPhone, notify } from "../helpers";
@@ -158,9 +159,13 @@ export const adminUserDetail = createServerFn({ method: "POST" })
         [data.userId],
       ),
       sql.query<Record<string, unknown>>(
-        `select r.id, r.reason, r.status, r.created_at, l.title
-         from reports r join listings l on l.id = r.listing_id
-         where l.user_id = $1 order by r.created_at desc limit 8`,
+        `select r.id, r.reason, r.status, r.created_at, coalesce(l.title, r.listing_snapshot->>'title', 'Mesajlaşma') as title
+         from reports r
+         left join listings l on l.id = r.listing_id
+         left join conversations cv on cv.id = r.conversation_id
+         where (r.conversation_id is null and coalesce(l.user_id, r.listing_snapshot->>'user_id') = $1)
+            or (r.conversation_id is not null and r.reporter_id <> $1 and $1 in (cv.buyer_id, cv.seller_id))
+         order by r.created_at desc limit 8`,
         [data.userId],
       ),
       sql.query<Record<string, unknown>>("select id, name, slug, plan from stores where user_id = $1 limit 1", [data.userId]),
@@ -376,7 +381,9 @@ export const adminGrantCredits = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     const sql = await getSql();
+    if (data.userId === context.adminId) throw new Error("Kendi hesabınıza kredi tanımlayamazsınız.");
     const t = await targetProfile(sql, data.userId);
+    if (data.amount < 0 && (await creditBalance(data.userId)) + data.amount < 0) throw new Error("Üyenin bakiyesi bu kadar kredi düşmeye yetmiyor.");
     await sql.query("insert into credit_ledger (id, user_id, amount, reason) values ($1,$2,$3,$4)", [
       newId("crd"),
       data.userId,
@@ -385,6 +392,8 @@ export const adminGrantCredits = createServerFn({ method: "POST" })
     ]);
     if (data.amount > 0) {
       await notify(data.userId, "credit", "Hesabınıza kredi eklendi", `${data.amount} doping kredisi hesabınıza tanımlandı.`, "/doping");
+    } else {
+      await notify(data.userId, "credit", "Hesabınızdan kredi düşüldü", `${-data.amount} doping kredisi düşüldü. Gerekçe: ${data.reason}`, "/doping");
     }
     await audit(sql, context.adminId, "user.credits", "user", data.userId, `${t.display_name}: ${data.amount > 0 ? "+" : ""}${data.amount} kredi — ${data.reason}`);
     return { ok: true as const, balance: await creditBalance(data.userId) };
@@ -403,7 +412,8 @@ export const adminNotifyUser = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     const t = await targetProfile(sql, data.userId);
-    const link = data.link && data.link.startsWith("/") ? data.link : "/bildirimler";
+    if (data.link && safeRedirect(data.link) !== data.link) throw new Error("Bağlantı site içinde bir yol olmalı (/ ile başlar).");
+    const link = data.link || "/bildirimler";
     await notify(data.userId, "system", data.title, data.body, link);
     await audit(sql, context.adminId, "user.notify", "user", data.userId, `${t.display_name}: bildirim gönderildi — ${data.title}`);
     return { ok: true as const };

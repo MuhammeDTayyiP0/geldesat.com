@@ -198,12 +198,12 @@ function ReportCard({ report: r, selected, onSelect }: { report: AdminReportRow;
               <PanelRightOpen className="size-4 shrink-0 text-muted" />
             </button>
           ) : r.kind === "listing" ? (
-            <p className="mt-2 text-xs text-muted">İlan silinmiş.</p>
+            <p className="mt-2 text-xs text-muted">İlan silinmiş{r.listing_title ? `: ${r.listing_title}` : ""}.</p>
           ) : null}
 
           {r.messages.length ? (
             <div className="mt-3 rounded-xl border border-border">
-              <p className="border-b border-border bg-elevated/40 px-3 py-1.5 text-[11px] font-semibold text-muted">Son mesajlar (şikayet eden paylaştı)</p>
+              <p className="border-b border-border bg-elevated/40 px-3 py-1.5 text-[11px] font-semibold text-muted">Şikayet anındaki mesajlar (şikayet eden paylaştı)</p>
               <ul className="max-h-56 space-y-1.5 overflow-y-auto p-3 text-xs">
                 {r.messages.map((m, i) => (
                   <li key={i} className={cn("flex", m.who === "Şikayet eden" ? "justify-end" : "justify-start")}>
@@ -218,7 +218,13 @@ function ReportCard({ report: r, selected, onSelect }: { report: AdminReportRow;
                         {m.who} · {relative(m.at)}
                         {m.reported ? " · şikayet edilen mesaj" : ""}
                       </span>
-                      {m.text}
+                      {m.image_id ? (
+                        <a href={`/api/chat/image/${m.image_id}`} target="_blank" rel="noreferrer">
+                          <img src={`/api/chat/image/${m.image_id}`} alt="Şikayet edilen sohbetteki fotoğraf" loading="lazy" className="mt-1 max-h-40 rounded-lg" />
+                        </a>
+                      ) : (
+                        m.text
+                      )}
                     </span>
                   </li>
                 ))}
@@ -251,7 +257,7 @@ function ReportCard({ report: r, selected, onSelect }: { report: AdminReportRow;
             <Button size="sm" variant="outline" disabled={busy} onClick={() => void close(false)}>
               <Check className="size-4" /> Kapat (sorun yok)
             </Button>
-            {r.listing_id && r.listing_status !== "REJECTED" ? (
+            {r.kind === "listing" && r.listing_id && r.listing_status !== "REJECTED" ? (
               <Button size="sm" variant="outline" className="text-danger" disabled={busy} onClick={() => void close(true)}>
                 <ShieldX className="size-4" /> İlanı kaldır ve kapat
               </Button>

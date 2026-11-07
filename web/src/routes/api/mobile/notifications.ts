@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { auth } from "@/lib/auth/server";
 import { getSql } from "@/lib/db";
 import { getMobileUserId } from "@/lib/server/mobile-auth";
-import { publicErrorMessage } from "@/lib/server/errors";
+import { errorStatus, publicErrorMessage } from "@/lib/server/errors";
 
 export const Route = createFileRoute("/api/mobile/notifications")({
   server: {
@@ -19,7 +20,7 @@ export const Route = createFileRoute("/api/mobile/notifications")({
           return Response.json({ success: true, notifications, unread: count[0]?.n ?? 0 }, { headers: { "Cache-Control": "private, no-store" } });
         } catch (error) {
           const message = publicErrorMessage(error, "Bildirimler yüklenemedi.");
-          return Response.json({ success: false, error: message }, { status: 500 });
+          return Response.json({ success: false, error: message }, { status: errorStatus(error, 500) });
         }
       },
       POST: async ({ request }) => {
@@ -35,10 +36,11 @@ export const Route = createFileRoute("/api/mobile/notifications")({
             if (body.platform !== "ios" && body.platform !== "android") {
               return Response.json({ success: false, error: "Cihaz türü geçersiz." }, { status: 400 });
             }
+            const session = await auth.api.getSession({ headers: request.headers });
             await sql.query(
-              `insert into mobile_push_tokens (token,user_id,platform) values ($1,$2,$3)
-               on conflict (token) do update set user_id=excluded.user_id, platform=excluded.platform, updated_at=now()`,
-              [body.token, userId, body.platform],
+              `insert into mobile_push_tokens (token,user_id,platform,session_id) values ($1,$2,$3,$4)
+               on conflict (token) do update set user_id=excluded.user_id, platform=excluded.platform, session_id=excluded.session_id, updated_at=now()`,
+              [body.token, userId, body.platform, session?.session.id ?? null],
             );
             return Response.json({ success: true });
           }
@@ -51,7 +53,7 @@ export const Route = createFileRoute("/api/mobile/notifications")({
           return Response.json({ success: true });
         } catch (error) {
           const message = publicErrorMessage(error, "Bildirimler güncellenemedi.");
-          return Response.json({ success: false, error: message }, { status: 500 });
+          return Response.json({ success: false, error: message }, { status: errorStatus(error, 500) });
         }
       },
     },

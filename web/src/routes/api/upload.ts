@@ -1,8 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getSql } from "@/lib/db";
 import { deleteUnusedListingImages, MAX_UPLOAD_BYTES, saveListingImage } from "@/lib/server/upload.server";
-import { publicErrorMessage } from "@/lib/server/errors";
+import { errorStatus, publicErrorMessage } from "@/lib/server/errors";
+import { limitedFormData } from "@/lib/server/request-body";
 import { authorizeUpload as authorize, json } from "@/lib/server/upload-auth.server";
+
+const TOO_LARGE = "Fotoğraf en fazla 12 MB olabilir.";
 
 export const Route = createFileRoute("/api/upload")({
   server: {
@@ -11,16 +14,14 @@ export const Route = createFileRoute("/api/upload")({
       POST: async ({ request }) => {
         const auth = await authorize(request);
         if (auth instanceof Response) return auth;
-        const length = Number(request.headers.get("content-length") ?? 0);
-        if (length > MAX_UPLOAD_BYTES + 64 * 1024) return json({ error: "Fotoğraf en fazla 12 MB olabilir." }, 413);
         try {
-          const file = (await request.formData()).get("file");
+          const file = (await limitedFormData(request, MAX_UPLOAD_BYTES + 64 * 1024, TOO_LARGE)).get("file");
           if (!(file instanceof File)) return json({ error: "Fotoğraf bulunamadı." }, 400);
-          if (file.size > MAX_UPLOAD_BYTES) return json({ error: "Fotoğraf en fazla 12 MB olabilir." }, 413);
+          if (file.size > MAX_UPLOAD_BYTES) return json({ error: TOO_LARGE }, 413);
           const url = await saveListingImage(new Uint8Array(await file.arrayBuffer()), auth.userId);
           return json({ url });
         } catch (err) {
-          return json({ error: publicErrorMessage(err, "Yükleme başarısız") }, 400);
+          return json({ error: publicErrorMessage(err, "Yükleme başarısız") }, errorStatus(err, 400));
         }
       },
       /** Drop a photo the user removed before saving; photos used by any listing are kept. */

@@ -192,29 +192,30 @@ export const adminResolveCreditOrder = createServerFn({ method: "POST" })
   .validator(z.object({ id: z.string().max(200), status: z.enum(["PAID", "REJECTED"]) }))
   .handler(async ({ context, data }) => {
     const sql = await getSql();
-    const row = (await sql.query<{ user_id: string; status: string; credits: number; price: number }>(
-      "select user_id, status, credits, price from credit_orders where id = $1",
-      [data.id],
-    ))[0];
-    if (!row) throw new Error("Talep bulunamadı.");
-    if (row.status !== "PENDING") throw new Error("Bu talep zaten işlendi.");
-    await sql.transaction(async (tx) => {
-      await tx.query("update credit_orders set status = $2, resolved_at = now() where id = $1", [data.id, data.status]);
+    // Claiming the order in one conditional update stops a second approval, or
+    // the member's cancellation, from racing this one.
+    const row = await sql.transaction(async (tx) => {
+      const claimed = (await tx.query<{ user_id: string; credits: number; price: number }>(
+        "update credit_orders set status = $2, resolved_at = now() where id = $1 and status = 'PENDING' returning user_id, credits, price",
+        [data.id, data.status],
+      ))[0];
+      if (!claimed) throw new Error("Bu talep bulunamadı veya zaten işlendi.");
       if (data.status === "PAID") {
         await tx.query("insert into credit_ledger (id, user_id, amount, reason) values ($1,$2,$3,$4)", [
           newId("crd"),
-          row.user_id,
-          num(row.credits),
+          claimed.user_id,
+          num(claimed.credits),
           `order:${data.id}`,
         ]);
       }
+      return claimed;
     });
     if (data.status === "PAID") {
       await notify(row.user_id, "credit", "Krediniz yüklendi", `${row.credits} doping kredisi hesabınıza eklendi.`, "/doping");
     } else {
       await notify(row.user_id, "credit", "Kredi talebi reddedildi", "Havaleniz bulunamadı veya talep iptal edildi. Sorularınız için destek ekibimize yazın.", "/doping");
     }
-    await audit(sql, context.adminId, data.status === "PAID" ? "order.paid" : "order.reject", "order", data.id, `${row.credits} kredilik talep ${data.status === "PAID" ? "onaylandı" : "reddedildi"}`);
+    await audit(sql, context.adminId, data.status === "PAID" ? "order.paid" : "order.reject", "order", data.id, `${row.credits} kredilik talep (${row.price} TL) ${data.status === "PAID" ? "onaylandı" : "reddedildi"}`);
     return { ok: true as const };
   });
 

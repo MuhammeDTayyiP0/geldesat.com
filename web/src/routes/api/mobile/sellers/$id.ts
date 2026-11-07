@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { getSql } from "@/lib/db";
 import { mapListing } from "@/lib/server/helpers";
 import { num } from "@/lib/utils";
-import { publicErrorMessage } from "@/lib/server/errors";
+import { errorStatus, publicErrorMessage } from "@/lib/server/errors";
 
 export const Route = createFileRoute("/api/mobile/sellers/$id")({
   server: {
@@ -50,7 +50,7 @@ export const Route = createFileRoute("/api/mobile/sellers/$id")({
           }, listings: listings.map(mapListing) }, { headers: { "Cache-Control": "public, max-age=30" } });
         } catch (error) {
           const message = publicErrorMessage(error, "Satıcı profili yüklenemedi.");
-          return Response.json({ success: false, error: message }, { status: 500 });
+          return Response.json({ success: false, error: message }, { status: errorStatus(error, 500) });
         }
       },
     },

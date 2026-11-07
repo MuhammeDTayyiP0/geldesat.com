@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { auth, googleAuthConfigured } from "@/lib/auth/server";
-import { isChallenge } from "@/lib/server/mobile-oauth";
+import { challengeCookie, isChallenge } from "@/lib/server/mobile-oauth";
 
 export const Route = createFileRoute("/api/mobile/oauth/start")({
   server: {
@@ -21,6 +21,7 @@ export const Route = createFileRoute("/api/mobile/oauth/start")({
         if (!response.ok || !body?.url) return text("Google ile giriş başlatılamadı.", 502);
         const headers = new Headers({ Location: body.url, "Cache-Control": "no-store" });
         for (const cookie of response.headers.getSetCookie()) headers.append("Set-Cookie", cookie);
+        headers.append("Set-Cookie", challengeCookie(challenge, url.protocol === "https:"));
         return new Response(null, { status: 302, headers });
       },
     },

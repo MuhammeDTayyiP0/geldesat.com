@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { firstInWindow, rateLimit, viewerKey } from "@/lib/server/helpers";
+import { rateLimit, viewerKey } from "@/lib/server/helpers";
 
 /**
  * Place search and reverse geocoding for the chat's meeting-point picker
@@ -39,9 +39,19 @@ function shortLabel(p: NominatimPlace): string {
   return (parts.length ? parts.slice(0, 4).join(", ") : (p.display_name ?? "")).slice(0, 120);
 }
 
+/** Nominatim allows about one request per second for the whole site: cache misses wait in line. */
+let nextSlot = 0;
+function nextNominatimSlot(): Promise<void> {
+  const now = Date.now();
+  const at = Math.max(now, nextSlot);
+  nextSlot = at + 1100;
+  return at === now ? Promise.resolve() : new Promise((resolve) => setTimeout(resolve, at - now));
+}
+
 async function nominatim(path: string): Promise<unknown> {
   const hit = cache.get(path);
   if (hit && Date.now() - hit.at < TTL_MS) return hit.body;
+  await nextNominatimSlot();
   const res = await fetch(`${NOMINATIM}${path}`, {
     headers: { "User-Agent": USER_AGENT, "Accept-Language": "tr" },
     signal: AbortSignal.timeout(6000),
@@ -67,8 +77,6 @@ export const Route = createFileRoute("/api/geo")({
         } catch {
           return json({ error: "Çok fazla istek. Biraz bekleyin." }, 429);
         }
-        // Nominatim allows about one request per second for the whole site.
-        if (!firstInWindow("geo:global", 900)) await new Promise((r) => setTimeout(r, 900));
         try {
           const q = url.searchParams.get("q")?.trim();
           if (q) {
@@ -84,13 +92,15 @@ export const Route = createFileRoute("/api/geo")({
               results: places.map((p) => ({ label: shortLabel(p), lat: Number(p.lat), lng: Number(p.lon) })).filter((p) => p.label),
             });
           }
-          const lat = Number(url.searchParams.get("lat"));
-          const lng = Number(url.searchParams.get("lng"));
-          if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+          const rawLat = url.searchParams.get("lat");
+          const rawLng = url.searchParams.get("lng");
+          const lat = Number(rawLat);
+          const lng = Number(rawLng);
+          if (!rawLat || !rawLng || !Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
             return json({ error: "Konum geçersiz." }, 400);
           }
           // ~100 m rounding keeps the cache useful and does not leak an exact position upstream.
-          const params = new URLSearchParams({ lat: lat.toFixed(4), lon: lng.toFixed(4), format: "jsonv2", addressdetails: "1", zoom: "18" });
+          const params = new URLSearchParams({ lat: lat.toFixed(3), lon: lng.toFixed(3), format: "jsonv2", addressdetails: "1", zoom: "18" });
           const place = (await nominatim(`/reverse?${params}`)) as NominatimPlace;
           return json({ label: place?.lat ? shortLabel(place) : "" });
         } catch {

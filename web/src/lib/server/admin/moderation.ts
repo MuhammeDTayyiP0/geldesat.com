@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { getSql } from "@/lib/db";
-import { num } from "@/lib/utils";
+import { asJson, num } from "@/lib/utils";
 import { notify } from "../helpers";
 import { adminMiddleware, audit, likeTerm, paged, paging, PageInput, strOrNull, ts, tsOrNull, Where } from "./common";
 
@@ -25,25 +25,30 @@ export const adminListReports = createServerFn({ method: "POST" })
     if (data.kind === "conversation") w.add("r.conversation_id is not null");
     if (data.q) {
       const like = w.param(likeTerm(data.q));
-      w.add(`(r.reason ilike ${like} or r.details ilike ${like} or l.title ilike ${like} or rp.display_name ilike ${like})`);
+      w.add(`(r.reason ilike ${like} or r.details ilike ${like} or l.title ilike ${like} or rp.display_name ilike ${like} or tp.display_name ilike ${like})`);
     }
     const from = `
       from reports r
       left join listings l on l.id = r.listing_id
       left join profiles rp on rp.user_id = r.reporter_id
-      left join profiles op on op.user_id = l.user_id
       left join conversations cv on cv.id = r.conversation_id
+      left join profiles tp on tp.user_id = case
+        when r.conversation_id is not null then coalesce(case when cv.buyer_id = r.reporter_id then cv.seller_id else cv.buyer_id end, r.evidence->>'target_id')
+        else coalesce(l.user_id, r.listing_snapshot->>'user_id')
+      end
       left join profiles rb on rb.user_id = r.resolved_by`;
     const { limit, offset } = paging(data.page, data.pageSize);
     const [rows, count, totals] = await Promise.all([
       sql.query<Record<string, unknown>>(
         `select r.id, r.listing_id, r.reason, r.details, r.status, r.created_at, r.conversation_id, r.message_id, r.reporter_id,
                 r.resolved_at, r.resolution_note, coalesce(rb.display_name, null) as resolved_by_name,
-                l.title, l.slug, l.listing_no, l.status as listing_status, l.user_id as owner_id,
-                case when l.id is not null and jsonb_array_length(l.images) > 0 then l.images->>0 end as cover,
-                coalesce(rp.display_name, 'Üye') as reporter_name, op.display_name as owner_name, (op.banned_at is not null) as owner_banned,
-                cv.buyer_id, cv.seller_id,
-                (select count(*) from reports r2 where r2.listing_id = r.listing_id and r.listing_id is not null) as same_listing_reports
+                coalesce(l.title, r.listing_snapshot->>'title') as title, l.slug,
+                coalesce(l.listing_no::text, r.listing_snapshot->>'listing_no') as listing_no, l.status as listing_status,
+                coalesce(case when l.id is not null and jsonb_array_length(l.images) > 0 then l.images->>0 end, r.listing_snapshot->>'cover') as cover,
+                coalesce(rp.display_name, 'Üye') as reporter_name, tp.user_id as target_id, tp.display_name as target_name,
+                (tp.banned_at is not null) as target_banned, r.evidence,
+                (select count(*) from reports r2 where r2.listing_id = r.listing_id and r.listing_id is not null
+                   and r2.conversation_id is null and r2.status = 'OPEN') as same_listing_reports
          ${from} ${w.sql} order by (r.status = 'OPEN') desc, r.created_at desc limit ${limit} offset ${offset}`,
         w.params,
       ),
@@ -53,18 +58,24 @@ export const adminListReports = createServerFn({ method: "POST" })
       ),
     ]);
 
-    // Conversation reports carry the reported message, or the last messages,
-    // so moderators can judge them; the reporter chose to share that chat.
-    const excerpts = new Map<string, Array<{ who: string; text: string; at: string; reported: boolean }>>();
-    const partyNames = new Map<string, string>();
+    // Conversation reports carry the chat as it was when reported, so moderators
+    // can judge them even if messages are deleted later; the reporter chose to
+    // share that chat. Reports filed before the copy existed read the live chat.
+    type Evidence = { id: string; sender_id: string; content: string; kind?: string; image_id?: string | null; created_at: unknown };
+    const excerpts = new Map<string, Array<{ who: string; text: string; at: string; reported: boolean; image_id: string | null }>>();
     for (const r of rows.filter((x) => x.conversation_id)) {
-      const msgs = await sql.query<{ id: string; sender_id: string; content: string; created_at: unknown }>(
-        `select * from (
-           select id, sender_id, content, created_at from messages
-           where conversation_id = $1 and deleted_at is null order by created_at desc limit 12
-         ) m order by created_at`,
-        [r.conversation_id],
-      );
+      const saved = asJson<{ messages?: Evidence[] } | null>(r.evidence, null)?.messages;
+      const msgs: Evidence[] =
+        saved ??
+        (
+          await sql.query<Evidence & { meta: unknown }>(
+            `select * from (
+               select id, sender_id, content, kind, meta, created_at from messages
+               where conversation_id = $1 and deleted_at is null order by created_at desc limit 12
+             ) m order by created_at`,
+            [r.conversation_id],
+          )
+        ).map((m) => ({ ...m, image_id: asJson<{ image_id?: string }>(m.meta, {}).image_id ?? null }));
       excerpts.set(
         String(r.id),
         msgs.map((m) => ({
@@ -72,20 +83,15 @@ export const adminListReports = createServerFn({ method: "POST" })
           text: m.content,
           at: ts(m.created_at),
           reported: m.id === r.message_id,
+          image_id: m.kind === "image" ? (m.image_id ?? null) : null,
         })),
       );
-      const other = r.buyer_id === r.reporter_id ? r.seller_id : r.buyer_id;
-      if (other) {
-        const p = await sql.query<{ display_name: string }>("select display_name from profiles where user_id = $1", [other]);
-        partyNames.set(String(r.id), p[0]?.display_name ?? "Silinmiş kullanıcı");
-      }
     }
 
     const t = totals[0] ?? {};
     return {
       ...paged(
         rows.map((r) => {
-          const otherParty = r.conversation_id ? (r.buyer_id === r.reporter_id ? strOrNull(r.seller_id) : strOrNull(r.buyer_id)) : strOrNull(r.owner_id);
           return {
             id: String(r.id),
             kind: r.conversation_id ? ("conversation" as const) : ("listing" as const),
@@ -104,9 +110,9 @@ export const adminListReports = createServerFn({ method: "POST" })
             listing_no: num(r.listing_no),
             listing_status: strOrNull(r.listing_status),
             cover: strOrNull(r.cover),
-            reported_user_id: otherParty,
-            reported_user_name: r.conversation_id ? (partyNames.get(String(r.id)) ?? null) : strOrNull(r.owner_name),
-            reported_user_banned: Boolean(r.owner_banned),
+            reported_user_id: strOrNull(r.target_id),
+            reported_user_name: strOrNull(r.target_name) ?? (r.conversation_id ? "Silinmiş kullanıcı" : null),
+            reported_user_banned: Boolean(r.target_banned),
             same_listing_reports: num(r.same_listing_reports),
             messages: excerpts.get(String(r.id)) ?? [],
           };
@@ -138,21 +144,26 @@ export const adminResolveReports = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     const note = data.note?.trim() || null;
-    const rows = await sql.query<{ id: string; listing_id: string | null; reason: string }>(
-      "select id, listing_id, reason from reports where id = any($1::text[])",
-      [data.ids],
+    // Only reports that really change state count: closing a closed report would
+    // overwrite who closed it and when.
+    const rows = await sql.query<{ id: string; listing_id: string | null; reason: string; conversation_id: string | null }>(
+      "select id, listing_id, reason, conversation_id from reports where id = any($1::text[]) and status <> $2",
+      [data.ids, data.status],
     );
+    const ids = rows.map((r) => r.id);
     if (data.status === "CLOSED") {
       await sql.query(
         "update reports set status = 'CLOSED', resolved_at = now(), resolved_by = $2, resolution_note = coalesce($3, resolution_note) where id = any($1::text[])",
-        [data.ids, context.adminId, note],
+        [ids, context.adminId, note],
       );
     } else {
-      await sql.query("update reports set status = 'OPEN', resolved_at = null, resolved_by = null where id = any($1::text[])", [data.ids]);
+      await sql.query("update reports set status = 'OPEN', resolved_at = null, resolved_by = null, resolution_note = null where id = any($1::text[])", [ids]);
     }
     let takenDown = 0;
     if (data.takeDownListing && data.status === "CLOSED") {
-      const listingIds = [...new Set(rows.map((r) => r.listing_id).filter((x): x is string => Boolean(x)))];
+      // A chat report points at the chat's listing, which may be the reporter's
+      // own: only a report about the listing itself can take it down.
+      const listingIds = [...new Set(rows.filter((r) => !r.conversation_id).map((r) => r.listing_id).filter((x): x is string => Boolean(x)))];
       if (listingIds.length) {
         const listings = await sql.query<{ id: string; user_id: string; title: string; slug: string; listing_no: number }>(
           `update listings set status = 'REJECTED', approved_at = null, updated_at = now()

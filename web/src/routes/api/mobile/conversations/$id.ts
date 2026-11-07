@@ -6,7 +6,7 @@ import { notify, rateLimit } from "@/lib/server/helpers";
 import { broadcastChatMessage, broadcastChatRead, broadcastUserInbox } from "@/lib/server/chat-bus";
 import { hasUserBlock } from "@/lib/server/user-blocks";
 import { insertConversationMessage, loadConversationThread } from "@/lib/server/mobile-conversation-store";
-import { publicErrorMessage } from "@/lib/server/errors";
+import { errorStatus, publicErrorMessage } from "@/lib/server/errors";
 import { DELETED_USER_NAME, hideConversationFor, isClosedAccount } from "@/lib/server/retention";
 
 export const Route = createFileRoute("/api/mobile/conversations/$id")({
@@ -42,7 +42,7 @@ export const Route = createFileRoute("/api/mobile/conversations/$id")({
           }, { headers: { "Cache-Control": "private, no-store" } });
         } catch (error) {
           const message = publicErrorMessage(error, "Mesajlar yüklenemedi.");
-          return Response.json({ success: false, error: message }, { status: 500 });
+          return Response.json({ success: false, error: message }, { status: errorStatus(error, 500) });
         }
       },
       POST: async ({ request, params }) => {
@@ -69,7 +69,7 @@ export const Route = createFileRoute("/api/mobile/conversations/$id")({
           return Response.json({ success: true, message });
         } catch (error) {
           const message = publicErrorMessage(error, "Mesaj gönderilemedi.");
-          return Response.json({ success: false, error: message }, { status: 500 });
+          return Response.json({ success: false, error: message }, { status: errorStatus(error, 500) });
         }
       },
       /** Delete the chat from this user's inbox; the other person keeps it. */

@@ -1,7 +1,8 @@
 import { getSql } from "@/lib/db";
-import { asJson, num } from "@/lib/utils";
+import { asJson, newId, num } from "@/lib/utils";
 import { resolveNotifyPrefs, type NotifyChannelPrefs, type PhoneVisibility } from "@/lib/notification-prefs";
 import { findCategory, getCategoryTree, subtreeOf } from "./category-cache";
+import { RateLimitError } from "./errors";
 import { broadcastUserInbox } from "./chat-bus";
 
 export type CategoryRow = {
@@ -79,7 +80,7 @@ export function rateLimit(key: string, max: number, windowMs: number) {
     return;
   }
   if (hit.n >= max) {
-    throw new Error("Çok fazla istek. Lütfen biraz bekleyin.");
+    throw new RateLimitError();
   }
   hit.n += 1;
 }
@@ -234,11 +235,14 @@ export async function ensureProfile(
 
   const role = (await isBootstrapAdmin(sql, userId)) ? "ADMIN" : "USER";
   const name = resolvedName || resolvedEmail?.split("@")[0] || "Üye";
+  // The sign-up form accepts any `image` URL; a public profile must not load it
+  // (unreviewed picture, visitors' IPs sent elsewhere). Only Google's photos pass.
+  const avatar = resolvedImage && /^https:\/\/[a-z0-9-]+\.googleusercontent\.com\//.test(resolvedImage) ? resolvedImage : null;
   await sql.query(
     `insert into profiles (user_id, display_name, avatar_url, role)
      values ($1, $2, $3, $4)
      on conflict (user_id) do nothing`,
-    [userId, name, resolvedImage, role],
+    [userId, name, avatar, role],
   );
   const row = await sql.query<{ user_id: string; role: string; display_name: string }>(
     "select user_id, role, display_name from profiles where user_id = $1",
@@ -262,6 +266,16 @@ export async function creditBalance(userId: string) {
   return rows[0]?.bal ?? 0;
 }
 
+/**
+ * A device gets push only while its session lives, so a lost phone stops
+ * receiving message previews once its sessions are revoked. Rows from before
+ * session_id existed count as live while the member has any session.
+ */
+export const LIVE_PUSH_TOKEN = `exists (
+  select 1 from "session" s
+  where s."userId" = t.user_id and s."expiresAt" > now() and (t.session_id is null or s.id = t.session_id)
+)`;
+
 export async function notify(userId: string, type: string, title: string, body: string, link: string) {
   const sql = await getSql();
   // Respect the recipient's notification settings (missing types/keys mean "on").
@@ -283,7 +297,7 @@ export async function notify(userId: string, type: string, title: string, body: 
   // created the in-app notification.
   try {
     const devices = await sql.query<{ token: string }>(
-      "select token from mobile_push_tokens where user_id=$1",
+      `select t.token from mobile_push_tokens t where t.user_id=$1 and ${LIVE_PUSH_TOKEN}`,
       [userId],
     );
     if (devices.length) {
@@ -330,6 +344,9 @@ export async function notify(userId: string, type: string, title: string, body: 
 
 const ALLOWED_UPLOAD_PATH = /^\/uploads\/[-a-zA-Z0-9_.]+\.(webp|jpg|jpeg|png)$/i;
 const ALLOWED_MOBILE_IMAGE_PATH = /^\/api\/mobile\/images\/[0-9a-f-]{36}$/i;
+
+/** Deliberately vague: saying "registered on another account" would let anyone test numbers. */
+export const PHONE_UNAVAILABLE = "Bu telefon numarası kullanılamıyor. Sorun olduğunu düşünüyorsanız destek ekibine yazın.";
 
 /** Normalize a TR mobile number to 05XXXXXXXXX. */
 export function normalizeTrPhone(raw: string): string {
@@ -402,6 +419,21 @@ export async function canReviewSeller(sql: QuerySql, reviewerId: string, sellerI
   return Boolean(rows[0]);
 }
 
+/**
+ * A reviewer has one rating per seller; rating again replaces it. The listing is
+ * only context, so it is kept only if it really is that seller's.
+ */
+export async function saveReview(sql: QuerySql, reviewerId: string, sellerId: string, listingId: string | null, rating: number, comment: string | null) {
+  rateLimit(`review:${reviewerId}`, 10, 60_000);
+  await sql.query(
+    `insert into reviews (id, seller_id, reviewer_id, listing_id, rating, comment)
+     values ($1, $2, $3, (select id from listings where id = $4 and user_id = $2), $5, $6)
+     on conflict (seller_id, reviewer_id) do update
+       set listing_id = excluded.listing_id, rating = excluded.rating, comment = excluded.comment, created_at = now()`,
+    [newId("rev"), sellerId, reviewerId, listingId, rating, comment || null],
+  );
+}
+
 export const REVIEW_NOT_ELIGIBLE = "Yalnızca karşılıklı mesajlaştığınız satıcıları puanlayabilirsiniz.";
 
 /** A user's still-open report on a listing; repeats are dropped instead of queued again. */
@@ -413,11 +445,26 @@ export async function hasOpenReport(sql: QuerySql, listingId: string, reporterId
   return Boolean(rows[0]);
 }
 
+/** File a listing report with a copy of the listing, so it survives edits and deletion. */
+export async function insertListingReport(sql: QuerySql, listingId: string, reporterId: string, reason: string, details: string | null) {
+  await sql.query(
+    `insert into reports (id, listing_id, reporter_id, reason, details, listing_snapshot)
+     select $1, l.id, $3, $4, $5,
+            jsonb_build_object('title', l.title, 'slug', l.slug, 'listing_no', l.listing_no, 'user_id', l.user_id, 'cover', l.images->>0)
+     from listings l where l.id = $2`,
+    [newId("rep"), listingId, reporterId, reason, details || null],
+  );
+}
+
 /** Best-effort visitor identity for de-duplicating counters (behind Coolify's proxy). */
 export function viewerKey(headers: Headers, userId?: string | null): string {
   if (userId) return `u:${userId}`;
+  // TRUSTED_IP_HEADER names the header the edge overwrites itself (Cloudflare:
+  // cf-connecting-ip). The first X-Forwarded-For value can be sent by the client.
+  const trusted = process.env.TRUSTED_IP_HEADER?.trim();
+  const fromEdge = trusted ? headers.get(trusted)?.split(",")[0]?.trim() : undefined;
   const forwarded = headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  return `ip:${forwarded || headers.get("x-real-ip") || "unknown"}`;
+  return `ip:${fromEdge || forwarded || headers.get("x-real-ip") || "unknown"}`;
 }
 
 /**
@@ -425,6 +472,8 @@ export function viewerKey(headers: Headers, userId?: string | null): string {
  * visibility setting, and records the reveal. Throws a user-facing error.
  */
 export async function revealListingPhone(listingRef: string, viewerId: string | null): Promise<string> {
+  // Enough for any real buyer, too little to harvest sellers' numbers.
+  if (viewerId) rateLimit(`phone-day:${viewerId}`, 300, 24 * 60 * 60_000);
   const sql = await getSql();
   const rows = await sql.query<{ id: string; phone_override: string | null; phone: string | null; phone_visibility: PhoneVisibility | null }>(
     `select l.id, l.phone_override, p.phone, p.phone_visibility

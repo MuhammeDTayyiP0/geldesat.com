@@ -1,9 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { auth } from "@/lib/auth/server";
 import { getSql } from "@/lib/db";
-import { ensureProfile, hasOpenReport, rateLimit } from "@/lib/server/helpers";
-import { newId } from "@/lib/utils";
-import { publicErrorMessage } from "@/lib/server/errors";
+import { ensureProfile, hasOpenReport, insertListingReport, rateLimit } from "@/lib/server/helpers";
+import { errorStatus, publicErrorMessage } from "@/lib/server/errors";
 
 async function sessionUserId(request: Request) {
   const session = await auth.api.getSession({ headers: request.headers });
@@ -28,11 +27,11 @@ export const Route = createFileRoute("/api/mobile/reports")({
           if (!listing[0]) return Response.json({ success: false, error: "İlan bulunamadı." }, { status: 404 });
           await ensureProfile(userId);
           if (await hasOpenReport(sql, listing[0].id, userId)) return Response.json({ success: true });
-          await sql.query("insert into reports (id,listing_id,reporter_id,reason,details) values ($1,$2,$3,$4,$5)", [newId("rep"), listing[0].id, userId, reason, details || null]);
+          await insertListingReport(sql, listing[0].id, userId, reason, details || null);
           return Response.json({ success: true });
         } catch (error) {
           const message = publicErrorMessage(error, "Bildirim gönderilemedi.");
-          return Response.json({ success: false, error: message }, { status: 500 });
+          return Response.json({ success: false, error: message }, { status: errorStatus(error, 500) });
         }
       },
     },

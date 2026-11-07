@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { getSql } from "@/lib/db";
 import { auth } from "@/lib/auth/server";
 import { canReviewSeller, firstInWindow, mapListing, rateLimit, revealListingPhone, viewerKey } from "@/lib/server/helpers";
-import { publicErrorMessage } from "@/lib/server/errors";
+import { errorStatus, publicErrorMessage } from "@/lib/server/errors";
 import { recordListingView } from "@/lib/server/recently-viewed";
 
 async function sessionUserId(request: Request) {
@@ -86,13 +86,14 @@ export const Route = createFileRoute("/api/mobile/listings/$id")({
           });
         } catch (error) {
           const message = publicErrorMessage(error, "İlan yüklenemedi.");
-          return Response.json({ success: false, error: message }, { status: 500 });
+          return Response.json({ success: false, error: message }, { status: errorStatus(error, 500) });
         }
       },
       POST: async ({ request, params }) => {
         try {
           const userId = await sessionUserId(request);
           rateLimit(`mobile-phone:${viewerKey(request.headers, userId)}`, 30, 60_000);
+          if (!userId) rateLimit(`phone-day:${viewerKey(request.headers)}`, 100, 24 * 60 * 60_000);
           let phone: string;
           try {
             phone = await revealListingPhone(params.id, userId ?? null);
@@ -104,7 +105,7 @@ export const Route = createFileRoute("/api/mobile/listings/$id")({
           return Response.json({ success: true, phone });
         } catch (error) {
           const message = publicErrorMessage(error, "Telefon numarası alınamadı.");
-          return Response.json({ success: false, error: message }, { status: 500 });
+          return Response.json({ success: false, error: message }, { status: errorStatus(error, 500) });
         }
       },
     },

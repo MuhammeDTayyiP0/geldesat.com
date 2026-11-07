@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { getSql } from "@/lib/db";
 import { CITY_COORDS } from "@/lib/data/geo";
+import { cleanAttrs, type AttrValues } from "@/lib/listing-attrs";
 import { asJson, listingSlug, newId, num } from "@/lib/utils";
 import { inheritedAttributes, ensureProfile, rateLimit, assertImages, notify, normalizeTrPhone } from "./helpers";
 import { deleteUnusedListingImages } from "./upload.server";
@@ -12,8 +13,8 @@ export const ListingInput = z.object({
   title: z.string().min(5).max(100),
   description: z.string().min(10).max(5000),
   price: z.number().min(1).max(1_000_000_000),
-  city: z.string().min(1),
-  district: z.string().min(1),
+  city: z.string().min(1).max(60),
+  district: z.string().min(1).max(60),
   neighborhood: z.string().max(60).optional(),
   phone: z.string().max(20).optional(),
   images: z.array(z.string()).max(10),
@@ -60,8 +61,8 @@ export async function saveListingRecord(userId: string, data: ListingInputData) 
     ? (
         await sql.query<{
           user_id: string; slug: string; listing_no: string | number; price: string | number; status: string; images: unknown;
-          title: string; description: string; category_id: string;
-        }>("select user_id, slug, listing_no, price, status, images, title, description, category_id from listings where id = $1", [data.id])
+          title: string; description: string; category_id: string; attrs: unknown;
+        }>("select user_id, slug, listing_no, price, status, images, title, description, category_id, attrs from listings where id = $1", [data.id])
       )[0]
     : undefined;
   if (data.id && !existing) throw new Error("İlan bulunamadı");
@@ -95,9 +96,10 @@ export async function saveListingRecord(userId: string, data: ListingInputData) 
   if (photoNeed.length && !data.images.length) throw new Error("Emlak ve vasıta ilanlarında en az 1 fotoğraf zorunludur.");
   const cat = await sql.query<{ id: string }>("select id from categories where id = $1", [data.categoryId]);
   if (!cat[0]) throw new Error("Kategori bulunamadı");
-  for (const attr of (await inheritedAttributes(data.categoryId)).filter((item) => item.required)) {
-    const value = data.attrs[attr.name];
-    if (value == null || value === "") throw new Error(`Zorunlu alan: ${attr.name}`);
+  const attrRules = await inheritedAttributes(data.categoryId);
+  const attrs = cleanAttrs(data.attrs, attrRules, asJson<AttrValues>(existing?.attrs, {}));
+  for (const attr of attrRules.filter((item) => item.required)) {
+    if (attrs[attr.name] == null) throw new Error(`Zorunlu alan: ${attr.name}`);
   }
 
   // A listing may only be attached to a store owned by the listing's owner.
@@ -127,7 +129,7 @@ export async function saveListingRecord(userId: string, data: ListingInputData) 
         store_id=$14,status=$15,approved_at=case when $16::boolean then null else approved_at end,
         slug=$17,updated_at=now() where id=$1`,
       [data.id,data.categoryId,data.title,data.description,data.price,data.city,data.district,data.neighborhood || null,
-        coords?.lat ?? null,coords?.lng ?? null,JSON.stringify(data.images),JSON.stringify(data.attrs),
+        coords?.lat ?? null,coords?.lng ?? null,JSON.stringify(data.images),JSON.stringify(attrs),
         phoneOverride,data.storeId || null,nextStatus,reReview,slug],
     );
     await deleteUnusedListingImages(sql, ownerId, existingImages.filter((image) => !data.images.includes(image)));
@@ -151,7 +153,7 @@ export async function saveListingRecord(userId: string, data: ListingInputData) 
      values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::jsonb,$16::jsonb,$17,now()+interval '30 days',
        case when $9::text = 'ACTIVE' then now() end,$18::bigint)`,
     [id,slug,userId,data.storeId || null,data.categoryId,data.title,data.description,data.price,status,data.city,data.district,
-      data.neighborhood || null,coords?.lat ?? null,coords?.lng ?? null,JSON.stringify(data.images),JSON.stringify(data.attrs),phoneOverride,listingNo],
+      data.neighborhood || null,coords?.lat ?? null,coords?.lng ?? null,JSON.stringify(data.images),JSON.stringify(attrs),phoneOverride,listingNo],
   );
   await sql.query("insert into price_history (listing_id,price) values ($1,$2)", [id,data.price]);
   return { id, slug, status };

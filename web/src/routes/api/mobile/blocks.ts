@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getMobileUserId } from "@/lib/server/mobile-auth";
 import { getSql } from "@/lib/db";
-import { publicErrorMessage } from "@/lib/server/errors";
+import { errorStatus, publicErrorMessage } from "@/lib/server/errors";
 
 export const Route = createFileRoute("/api/mobile/blocks")({
   server: {
@@ -18,7 +18,7 @@ export const Route = createFileRoute("/api/mobile/blocks")({
           return Response.json({ success: true, blocked: body.blocked !== false });
         } catch (error) {
           const message = publicErrorMessage(error, "Engelleme işlemi tamamlanamadı.");
-          return Response.json({ success: false, error: message }, { status: 500 });
+          return Response.json({ success: false, error: message }, { status: errorStatus(error, 500) });
         }
       },
     },

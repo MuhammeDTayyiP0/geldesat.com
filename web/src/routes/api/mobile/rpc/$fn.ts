@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { UnauthorizedError } from "@/lib/auth/verify.server";
-import { publicErrorMessage } from "@/lib/server/errors";
+import { errorStatus, publicErrorMessage } from "@/lib/server/errors";
+import { BodyTooLargeError, readLimited } from "@/lib/server/request-body";
 import {
   archiveConversation,
   deleteConversation,
@@ -106,6 +107,9 @@ const FUNCTIONS: Record<string, ServerFn> = {
   listBlockedUsers,
 } as unknown as Record<string, ServerFn>;
 
+/** Largest accepted RPC body; photos go through their own upload routes. */
+const MAX_BODY_BYTES = 1024 * 1024;
+
 export const Route = createFileRoute("/api/mobile/rpc/$fn")({
   server: {
     handlers: {
@@ -115,10 +119,10 @@ export const Route = createFileRoute("/api/mobile/rpc/$fn")({
         if (!fn) return Response.json({ success: false, error: "İşlem bulunamadı." }, { status: 404 });
         let body: { data?: unknown } = {};
         try {
-          const text = await request.text();
+          const text = new TextDecoder().decode(await readLimited(request, MAX_BODY_BYTES));
           if (text) body = JSON.parse(text) as { data?: unknown };
-        } catch {
-          return Response.json({ success: false, error: "İstek okunamadı." }, { status: 400 });
+        } catch (error) {
+          return Response.json({ success: false, error: error instanceof BodyTooLargeError ? error.message : "İstek okunamadı." }, { status: errorStatus(error, 400) });
         }
         try {
           const result = await fn(body.data === undefined ? {} : { data: body.data });
@@ -127,7 +131,7 @@ export const Route = createFileRoute("/api/mobile/rpc/$fn")({
           if (error instanceof UnauthorizedError) {
             return Response.json({ success: false, error: "Giriş yapmanız gerekiyor." }, { status: 401 });
           }
-          return Response.json({ success: false, error: validationMessage(error) ?? publicErrorMessage(error, "İşlem tamamlanamadı.") }, { status: 400 });
+          return Response.json({ success: false, error: validationMessage(error) ?? publicErrorMessage(error, "İşlem tamamlanamadı.") }, { status: errorStatus(error, 400) });
         }
       },
     },

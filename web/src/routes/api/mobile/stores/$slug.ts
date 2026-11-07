@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getSql } from "@/lib/db";
 import { mapListing } from "@/lib/server/helpers";
-import { publicErrorMessage } from "@/lib/server/errors";
+import { errorStatus, publicErrorMessage } from "@/lib/server/errors";
 
 export const Route = createFileRoute("/api/mobile/stores/$slug")({
   server: {
@@ -9,7 +9,8 @@ export const Route = createFileRoute("/api/mobile/stores/$slug")({
       GET: async ({ params }) => {
         try {
           const sql = await getSql();
-          const rows = await sql.query<Record<string, unknown>>("select id,user_id,name,slug,description,city,plan from stores where lower(slug)=lower($1) limit 1", [params.slug]);
+          const rows = await sql.query<Record<string, unknown>>(`select s.id,s.user_id,s.name,s.slug,s.description,s.city,s.plan from stores s join profiles p on p.user_id=s.user_id
+             where lower(s.slug)=lower($1) and p.deletion_requested_at is null and p.banned_at is null limit 1`, [params.slug]);
           if (!rows[0]) return Response.json({ success: false, error: "Mağaza bulunamadı." }, { status: 404 });
           const store = rows[0];
           const listings = await sql.query<Record<string, unknown>>(
@@ -24,7 +25,7 @@ export const Route = createFileRoute("/api/mobile/stores/$slug")({
           }, listings: listings.map(mapListing) }, { headers: { "Cache-Control": "public, max-age=30" } });
         } catch (error) {
           const message = publicErrorMessage(error, "Mağaza yüklenemedi.");
-          return Response.json({ success: false, error: message }, { status: 500 });
+          return Response.json({ success: false, error: message }, { status: errorStatus(error, 500) });
         }
       },
     },

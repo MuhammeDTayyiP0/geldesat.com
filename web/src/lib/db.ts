@@ -110,7 +110,9 @@ function createPostgresSql(): Promise<Sql> {
     // pg defaults to 10 connections; pages fire several queries in parallel, so
     // allow more (DB_POOL_MAX overrides) and drop idle ones after 30 s.
     const max = Number(process.env.DB_POOL_MAX) || 20;
-    const pool = new Pool({ connectionString: databaseUrl, max, idleTimeoutMillis: 30_000 });
+    // A full pool or a stuck query fails instead of holding requests forever.
+    const pool = new Pool({ connectionString: databaseUrl, max, idleTimeoutMillis: 30_000, connectionTimeoutMillis: 10_000, statement_timeout: 30_000 });
+    pool.on("error", (err) => console.error("[db] idle client error", err));
     return toSql(
       async <T>(text: string, params: unknown[]) => {
         const res = await pool.query(text, params);

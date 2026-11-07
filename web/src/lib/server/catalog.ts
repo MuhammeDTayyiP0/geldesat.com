@@ -129,7 +129,8 @@ export async function searchListings(f: SearchFilters): Promise<{
     params.push(value);
     const n = params.length;
     const list = Array.isArray(keys) ? keys : [keys];
-    const parts = list.map((key) => `(l.attrs->>'${key}' ~ '^[0-9.]+$' and (l.attrs->>'${key}')::numeric ${op} $${n})`);
+    // CASE guarantees the regex runs first; a value like "1.2.3" must not fail the whole search.
+    const parts = list.map((key) => `(case when l.attrs->>'${key}' ~ '^[0-9]+(\\.[0-9]+)?$' then (l.attrs->>'${key}')::numeric end ${op} $${n})`);
     conds.push(`(${parts.join(" or ")})`);
   };
   if (f.minYear != null) jsonNum("Yıl", ">=", f.minYear);
@@ -507,4 +508,8 @@ export async function loadSiteSettings(): Promise<SiteSettings> {
   }
 }
 
-export const getSiteSettings = createServerFn({ method: "GET" }).handler(() => loadSiteSettings());
+/** Public contact details only; bank details are not for every visitor. */
+export const getSiteSettings = createServerFn({ method: "GET" }).handler(async () => {
+  const { company_name, support_email, support_phone } = await loadSiteSettings();
+  return { company_name, support_email, support_phone };
+});

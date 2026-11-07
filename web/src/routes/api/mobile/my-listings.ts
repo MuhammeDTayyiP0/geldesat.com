@@ -3,7 +3,7 @@ import { getSql } from "@/lib/db";
 import { getMobileUserId } from "@/lib/server/mobile-auth";
 import { mapListing } from "@/lib/server/helpers";
 import { ListingInput, saveListingRecord } from "@/lib/server/listing-write";
-import { publicErrorMessage } from "@/lib/server/errors";
+import { errorStatus, publicErrorMessage } from "@/lib/server/errors";
 
 export const Route = createFileRoute("/api/mobile/my-listings")({
   server: {
@@ -22,7 +22,7 @@ export const Route = createFileRoute("/api/mobile/my-listings")({
           return Response.json({ success: true, listings: rows.map(mapListing) }, { headers: { "Cache-Control": "private, no-store" } });
         } catch (error) {
           const message = publicErrorMessage(error, "İlanlarınız yüklenemedi.");
-          return Response.json({ success: false, error: message }, { status: 500 });
+          return Response.json({ success: false, error: message }, { status: errorStatus(error, 500) });
         }
       },
       POST: async ({ request }) => {

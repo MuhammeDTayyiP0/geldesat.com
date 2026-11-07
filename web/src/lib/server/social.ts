@@ -2,16 +2,18 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
-import { asIso, newId } from "@/lib/utils";
+import { asIso } from "@/lib/utils";
 import {
   canReviewSeller,
   ensureProfile,
   firstInWindow,
   hasOpenReport,
+  insertListingReport,
   mapListing,
   notify,
   rateLimit,
   REVIEW_NOT_ELIGIBLE,
+  saveReview,
 } from "./helpers";
 import { sweepExpiryReminders } from "./ops";
 import { sweepRetention } from "./retention";
@@ -96,10 +98,7 @@ export const reportListing = createServerFn({ method: "POST" })
     const sql = await getSql();
     await ensureProfile(context.userId);
     if (await hasOpenReport(sql, data.listingId, context.userId)) return { ok: true };
-    await sql.query(
-      "insert into reports (id, listing_id, reporter_id, reason, details) values ($1,$2,$3,$4,$5)",
-      [newId("rep"), data.listingId, context.userId, data.reason, data.details || null],
-    );
+    await insertListingReport(sql, data.listingId, context.userId, data.reason, data.details || null);
     return { ok: true };
   });
 
@@ -118,16 +117,7 @@ export const leaveReview = createServerFn({ method: "POST" })
     const sql = await getSql();
     await ensureProfile(context.userId);
     if (!(await canReviewSeller(sql, context.userId, data.sellerId))) throw new Error(REVIEW_NOT_ELIGIBLE);
-    await sql.query("delete from reviews where seller_id=$1 and reviewer_id=$2 and listing_id is not distinct from $3", [
-      data.sellerId,
-      context.userId,
-      data.listingId || null,
-    ]);
-    await sql.query(
-      `insert into reviews (id, seller_id, reviewer_id, listing_id, rating, comment)
-       values ($1,$2,$3,$4,$5,$6)`,
-      [newId("rev"), data.sellerId, context.userId, data.listingId || null, data.rating, data.comment || null],
-    );
+    await saveReview(sql, context.userId, data.sellerId, data.listingId ?? null, data.rating, data.comment ?? null);
     return { ok: true };
   });
 

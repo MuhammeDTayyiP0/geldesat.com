@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { auth } from "@/lib/auth/server";
 import { rateLimit, viewerKey } from "@/lib/server/helpers";
-import { publicErrorMessage } from "@/lib/server/errors";
+import { errorStatus, publicErrorMessage } from "@/lib/server/errors";
 import { redeemCode } from "@/lib/server/mobile-oauth";
 
 export const Route = createFileRoute("/api/mobile/oauth/exchange")({
@@ -23,9 +23,9 @@ export const Route = createFileRoute("/api/mobile/oauth/exchange")({
             success: true,
             token,
             user: { id: session.user.id, email: session.user.email, name: session.user.name },
-          });
+          }, { headers: { "Cache-Control": "no-store" } });
         } catch (error) {
-          return Response.json({ success: false, error: publicErrorMessage(error, "Giriş tamamlanamadı.") }, { status: 500 });
+          return Response.json({ success: false, error: publicErrorMessage(error, "Giriş tamamlanamadı.") }, { status: errorStatus(error, 500) });
         }
       },
     },

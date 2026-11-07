@@ -52,7 +52,7 @@ async function blockedBetween(sql: Sql, a: string, b: string) {
 }
 
 /** The conversation, if the user is one of its two people; throws otherwise. */
-async function myConversation(sql: Sql, conversationId: string, userId: string): Promise<Conv> {
+export async function myConversation(sql: Sql, conversationId: string, userId: string): Promise<Conv> {
   const rows = await sql.query<Conv>("select id, buyer_id, seller_id, listing_id from conversations where id=$1", [conversationId]);
   const conv = rows[0];
   if (!conv || (conv.buyer_id !== userId && conv.seller_id !== userId)) throw new Error("Konuşma bulunamadı");
@@ -237,13 +237,23 @@ export const respondOffer = createServerFn({ method: "POST" })
     const conv = await myConversation(sql, rows[0].conversation_id, context.userId);
     if (rows[0].sender_id === context.userId) throw new Error("Kendi teklifinize yanıt veremezsiniz.");
     const offerer = rows[0].sender_id;
+    await assertCanMessage(sql, context.userId, offerer);
     const meta = asJson<{ amount?: number; status?: OfferStatus }>(rows[0].meta, {});
     if (meta.status !== "pending") throw new Error("Bu teklif artık geçerli değil.");
+    if (data.accept) {
+      const listing = conv.listing_id
+        ? (await sql.query<{ status: string }>("select status from listings where id=$1 and (expires_at is null or expires_at > now())", [conv.listing_id]))[0]
+        : undefined;
+      if (listing?.status !== "ACTIVE") throw new Error("İlan artık yayında olmadığı için teklif kabul edilemez.");
+    }
     const status: OfferStatus = data.accept ? "accepted" : "rejected";
+    // Only a still pending offer changes, so a withdrawal arriving first wins.
     const updated = await sql.query<Record<string, unknown>>(
-      `update messages set meta = jsonb_set(meta, '{status}', to_jsonb($2::text)) where id=$1 returning ${MSG_COLUMNS}`,
+      `update messages set meta = jsonb_set(meta, '{status}', to_jsonb($2::text))
+       where id=$1 and meta->>'status' = 'pending' returning ${MSG_COLUMNS}`,
       [data.messageId, status],
     );
+    if (!updated[0]) throw new Error("Bu teklif artık geçerli değil.");
     const msg = mapMsg(updated[0]);
     broadcastChatUpdate(conv.id, msg);
     broadcastUserInbox(offerer, { type: "inbox_ping", conversationId: conv.id });
@@ -263,8 +273,8 @@ export const deleteMessage = createServerFn({ method: "POST" })
   .validator(z.object({ messageId: z.string() }))
   .handler(async ({ context, data }) => {
     const sql = await getSql();
-    const rows = await sql.query<{ conversation_id: string; sender_id: string; created_at: string; kind: string; meta: unknown }>(
-      "select conversation_id, sender_id, created_at, kind, meta from messages where id=$1 and deleted_at is null",
+    const rows = await sql.query<{ conversation_id: string; sender_id: string; created_at: string; kind: string; meta: unknown; content: string }>(
+      "select conversation_id, sender_id, created_at, kind, meta, content from messages where id=$1 and deleted_at is null",
       [data.messageId],
     );
     const m = rows[0];
@@ -272,7 +282,18 @@ export const deleteMessage = createServerFn({ method: "POST" })
     if (Date.now() - new Date(m.created_at).getTime() > DELETE_WINDOW_MS) throw new Error("Mesajlar yalnızca gönderildikten sonraki 1 saat içinde silinebilir.");
     if (m.kind === "image") {
       const imageId = asJson<{ image_id?: string }>(m.meta, {}).image_id;
-      if (imageId) await sql.query("delete from chat_images where id=$1", [imageId]);
+      // While a report on this chat is open the photo stays as evidence, unseen by the two people.
+      const reported = await sql.query("select 1 from reports where conversation_id=$1 and status='OPEN' limit 1", [m.conversation_id]);
+      if (imageId && !reported[0]) await sql.query("delete from chat_images where id=$1", [imageId]);
+    }
+    // A deleted IBAN or phone must not live on in the bell list or the push preview.
+    const conv = (await sql.query<Conv>("select id, buyer_id, seller_id, listing_id from conversations where id=$1", [m.conversation_id]))[0];
+    const receiver = conv ? otherOf(conv, context.userId) : null;
+    if (receiver && m.kind !== "image") {
+      await sql.query(
+        "update notifications set body=$1 where user_id=$2 and type='message' and link=$3 and body=$4",
+        [DELETED_MESSAGE_TEXT, receiver, `/mesajlar/${m.conversation_id}`, m.content.slice(0, 80)],
+      );
     }
     const updated = await sql.query<Record<string, unknown>>(
       `update messages set deleted_at=now(), content=$2, meta=null where id=$1 returning ${MSG_COLUMNS}`,
@@ -280,6 +301,7 @@ export const deleteMessage = createServerFn({ method: "POST" })
     );
     const msg = mapMsg(updated[0]);
     broadcastChatUpdate(m.conversation_id, msg);
+    if (receiver) broadcastUserInbox(receiver, { type: "inbox_ping", conversationId: m.conversation_id });
     return msg;
   });
 
@@ -365,6 +387,8 @@ export const getThread = createServerFn({ method: "POST" })
     ]);
     // Receipts are mutual, like WhatsApp: hidden if either side turned them off.
     const showReads = Boolean(h.other_receipts) && Boolean(h.my_receipts);
+    // Blocking in either direction also hides presence, so neither can watch the other.
+    const blocked = Boolean(blockedByMeRows[0] || blockedByOtherRows[0]);
     const page = await sql.query<Record<string, unknown>>(
       `select ${MSG_COLUMNS} from messages where conversation_id=$1 order by created_at desc limit $2`,
       [conv.id, THREAD_PAGE + 1],
@@ -386,8 +410,8 @@ export const getThread = createServerFn({ method: "POST" })
         other_name: h.other_name == null ? DELETED_USER_NAME : String(h.other_name),
         other_closed: h.other_name == null || h.other_closing != null,
         other_avatar: h.other_avatar ? String(h.other_avatar) : null,
-        other_online: h.other_name != null && isOnline(otherId),
-        other_last_seen: h.other_last_seen ? asIso(h.other_last_seen) : null,
+        other_online: !blocked && h.other_name != null && isOnline(otherId),
+        other_last_seen: !blocked && h.other_last_seen ? asIso(h.other_last_seen) : null,
         buyer_id: conv.buyer_id,
         seller_id: conv.seller_id,
       },
@@ -443,11 +467,12 @@ export const pollThread = createServerFn({ method: "POST" })
           [conv.id, context.userId, afterIso],
         )
       : [];
-    const lastSeen = await sql.query<{ last_seen_at: string | null }>("select last_seen_at from profiles where user_id=$1", [otherId]);
+    const blocked = await blockedBetween(sql, context.userId, otherId);
+    const lastSeen = blocked ? [] : await sql.query<{ last_seen_at: string | null }>("select last_seen_at from profiles where user_id=$1", [otherId]);
     return {
       messages: fresh.map((m) => mapMsg(m, !showReads && String(m.sender_id) === context.userId)),
       reads: reads.map((r) => ({ id: String(r.id), read_at: asIso(r.read_at) })),
-      other_online: isOnline(otherId),
+      other_online: !blocked && isOnline(otherId),
       other_last_seen: lastSeen[0]?.last_seen_at ? asIso(lastSeen[0].last_seen_at) : null,
     };
   });
@@ -488,7 +513,8 @@ export const sendTyping = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     if (!firstInWindow(`typing:${context.userId}:${data.conversationId}`, 2500)) return { ok: true };
     const sql = await getSql();
-    await myConversation(sql, data.conversationId, context.userId);
+    const conv = await myConversation(sql, data.conversationId, context.userId);
+    if (await blockedBetween(sql, context.userId, otherOf(conv, context.userId))) return { ok: true };
     broadcastTyping(data.conversationId, context.userId);
     return { ok: true };
   });
@@ -542,14 +568,46 @@ export const reportConversation = createServerFn({ method: "POST" })
     rateLimit(`report:${context.userId}`, 10, 60_000);
     const sql = await getSql();
     const conv = await myConversation(sql, data.conversationId, context.userId);
-    const open = await sql.query("select 1 from reports where conversation_id=$1 and reporter_id=$2 and status='OPEN' limit 1", [
+    const reported = data.messageId
+      ? (await sql.query<{ id: string; created_at: unknown }>("select id, created_at from messages where id=$1 and conversation_id=$2", [data.messageId, conv.id]))[0]
+      : undefined;
+    const messageId = reported?.id ?? null;
+    // One open report per message, so a later abusive message still reaches moderators.
+    const open = await sql.query("select 1 from reports where conversation_id=$1 and reporter_id=$2 and status='OPEN' and message_id is not distinct from $3 limit 1", [
       conv.id,
       context.userId,
+      messageId,
     ]);
     if (open[0]) return { ok: true };
+    // What moderators read later: the chat as it stands now, around the reported message.
+    const columns = "id, sender_id, content, kind, meta, created_at";
+    const excerpt = reported
+      ? await sql.query<Record<string, unknown>>(
+          `select * from (
+             (select ${columns} from messages where conversation_id=$1 and created_at <= $2 and deleted_at is null order by created_at desc limit 8)
+             union all
+             (select ${columns} from messages where conversation_id=$1 and created_at > $2 and deleted_at is null order by created_at asc limit 5)
+           ) m order by created_at`,
+          [conv.id, reported.created_at],
+        )
+      : await sql.query<Record<string, unknown>>(
+          `select * from (select ${columns} from messages where conversation_id=$1 and deleted_at is null order by created_at desc limit 12) m order by created_at`,
+          [conv.id],
+        );
+    const evidence = {
+      target_id: otherOf(conv, context.userId),
+      messages: excerpt.map((m) => ({
+        id: String(m.id),
+        sender_id: String(m.sender_id),
+        content: String(m.content),
+        kind: String(m.kind ?? "text"),
+        image_id: asJson<{ image_id?: string }>(m.meta, {}).image_id ?? null,
+        created_at: asIso(m.created_at),
+      })),
+    };
     await sql.query(
-      "insert into reports (id, listing_id, reporter_id, reason, details, conversation_id, message_id) values ($1,$2,$3,$4,$5,$6,$7)",
-      [newId("rep"), conv.listing_id, context.userId, data.reason, data.details || null, conv.id, data.messageId || null],
+      "insert into reports (id, listing_id, reporter_id, reason, details, conversation_id, message_id, evidence) values ($1,$2,$3,$4,$5,$6,$7,$8::jsonb)",
+      [newId("rep"), conv.listing_id, context.userId, data.reason, data.details || null, conv.id, messageId, JSON.stringify(evidence)],
     );
     return { ok: true };
   });

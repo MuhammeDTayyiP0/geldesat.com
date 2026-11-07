@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { inheritedAttributes } from "@/lib/server/helpers";
-import { publicErrorMessage } from "@/lib/server/errors";
+import { errorStatus, publicErrorMessage } from "@/lib/server/errors";
 
 export const Route = createFileRoute("/api/mobile/category-attributes")({
   server: {
@@ -15,7 +15,7 @@ export const Route = createFileRoute("/api/mobile/category-attributes")({
           });
         } catch (error) {
           const message = publicErrorMessage(error, "Kategori özellikleri yüklenemedi.");
-          return Response.json({ success: false, error: message }, { status: 500 });
+          return Response.json({ success: false, error: message }, { status: errorStatus(error, 500) });
         }
       },
     },

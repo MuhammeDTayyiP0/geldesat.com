@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { getSql, dbSource } from "@/lib/db";
 import { newId, num, slugify } from "@/lib/utils";
-import { normalizeTrPhone } from "../helpers";
+import { LIVE_PUSH_TOKEN, normalizeTrPhone } from "../helpers";
 import { DEFAULT_FLAGS, getAppConfig, setAppConfig } from "../config";
 import { FLAG_NAME_PATTERN, FLAG_PLATFORMS, VERSION_PATTERN, normalizeFlags } from "@/lib/flags";
 import { clearSiteSettingsCache, loadSiteSettings } from "../catalog";
@@ -122,7 +122,7 @@ export const adminBroadcast = createServerFn({ method: "POST" })
     let pushed = 0;
     if (data.push) {
       const tokens = await sql.query<{ token: string }>(
-        `select t.token from mobile_push_tokens t where t.user_id in (${AUDIENCE_SQL[data.audience]})`,
+        `select t.token from mobile_push_tokens t where t.user_id in (${AUDIENCE_SQL[data.audience]}) and ${LIVE_PUSH_TOKEN}`,
       );
       // Expo accepts up to 100 messages per request; delivery is best effort.
       for (let i = 0; i < tokens.length; i += 100) {

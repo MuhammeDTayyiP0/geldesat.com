@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getSql } from "@/lib/db";
-import { publicErrorMessage } from "@/lib/server/errors";
-import { ensureProfile } from "@/lib/server/helpers";
+import { errorStatus, publicErrorMessage } from "@/lib/server/errors";
+import { ensureProfile, rateLimit } from "@/lib/server/helpers";
+import { limitedFormData } from "@/lib/server/request-body";
 import { assertImageBytes, MAX_UPLOAD_BYTES } from "@/lib/server/upload.server";
 import { authorizeUpload, json } from "@/lib/server/upload-auth.server";
 
@@ -12,11 +13,9 @@ export const Route = createFileRoute("/api/avatar")({
       POST: async ({ request }) => {
         const auth = await authorizeUpload(request);
         if (auth instanceof Response) return auth;
-        if (Number(request.headers.get("content-length") ?? 0) > MAX_UPLOAD_BYTES + 64 * 1024) {
-          return json({ error: "Fotoğraf en fazla 12 MB olabilir." }, 413);
-        }
         try {
-          const file = (await request.formData()).get("file");
+          rateLimit(`avatar:${auth.userId}`, 10, 10 * 60_000);
+          const file = (await limitedFormData(request, MAX_UPLOAD_BYTES + 64 * 1024, "Fotoğraf en fazla 12 MB olabilir.")).get("file");
           if (!(file instanceof File)) return json({ error: "Fotoğraf bulunamadı." }, 400);
           const bytes = new Uint8Array(await file.arrayBuffer());
           const { isHeif, processAvatar } = await import("@/lib/server/image-pipeline.server");
@@ -39,7 +38,7 @@ export const Route = createFileRoute("/api/avatar")({
           await sql.query("update profiles set avatar_url=$2 where user_id=$1", [auth.userId, url]);
           return json({ url });
         } catch (err) {
-          return json({ error: publicErrorMessage(err, "Fotoğraf yüklenemedi") }, 400);
+          return json({ error: publicErrorMessage(err, "Fotoğraf yüklenemedi") }, errorStatus(err, 400));
         }
       },
       /** Remove the profile photo. */

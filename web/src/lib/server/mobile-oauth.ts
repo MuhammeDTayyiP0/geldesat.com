@@ -23,6 +23,18 @@ export function isChallenge(value: string | null): value is string {
   return Boolean(value && CHALLENGE_RE.test(value));
 }
 
+const CHALLENGE_COOKIE = "gs-oauth-challenge";
+
+/** Ties /done to the browser that went through /start. */
+export function challengeCookie(challenge: string, secure: boolean): string {
+  return `${CHALLENGE_COOKIE}=${challenge}; Path=/api/mobile/oauth; Max-Age=600; HttpOnly; SameSite=Lax${secure ? "; Secure" : ""}`;
+}
+
+export function readChallengeCookie(header: string | null): string | null {
+  const match = header?.match(new RegExp(`(?:^|;\\s*)${CHALLENGE_COOKIE}=([^;]+)`));
+  return match?.[1] ?? null;
+}
+
 function prune(now: number) {
   for (const [code, entry] of pending) if (entry.expiresAt < now) pending.delete(code);
 }

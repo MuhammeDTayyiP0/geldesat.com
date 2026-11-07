@@ -70,7 +70,7 @@ const ROW_SELECT = `
   coalesce(p.display_name, 'Üye') as seller_name, (p.banned_at is not null) as seller_banned,
   s.name as store_name, l.view_count,
   (select count(*) from favorites f where f.listing_id = l.id) as fav_count,
-  (select count(*) from reports r where r.listing_id = l.id and r.status = 'OPEN') as open_reports,
+  (select count(*) from reports r where r.listing_id = l.id and r.status = 'OPEN' and r.conversation_id is null) as open_reports,
   l.featured_until, l.expires_at, l.approved_at, l.created_at, l.updated_at`;
 
 const ROW_FROM = `
@@ -183,7 +183,11 @@ export const adminListingDetail = createServerFn({ method: "POST" })
                 (select count(*) from listings where user_id = p.user_id) as listings_total,
                 (select count(*) from listings where user_id = p.user_id and status = 'ACTIVE') as listings_active,
                 (select count(*) from listings where user_id = p.user_id and status = 'REJECTED') as listings_rejected,
-                (select count(*) from reports r join listings l2 on l2.id = r.listing_id where l2.user_id = p.user_id) as reports_against
+                (select count(*) from reports r
+                   left join listings l2 on l2.id = r.listing_id
+                   left join conversations cv on cv.id = r.conversation_id
+                  where (r.conversation_id is null and coalesce(l2.user_id, r.listing_snapshot->>'user_id') = p.user_id)
+                     or (r.conversation_id is not null and r.reporter_id <> p.user_id and p.user_id in (cv.buyer_id, cv.seller_id))) as reports_against
          from profiles p left join "user" u on u.id = p.user_id where p.user_id = $1`,
         [userId],
       ),

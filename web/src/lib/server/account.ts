@@ -13,6 +13,7 @@ import {
   rateLimit,
   notify,
   normalizeTrPhone,
+  PHONE_UNAVAILABLE,
   revealListingPhone,
   viewerKey,
 } from "./helpers";
@@ -100,11 +101,12 @@ export const updateProfile = createServerFn({ method: "POST" })
     await ensureProfile(context.userId);
     const phone = data.phone?.trim() ? normalizeTrPhone(data.phone) : null;
     if (phone) {
+      rateLimit(`phone-check:${context.userId}`, 20, 60 * 60_000);
       const taken = await sql.query<{ user_id: string }>(
         "select user_id from profiles where phone = $1 and user_id <> $2",
         [phone, context.userId],
       );
-      if (taken[0]) throw new Error("Bu telefon başka bir hesapta kayıtlı.");
+      if (taken[0]) throw new Error(PHONE_UNAVAILABLE);
     }
     await sql.query(
       `update profiles set display_name=$2, phone=$3, bio=$4, city=$5, district=$6
@@ -311,13 +313,11 @@ export const cancelCreditOrder = createServerFn({ method: "POST" })
   .validator(z.object({ id: z.string() }))
   .handler(async ({ context, data }) => {
     const sql = await getSql();
-    const row = await sql.query<{ user_id: string; status: string }>(
-      "select user_id, status from credit_orders where id=$1",
-      [data.id],
+    const cancelled = await sql.query(
+      "update credit_orders set status='CANCELLED', resolved_at=now() where id=$1 and user_id=$2 and status='PENDING' returning id",
+      [data.id, context.userId],
     );
-    if (!row[0] || row[0].user_id !== context.userId) throw new Error("Talep bulunamadı");
-    if (row[0].status !== "PENDING") throw new Error("Bu talep iptal edilemez.");
-    await sql.query("update credit_orders set status='CANCELLED', resolved_at=now() where id=$1", [data.id]);
+    if (!cancelled[0]) throw new Error("Bu talep iptal edilemez.");
     return { ok: true };
   });
 
@@ -335,7 +335,9 @@ export const revealPhone = createServerFn({ method: "POST" })
     const { getSessionUser } = await import("@/lib/auth/verify.server");
     const user = await getSessionUser();
     const request = getRequest();
-    rateLimit(`phone:${request ? viewerKey(request.headers, user?.id) : user?.id ?? "unknown"}`, 30, 60_000);
+    const viewer = request ? viewerKey(request.headers, user?.id) : user?.id ?? "unknown";
+    rateLimit(`phone:${viewer}`, 30, 60_000);
+    if (!user) rateLimit(`phone-day:${viewer}`, 100, 24 * 60 * 60_000);
     return { phone: await revealListingPhone(data.listingId, user?.id ?? null) };
   });
 
@@ -407,7 +409,6 @@ export const getStore = createServerFn({ method: "POST" })
       slug: String(rows[0].slug),
       description: rows[0].description ? String(rows[0].description) : "",
       city: rows[0].city ? String(rows[0].city) : null,
-      phone: rows[0].phone ? String(rows[0].phone) : null,
       plan: String(rows[0].plan),
     };
   });
