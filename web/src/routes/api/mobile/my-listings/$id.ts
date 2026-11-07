@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { readJson } from "@/lib/server/request-body";
 import { getSql } from "@/lib/db";
 import { getMobileUserId } from "@/lib/server/mobile-auth";
 import { assertOwnerStatus, assertRenewable, isExpired } from "@/lib/listing-status";
@@ -13,7 +14,7 @@ export const Route = createFileRoute("/api/mobile/my-listings/$id")({
         try {
           const userId = await getMobileUserId(request);
           if (!userId) return Response.json({ success: false, error: "Giriş yapmanız gerekiyor." }, { status: 401 });
-          const body = await request.json() as { action?: unknown; status?: unknown };
+          const body = (await readJson(request)) as { action?: unknown; status?: unknown };
           const sql = await getSql();
           const rows = await sql.query<{ id: string; user_id: string; status: string; slug: string; images: string[]; approved_at: string | null; expires_at: string | null }>("select id,user_id,status,slug,images,approved_at,expires_at from listings where id=$1", [params.id]);
           if (!rows[0] || rows[0].user_id !== userId) return Response.json({ success: false, error: "İlan bulunamadı." }, { status: 404 });

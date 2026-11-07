@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { readJson } from "@/lib/server/request-body";
 import { getSql } from "@/lib/db";
 import { getMobileUserId } from "@/lib/server/mobile-auth";
-import { ensureProfile, firstInWindow, mapListing, notify } from "@/lib/server/helpers";
+import { ensureProfile, firstInWindow, listingSelect, mapListing, notify } from "@/lib/server/helpers";
 import { errorStatus, publicErrorMessage } from "@/lib/server/errors";
 
 export const Route = createFileRoute("/api/mobile/favorites")({
@@ -13,11 +14,12 @@ export const Route = createFileRoute("/api/mobile/favorites")({
           if (!userId) return Response.json({ success: false, error: "Giriş yapmanız gerekiyor." }, { status: 401 });
           const sql = await getSql();
           const rows = await sql.query<Record<string, unknown>>(
-            `select l.*, c.name as category_name, c.slug as category_slug,
+            `select ${listingSelect("", true)},
                     coalesce((select json_agg(b.kind) from boosts b where b.listing_id=l.id and b.ends_at>now()), '[]'::json) as boosts
              from favorites f join listings l on l.id=f.listing_id join categories c on c.id=l.category_id
-             where f.user_id=$1 and l.status='ACTIVE' and (l.expires_at is null or l.expires_at>now())
-             order by f.created_at desc`,
+             left join profiles p on p.user_id=l.user_id left join stores s on s.id=l.store_id
+             where f.user_id=$1 and l.status in ('ACTIVE','SOLD')
+             order by f.created_at desc limit 500`,
             [userId],
           );
           return Response.json({ success: true, listings: rows.map(mapListing) }, { headers: { "Cache-Control": "private, no-store" } });
@@ -30,7 +32,7 @@ export const Route = createFileRoute("/api/mobile/favorites")({
         try {
           const userId = await getMobileUserId(request);
           if (!userId) return Response.json({ success: false, error: "Favorilere eklemek için giriş yapın." }, { status: 401 });
-          const body = await request.json() as { listingId?: unknown };
+          const body = (await readJson(request)) as { listingId?: unknown };
           if (typeof body.listingId !== "string" || !body.listingId) return Response.json({ success: false, error: "İlan bilgisi geçersiz." }, { status: 400 });
           const sql = await getSql();
           await ensureProfile(userId);

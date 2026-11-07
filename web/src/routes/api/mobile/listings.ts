@@ -8,8 +8,12 @@ export const Route = createFileRoute("/api/mobile/listings")({
       GET: async ({ request }) => {
         try {
           const url = new URL(request.url);
-          const limit = Math.min(Math.max(Number(url.searchParams.get("limit") || 20), 1), 50);
-          const offset = Math.max(Number(url.searchParams.get("offset") || 0), 0);
+          const whole = (name: string, fallback: number) => {
+            const value = Number(url.searchParams.get(name) ?? fallback);
+            return Number.isInteger(value) && value >= 0 ? value : fallback;
+          };
+          const limit = Math.min(Math.max(whole("limit", 20), 1), 50);
+          const offset = Math.min(whole("offset", 0), 100_000);
           const category = url.searchParams.get("category") || undefined;
           const q = url.searchParams.get("q")?.trim() || undefined;
           const urgent = url.searchParams.get("urgent") === "true";

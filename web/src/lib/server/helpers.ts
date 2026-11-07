@@ -1,5 +1,5 @@
 import { getSql } from "@/lib/db";
-import { asJson, newId, num } from "@/lib/utils";
+import { asIso, asJson, newId, num } from "@/lib/utils";
 import { resolveNotifyPrefs, type NotifyChannelPrefs, type PhoneVisibility } from "@/lib/notification-prefs";
 import { findCategory, getCategoryTree, subtreeOf } from "./category-cache";
 import { RateLimitError } from "./errors";
@@ -108,10 +108,10 @@ export function mapListing(row: Record<string, unknown>): ListingCard {
     images: asJson<string[]>(row.images, []),
     attrs: asJson<Record<string, string | number>>(row.attrs, {}),
     view_count: num(row.view_count),
-    featured_until: row.featured_until ? String(row.featured_until) : null,
-    expires_at: row.expires_at ? String(row.expires_at) : null,
-    created_at: String(row.created_at),
-    updated_at: String(row.updated_at),
+    featured_until: row.featured_until ? asIso(row.featured_until) : null,
+    expires_at: row.expires_at ? asIso(row.expires_at) : null,
+    created_at: asIso(row.created_at),
+    updated_at: asIso(row.updated_at),
     category_name: row.category_name ? String(row.category_name) : undefined,
     category_slug: row.category_slug ? String(row.category_slug) : undefined,
     seller_name: row.seller_name ? String(row.seller_name) : undefined,

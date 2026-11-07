@@ -198,6 +198,10 @@ async function createPgliteSql(): Promise<Sql> {
   globalRef.__pgliteMigrateChain__ = pass;
   await pass;
 
+  return pgliteSql(pg);
+}
+
+function pgliteSql(pg: import("@electric-sql/pglite").PGlite): Sql {
   return toSql(
     async <T>(text: string, params: unknown[]) => {
       const result = await pg.query<T>(text, params);
@@ -211,6 +215,11 @@ async function createPgliteSql(): Promise<Sql> {
 }
 
 let sqlPromise: Promise<Sql> | null = null;
+
+/** Tests run outside Vite, where the migration glob does not exist: they bring a migrated PGLite. */
+export function useTestDatabase(pg: import("@electric-sql/pglite").PGlite): void {
+  sqlPromise = Promise.resolve(pgliteSql(pg));
+}
 
 async function createSql(): Promise<Sql> {
   if (typeof window !== "undefined") {
@@ -264,7 +273,8 @@ export async function getPglite(): Promise<import("@electric-sql/pglite").PGlite
  * module kick it off immediately (see bottom of file).
  */
 export function ensureDbReady(): Promise<void> {
-  if (dbSource !== "pglite") return Promise.resolve();
+  // `node --test` runs bring their own database (useTestDatabase).
+  if (dbSource !== "pglite" || process.env.NODE_TEST_CONTEXT) return Promise.resolve();
   return getSql().then(() => undefined);
 }
 

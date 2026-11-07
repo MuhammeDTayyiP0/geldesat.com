@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { readJson } from "@/lib/server/request-body";
 import { auth } from "@/lib/auth/server";
 import { getSql } from "@/lib/db";
 import { canReviewSeller, ensureProfile, REVIEW_NOT_ELIGIBLE, saveReview } from "@/lib/server/helpers";
@@ -16,7 +17,7 @@ export const Route = createFileRoute("/api/mobile/reviews")({
         try {
           const userId = await sessionUserId(request);
           if (!userId) return Response.json({ success: false, error: "Puan vermek için giriş yapın." }, { status: 401 });
-          const body = await request.json() as { listingId?: unknown; rating?: unknown; comment?: unknown };
+          const body = (await readJson(request)) as { listingId?: unknown; rating?: unknown; comment?: unknown };
           const listingId = typeof body.listingId === "string" ? body.listingId : "";
           const rating = Number(body.rating);
           const comment = typeof body.comment === "string" ? body.comment.trim().slice(0, 400) : "";

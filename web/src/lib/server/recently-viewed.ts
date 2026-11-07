@@ -1,3 +1,4 @@
+import { asIso } from "@/lib/utils";
 import { getSql } from "@/lib/db";
 import { listingSelect, mapListing, type ListingCard } from "./helpers";
 
@@ -45,7 +46,7 @@ export async function recentListings(userId: string, limit = RECENT_LIMIT): Prom
     const hidden = listing.status === "REJECTED" || listing.status === "INACTIVE" || listing.status === "PENDING";
     return {
       ...(hidden ? { ...listing, title: "Bu ilan yayında değil", images: [], price: 0, description: "" } : listing),
-      viewed_at: String(row.viewed_at),
+      viewed_at: asIso(row.viewed_at),
       live: Boolean(row.live),
     };
   });

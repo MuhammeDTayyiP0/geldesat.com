@@ -170,11 +170,11 @@ Sonraki fazlar bunları kullanır.
 
 ## Faz 9: Kalan sunucu ve performans (rapor 3.7)
 
-- [ ] İndeksler: `phone_reveals`, `created_at`, örtüşen `messages` indeksleri; `listing_no` sorguları.
-- [ ] Sayfalama ve `listingSelect` (favoriler, ilanlarım, sohbet); `String(Date)` yerine `asIso`.
-- [ ] Mobil API uyumu: `legacy_slug`, `show_whatsapp`, `has_phone`, süresi dolmuş kuralı (Madde 11).
-- [ ] Küçük API düzeltmeleri: `limit=abc`, 400/500, kısmi profil, tanınmayan `action`, geo parametresi.
-- [ ] Test kapsamı: RPC izin listesi, OAuth, `searchListings`.
+- [x] İndeksler: `phone_reveals`, `created_at`, örtüşen `messages` indeksleri; `listing_no` sorguları.
+- [x] Sayfalama ve `listingSelect` (favoriler, ilanlarım, sohbet); `String(Date)` yerine `asIso`.
+- [x] Mobil API uyumu: `legacy_slug`, `show_whatsapp`, `has_phone`, süresi dolmuş kuralı (Madde 11).
+- [x] Küçük API düzeltmeleri: `limit=abc`, 400/500, kısmi profil, tanınmayan `action`, geo parametresi.
+- [x] Test kapsamı: RPC izin listesi, OAuth, `searchListings`.
 - [ ] **Deploy noktası:** Mobil fazlardan önce web canlıda olmalı.
 
 ## Faz 10: Mobil temel (rapor 3.11)

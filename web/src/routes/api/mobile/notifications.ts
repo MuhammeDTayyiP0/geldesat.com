@@ -49,6 +49,10 @@ export const Route = createFileRoute("/api/mobile/notifications")({
             await sql.query("delete from mobile_push_tokens where token=$1 and user_id=$2", [body.token, userId]);
             return Response.json({ success: true });
           }
+          // An action this server does not know must not silently read everything.
+          if (body.action !== undefined && body.action !== "mark-read") {
+            return Response.json({ success: false, error: "İşlem tanınmadı." }, { status: 400 });
+          }
           await sql.query("update notifications set read_at=now() where user_id=$1 and read_at is null", [userId]);
           return Response.json({ success: true });
         } catch (error) {

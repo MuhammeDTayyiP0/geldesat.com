@@ -15,6 +15,7 @@ export class RateLimitError extends Error {
 export function errorStatus(error: unknown, fallback: number): number {
   if (error instanceof RateLimitError) return 429;
   if (error instanceof Error && error.name === "BodyTooLargeError") return 413;
+  if (error instanceof Error && error.name === "BadRequestError") return 400;
   return fallback;
 }
 

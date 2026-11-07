@@ -1,3 +1,4 @@
+import { asIso, listingNoFromSlug } from "@/lib/utils";
 import { createFileRoute } from "@tanstack/react-router";
 import { getSql } from "@/lib/db";
 import { auth } from "@/lib/auth/server";
@@ -16,17 +17,22 @@ export const Route = createFileRoute("/api/mobile/listings/$id")({
       GET: async ({ request, params }) => {
         try {
           const sql = await getSql();
+          const listingNo = listingNoFromSlug(params.id);
           const rows = await sql.query<Record<string, unknown>>(
             `select l.*, c.name as category_name, c.slug as category_slug,
                     p.display_name as seller_name, s.name as store_name, s.slug as store_slug,
+                    coalesce(p.phone_visibility, 'members') as phone_visibility, coalesce(p.show_whatsapp, true) as show_whatsapp,
+                    (coalesce(nullif(trim(l.phone_override), ''), nullif(trim(p.phone), '')) is not null) as has_phone,
                     coalesce((select json_agg(b.kind) from boosts b where b.listing_id=l.id and b.ends_at>now()), '[]'::json) as boosts
              from listings l
              join categories c on c.id=l.category_id
              left join profiles p on p.user_id=l.user_id
              left join stores s on s.id=l.store_id
-             where l.id=$1 or lower(l.slug)=lower($1) or ($1 ~ '^[0-9]{7,15}$' and l.listing_no::text=$1)
+             where ${listingNo ? "l.listing_no = $1::bigint" : "l.id=$1 or lower(l.slug)=lower($1) or lower(l.legacy_slug)=lower($1)"}
              limit 1`,
-            [params.id],
+            // Same rules as the site: the number at the end of an address identifies the
+            // listing, so links stay good after a title edit.
+            [listingNo ? String(listingNo) : params.id],
           );
           if (!rows[0]) return Response.json({ success: false, error: "İlan bulunamadı." }, { status: 404 });
           const listing = mapListing(rows[0]);
@@ -63,7 +69,7 @@ export const Route = createFileRoute("/api/mobile/listings/$id")({
           const sellerReviewEligible = Boolean(userId && userId !== listing.user_id && (await canReviewSeller(sql, userId, listing.user_id)));
           const existingReview = userId && userId !== listing.user_id
             ? await sql.query<{ rating: number; comment: string | null }>(
-                "select rating,comment from reviews where seller_id=$1 and reviewer_id=$2 and listing_id=$3 limit 1", [listing.user_id, userId, listing.id],
+                "select rating,comment from reviews where seller_id=$1 and reviewer_id=$2 limit 1", [listing.user_id, userId],
               )
             : [];
           const metric = stats[0];
@@ -76,9 +82,12 @@ export const Route = createFileRoute("/api/mobile/listings/$id")({
             listing: enrichedListing,
             isFavorite: favoriteRows.length > 0,
             isOwner: userId === listing.user_id,
-            history: history.map((row) => ({ price: Number(row.price), at: String(row.recorded_at) })),
+            hasPhone: Boolean(rows[0].has_phone) && rows[0].phone_visibility !== "hidden",
+            phoneVisibility: String(rows[0].phone_visibility),
+            showWhatsapp: Boolean(rows[0].show_whatsapp),
+            history: history.map((row) => ({ price: Number(row.price), at: asIso(row.recorded_at) })),
             similar: similarRows.map(mapListing),
-            reviews: reviews.map((row) => ({ id: String(row.id), rating: Number(row.rating), comment: String(row.comment ?? ''), reviewer: String(row.reviewer ?? 'Üye'), at: String(row.created_at) })),
+            reviews: reviews.map((row) => ({ id: String(row.id), rating: Number(row.rating), comment: String(row.comment ?? ''), reviewer: String(row.reviewer ?? 'Üye'), at: asIso(row.created_at) })),
             sellerStats: { rating_avg: Number(metric?.rating_avg || 0), rating_count: Number(metric?.rating_count || 0) },
             favoriteCount: Number(metric?.favorite_count || 0),
             phoneRevealCount: Number(metric?.phone_reveal_count || 0),

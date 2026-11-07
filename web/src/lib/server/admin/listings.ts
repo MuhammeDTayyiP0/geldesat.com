@@ -91,7 +91,7 @@ export const adminListListings = createServerFn({ method: "POST" })
     else if (data.status !== "ALL") w.add(`l.status = ${w.param(data.status)}`);
     if (data.q) {
       const q = data.q.replace(/^#/, "");
-      if (/^\d{4,15}$/.test(q)) w.add(`(l.listing_no::text = ${w.param(q)} or l.title ilike ${w.param(likeTerm(q))})`);
+      if (/^\d{4,15}$/.test(q)) w.add(`(l.listing_no = ${w.param(q)}::bigint or l.title ilike ${w.param(likeTerm(q))})`);
       else {
         const like = w.param(likeTerm(q));
         w.add(`(l.title ilike ${like} or p.display_name ilike ${like} or l.id = ${w.param(q)})`);

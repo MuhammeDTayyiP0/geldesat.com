@@ -461,14 +461,14 @@ export const getListing = createServerFn({ method: "POST" })
         ) as Record<string, string>,
       },
       path,
-      history: history.map((h) => ({ price: num(h.price), at: String(h.recorded_at) })),
+      history: history.map((h) => ({ price: num(h.price), at: asIso(h.recorded_at) })),
       similar: filteredSimilar.slice(0, 4),
       seller: seller[0]
         ? {
             id: String(seller[0].user_id),
             name: String(seller[0].display_name ?? "Satıcı"),
             city: seller[0].city ? String(seller[0].city) : null,
-            since: String(seller[0].created_at),
+            since: asIso(seller[0].created_at),
             avatar: seller[0].avatar_url ? String(seller[0].avatar_url) : (rows[0].profile_avatar ? String(rows[0].profile_avatar) : null),
             bio: seller[0].bio ? String(seller[0].bio) : null,
             listing_count: num(seller[0].listing_count),

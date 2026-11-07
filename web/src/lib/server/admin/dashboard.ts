@@ -201,8 +201,8 @@ export const adminGlobalSearch = createServerFn({ method: "POST" })
       sql.query<Record<string, unknown>>(
         `select l.id, l.listing_no, l.title, l.status
          from listings l
-         where ($2::text is not null and l.listing_no::text = $2) or l.id = $3 or l.title ilike $1
-         order by ($2::text is not null and l.listing_no::text = $2) desc, l.created_at desc limit 6`,
+         where l.listing_no = $2::bigint or l.id = $3 or l.title ilike $1
+         order by (l.listing_no = $2::bigint) is true desc, l.created_at desc limit 6`,
         [like, digits, data.q],
       ),
       sql.query<Record<string, unknown>>(

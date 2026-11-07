@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
-import { asJson, num } from "@/lib/utils";
+import { asIso, asJson, num } from "@/lib/utils";
 import { deleteUnusedListingImages } from "./upload.server";
 import {
   inheritedAttributes,
@@ -70,7 +70,7 @@ export const getMe = createServerFn({ method: "GET" })
             favorite_count: num(p.favorite_count),
             rating_avg: num(p.rating_avg),
             rating_count: num(p.rating_count),
-            created_at: String(p.created_at),
+            created_at: asIso(p.created_at),
           }
         : null,
       store: store[0]
@@ -111,6 +111,7 @@ export const updateProfile = createServerFn({ method: "POST" })
       );
       if (taken[0]) throw new Error(PHONE_UNAVAILABLE);
     }
+    // Both clients send the whole form, and an omitted field means "cleared".
     await sql.query(
       `update profiles set display_name=$2, phone=$3, bio=$4, city=$5, district=$6
        where user_id=$1`,
@@ -258,7 +259,7 @@ export const upsertStore = createServerFn({ method: "POST" })
     z.object({
       name: z.string().min(3).max(60),
       description: z.string().max(400).optional(),
-      city: z.string().optional(),
+      city: z.string().max(40).optional(),
       phone: z.string().optional(),
     }),
   )
@@ -307,8 +308,8 @@ export const myCreditOrders = createServerFn({ method: "GET" })
       credits: num(r.credits),
       price: num(r.price),
       status: String(r.status),
-      created_at: String(r.created_at),
-      resolved_at: r.resolved_at ? String(r.resolved_at) : null,
+      created_at: asIso(r.created_at),
+      resolved_at: r.resolved_at ? asIso(r.resolved_at) : null,
     }));
   });
 
@@ -350,7 +351,7 @@ const mapReview = (r: Record<string, unknown>) => ({
         rating: num(r.rating),
         comment: r.comment ? String(r.comment) : "",
         reviewer: r.reviewer_name == null ? "Silinmiş kullanıcı" : String(r.reviewer_name),
-        at: String(r.created_at),
+        at: asIso(r.created_at),
       });
 
 /** One page of a seller's reviews, for "Daha fazla göster". */
@@ -393,7 +394,7 @@ export const getSeller = createServerFn({ method: "POST" })
       city: p[0].city ? String(p[0].city) : null,
       bio: p[0].bio ? String(p[0].bio) : null,
       avatar: p[0].avatar_url ? String(p[0].avatar_url) : null,
-      since: String(p[0].created_at),
+      since: asIso(p[0].created_at),
       listing_count: num(p[0].listing_count),
       rating_avg: num(p[0].rating_avg),
       rating_count: num(p[0].rating_count),

@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { readJson } from "@/lib/server/request-body";
 import { auth } from "@/lib/auth/server";
 import { getSql } from "@/lib/db";
 import { ensureProfile, hasOpenReport, insertListingReport, rateLimit } from "@/lib/server/helpers";
@@ -17,7 +18,7 @@ export const Route = createFileRoute("/api/mobile/reports")({
           const userId = await sessionUserId(request);
           if (!userId) return Response.json({ success: false, error: "İlanı bildirmek için giriş yapın." }, { status: 401 });
           rateLimit(`mobile-report:${userId}`, 10, 60_000);
-          const body = await request.json() as { listingId?: unknown; reason?: unknown; details?: unknown };
+          const body = (await readJson(request)) as { listingId?: unknown; reason?: unknown; details?: unknown };
           const listingId = typeof body.listingId === "string" ? body.listingId : "";
           const reason = typeof body.reason === "string" ? body.reason.trim().slice(0, 80) : "";
           const details = typeof body.details === "string" ? body.details.trim().slice(0, 500) : "";

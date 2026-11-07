@@ -422,37 +422,37 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 ### 3.7 Web: mobil API ve sunucu
 
 - [x] O (olası) · `api/mobile/rpc/$fn.ts:118` — `request.text()` oturumdan önce ve sınırsız; bellek tüketimi.
-- [ ] D · `account.ts:103`, `api/mobile/profile.ts:129` — Telefon taraması mümkün.
-- [ ] D · `chat.ts:243` — `respondOffer` koşulsuz (bkz. 3.3).
+- [x] D · `account.ts:103`, `api/mobile/profile.ts:129` — Telefon taraması mümkün.
+- [x] D · `chat.ts:243` — `respondOffer` koşulsuz (bkz. 3.3).
 - [x] O (olası) · `api/mobile/oauth/done.ts:11-17` — `/start` doğrulanmadan kod üretiliyor; `geldesat://` şemasını kaydeden kötü niyetli Android uygulaması tarayıcı oturumundan token alabilir → challenge'ı çereze bağla, App Links.
-- [ ] D · `oauth/done.ts:17` — Uygulama tarayıcıyla aynı token. `oauth/exchange.ts:22` — `no-store` yok.
+- [~] D · `oauth/done.ts:17` — Uygulama tarayıcıyla aynı token. `oauth/exchange.ts:22` — `no-store` yok.
 - [x] O · `conversations.ts:77`, `conversations/$id.ts:68` — REST her mesajda `notify`, dakikada 40 push.
 - [x] O · `conversations.ts:20-32` — Limit yok, üç alt sorgu.
 - [x] D · `conversations/$id.ts:40` — `kind/meta` yok. `mobile-conversation-store.ts:38` — Transaction yok.
-- [ ] D · `api/mobile/listings.ts:11-12` — `limit=abc` 500.
-- [ ] O · `api/mobile/listings/$id.ts:27` — Eski slug ve `legacy_slug` çözülmüyor; web'de açılan link uygulamada "yayında değil" (mobil raporu Y).
-- [ ] O · `listings/$id.ts:58` — `phone_reveals(listing_id)` indeksi yok, her detayda tarama.
+- [x] D · `api/mobile/listings.ts:11-12` — `limit=abc` 500.
+- [x] O · `api/mobile/listings/$id.ts:27` — Eski slug ve `legacy_slug` çözülmüyor; web'de açılan link uygulamada "yayında değil" (mobil raporu Y).
+- [x] O · `listings/$id.ts:58` — `phone_reveals(listing_id)` indeksi yok, her detayda tarama.
 - [x] O · `listings/$id.ts:95`, `helpers.ts` — Günlük tavan yok; günde yaklaşık 43 bin telefon toplanabilir.
-- [ ] D · `listings/$id.ts:27` — `listing_no::text` indeks kullanamıyor. `:74` — `has_phone` yok, "Ara" düğmesi hata veriyor (mobil O: `M/app/ilan/[id].tsx:351`).
-- [ ] D · `my-listings.ts:16-21` — Limit yok. `listing-write.ts:124-156` — Transaction yok. `my-listings/$id.ts:12` — Kullanılmayan GET.
+- [x] D · `listings/$id.ts:27` — `listing_no::text` indeks kullanamıyor. `:74` — `has_phone` yok, "Ara" düğmesi hata veriyor (mobil O: `M/app/ilan/[id].tsx:351`).
+- [x] D · `my-listings.ts:16-21` — Limit yok. `listing-write.ts:124-156` — Transaction yok. `my-listings/$id.ts:12` — Kullanılmayan GET.
 - [x] O · `listing-write.ts:15-20` — `city`, `district`, `attrs` boyut sınırı yok.
 - [x] O · `api/mobile/images.ts:27-32` — Eski uç filigran ve EXIF/GPS temizliğini atlıyor; fotoğraftaki konum açığa çıkabilir → 410 veya hattan geçir.
 - [x] O (olası) · `image-pipeline.server.ts:229` — `resizeVariant` piksel sınırı yok. D (olası) · `images.ts:18` — `formData()` boyuttan önce.
-- [ ] D · `image-serve.server.ts:42-43` — Silinen görsel önbellekten sunuluyor, bir yıl `immutable` (KVKK notu).
-- [ ] D · `profile.ts:18-19`, `account.ts:255-256` — `city` sınırı yok. `profile.ts:135-138`, `account.ts:109-113` — Gönderilmeyen alan NULL. `:101,127` — 400 yerine 500.
+- [~] D · `image-serve.server.ts:42-43` — Silinen görsel önbellekten sunuluyor, bir yıl `immutable` (KVKK notu).
+- [~] D · `profile.ts:18-19`, `account.ts:255-256` — `city` sınırı yok. `profile.ts:135-138`, `account.ts:109-113` — Gönderilmeyen alan NULL. `:101,127` — 400 yerine 500.
 - [x] O · `api/mobile/stores/$slug.ts:12` — Askıdaki mağaza mobilde görünüyor, web gizliyor.
 - [x] O · `api/mobile/reviews.ts:34-35`, `social.ts:121-130` — Sil-ekle transaction dışında, hata eski puanı kaybettiriyor.
-- [ ] D (olası) · `reports.ts:30-31` — Çift rapor. D · `favorites.ts:15-22` — Limit yok. `notifications.ts:50` — Tanınmayan `action` hepsini okundu yapıyor. `blocks.ts:13` — Bozuk JSON 500.
+- [x] D (olası) · `reports.ts:30-31` — Çift rapor. D · `favorites.ts:15-22` — Limit yok. `notifications.ts:50` — Tanınmayan `action` hepsini okundu yapıyor. `blocks.ts:13` — Bozuk JSON 500.
 - [x] D · `docker-compose.yml:28-44`, `env.ornek` — `CRON_SECRET` yok, süpürme yalnız trafikle çalışır.
 - [x] O · `api/geo.ts:71` — 900 ms bekleme önbellekten önce ve kuyruk değil; Nominatim sınırı aşılır, IP engellenebilir.
 - [x] D · `geo.ts:92-93` — Yorum 100 m, gerçek 11 m. `:87-88` — Parametresiz 0,0 sorgusu.
 - [x] O · `lib/db.ts:113`, `auth/server.ts:52` — `connectionTimeout` ve `statement_timeout` yok.
-- [ ] O · `helpers.ts` `notify` — Mesaj yanıtı Expo'yu 2,5 sn'ye kadar bekliyor; push arka plana alınmalı.
-- [ ] O · `helpers.ts` rozet — Gizli ve arşivli sohbetleri sayıyor; silinen sohbetin rozeti düşmüyor.
-- [ ] D · `helpers.ts` `rateLimit` — 429 yerine 500/400. D (olası) · `errors.ts:13-20` — `code`suz iç hata istemciye gidiyor.
-- [ ] D · `helpers.ts mapListing`, `account.ts:69`, `listings/$id.ts:79,81` — `String(Date)` dönüyor → `asIso`.
-- [ ] D · `migrations/0002,0020,0026,0028` — `messages` üzerinde beş örtüşen indeks.
-- [ ] O · `web/package.json` — RPC, OAuth, durum geçişi, `searchListings`, `leaveReview` testi yok.
+- [x] O · `helpers.ts` `notify` — Mesaj yanıtı Expo'yu 2,5 sn'ye kadar bekliyor; push arka plana alınmalı.
+- [x] O · `helpers.ts` rozet — Gizli ve arşivli sohbetleri sayıyor; silinen sohbetin rozeti düşmüyor.
+- [~] D · `helpers.ts` `rateLimit` — 429 yerine 500/400. D (olası) · `errors.ts:13-20` — `code`suz iç hata istemciye gidiyor.
+- [x] D · `helpers.ts mapListing`, `account.ts:69`, `listings/$id.ts:79,81` — `String(Date)` dönüyor → `asIso`.
+- [x] D · `migrations/0002,0020,0026,0028` — `messages` üzerinde beş örtüşen indeks.
+- [~] O · `web/package.json` — RPC, OAuth, durum geçişi, `searchListings`, `leaveReview` testi yok.
 
 ### 3.8 Mobil: keşif
 
