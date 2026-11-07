@@ -59,6 +59,8 @@ const Filters = z.object({
  * visitors only ever see ACTIVE listings.
  */
 export type SearchFilters = z.infer<typeof Filters> & {
+  /** Word matching instead of a single phrase (arama_v2). Set by the caller, not by the client. */
+  wordSearch?: boolean;
   status?: string;
   /** Skip the COUNT query when the caller ignores `total`/`pages`. */
   skipCount?: boolean;
