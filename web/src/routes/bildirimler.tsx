@@ -1,3 +1,5 @@
+import { ErrorState } from "@/components/common/ErrorState";
+import { subscribeChatStream } from "@/lib/chat-stream";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Bell, Clock, Heart, LayoutGrid, MessageCircle, Settings, Store, Wallet, type LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -34,6 +36,8 @@ function Notes() {
   const { user, isPending } = useCurrentUserState();
   const navigate = useNavigate();
   const [rows, setRows] = useState<Note[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     if (!user) return;
@@ -44,15 +48,24 @@ function Notes() {
         // Show which ones are new on this visit, then count them as read.
         setRows(list);
         if (list.some((n) => !n.read)) {
-          void markNotificationsRead().then(() => setUnread((prev) => ({ ...prev, notifications: 0 })));
+          void markNotificationsRead().catch(() => undefined).then(() => setUnread((prev) => ({ ...prev, notifications: 0 })));
         }
       })
-      .catch(() => alive && setRows([]));
+      .catch(() => alive && setFailed(true));
     return () => {
       alive = false;
     };
+  }, [user, attempt]);
+
+  // Keeps an open page current; the header badge is handled elsewhere.
+  useEffect(() => {
+    if (!user) return;
+    return subscribeChatStream((data) => {
+      if (data.type === "notification") setAttempt((n) => n + 1);
+    });
   }, [user]);
 
+  if (failed) return <AccountShell title="Bildirimler"><ErrorState message="Bildirimleriniz yüklenemedi." onRetry={() => { setFailed(false); setAttempt((n) => n + 1); }} /></AccountShell>;
   if (isPending || (user && !rows)) return <BrandSpinner fullPage text="Bildirimleriniz yükleniyor…" />;
   if (!user || !rows) return <RedirectToSignIn />;
 

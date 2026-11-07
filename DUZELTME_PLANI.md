@@ -144,15 +144,15 @@ Sonraki fazlar bunları kullanır.
 
 ## Faz 7: Mesajlaşma sunucu ve web (rapor 3.3)
 
-- [ ] `mesajlar/$id.tsx`'i rapordaki sınırlarla böl (davranış değiştirmeden, ayrı commit).
-- [ ] Dolandırıcılık regex'i, testli, web ve mobil (Madde 22).
-- [ ] Görünürlük: gizli sekme "izliyor" sayılmasın, pencere okununca sıfırlansın (Madde 20).
-- [ ] `pollThread` değişenleri getirsin; `message_update` yalnız var olanı güncellesin; kaçan olay telafisi.
-- [ ] Tek rozet fonksiyonu: arşiv, gizli, bildirim çifti (Bölüm 2.12). Arşiv kararı (K3).
-- [ ] Süpürme tekrarları: `expiry_notified_at` (Madde 23); push arka plana; `broadcast` ve ölü token ortak.
-- [ ] Web sohbet: sıralama, ilk okunmamış, yeni mesaj düğmesi, başarısız fotoğraf, arama debounce, geri dönüşte önce çekme. Anahtar: `sohbet_v2`.
-- [ ] Küçükler: Enter, pano, sürükle-bırak, menü `catch`, arşiv etiketi, hızlı yanıt, kontrast, `LocationPicker` yer adı.
-- [ ] Bildirim sayfası: hata, canlılık, sayfalama, başlıkta gönderen.
+- [~] `mesajlar/$id.tsx` bölünmedi: davranış değiştirmeyen bir iş, ekrana bakmadan 1600 satırı taşımak gereksiz risk. Görsel kontrol sonrası ayrı iş; sınırlar raporda.
+- [x] Dolandırıcılık regex'i, testli, web ve mobil (Madde 22).
+- [x] Görünürlük: gizli sekme "izliyor" sayılmasın, pencere okununca sıfırlansın (Madde 20).
+- [x] `pollThread` değişenleri getirsin; `message_update` yalnız var olanı güncellesin; kaçan olay telafisi.
+- [x] Tek rozet fonksiyonu: arşiv, gizli, bildirim çifti (Bölüm 2.12). Arşiv kararı (K3).
+- [x] Süpürme tekrarları: `expiry_notified_at` (Madde 23); push arka plana; `broadcast` ve ölü token ortak.
+- [x] Web sohbet: sıralama, ilk okunmamış, yeni mesaj düğmesi, başarısız fotoğraf, arama debounce, geri dönüşte önce çekme. Anahtar: `sohbet_v2`.
+- [x] Küçükler: Enter, pano, sürükle-bırak, menü `catch`, arşiv etiketi, hızlı yanıt, kontrast, `LocationPicker` yer adı.
+- [x] Bildirim sayfası: hata, canlılık, sayfalama, başlıkta gönderen.
 
 ## Faz 8: Admin (rapor 3.5, 3.6)
 

@@ -34,7 +34,7 @@ export async function sweepMessageDigests(force = false): Promise<void> {
   const due = await sql.query<{ user_id: string; email: string; name: string }>(
     `select p.user_id, u.email, coalesce(nullif(p.display_name, ''), u.name) as name
      from profiles p join "user" u on u.id = p.user_id
-     where p.message_email and u."emailVerified" and p.deletion_requested_at is null
+     where p.message_email and u."emailVerified" and p.deletion_requested_at is null and p.banned_at is null
        and (p.last_message_email_at is null or p.last_message_email_at < now() - make_interval(hours => $1))
        and exists (
          select 1 from messages m join conversations cv on cv.id = m.conversation_id

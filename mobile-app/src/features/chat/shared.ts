@@ -27,11 +27,11 @@ export const REPORT_REASONS = ['Sahte / dolandırıcılık', 'Yanlış kategori'
 export const CHAT_REPORT_REASONS = ['Dolandırıcılık şüphesi', 'Taciz / hakaret', 'Spam', 'Diğer'];
 
 const RISK_PATTERNS: { re: RegExp; warning: string }[] = [
-  { re: /\bTR\s?\d{2}(?:\s?\d{4}){5}\s?\d{2}\b/i, warning: 'IBAN paylaşıldı. Ürünü görmeden para göndermeyin.' },
-  { re: /\b(kapora|kaparo|ön ?ödeme|peşinat)\b/i, warning: 'Ürünü görmeden kapora veya ön ödeme göndermeyin.' },
-  { re: /\b(whatsapp|telegram|wa\.me|t\.me)\b/i, warning: 'Site dışına taşınan yazışmalarda GeldeSat sizi koruyamaz.' },
+  { re: /(?<![\p{L}\p{N}])TR\s?\d{2}(?:\s?\d{4}){5}\s?\d{2}(?![\p{L}\p{N}])/iu, warning: 'IBAN paylaşıldı. Ürünü görmeden para göndermeyin.' },
+  { re: /(?<![\p{L}\p{N}])(kapora|kaparo|ön ?ödeme|peşinat)/iu, warning: 'Ürünü görmeden kapora veya ön ödeme göndermeyin.' },
+  { re: /(?<![\p{L}\p{N}])(whatsapp|telegram|wa\.me|t\.me)/iu, warning: 'Site dışına taşınan yazışmalarda GeldeSat sizi koruyamaz.' },
   {
-    re: /\b(shopier|papara|ininal|bit\.ly|tinyurl|odeme|ödeme linki|güvenli ödeme)\b/i,
+    re: /(?<![\p{L}\p{N}])(shopier|papara(?![a-zğüşıöç]{3})|ininal|bit\.ly|tinyurl|odeme|ödeme linki|güvenli ödeme)/iu,
     warning: 'Dış ödeme bağlantılarına tıklamayın; sahte ödeme sayfası olabilir.',
   },
 ];

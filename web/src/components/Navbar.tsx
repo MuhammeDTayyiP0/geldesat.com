@@ -86,7 +86,7 @@ export function Navbar({ className }: NavbarProps) {
       return;
     }
 
-    function loadStats() {
+    function fetchStats() {
       unreadCount()
         .then((c) => {
           setUnread({ messages: c.messages, notifications: c.notifications });
@@ -95,15 +95,23 @@ export function Navbar({ className }: NavbarProps) {
         .catch(() => undefined);
     }
 
-    loadStats();
+    // One message fires several inbox events; they share a single request.
+    let statsTimer: ReturnType<typeof setTimeout> | null = null;
+    function loadStats() {
+      if (statsTimer) clearTimeout(statsTimer);
+      statsTimer = setTimeout(fetchStats, 400);
+    }
+
+    fetchStats();
 
     // The header owns the inbox side of the shared chat stream and re-broadcasts
     // it as a window event for the inbox page.
     const unsubscribe = subscribeChatStream((data) => {
       if (data.type === "new_message") {
-        setUnread((prev) => ({ ...prev, messages: prev.messages + 1 }));
+        // The chat being read does not add to the badge.
+        if (window.location.pathname !== `/mesajlar/${String(data.conversationId)}`) setUnread((prev) => ({ ...prev, messages: prev.messages + 1 }));
         window.dispatchEvent(new CustomEvent("geldesat:inbox", { detail: data }));
-      } else if (data.type === "read_update" || data.type === "inbox_ping") {
+      } else if (data.type === "read_update" || data.type === "inbox_ping" || data.type === "stream_resumed") {
         loadStats();
         window.dispatchEvent(new CustomEvent("geldesat:inbox", { detail: data }));
       } else if (data.type === "notification") {
@@ -118,6 +126,7 @@ export function Navbar({ className }: NavbarProps) {
 
     return () => {
       unsubscribe();
+      if (statsTimer) clearTimeout(statsTimer);
       window.removeEventListener("geldesat:inbox", loadStats);
       window.clearInterval(tick);
     };

@@ -24,6 +24,7 @@ export async function hideConversationFor(sql: Sql, conversationId: string, user
     [conversationId, userId],
   );
   if (!rows[0]) return false;
+  await sql.query("update notifications set read_at=coalesce(read_at, now()) where user_id=$1 and type='message' and link=$2", [userId, `/mesajlar/${conversationId}`]);
   await sql.query(
     `update conversations set purge_after = now() + make_interval(days => $2)
      where id = $1 and buyer_hidden_at is not null and seller_hidden_at is not null and purge_after is null`,

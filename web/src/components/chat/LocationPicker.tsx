@@ -43,6 +43,7 @@ export function LocationPicker({
   const [locating, setLocating] = useState(false);
   const [busy, setBusy] = useState(false);
   const lookup = useRef(0);
+  const keepPickedName = useRef(false);
 
   // Create the map when the dialog opens (Leaflet needs the browser and a sized element).
   useEffect(() => {
@@ -81,6 +82,12 @@ export function LocationPicker({
   // Address of the point under the pin once the map settles (zoomed in far enough to mean a place).
   useEffect(() => {
     if (!center || (map.current?.getZoom() ?? 0) < 12) return;
+    // Flying to a place picked from search ends here too; its name must stay.
+    if (keepPickedName.current) {
+      keepPickedName.current = false;
+      setResolving(false);
+      return;
+    }
     const id = ++lookup.current;
     setResolving(true);
     const t = setTimeout(() => {
@@ -89,7 +96,10 @@ export function LocationPicker({
         .catch(() => id === lookup.current && setLabel("Seçilen konum"))
         .finally(() => id === lookup.current && setResolving(false));
     }, 500);
-    return () => clearTimeout(t);
+    return () => {
+      clearTimeout(t);
+      setResolving(false);
+    };
   }, [center]);
 
   // Place search, debounced.
@@ -97,17 +107,22 @@ export function LocationPicker({
     const term = q.trim();
     if (term.length < 2) {
       setResults([]);
+      setSearching(false);
       return;
     }
+    let current = true;
     setSearching(true);
     const t = setTimeout(() => {
       const c = map.current?.getCenter();
       void geo<{ results: Place[] }>({ q: term, ...(c ? { near: `${c.lat},${c.lng}` } : {}) })
-        .then((r) => setResults(r.results))
-        .catch(() => setResults([]))
-        .finally(() => setSearching(false));
+        .then((r) => current && setResults(r.results))
+        .catch(() => current && setResults([]))
+        .finally(() => current && setSearching(false));
     }, 450);
-    return () => clearTimeout(t);
+    return () => {
+      current = false;
+      clearTimeout(t);
+    };
   }, [q]);
 
   function locate(quiet = false) {
@@ -133,6 +148,7 @@ export function LocationPicker({
     setQ("");
     setResults([]);
     lookup.current++;
+    keepPickedName.current = true;
     setLabel(p.label);
     map.current?.flyTo([p.lat, p.lng], 17, { duration: 0.8 });
   }
@@ -177,7 +193,7 @@ export function LocationPicker({
               onChange={(e) => setQ(e.target.value)}
               placeholder="Yer, cadde veya semt ara"
               aria-label="Yer ara"
-              className="h-full min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-subtle"
+              className="h-full min-w-0 flex-1 bg-transparent text-base md:text-sm outline-none placeholder:text-subtle"
             />
             {searching ? <Loader2 className="size-4 animate-spin text-subtle" /> : null}
           </label>

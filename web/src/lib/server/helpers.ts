@@ -295,53 +295,9 @@ export async function notify(userId: string, type: string, title: string, body: 
   }
   if (!channel.push) return;
 
-  // Push delivery is best effort: an Expo outage must not break the action that
-  // created the in-app notification.
-  try {
-    const devices = await sql.query<{ token: string }>(
-      `select t.token from mobile_push_tokens t where t.user_id=$1 and ${LIVE_PUSH_TOKEN}`,
-      [userId],
-    );
-    if (devices.length) {
-      // App icon badge: unread bell notifications plus unread chat messages.
-      const badgeRows = await sql.query<{ n: number }>(
-        `select (select count(*)::int from notifications where user_id=$1 and read_at is null)
-              + (select count(*)::int from messages m join conversations cv on cv.id = m.conversation_id
-                 where m.read_at is null and m.sender_id <> $1 and (cv.buyer_id = $1 or cv.seller_id = $1)) as n`,
-        [userId],
-      );
-      const badge = badgeRows[0]?.n ?? 0;
-      const response = await fetch("https://exp.host/--/api/v2/push/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify(devices.map(({ token }) => ({
-          to: token,
-          title,
-          body,
-          sound: "default",
-          badge,
-          data: { link },
-          channelId: "default",
-        }))),
-        signal: AbortSignal.timeout(2500),
-      });
-      if (!response.ok) {
-        console.warn(`[push] Expo returned ${response.status}`);
-      } else {
-        const tickets = await response.json().catch(() => null) as { data?: Array<{ status?: string; details?: { error?: string } }> } | null;
-        const staleTokens = devices.filter((_, index) =>
-          tickets?.data?.[index]?.status === "error" && tickets.data[index]?.details?.error === "DeviceNotRegistered",
-        );
-        if (staleTokens.length) {
-          await Promise.all(staleTokens.map(({ token }) =>
-            sql.query("delete from mobile_push_tokens where token=$1", [token]),
-          ));
-        }
-      }
-    }
-  } catch (error) {
-    console.warn("[push] Notification delivery failed", error instanceof Error ? error.message : "unknown error");
-  }
+  // Push delivery is best effort and runs after the answer: a slow or broken Expo
+  // must neither fail nor delay the action that created the notification.
+  void sendPush(sql, userId, title, body, link);
 }
 
 const ALLOWED_UPLOAD_PATH = /^\/uploads\/[-a-zA-Z0-9_.]+\.(webp|jpg|jpeg|png)$/i;
@@ -408,6 +364,11 @@ export function firstInWindow(key: string, windowMs: number): boolean {
   } catch {
     return false;
   }
+}
+
+/** Start the window over, so the next `firstInWindow(key)` is true again. */
+export function resetWindow(key: string): void {
+  buckets.delete(key);
 }
 
 type QuerySql = { query<T = Record<string, unknown>>(text: string, params?: unknown[]): Promise<T[]> };
@@ -501,4 +462,63 @@ export async function revealListingPhone(listingRef: string, viewerId: string | 
   if (!phone) throw new Error("Satıcı telefon numarası paylaşmamış.");
   await sql.query("insert into phone_reveals (listing_id, viewer_id) values ($1,$2)", [row.id, viewerId ?? "anon"]);
   return phone;
+}
+
+/**
+ * The number on the app icon: unread messages the way the Messages tab counts
+ * them, plus bell notifications about anything else, so a message is not counted
+ * twice and hidden or archived chats do not count at all.
+ */
+export async function appBadgeCount(sql: QuerySql, userId: string): Promise<number> {
+  const rows = await sql.query<{ n: number }>(
+    `select (select count(*)::int from notifications where user_id=$1 and read_at is null and type <> 'message')
+          + (select count(*)::int from messages m join conversations cv on cv.id = m.conversation_id
+             where m.read_at is null and m.sender_id <> $1 and (cv.buyer_id = $1 or cv.seller_id = $1)
+               and (case when cv.buyer_id = $1 then cv.buyer_hidden_at else cv.seller_hidden_at end) is null
+               and (case when cv.buyer_id = $1 then cv.buyer_archived_at else cv.seller_archived_at end) is null) as n`,
+    [userId],
+  );
+  return rows[0]?.n ?? 0;
+}
+
+async function sendPush(sql: QuerySql, userId: string, title: string, body: string, link: string): Promise<void> {
+  try {
+    const devices = await sql.query<{ token: string }>(
+      `select t.token from mobile_push_tokens t where t.user_id=$1 and ${LIVE_PUSH_TOKEN}`,
+      [userId],
+    );
+    if (devices.length) {
+      // App icon badge: unread bell notifications plus unread chat messages.
+      const badge = await appBadgeCount(sql, userId);
+      const response = await fetch("https://exp.host/--/api/v2/push/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify(devices.map(({ token }) => ({
+          to: token,
+          title,
+          body,
+          sound: "default",
+          badge,
+          data: { link },
+          channelId: "default",
+        }))),
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!response.ok) {
+        console.warn(`[push] Expo returned ${response.status}`);
+      } else {
+        const tickets = await response.json().catch(() => null) as { data?: Array<{ status?: string; details?: { error?: string } }> } | null;
+        const staleTokens = devices.filter((_, index) =>
+          tickets?.data?.[index]?.status === "error" && tickets.data[index]?.details?.error === "DeviceNotRegistered",
+        );
+        if (staleTokens.length) {
+          await Promise.all(staleTokens.map(({ token }) =>
+            sql.query("delete from mobile_push_tokens where token=$1", [token]),
+          ));
+        }
+      }
+    }
+  } catch (error) {
+    console.warn("[push] Notification delivery failed", error instanceof Error ? error.message : "unknown error");
+  }
 }

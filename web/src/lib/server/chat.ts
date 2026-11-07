@@ -4,7 +4,7 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
 import { asIso, asJson, formatPrice, newId, num } from "@/lib/utils";
 import { DELETE_WINDOW_MS, DELETED_MESSAGE_TEXT, MAX_TEMPLATE_LENGTH, MAX_TEMPLATES, type ChatMessage, type OfferStatus } from "@/lib/chat-shared";
-import { ensureProfile, firstInWindow, notify, rateLimit } from "./helpers";
+import { ensureProfile, firstInWindow, notify, rateLimit, resetWindow } from "./helpers";
 import { chatVisibleTo, DELETED_USER_NAME, hideConversationFor, isClosedAccount, reopenConversation } from "./retention";
 import {
   broadcastChatMessage,
@@ -97,11 +97,14 @@ async function deliver(
   await reopenConversation(sql, conv.id);
   const msg = mapMsg(rows[0]);
   const receiver = otherOf(conv, senderId);
+  // A new message brings an archived chat back for the person it is meant for.
+  await sql.query(`update conversations set ${sideOf(conv, receiver)}_archived_at=null where id=$1`, [conv.id]);
   broadcastChatMessage(conv.id, msg);
   broadcastUserInbox(receiver, { type: "new_message", conversationId: conv.id, message: msg });
   broadcastUserInbox(senderId, { type: "inbox_ping", conversationId: conv.id });
   if (!isViewingConversation(receiver, conv.id) && firstInWindow(`msgnotify:${receiver}:${conv.id}`, 2 * 60_000)) {
-    await notify(receiver, "message", "Yeni mesaj", message.content.slice(0, 80), `/mesajlar/${conv.id}`);
+    const sender = (await sql.query<{ display_name: string | null }>("select display_name from profiles where user_id=$1", [senderId]))[0];
+    await notify(receiver, "message", sender?.display_name ? `${sender.display_name} size yazdı` : "Yeni mesaj", message.content.slice(0, 80), `/mesajlar/${conv.id}`);
   }
   return msg;
 }
@@ -313,7 +316,7 @@ export const listConversations = createServerFn({ method: "GET" })
     const rows = await sql.query<Record<string, unknown>>(
       `select cv.id, cv.listing_id, cv.buyer_id, cv.seller_id, cv.updated_at,
               l.title as listing_title, l.slug as listing_slug, l.images, l.price, l.status as listing_status,
-              op.display_name as other_name, op.avatar_url as other_avatar, op.deletion_requested_at as other_closing,
+              op.display_name as other_name, op.avatar_url as other_avatar, coalesce(op.deletion_requested_at, op.banned_at) as other_closing,
               case when cv.buyer_id = $1 then cv.seller_id else cv.buyer_id end as other_id,
               case when cv.buyer_id = $1 then cv.buyer_archived_at else cv.seller_archived_at end as archived_at,
               case when cv.buyer_id = $1 then cv.buyer_marked_unread else cv.seller_marked_unread end as marked_unread,
@@ -371,7 +374,7 @@ export const getThread = createServerFn({ method: "POST" })
     const head = await sql.query<Record<string, unknown>>(
       `select l.title, l.slug, l.images, l.price, l.status as listing_status,
               op.display_name as other_name, op.avatar_url as other_avatar, op.last_seen_at as other_last_seen,
-              op.deletion_requested_at as other_closing, coalesce(op.read_receipts, true) as other_receipts,
+              coalesce(op.deletion_requested_at, op.banned_at) as other_closing, coalesce(op.read_receipts, true) as other_receipts,
               coalesce(mp.read_receipts, true) as my_receipts
        from conversations cv
        left join listings l on l.id = cv.listing_id
@@ -458,7 +461,9 @@ export const pollThread = createServerFn({ method: "POST" })
     const after = new Date(data.after);
     const afterIso = Number.isNaN(after.getTime()) ? new Date(Date.now() - 60_000).toISOString() : after.toISOString();
     const fresh = await sql.query<Record<string, unknown>>(
-      `select ${MSG_COLUMNS} from messages where conversation_id=$1 and created_at > $2::timestamptz order by created_at asc limit 100`,
+      `select ${MSG_COLUMNS} from messages
+       where conversation_id=$1 and (created_at > $2::timestamptz or updated_at > $2::timestamptz)
+       order by created_at asc limit 100`,
       [conv.id, afterIso],
     );
     const reads = showReads
@@ -486,6 +491,8 @@ export const markThreadRead = createServerFn({ method: "POST" })
     const conv = await myConversation(sql, data.conversationId, context.userId);
     const side = sideOf(conv, context.userId);
     await sql.query(`update conversations set ${side}_marked_unread=false where id=$1`, [conv.id]);
+    // Read means caught up: the next message may notify again, even within the quiet window.
+    resetWindow(`msgnotify:${context.userId}:${conv.id}`);
     const read = await sql.query<{ id: string }>(
       `update messages set read_at=now()
        where conversation_id=$1 and sender_id<>$2 and read_at is null ${data.messageIds?.length ? "and id = any($3)" : ""}
@@ -537,6 +544,10 @@ export const markConversationUnread = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     const conv = await myConversation(sql, data.conversationId, context.userId);
+    if (!data.unread) {
+      // "Okundu" means the messages too; otherwise the badge stays.
+      await sql.query("update messages set read_at=now() where conversation_id=$1 and sender_id<>$2 and read_at is null", [conv.id, context.userId]);
+    }
     await sql.query(`update conversations set ${sideOf(conv, context.userId)}_marked_unread=$2 where id=$1`, [conv.id, data.unread]);
     broadcastUserInbox(context.userId, { type: "inbox_ping", conversationId: conv.id });
     return { ok: true };
@@ -622,7 +633,10 @@ export async function unreadMessageCount(sql: Sql, userId: string): Promise<numb
           and (case when cv.buyer_id=$1 then cv.buyer_archived_at else cv.seller_archived_at end) is null)
      + (select count(*)::int from conversations cv
         where ((cv.buyer_id=$1 and cv.buyer_marked_unread) or (cv.seller_id=$1 and cv.seller_marked_unread))
-          and ${chatVisibleTo("$1")}) as n`,
+          and ${chatVisibleTo("$1")}
+          and (case when cv.buyer_id=$1 then cv.buyer_archived_at else cv.seller_archived_at end) is null
+          -- A marked chat that also has unread messages is already counted above.
+          and not exists (select 1 from messages m where m.conversation_id = cv.id and m.read_at is null and m.sender_id <> $1)) as n`,
     [userId],
   );
   return rows[0]?.n ?? 0;

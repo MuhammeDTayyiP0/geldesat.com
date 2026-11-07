@@ -29,7 +29,7 @@ const TABS: Array<{ key: Tab; label: string }> = [
   { key: "archived", label: "Arşiv" },
 ];
 
-const LISTING_STATE: Record<string, string> = { SOLD: "Satıldı", INACTIVE: "Yayında değil", REMOVED: "İlan kaldırıldı", PENDING: "Onayda" };
+const LISTING_STATE: Record<string, string> = { SOLD: "Satıldı", REJECTED: "Yayında değil", INACTIVE: "Yayında değil", REMOVED: "İlan kaldırıldı", PENDING: "Onayda" };
 
 function MessagesLayout() {
   const { user, isPending } = useCurrentUserState();
@@ -58,7 +58,8 @@ function MessagesLayout() {
         setRows(next);
         setErr("");
       } catch {
-        if (!stop) setErr("Konuşmalar yüklenemedi.");
+        // A failed refresh keeps the list on screen; the error only replaces an empty one.
+        if (!stop) setErr("Sohbetler yüklenemedi.");
       } finally {
         if (!stop) setLoaded(true);
       }
@@ -166,13 +167,12 @@ function MessagesLayout() {
                   className="h-10 w-full rounded-xl border border-border bg-bg pl-9 pr-3 text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 md:text-sm"
                 />
               </div>
-              <div className="-mx-3.5 flex gap-1.5 overflow-x-auto px-3.5 pb-0.5 [scrollbar-width:none]" role="tablist" aria-label="Sohbet filtresi">
+              <div className="-mx-3.5 flex gap-1.5 overflow-x-auto px-3.5 pb-0.5 [scrollbar-width:none]" aria-label="Sohbet filtresi">
                 {TABS.filter((t) => t.key !== "archived" || counts.archived > 0).map((t) => (
                   <button
                     key={t.key}
                     type="button"
-                    role="tab"
-                    aria-selected={tab === t.key}
+                    aria-pressed={tab === t.key}
                     onClick={() => setTab(t.key)}
                     className={cn(
                       "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition-colors",
@@ -194,7 +194,7 @@ function MessagesLayout() {
           <div className="flex justify-center px-4 py-16">
             <BrandSpinner size="sm" text="Sohbetler yükleniyor…" />
           </div>
-        ) : err ? (
+        ) : err && !rows.length ? (
           <p className="p-6 text-center text-sm text-danger">{err}</p>
         ) : rows.length === 0 ? (
           <div className="m-4 rounded-2xl border border-dashed border-border p-8 text-center">
@@ -275,18 +275,18 @@ function MessagesLayout() {
                   <DropdownMenu>
                     <DropdownMenuTrigger
                       aria-label={`${c.other_name} sohbeti için seçenekler`}
-                      className="absolute right-1.5 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-full text-muted opacity-100 hover:bg-elevated hover:text-fg data-[state=open]:bg-elevated md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 md:data-[state=open]:opacity-100"
+                      className="absolute right-1.5 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-full text-muted opacity-100 hover:bg-elevated hover:text-fg data-[state=open]:bg-elevated md:opacity-0 md:group-hover:opacity-100 md:[@media(hover:none)]:opacity-100 md:focus-visible:opacity-100 md:data-[state=open]:opacity-100"
                     >
                       <MoreHorizontal className="size-4" />
                     </DropdownMenuTrigger>
                     <MenuContent align="end">
                       {flagged ? (
                         <MenuItem onSelect={() => void act(c, () => markConversationUnread({ data: { conversationId: c.id, unread: false } }), { marked_unread: false }, "Okundu olarak işaretlendi")}>
-                          <MailOpen /> Okundu işaretle
+                          <MailOpen /> Okundu olarak işaretle
                         </MenuItem>
                       ) : (
                         <MenuItem onSelect={() => void act(c, () => markConversationUnread({ data: { conversationId: c.id, unread: true } }), { marked_unread: true }, "Okunmadı olarak işaretlendi")}>
-                          <Mail /> Okunmadı işaretle
+                          <Mail /> Okunmadı olarak işaretle
                         </MenuItem>
                       )}
                       <MenuItem

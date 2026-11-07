@@ -56,10 +56,10 @@ Temiz çıkan alanlar: admin server fonksiyonlarının tamamı yetki kontrollü 
 - [x] 17. **Y · Sayısal URL parametreleri yok sayılıyor.** Router `?page=2` değerini sayıya çeviriyor, `str()` yalnız string kabul ediyor. Dış linkler bozuk, `rel=next` ve canonical 1. sayfayı döndürür, arama motoru derin sayfaları göremez. `W/lib/search-params.ts:64`, `W/lib/seo.ts:189-205` → `str()` sayıyı `String()` ile kabul etsin, test ekle.
 - [x] 18. **Y · Uygulanan filtre geri alınıyor.** `closeFilterDrawer` 280 ms sonra eski `initial`'ı yazıyor; hızlı yanıtta panel eski değerlere döner, sonraki sayfada filtre URL'den silinir. `W/routes/search.tsx:155-161`.
 - [x] 19. **Y · Ölü kategori linkleri tüm ilanları gösteriyor.** `projeler`, `ozel-araclar`, `elektronik`, `ev-yasam`, `oto-parca`, `moto-ekipman`, `tadilat`, `sektorler`, `evcil-hayvan` migration'larda yok; bilinmeyen kategoride filtre atlanıyor. 404 sayfasındaki `ikinci-el-ve-sifir-alisveris`, `ustalar-ve-hizmetler` ve menüdeki `/sayfa/yardim` da yok. `W/components/navbar/nav-data.ts`, `W/lib/server/catalog.ts:106-113`, `W/components/common/NotFound.tsx:32-33`, `W/components/navbar/MobileNavigationDrawer.tsx:268` → canlıda kontrol et, menüyü kategori ağacından besle, bilinmeyende boş sonuç dön.
-- [ ] 20. **Y · Bildirimler kayboluyor.** Arka planda açık sekme "sohbeti izliyor" sayılıyor; push, zil ve e-posta kesiliyor. 2 dakikalık pencere okununca sıfırlanmıyor, hızlı yazışmada yanıt sessiz kalır. `W/lib/server/chat.ts:103`.
+- [x] 20. **Y · Bildirimler kayboluyor.** Arka planda açık sekme "sohbeti izliyor" sayılıyor; push, zil ve e-posta kesiliyor. 2 dakikalık pencere okununca sıfırlanmıyor, hızlı yazışmada yanıt sessiz kalır. `W/lib/server/chat.ts:103`.
 - [ ] 21. **Y · Mobilde mesaj kaçıyor ve yanlış okundu.** Ön planda bağlantı kopup gelince telafi yok, yoklama yok; arkada kalan sohbet ekranı mesajları okundu yapıp push'u bastırıyor. `M/features/chat/stream.ts:32`, `M/app/mesaj/[id].tsx:89,162-173,183`.
-- [ ] 22. **Y · Dolandırıcılık uyarısı çalışmıyor.** `\b` Türkçe harfleri tanımıyor, ekleri kaçırıyor. Denenen 9 ifadeden 7'si yakalanmadı: "ön ödeme yapın", "ödeme linki atıyorum", "kaporayı gönder", "kaporası lazım", "önödeme lazım", "paparaya at", "whatsapptan yaz". `W/lib/chat-shared.ts:68-70`, `M/features/chat/shared.ts:31,34` → Unicode sınırı, ek toleransı, test.
-- [ ] 23. **Y · Tekrarlayan hatırlatma push'u.** Tekrar önleme `notifications` satırına bakıyor; `expiry` için uygulama içini kapatıp push'u açık bırakan kullanıcıda satır yazılmıyor, her süpürmede yeniden push gider. `W/lib/server/ops.ts:17-21`, `helpers.ts` `notify` → `listings.expiry_notified_at`.
+- [x] 22. **Y · Dolandırıcılık uyarısı çalışmıyor.** `\b` Türkçe harfleri tanımıyor, ekleri kaçırıyor. Denenen 9 ifadeden 7'si yakalanmadı: "ön ödeme yapın", "ödeme linki atıyorum", "kaporayı gönder", "kaporası lazım", "önödeme lazım", "paparaya at", "whatsapptan yaz". `W/lib/chat-shared.ts:68-70`, `M/features/chat/shared.ts:31,34` → Unicode sınırı, ek toleransı, test.
+- [x] 23. **Y · Tekrarlayan hatırlatma push'u.** Tekrar önleme `notifications` satırına bakıyor; `expiry` için uygulama içini kapatıp push'u açık bırakan kullanıcıda satır yazılmıyor, her süpürmede yeniden push gider. `W/lib/server/ops.ts:17-21`, `helpers.ts` `notify` → `listings.expiry_notified_at`.
 - [x] 24. **Y · Model yılı "2.018" görünüyor.** Web detay ve kart, mobil kart ve detay. `W/components/listing/detail/ListingSections.tsx:140`, `W/lib/utils.ts:49`, `M/features/listing/ListingCard.tsx:26`, `M/app/ilan/[id].tsx:242`.
 - [ ] 25. **Y · Uygulama açılışı kırılgan.** Açılış ekranı zaman aşımı olmayan `get-session` isteğini bekliyor; hiç `ErrorBoundary` yok, hatalı OTA uygulamayı tümden kapatır, hata raporlama da yok. `M/app/_layout.tsx:24-34`, `M/auth/auth.ts:154`.
 - [ ] 26. **Y · Android taslak siliniyor.** Devam diyaloğunun dışına dokunmak veya geri tuşu onaysız `clearDraft()` çalıştırır. `M/ui/dialogs.ts:28`, `M/app/ilan-ver.tsx:125`.
@@ -249,49 +249,49 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 ### 3.3 Web: mesajlaşma ve bildirim
 
 **Sohbet listesi `routes/mesajlar.tsx`**
-- [ ] Y · `:89`, `retention.ts:35-40` — Arşivdeki sohbet yeni mesajda istemcide çıkıyor, 60 sn içinde geri dönüyor; rozet ve e-posta saymıyor.
-- [ ] O · `:283` — "Okundu işaretle" mesajları okundu yapmıyor. O · `:60,196` — Tek başarısız yenileme listeyi siliyor.
+- [x] Y · `:89`, `retention.ts:35-40` — Arşivdeki sohbet yeni mesajda istemcide çıkıyor, 60 sn içinde geri dönüyor; rozet ve e-posta saymıyor.
+- [x] O · `:283` — "Okundu işaretle" mesajları okundu yapmıyor. O · `:60,196` — Tek başarısız yenileme listeyi siliyor.
 - [ ] D · `:277` — Menü dokunmatik tablette görünmüyor. `:124,169` — Arşiv boşalınca seçili sekme yok. `:31` — `REJECTED` eşlemesi yok. `:168-175` — Eksik sekme yapısı. `:248` — 11 px düşük kontrast. `:284,288`, `$id.tsx:704` — Eksik ifade. `:60` — "Konuşma"/"sohbet" tutarsız.
 - [ ] D (olası) · `:76-94` — `known` güncelleyici içinde okunuyor.
 
 **Sohbet `routes/mesajlar/$id.tsx`**
 - [x] Y · `:482-485,558-560,379-382,1184-1186` — Devam eden sonuçlar açık sohbete yazılıyor; A'nın mesajı B'de görünür (bkz. madde 16).
-- [ ] O · `:224-240,482-485` — SSE önce gelirse mesaj çift görünür, sıra karışabilir.
-- [ ] O · `:229-234` — Listede olmayan `message_update` sona ekleniyor; eski teklif en alta düşer.
-- [ ] O · `:460-477` — Eski görünümde gönderim hatasında metin kaybolur.
-- [ ] O · `:560,1186,1199` — Fotoğraf, teklif ve konum `backToLatest` çağırmıyor.
-- [ ] O · `:315-317` — Sekmeye dönünce veri çekmeden okundu işaretliyor; gönderen "Görüldü" görür.
-- [ ] O · `:293-299,363` — Yukarıdayken gelen mesaj okundu sayılıyor; yeni mesaj işareti yok.
-- [ ] O · `:276,363-364,907` — İlk okunmamışa değil en alta açılıyor.
-- [ ] O · `:507-512,561-563` — Başarısız fotoğraf kayboluyor, açıklama yine gidiyor.
-- [ ] O · `:427-435` — Aramada debounce yok, her harf istek; hata "Sonuç yok".
+- [x] O · `:224-240,482-485` — SSE önce gelirse mesaj çift görünür, sıra karışabilir.
+- [x] O · `:229-234` — Listede olmayan `message_update` sona ekleniyor; eski teklif en alta düşer.
+- [x] O · `:460-477` — Eski görünümde gönderim hatasında metin kaybolur.
+- [x] O · `:560,1186,1199` — Fotoğraf, teklif ve konum `backToLatest` çağırmıyor.
+- [x] O · `:315-317` — Sekmeye dönünce veri çekmeden okundu işaretliyor; gönderen "Görüldü" görür.
+- [x] O · `:293-299,363` — Yukarıdayken gelen mesaj okundu sayılıyor; yeni mesaj işareti yok.
+- [x] O · `:276,363-364,907` — İlk okunmamışa değil en alta açılıyor.
+- [x] O · `:507-512,561-563` — Başarısız fotoğraf kayboluyor, açıklama yine gidiyor.
+- [x] O · `:427-435` — Aramada debounce yok, her harf istek; hata "Sonuç yok".
 - [ ] O (olası) · `:136,445,891-947` — Her tuşta tüm mesajlar yeniden çiziliyor. `:357-366`, `MessageBubble.tsx:123` — Görsel boyutu ayrılmıyor.
 - [ ] O · `:1-1566` — Dosya bölünmeli: `useChatThread` (223-250, 252-347, 368-425), `useChatViewport` (186-213), `ChatComposer` (440-451, 496-569, 1013-1168), `ThreadHeader` (614-735), `ThreadSearch` (427-435, 737-778), `ListingStrip` (781-823), `MessageList` (826-966), diyaloglar (1293-1566).
-- [ ] D · `:1128-1137` — Odakta her seferinde en alta kayıyor. `:1140` — Telefonda Enter gönderiyor. `:1145-1150` — Panoda görsel varsa metin yapıştırılmıyor. `:1072-1079` — Sürükle-bırak yalnız yazı alanında.
-- [ ] D · `:696-714` — `catch` yok. `:706-718` — Arşivde de "Arşivle" yazıyor. `:252-262,859` — `hasMore` sıfırlanmıyor. `:981` — Satılmış ilanda "hâlâ satılık" hızlı yanıtı. `:1207-1208` — Hazır cevap metnin üstüne yazıyor. `:1239` — Silme uyarısı eksik. `:808-816` — Telefonda ilan şeridi tıklanmıyor.
+- [x] D · `:1128-1137` — Odakta her seferinde en alta kayıyor. `:1140` — Telefonda Enter gönderiyor. `:1145-1150` — Panoda görsel varsa metin yapıştırılmıyor. `:1072-1079` — Sürükle-bırak yalnız yazı alanında.
+- [x] D · `:696-714` — `catch` yok. `:706-718` — Arşivde de "Arşivle" yazıyor. `:252-262,859` — `hasMore` sıfırlanmıyor. `:981` — Satılmış ilanda "hâlâ satılık" hızlı yanıtı. `:1207-1208` — Hazır cevap metnin üstüne yazıyor. `:1239` — Silme uyarısı eksik. `:808-816` — Telefonda ilan şeridi tıklanmıyor.
 - [ ] D (olası) · `:1349` — Teklif 10 hane, sunucu 1 milyar. `:830-832` — `role="log"` açılışta onlarca mesaj okutabilir.
 - [ ] D · `:1285,1553` — `alt` ve etiket yok. `:727,1427,1461` — "şikâyet" yazımı.
 
 **Bildirimler `routes/bildirimler.tsx`**
-- [ ] O · `:50` — Hata "Bildirim yok" görünüyor.
-- [ ] D · `:47` — `catch` yok. `:38-54` — Sayfa canlı değil. `social.ts:161,179` — 50 gösteriliyor, hepsi okundu oluyor. `retention.ts:16-31` — Sohbet silinince zil rozeti kalıyor. `:91-93` — Bağlantı değil düğme. `chat.ts:104` — Başlık hep "Yeni mesaj". `notification-prefs.ts:3` — Metin alıcıyı kapsamıyor.
+- [x] O · `:50` — Hata "Bildirim yok" görünüyor.
+- [x] D · `:47` — `catch` yok. `:38-54` — Sayfa canlı değil. `social.ts:161,179` — 50 gösteriliyor, hepsi okundu oluyor. `retention.ts:16-31` — Sohbet silinince zil rozeti kalıyor. `:91-93` — Bağlantı değil düğme. `chat.ts:104` — Başlık hep "Yeni mesaj". `notification-prefs.ts:3` — Metin alıcıyı kapsamıyor.
 - [ ] D (olası) · `:101` — Uzun gövde kırılmıyor.
 
 **Sohbet sunucusu ve bileşenleri**
 - [x] O · `chat.ts:389-390,450-451,485-494` — Engel varken çevrimiçi ve son görülme açık, `sendTyping` engeli denetlemiyor.
 - [x] O · `chat.ts:227-246` — `respondOffer` engel, kapalı hesap, ilan durumu ve `status='pending'` denetlemiyor; satılmış ilanda teklif kabul edilebilir.
-- [ ] O · `chat.ts:423-439` — `pollThread` yalnız yeni mesaj getiriyor, yorumu aksini söylüyor.
+- [x] O · `chat.ts:423-439` — `pollThread` yalnız yeni mesaj getiriyor, yorumu aksini söylüyor.
 - [x] O · `chat.ts:104,277-282` — "Herkesten sil" bildirimdeki ilk 80 karakteri silmiyor; IBAN kalır.
-- [ ] O · `chat.ts:328,387` — `other_closed` yasaklı hesabı içermiyor.
-- [ ] D · `chat.ts:565-567` — Arşivli işaretli sohbet rozete +1 ekliyor. `:545-549` — Yeni mesaj şikayeti kaydedilmiyor ama başarı dönüyor (mobil raporu bunu O sayıyor). `message-digest.ts:37` — Yasaklılar özete dahil. `user-blocks.ts:2` — Yinelenen işlev.
-- [ ] O · `Navbar.tsx:98-101,106` — Tek olay zincirleme istek üretiyor.
+- [x] O · `chat.ts:328,387` — `other_closed` yasaklı hesabı içermiyor.
+- [x] D · `chat.ts:565-567` — Arşivli işaretli sohbet rozete +1 ekliyor. `:545-549` — Yeni mesaj şikayeti kaydedilmiyor ama başarı dönüyor (mobil raporu bunu O sayıyor). `message-digest.ts:37` — Yasaklılar özete dahil. `user-blocks.ts:2` — Yinelenen işlev.
+- [x] O · `Navbar.tsx:98-101,106` — Tek olay zincirleme istek üretiyor.
 - [ ] D · `lib/chat-stream.ts:20-21,47-53` — Geçersiz kimlikte 403 tüm akışı kesip 5 sn'de bir deniyor. `:61-67` — Gereksiz bağlantı.
 - [ ] D (olası) · `api/chat/stream.ts:13` — Oturum yalnız bağlantıda denetleniyor. `api/chat/image.ts:17-37` — HEIF boyut denetimini atlıyor, işleme üyelikten önce.
 - [x] O · `api/tiles/$z/$x/$y.ts:34-62` — Kimliksiz, sınırsız OSM vekili; IP engellenirse harita herkes için bozulur.
 - [ ] D · `MapThumb.tsx:8-25` — OSM atfı yok.
-- [ ] O · `LocationPicker.tsx:81-92,131-137` — Seçilen yer adı ters kodlamayla eziliyor; mobilde de aynı (`M/features/chat/LocationPicker.tsx:87-99,118-124`).
+- [x] O · `LocationPicker.tsx:81-92,131-137` — Seçilen yer adı ters kodlamayla eziliyor; mobilde de aynı (`M/features/chat/LocationPicker.tsx:87-99,118-124`).
 - [x] O · `MessageBubble.tsx:170` — "Kabul et" koyu temada 2:1. D · `:220` — Kendi balonu 3,71:1.
-- [ ] D · `MessageBubble.tsx:237` — Silinmiş mesaj alıntısı. `:267` — Başarısız balonda menü yok. `LocationPicker.tsx:84-110` — Takılı gösterge, yarış. `components/ui/dialog.tsx:73` — İngilizce "Close".
+- [x] D · `MessageBubble.tsx:237` — Silinmiş mesaj alıntısı. `:267` — Başarısız balonda menü yok. `LocationPicker.tsx:84-110` — Takılı gösterge, yarış. `components/ui/dialog.tsx:73` — İngilizce "Close".
 - [ ] D (olası) · `MapThumb.tsx:8` — 256 px taşabilir. `LocationPicker.tsx:179` — 15 px, iOS yakınlaştırır.
 
 ### 3.4 Web: hesap ve ayarlar

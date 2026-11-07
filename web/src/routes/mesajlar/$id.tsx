@@ -1,3 +1,4 @@
+import { useFlag } from "@/lib/use-flag";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { errorText } from "@/lib/error-text";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -129,6 +130,9 @@ function Thread() {
   const [hasMore, setHasMore] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [firstUnreadId, setFirstUnreadId] = useState<string | null>(null);
+  const [searchFailed, setSearchFailed] = useState(false);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchSeq = useRef(0);
   const [blockedByMe, setBlockedByMe] = useState(false);
   const [blockedByOther, setBlockedByOther] = useState(false);
   const [online, setOnline] = useState(false);
@@ -165,6 +169,10 @@ function Thread() {
   // Set after jumping to an old message: the newest messages are not loaded.
   const [detached, setDetached] = useState(false);
   const [newWhileDetached, setNewWhileDetached] = useState(false);
+  const chatV2 = useFlag("sohbet_v2");
+  const readWhenSeen = useRef(chatV2);
+  readWhenSeen.current = chatV2;
+  const [newBelow, setNewBelow] = useState(false);
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [lightbox, setLightbox] = useState<string | null>(null);
@@ -225,20 +233,31 @@ function Thread() {
   const merge = useCallback((incoming: ChatMessage[]) => {
     if (!incoming.length) return;
     setMessages((prev) => {
-      const byId = new Map(prev.map((m) => [m.id, m]));
-      let next = prev;
+      const fresh = new Map(incoming.map((m) => [m.id, m]));
+      // The live copy can arrive before the send answer: it replaces the pending
+      // bubble with the same text instead of showing the message twice.
+      const pending = prev.filter((m) => m.localState === "pending");
+      const settled = new Set<string>();
       for (const m of incoming) {
-        if (byId.has(m.id)) {
-          next = next.map((x) => (x.id === m.id ? { ...m } : x));
-        } else {
-          next = [...next, m];
-        }
+        if (m.sender_id !== userId) continue;
+        const twin = pending.find((p) => p.content === m.content && !settled.has(p.id));
+        if (twin && !prev.some((x) => x.id === m.id)) settled.add(twin.id);
       }
+      const known = new Set(prev.map((m) => m.id));
+      let next: Msg[] = [
+        ...prev.filter((m) => !settled.has(m.id)).map((m) => fresh.get(m.id) ?? m),
+        ...incoming.filter((m) => !known.has(m.id)),
+      ];
+      // Answers can arrive out of order; pending bubbles stay last.
+      next = [...next].sort((a, b) => {
+        if (Boolean(a.localState) !== Boolean(b.localState)) return a.localState ? 1 : -1;
+        return a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id);
+      });
       const last = [...next].reverse().find((m) => !m.localState);
       if (last) lastRef.current = last.created_at;
       return next;
     });
-  }, []);
+  }, [userId]);
 
   const markRead = useCallback(
     (messageIds?: string[]) => {
@@ -260,6 +279,7 @@ function Thread() {
     setTypingUntil(0);
     setDetached(false);
     setNewWhileDetached(false);
+    setHasMore(false);
     lastRef.current = undefined;
 
     getThread({ data: { conversationId: id } })
@@ -274,9 +294,13 @@ function Thread() {
         setOnline(t.conversation.other_online);
         setLastSeen(t.conversation.other_last_seen);
         lastRef.current = t.messages.at(-1)?.created_at ?? new Date().toISOString();
-        stickRef.current = true;
+        const startAtUnread = readWhenSeen.current && t.firstUnreadId && t.firstUnreadId !== t.messages[0]?.id;
+        stickRef.current = !startAtUnread;
         setLoading(false);
-        markRead();
+        if (startAtUnread) {
+          requestAnimationFrame(() => document.getElementById(`msg-${t.firstUnreadId}`)?.scrollIntoView({ block: "start" }));
+          setNewBelow(true);
+        } else markRead();
         if (window.matchMedia("(hover: hover) and (pointer: fine)").matches)
           requestAnimationFrame(() => box.current?.focus());
       })
@@ -288,16 +312,24 @@ function Thread() {
 
     const unsubscribe = subscribeChatStream((data) => {
       if (stop) return;
+      if (data.type === "stream_resumed") {
+        onVisible();
+        return;
+      }
       if ((data.type === "message" || data.type === "message_update") && data.message) {
         const m = data.message as ChatMessage;
         // While an older stretch is shown, new messages would leave a gap; offer a jump back instead.
         if (data.type === "message" && detachedRef.current) setNewWhileDetached(true);
+        // An update to a message outside the loaded page must not append it at the bottom.
+        else if (data.type === "message_update") setMessages((prev) => prev.map((x) => (x.id === m.id ? m : x)));
         else merge([m]);
         if (data.type === "message") {
           if (m.sender_id !== userId) {
             setTypingUntil(0);
             setOnline(true);
-            markRead([m.id]);
+            // Someone reading further up has not seen it: no "Görüldü" until they are down here.
+            if (!readWhenSeen.current || (stickRef.current && !detachedRef.current)) markRead([m.id]);
+            else setNewBelow(true);
           }
         }
       } else if (data.type === "read" && Array.isArray(data.reads)) {
@@ -313,29 +345,34 @@ function Thread() {
       }
     }, id);
 
+    // Catch up first, so "Görüldü" only goes out for messages that are really on screen.
+    const catchUp = () => {
+      if (!visible() || !lastRef.current || detachedRef.current) return Promise.resolve();
+      return pollThread({ data: { conversationId: id, after: lastRef.current } })
+        .then((extra) => {
+          if (stop) return;
+          merge(extra.messages);
+          if (extra.reads.length) {
+            const map = new Map(extra.reads.map((r) => [r.id, r.read_at]));
+            setMessages((prev) => prev.map((m) => (map.has(m.id) ? { ...m, read_at: map.get(m.id)! } : m)));
+          }
+          setOnline(extra.other_online);
+          setLastSeen(extra.other_last_seen);
+        })
+        .catch(() => undefined);
+    };
     const onVisible = () => {
-      if (visible()) markRead();
+      if (!visible()) return;
+      void catchUp().then(() => {
+        if (!readWhenSeen.current || stickRef.current) markRead();
+      });
     };
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("focus", onVisible);
 
     // Safety net for missed live events (and presence refresh).
     const timer = window.setInterval(() => {
-      if (!visible() || !lastRef.current || detachedRef.current) return;
-      pollThread({ data: { conversationId: id, after: lastRef.current } })
-        .then((extra) => {
-          if (stop) return;
-          merge(extra.messages);
-          if (extra.reads.length) {
-            const map = new Map(extra.reads.map((r) => [r.id, r.read_at]));
-            setMessages((prev) =>
-              prev.map((m) => (map.has(m.id) ? { ...m, read_at: map.get(m.id)! } : m)),
-            );
-          }
-          setOnline(extra.other_online);
-          setLastSeen(extra.other_last_seen);
-        })
-        .catch(() => undefined);
+      void catchUp();
     }, 30_000);
 
     return () => {
@@ -393,6 +430,10 @@ function Thread() {
     const el = scroller.current;
     if (!el) return;
     stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    if (stickRef.current && newBelow) {
+      setNewBelow(false);
+      markRead();
+    }
     if (el.scrollTop < 120) void loadOlder();
   }
 
@@ -425,14 +466,21 @@ function Thread() {
     setReloadKey((k) => k + 1);
   }
 
-  async function runSearch(q: string) {
+  function runSearch(q: string) {
     setSearchQ(q);
+    setSearchFailed(false);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    const seq = ++searchSeq.current;
     if (q.trim().length < 2) return setSearchResults(null);
-    try {
-      setSearchResults(await searchMessages({ data: { conversationId: id, q: q.trim() } }));
-    } catch {
-      setSearchResults([]);
-    }
+    searchTimer.current = setTimeout(() => {
+      searchMessages({ data: { conversationId: id, q: q.trim() } })
+        .then((found) => {
+          if (seq === searchSeq.current) setSearchResults(found);
+        })
+        .catch(() => {
+          if (seq === searchSeq.current) setSearchFailed(true);
+        });
+    }, 300);
   }
 
   const nameOf = (senderId: string) =>
@@ -507,8 +555,15 @@ function Thread() {
     if (photos.length) {
       setStaged([]);
       // Photos first, then the text as their caption.
-      void sendPhotos(photos.map((p) => p.file)).then(() => {
-        photos.forEach((p) => URL.revokeObjectURL(p.url));
+      void sendPhotos(photos.map((p) => p.file)).then((failed) => {
+        // What did not go out stays ready to retry, with its caption.
+        const kept = photos.filter((p) => failed.includes(p.file));
+        photos.filter((p) => !kept.includes(p)).forEach((p) => URL.revokeObjectURL(p.url));
+        if (kept.length) {
+          setStaged((prev) => [...kept, ...prev]);
+          if (content) setText(content);
+          return;
+        }
         if (content) void send(content, undefined, quoted);
       });
       return;
@@ -550,8 +605,10 @@ function Thread() {
   }
 
   /** Send photos one after another, in the order picked. */
-  async function sendPhotos(files: File[]) {
-    if (!files.length) return;
+  async function sendPhotos(files: File[]): Promise<File[]> {
+    if (!files.length) return [];
+    const failed: File[] = [];
+    if (detached) backToLatest();
     setUploading(true);
     try {
       for (const file of files.slice(0, MAX_CHAT_PHOTOS)) {
@@ -560,6 +617,7 @@ function Thread() {
           stickRef.current = true;
           merge([msg]);
         } catch (err) {
+          failed.push(file);
           toast.error(errorText(err, "Fotoğraf gönderilemedi"));
         }
       }
@@ -567,6 +625,7 @@ function Thread() {
     } finally {
       setUploading(false);
     }
+    return failed;
   }
 
   async function toggleBlock() {
@@ -694,25 +753,25 @@ function Thread() {
               ) : null}
               <MenuItem
                 onSelect={() =>
-                  void markConversationUnread({ data: { conversationId: id, unread: true } }).then(
-                    () => {
+                  void markConversationUnread({ data: { conversationId: id, unread: true } })
+                    .then(() => {
                       pingInbox();
                       void navigate({ to: "/mesajlar" });
-                    },
-                  )
+                    })
+                    .catch((err) => toast.error(errorText(err, "İşlem tamamlanamadı")))
                 }
               >
-                <Mail /> Okunmadı işaretle
+                <Mail /> Okunmadı olarak işaretle
               </MenuItem>
               <MenuItem
                 onSelect={() =>
-                  void archiveConversation({ data: { conversationId: id, archived: true } }).then(
-                    () => {
+                  void archiveConversation({ data: { conversationId: id, archived: true } })
+                    .then(() => {
                       toast.success("Sohbet arşivlendi");
                       pingInbox();
                       void navigate({ to: "/mesajlar" });
-                    },
-                  )
+                    })
+                    .catch((err) => toast.error(errorText(err, "Sohbet arşivlenemedi")))
                 }
               >
                 <Archive /> Arşivle
@@ -751,7 +810,7 @@ function Thread() {
           {searchResults ? (
             <ul className="absolute inset-x-3 top-full z-20 mt-1 max-h-72 overflow-auto rounded-xl border border-border bg-surface shadow-lift">
               {searchResults.length === 0 ? (
-                <li className="px-3 py-3 text-sm text-muted">Sonuç yok.</li>
+                <li className="px-3 py-3 text-sm text-muted">{searchFailed ? "Arama yapılamadı. Biraz sonra tekrar deneyin." : "Sonuç yok."}</li>
               ) : (
                 searchResults.map((r) => (
                   <li key={r.id}>
@@ -966,6 +1025,18 @@ function Thread() {
         ) : null}
       </div>
 
+      {newBelow && !detached ? (
+        <div className="flex justify-center border-t border-border/50 bg-surface/60 py-2">
+          <button
+            type="button"
+            onClick={() => scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" })}
+            className="rounded-full bg-primary-solid px-4 py-1.5 text-xs font-semibold text-primary-fg shadow"
+          >
+            Yeni mesajlar · Aşağı in
+          </button>
+        </div>
+      ) : null}
+
       {detached ? (
         <div className="flex justify-center border-t border-border/50 bg-surface/60 py-2">
           <button
@@ -979,7 +1050,7 @@ function Thread() {
       ) : null}
 
       {/* Quick replies */}
-      {canMessage && messages.length <= 3 && !loading && !detached ? (
+      {canMessage && messages.length <= 3 && !loading && !detached && info?.listing_status === "ACTIVE" ? (
         <div className="flex gap-1.5 overflow-x-auto border-t border-border/50 bg-surface/60 px-3 py-2 [scrollbar-width:none]">
           {quickReplies.map((q) => (
             <button
@@ -1126,7 +1197,8 @@ function Thread() {
                 onType(e.target.value);
                 grow(e.target);
               }}
-              onFocus={() =>
+              onFocus={() => {
+                if (!stickRef.current) return;
                 setTimeout(
                   () =>
                     scroller.current?.scrollTo({
@@ -1134,18 +1206,20 @@ function Thread() {
                       behavior: "smooth",
                     }),
                   180,
-                )
-              }
+                );
+              }}
               onKeyDown={(e) => {
                 if (e.nativeEvent.isComposing || e.keyCode === 229) return;
-                if (e.key === "Enter" && !e.shiftKey) {
+                // Phone keyboards have no Shift+Enter: there Enter is a new line and the button sends.
+                if (e.key === "Enter" && !e.shiftKey && !window.matchMedia("(pointer: coarse)").matches) {
                   e.preventDefault();
                   submit();
                 }
               }}
               onPaste={(e) => {
                 const files = Array.from(e.clipboardData.files);
-                if (!files.length) return;
+                // Office and browsers put a picture of copied text on the clipboard too: text wins.
+                if (!files.length || e.clipboardData.getData("text/plain").trim()) return;
                 e.preventDefault();
                 stagePhotos(files);
               }}
@@ -1206,7 +1280,7 @@ function Thread() {
         open={dialog === "templates"}
         onOpenChange={(o) => !o && setDialog(null)}
         onPick={(t) => {
-          setText(t);
+          setText((current) => (current.trim() ? `${current.trimEnd()} ${t}` : t));
           setDialog(null);
           requestAnimationFrame(() => {
             if (box.current) {

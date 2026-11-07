@@ -1,6 +1,6 @@
 /** Notification kinds a user can tune, shared by the server (notify) and the settings page. */
 export const NOTIFY_TYPES = [
-  { type: "message", label: "Yeni mesajlar", hint: "Biri ilanınız hakkında yazdığında" },
+  { type: "message", label: "Yeni mesajlar", hint: "Size mesaj geldiğinde" },
   { type: "favorite", label: "Favoriler", hint: "İlanınız favorilere eklendiğinde" },
   { type: "listing", label: "İlan durumu", hint: "Onay, ret ve tekrar inceleme", inappLocked: true },
   { type: "expiry", label: "Süre hatırlatması", hint: "İlanınızın süresi dolmak üzereyken" },

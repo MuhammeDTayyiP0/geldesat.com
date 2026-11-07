@@ -15,11 +15,41 @@ let source: EventSource | null = null;
 let sourceUrl = "";
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
+/** A tab hidden this long gives up the stream, so the person counts as away and gets e-mail. */
+const AWAY_AFTER_MS = 5 * 60_000;
+let away = false;
+let awayTimer: ReturnType<typeof setTimeout> | null = null;
+
+const isHidden = () => typeof document !== "undefined" && document.visibilityState === "hidden";
+
 function wantedUrl(): string {
-  if (!listeners.size) return "";
-  const thread = openThreads.at(-1);
+  if (!listeners.size || away) return "";
+  // A tab in the background is not watching the chat: the server must keep
+  // sending push and bell notifications for it.
+  const thread = isHidden() ? undefined : openThreads.at(-1);
   return thread ? `/api/chat/stream?conversationId=${encodeURIComponent(thread)}` : "/api/chat/stream";
 }
+
+let needsCatchUp = false;
+
+function emit(event: ChatStreamEvent): void {
+  for (const listener of [...listeners]) listener(event);
+}
+
+function onVisibility(): void {
+  if (awayTimer) clearTimeout(awayTimer);
+  awayTimer = null;
+  needsCatchUp = true;
+  if (isHidden()) {
+    awayTimer = setTimeout(() => {
+      away = true;
+      sync();
+    }, AWAY_AFTER_MS);
+  } else away = false;
+  sync();
+}
+
+if (typeof document !== "undefined") document.addEventListener("visibilitychange", onVisibility);
 
 function sync(): void {
   if (retryTimer) {
@@ -35,6 +65,13 @@ function sync(): void {
 
   const es = new EventSource(url);
   source = es;
+  let opened = false;
+  // After any gap (dropped line, background tab) events were missed: tell listeners to catch up.
+  es.onopen = () => {
+    if (opened || needsCatchUp) emit({ type: "stream_resumed" });
+    opened = true;
+    needsCatchUp = false;
+  };
   es.onmessage = (message) => {
     let event: ChatStreamEvent;
     try {
@@ -42,7 +79,7 @@ function sync(): void {
     } catch {
       return; // keepalive comment or malformed payload
     }
-    for (const listener of [...listeners]) listener(event);
+    emit(event);
   };
   es.onerror = () => {
     // The browser retries transient drops itself; only a closed stream needs us.

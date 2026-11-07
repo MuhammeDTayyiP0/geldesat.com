@@ -5,7 +5,7 @@ import { previewTiles } from "@/lib/map-tiles";
 export function MapThumb({ lat, lng, width = 240, height = 140 }: { lat: number; lng: number; width?: number; height?: number }) {
   const tiles = previewTiles(lat, lng, 16, width, height);
   return (
-    <span className="relative block overflow-hidden rounded-xl bg-elevated" style={{ width, height }} aria-hidden="true">
+    <span className="relative block max-w-full overflow-hidden rounded-xl bg-elevated" style={{ width, height }} aria-hidden="true">
       {tiles.map((t) => (
         <img
           key={t.key}
@@ -22,6 +22,7 @@ export function MapThumb({ lat, lng, width = 240, height = 140 }: { lat: number;
         style={{ left: width / 2 - 16, top: height / 2 - 30 }}
         strokeWidth={1.5}
       />
+      <span className="absolute bottom-0 right-0 bg-white/80 px-1 text-[9px] leading-tight text-black">© OpenStreetMap</span>
     </span>
   );
 }
