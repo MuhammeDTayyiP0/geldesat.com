@@ -124,14 +124,14 @@ Sonraki fazlar bunları kullanır.
 
 ## Faz 5: Web ilan akışı (rapor 3.2)
 
-- [ ] Galeri ve lightbox: dialog, küçük resim kaydırma, jest, `srcSet`.
-- [ ] Yıl biçimi, birim, iskelet, Sahip paneli çıkmazları (Madde 24).
-- [ ] Doğrulamayı adımlara taşı: fiyat, telefon, zorunlu özellikler, trim; `Number("")` (3.2).
-- [ ] Profil telefonu override yazmasın (web ve mobil birlikte).
-- [ ] Düzenlemede yeniden inceleme uyarısı; kategori değişiminde değer koruma; mağaza kimliği.
-- [ ] Taslak: otomatik kayıt, adım URL'de, çıkış uyarısı, sürükle-bırak koruması. Anahtar: `ilan_formu_v2` (Madde 29).
-- [ ] Görsel hattı: JPEG çift sıkıştırma, HEIC başlık sınırı.
-- [ ] İlanlarım, favoriler, son bakılanlar: hata durumu, sayfalama, `listingSelect`, rozetli ve soluk satırlar, tutarlı giriş akışı.
+- [x] Galeri ve lightbox: dialog, küçük resim kaydırma, jest, `srcSet`.
+- [x] Yıl biçimi, birim, iskelet, Sahip paneli çıkmazları (Madde 24).
+- [x] Doğrulamayı adımlara taşı: fiyat, telefon, zorunlu özellikler, trim; `Number("")` (3.2).
+- [x] Profil telefonu override yazmasın (web ve mobil birlikte).
+- [x] Düzenlemede yeniden inceleme uyarısı; kategori değişiminde değer koruma; mağaza kimliği.
+- [x] Taslak: otomatik kayıt, adım URL'de, çıkış uyarısı, sürükle-bırak koruması. Anahtar: `ilan_formu_v2` (Madde 29).
+- [x] Görsel hattı: JPEG çift sıkıştırma, HEIC başlık sınırı.
+- [x] İlanlarım, favoriler, son bakılanlar: hata durumu, sayfalama, `listingSelect`, rozetli ve soluk satırlar, tutarlı giriş akışı.
 
 ## Faz 6: Web hesap ve ayarlar (rapor 3.4)
 

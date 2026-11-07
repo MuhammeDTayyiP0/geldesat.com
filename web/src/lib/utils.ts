@@ -46,7 +46,8 @@ export function listingHighlights(attrs: Record<string, string | number> | null 
     for (const key of keys) {
       const v = attrs[key];
       if (v !== undefined && v !== "" && out.length < 2) {
-        out.push(typeof v === "number" ? `${formatNumber(v)}${suffix}` : `${v}${suffix}`);
+        // A year is not a quantity: 2018, not 2.018.
+        out.push(typeof v === "number" && key !== "Yıl" ? `${formatNumber(v)}${suffix}` : `${v}${suffix}`);
         return;
       }
     }

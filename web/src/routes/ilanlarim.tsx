@@ -1,3 +1,5 @@
+import { ErrorState } from "@/components/common/ErrorState";
+import { ownerActions } from "@/lib/listing-status";
 import { useFlag } from "@/lib/use-flag";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { errorText } from "@/lib/error-text";
@@ -60,14 +62,23 @@ function daysLeft(iso: string | null): number | null {
 function Mine() {
   const { user, isPending } = useCurrentUserState();
   const [rows, setRows] = useState<Listing[] | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [tab, setTab] = useState<Tab>("live");
   const [toDelete, setToDelete] = useState<Listing | null>(null);
   const [busy, setBusy] = useState(false);
 
   function reload() {
+    setLoadFailed(false);
     myListings()
-      .then(setRows)
-      .catch(() => setRows([]));
+      .then((next) => {
+        setRows(next);
+        // Open on what is there: someone whose first listing waits for approval starts on that tab.
+        setTab((current) => {
+          const has = (key: Tab) => next.some((l) => tabOf(l) === key);
+          return has(current) ? current : (TABS.find((t) => has(t.key))?.key ?? current);
+        });
+      })
+      .catch(() => setLoadFailed(true));
   }
   useEffect(() => {
     if (user) reload();
@@ -107,7 +118,8 @@ function Mine() {
           </Link>
       }
     >
-      <div role="tablist" aria-label="İlan durumu" className="-mx-1 mb-3 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      {loadFailed ? <ErrorState message="İlanlarınız yüklenemedi." onRetry={reload} /> : null}
+      <div aria-label="İlan durumu" className={cn(loadFailed && "hidden", "-mx-1 mb-3 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden")}>
         {TABS.map((t) => {
           const n = groups[t.key].length;
           const selected = tab === t.key;
@@ -115,8 +127,7 @@ function Mine() {
             <button
               key={t.key}
               type="button"
-              role="tab"
-              aria-selected={selected}
+              aria-pressed={selected}
               onClick={() => setTab(t.key)}
               className={cn(
                 "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium transition-colors",
@@ -211,6 +222,7 @@ function MyListingRow({
   const dopingOn = useFlag("doping_enabled");
   const expired = isListingExpired(l);
   const live = l.status === "ACTIVE" && !expired;
+  const actions = ownerActions({ status: l.status, approved: l.approved ?? true, expired });
   const left = daysLeft(l.expires_at);
   const tone = live ? "ok" : l.status === "REJECTED" ? "danger" : l.status === "SOLD" ? "muted" : "warn";
 
@@ -260,27 +272,25 @@ function MyListingRow({
           <DropdownMenuItem onSelect={() => void nav({ to: "/ilan/$slug", params: { slug: l.slug } })}>
             <Eye className="size-4" /> İlanı görüntüle
           </DropdownMenuItem>
-          {l.status !== "SOLD" ? (
-            <DropdownMenuItem onSelect={() => void nav({ to: "/ilan-ver", search: { id: l.id } })}>
-              <Pencil className="size-4" /> Düzenle
-            </DropdownMenuItem>
-          ) : null}
+          <DropdownMenuItem onSelect={() => void nav({ to: "/ilan-ver", search: { id: l.id } })}>
+            <Pencil className="size-4" /> Düzenle
+          </DropdownMenuItem>
           {live ? (
             <DropdownMenuItem onSelect={() => onStatus("INACTIVE", "Yayından kaldırıldı")}>
               <EyeOff className="size-4" /> Yayından kaldır
             </DropdownMenuItem>
           ) : null}
-          {l.status === "INACTIVE" ? (
+          {actions.includes("publish") ? (
             <DropdownMenuItem onSelect={() => onStatus("ACTIVE", "İlan yayına alındı")}>
               <Eye className="size-4" /> Yayına al
             </DropdownMenuItem>
           ) : null}
-          {l.status === "ACTIVE" || l.status === "INACTIVE" ? (
+          {actions.includes("sold") ? (
             <DropdownMenuItem onSelect={() => onStatus("SOLD", "Satıldı olarak işaretlendi")}>
               <CircleCheck className="size-4" /> Satıldı olarak işaretle
             </DropdownMenuItem>
           ) : null}
-          {l.status !== "REJECTED" && l.status !== "SOLD" && l.status !== "PENDING" ? (
+          {actions.includes("renew") ? (
             <DropdownMenuItem onSelect={onRenew}>
               <RefreshCw className="size-4" /> Süreyi 30 gün uzat
             </DropdownMenuItem>

@@ -1,4 +1,6 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useFlag } from "@/lib/use-flag";
+import { ErrorState } from "@/components/common/ErrorState";
+import { createFileRoute, useNavigate, useBlocker } from "@tanstack/react-router";
 import { errorText } from "@/lib/error-text";
 import { useEffect, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { browseCategories } from "@/lib/server/catalog";
@@ -43,13 +45,14 @@ function AttrInput({
 }) {
   return (
     <div>
-      <Label>
+      <Label htmlFor={`attr-${a.id}`}>
         {a.name}
         {a.unit ? ` (${a.unit})` : ""}
         {a.required ? " *" : ""}
       </Label>
       {a.type === "SELECT" ? (
         <Select
+          id={`attr-${a.id}`}
           required={a.required}
           value={String(values[a.name] ?? "")}
           onChange={(e) => setValues((v) => ({ ...v, [a.name]: e.target.value }))}
@@ -61,19 +64,37 @@ function AttrInput({
         </Select>
       ) : (
         <Input
+          id={`attr-${a.id}`}
           type={a.type === "NUMBER" ? "number" : "text"}
           required={a.required}
           min={a.name === "Yıl" ? 1950 : a.type === "NUMBER" ? 0 : undefined}
           max={a.name === "Yıl" ? new Date().getFullYear() + 1 : undefined}
           value={String(values[a.name] ?? "")}
           onChange={(e) =>
-            setValues((v) => ({ ...v, [a.name]: a.type === "NUMBER" ? Number(e.target.value) : e.target.value }))
+            setValues((v) => ({ ...v, [a.name]: a.type === "NUMBER" && e.target.value !== "" ? Number(e.target.value) : e.target.value }))
           }
         />
       )}
     </div>
   );
 }
+
+type ListingDraft = {
+  path: string[];
+  title: string;
+  description: string;
+  price: string;
+  city: string;
+  district: string;
+  neighborhood: string;
+  phone: string;
+  images: string[];
+  values: Record<string, string | number>;
+  step: number;
+  savedAt: number;
+};
+
+const PHOTO_KEEP_MS = 20 * 60 * 60_000;
 
 export const Route = createFileRoute("/ilan-ver")({
   validateSearch: (s: Record<string, unknown>): { id?: string } =>
@@ -136,6 +157,14 @@ function PostForm() {
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [storeId, setStoreId] = useState<string | undefined>();
+  const [levelError, setLevelError] = useState(false);
+  const [levelAttempt, setLevelAttempt] = useState(0);
+  const [attrsError, setAttrsError] = useState(false);
+  const [attrAttempt, setAttrAttempt] = useState(0);
+  const [profilePhone, setProfilePhone] = useState("");
+  const draftsOn = useFlag("ilan_formu_v2");
+  const [offeredDraft, setOfferedDraft] = useState<ListingDraft | null>(null);
+  const saved = useRef(false);
   const [loaded, setLoaded] = useState(!editId);
   const keepValuesFor = useRef<string | null>(null);
   const photoOriginals = useRef(new Map<string, PhotoOriginal>());
@@ -163,34 +192,50 @@ function PostForm() {
   useEffect(() => {
     if (level.key === pathKey || selectedRow?.has_children === false) return;
     let cancelled = false;
+    setLevelError(false);
     browseCategories({ data: { path } })
       .then((next) => {
         if (!cancelled) setLevel({ key: pathKey, ...next });
       })
       .catch(() => {
-        if (!cancelled) toast.error("Kategoriler yüklenemedi");
+        if (!cancelled) setLevelError(true);
       });
     return () => {
       cancelled = true;
     };
     // `path` is captured through `pathKey`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathKey, level.key, selectedRow?.has_children]);
+  }, [pathKey, level.key, selectedRow?.has_children, levelAttempt]);
 
+  // Only a final category has a form; moving through its parents must not wipe
+  // what was filled in, unless a different category is really chosen.
   useEffect(() => {
-    if (!selected) return;
-    void getCategoryAttrs({ data: { categoryId: selected } }).then(setAttrs);
-    if (keepValuesFor.current === selected) return;
-    keepValuesFor.current = selected;
-    setValues({});
-  }, [selected]);
+    if (!selected || !leaf) return;
+    let cancelled = false;
+    setAttrsError(false);
+    getCategoryAttrs({ data: { categoryId: selected } })
+      .then((next) => {
+        if (!cancelled) setAttrs(next);
+      })
+      .catch(() => {
+        if (!cancelled) setAttrsError(true);
+      });
+    if (keepValuesFor.current !== selected) {
+      keepValuesFor.current = selected;
+      setValues({});
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [selected, leaf, attrAttempt]);
 
   const userProfileLoaded = useRef(false);
 
   useEffect(() => {
     if (!userId) return;
     void getMe().then((m) => {
-      if (m.store) setStoreId(m.store.id);
+      if (m.store && !editId) setStoreId(m.store.id);
+      setProfilePhone(m.profile?.phone ?? "");
       if (!editId && !userProfileLoaded.current) {
         if (m.profile?.phone) setPhone(maskPhone10(m.profile.phone));
         if (m.profile?.city) setCity(m.profile.city);
@@ -239,6 +284,44 @@ function PostForm() {
     topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [step]);
 
+  // Drafts: a new listing survives a refresh or the back button; an edit warns before leaving.
+  const draftKey = userId ? `geldesat:ilan-taslak:${userId}` : null;
+  const draft: ListingDraft = { path, title, description, price, city, district, neighborhood, phone, images, values, step, savedAt: Date.now() };
+  const { savedAt: _savedAt, ...draftFields } = draft;
+  const draftJson = JSON.stringify(draftFields);
+  const hasContent = Boolean(path.length || title || description || price || images.length);
+  const loadedForm = useRef<string | null>(null);
+  if (editId && loaded && loadedForm.current === null) loadedForm.current = draftJson;
+  const editChanged = Boolean(editId) && loadedForm.current !== null && loadedForm.current !== draftJson;
+
+  useEffect(() => {
+    if (!draftsOn || editId || !draftKey) return;
+    try {
+      const raw = localStorage.getItem(draftKey);
+      if (raw) setOfferedDraft(JSON.parse(raw) as ListingDraft);
+    } catch {
+      // Private mode or a damaged draft: start empty.
+    }
+  }, [draftsOn, editId, draftKey]);
+
+  useEffect(() => {
+    if (!draftsOn || editId || !draftKey || !hasContent || offeredDraft || saved.current) return;
+    const timer = setTimeout(() => {
+      try {
+        localStorage.setItem(draftKey, JSON.stringify({ ...JSON.parse(draftJson), savedAt: Date.now() }));
+      } catch {
+        // Storage is full or blocked; the form still works.
+      }
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [draftsOn, editId, draftKey, hasContent, offeredDraft, draftJson]);
+
+  useBlocker({
+    shouldBlockFn: () => !saved.current && !window.confirm("Kaydedilmemiş değişiklikler kaybolacak. Çıkmak istiyor musunuz?"),
+    disabled: !draftsOn || !editChanged,
+    enableBeforeUnload: draftsOn && editChanged,
+  });
+
   if (isPending || (user && !loaded)) return <BrandSpinner fullPage text="İlan formu hazırlanıyor…" />;
   if (!user) return <RedirectToSignIn />;
 
@@ -272,6 +355,8 @@ function PostForm() {
           storeId,
         },
       });
+      saved.current = true;
+      discardDraft();
       toast.success(
         editId
           ? result.status === "PENDING"
@@ -290,10 +375,68 @@ function PostForm() {
   }
 
   const priceNumber = Number(price) || 0;
+
+  function resumeDraft(d: ListingDraft) {
+    // The server removes photos not attached to a listing after 24 hours.
+    const photosGone = Date.now() - d.savedAt > PHOTO_KEEP_MS;
+    keepValuesFor.current = d.path[d.path.length - 1] ?? null;
+    setPath(d.path);
+    setTitle(d.title);
+    setDescription(d.description);
+    setPrice(d.price);
+    setCity(d.city);
+    setDistrict(d.district);
+    setNeighborhood(d.neighborhood);
+    setPhone(d.phone);
+    setImages(photosGone ? [] : d.images);
+    setValues(d.values);
+    setStep(d.step);
+    setOfferedDraft(null);
+    if (photosGone && d.images.length) toast.warning("Taslaktaki fotoğrafların süresi doldu; lütfen yeniden ekleyin.");
+  }
+
+  function discardDraft() {
+    setOfferedDraft(null);
+    try {
+      if (draftKey) localStorage.removeItem(draftKey);
+    } catch {
+      // Nothing to clean up if storage is blocked.
+    }
+  }
+
+  /** Everything the server would refuse, found while the person is still on this step. */
+  function detailsProblem(): string | null {
+    if (title.trim().length < 5) return "İlan başlığı en az 5 karakter olmalı.";
+    if (description.trim().length < 10) return "Açıklama en az 10 karakter olmalı.";
+    if (priceNumber < 1) return "Geçerli bir fiyat girin.";
+    if (priceNumber > 1_000_000_000) return "Fiyat en fazla 1 milyar TL olabilir.";
+    if (!city || !district) return "İl ve ilçe seçin.";
+    const digits = cleanPhone(phone);
+    if (!digits && !profilePhone) return "İlan için bir telefon numarası girin.";
+    if (digits && !/^0?5\d{9}$/.test(digits)) return "Geçerli bir cep telefonu girin (5xx xxx xx xx).";
+    if (attrsError) return "Kategori özellikleri yüklenemedi. Sayfadaki “Tekrar dene”ye basın.";
+    const missing = attrs.find((a) => a.required && (values[a.name] === undefined || values[a.name] === ""));
+    return missing ? `Zorunlu alan: ${missing.name}` : null;
+  }
   const location = [neighborhood, district, city].filter(Boolean).join(", ");
 
   return (
     <div ref={topRef} className="mx-auto max-w-6xl scroll-mt-20 px-4 pb-44 pt-4 sm:pt-8 md:pb-16">
+      {offeredDraft ? (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-primary/30 bg-primary/8 p-3 text-sm">
+          <p>
+            Yarım kalan bir ilanınız var{offeredDraft.title ? `: “${offeredDraft.title}”` : ""}.
+          </p>
+          <div className="flex gap-2">
+            <Button type="button" size="sm" onClick={() => resumeDraft(offeredDraft)}>
+              Devam et
+            </Button>
+            <Button type="button" size="sm" variant="ghost" onClick={discardDraft}>
+              Yeni başla
+            </Button>
+          </div>
+        </div>
+      ) : null}
       <header className="flex flex-wrap items-end justify-between gap-2">
         <div>
           <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">{editId ? "İlanı düzenle" : "Ücretsiz ilan ver"}</h1>
@@ -347,6 +490,8 @@ function PostForm() {
                     Değiştir
                   </Button>
                 </div>
+              ) : levelError ? (
+                <ErrorState message="Kategoriler yüklenemedi." onRetry={() => setLevelAttempt((n) => n + 1)} />
               ) : !levelReady ? (
                 <p className="py-10 text-center text-sm text-muted">Kategoriler yükleniyor…</p>
               ) : (
@@ -379,8 +524,9 @@ function PostForm() {
               aria-labelledby="step-details"
               onSubmit={(e) => {
                 e.preventDefault();
-                if (priceNumber < 1) {
-                  toast.error("Geçerli bir fiyat girin.");
+                const problem = detailsProblem();
+                if (problem) {
+                  toast.error(problem);
                   return;
                 }
                 setStep(2);
@@ -389,6 +535,13 @@ function PostForm() {
               <SectionHeading id="step-details" title="İlan detayları" hint="Alıcıların ilk göreceği bilgiler." />
 
               <CategorySummary rows={pathRows} onChange={() => goTo(0)} />
+
+              {editId ? (
+                <p className="mb-4 rounded-lg border border-warn/30 bg-warn/8 px-3 py-2 text-sm text-warn">
+                  Başlık, açıklama, kategori, özellik değişirse veya yeni fotoğraf eklerseniz ilan yeniden onaya gider ve o sırada yayında görünmez.
+                </p>
+              ) : null}
+              {attrsError ? <ErrorState message="Kategori özellikleri yüklenemedi." onRetry={() => setAttrAttempt((n) => n + 1)} /> : null}
 
               <div className="space-y-5">
                 <FieldGroup title="Temel bilgiler">
@@ -526,7 +679,10 @@ function PostForm() {
                                 key={a.id}
                                 className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2"
                               >
-                                <span className="text-sm">{a.name}</span>
+                                <span className="text-sm">
+                                  {a.name}
+                                  {a.required ? " *" : ""}
+                                </span>
                                 <div className="inline-flex shrink-0 rounded-md bg-elevated p-0.5" role="radiogroup" aria-label={a.name}>
                                   {(a.options ?? evetHayir).map((o) => (
                                     <button

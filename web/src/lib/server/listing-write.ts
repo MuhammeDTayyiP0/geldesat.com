@@ -49,7 +49,10 @@ export async function saveListingRecord(userId: string, data: ListingInputData) 
   if (!profile[0]?.phone && !data.phone) throw new Error("İlan vermek için profilinize telefon ekleyin.");
   // Only an explicit per-listing number is stored; otherwise the listing shows
   // the seller's current profile phone (revealPhone falls back to it).
-  const phoneOverride = data.phone?.trim() ? normalizeTrPhone(data.phone) : null;
+  const typedPhone = data.phone?.trim() ? normalizeTrPhone(data.phone) : null;
+  // The form starts filled with the profile number; that is not a choice to keep
+  // it forever, so listings follow the profile when it changes.
+  const phoneOverride = typedPhone && typedPhone !== profile[0]?.phone ? typedPhone : null;
   const isAdmin = profile[0]?.role === "ADMIN";
   // Admin console policy: first_free (first listing goes live), all (everything is reviewed), none (no review).
   const { mode } = await getAppConfig<{ mode: "first_free" | "all" | "none" }>("moderation", { mode: "first_free" });

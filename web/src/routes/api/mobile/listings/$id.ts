@@ -55,7 +55,7 @@ export const Route = createFileRoute("/api/mobile/listings/$id")({
             sql.query<{ favorite_count: number; phone_reveal_count: number; rating_avg: number; rating_count: number }>(
               `select
                 (select count(*)::int from favorites where listing_id=$1) as favorite_count,
-                (select count(*)::int from phone_reveals where listing_id=$1) as phone_reveal_count,
+                (select count(distinct viewer_id)::int from phone_reveals where listing_id=$1) as phone_reveal_count,
                 (select coalesce(avg(rating),0) from reviews where seller_id=$2) as rating_avg,
                 (select count(*)::int from reviews where seller_id=$2) as rating_count`, [listing.id, listing.user_id],
             ),

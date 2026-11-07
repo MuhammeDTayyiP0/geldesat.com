@@ -85,7 +85,20 @@ export function PhotoUploader({ images, setImages, originals, onBusyChange, requ
   const slotsLeft = MAX_PHOTOS - used;
   const busy = pending.some((p) => p.status !== "error");
 
-  useEffect(() => onBusyChange(busy), [busy, onBusyChange]);
+  useEffect(() => onBusyChange(busy || rotating !== null), [busy, rotating, onBusyChange]);
+
+  // Photos dropped just outside the box must not make the browser leave the form.
+  useEffect(() => {
+    const stop = (e: globalThis.DragEvent) => {
+      if (Array.from(e.dataTransfer?.types ?? []).includes("Files")) e.preventDefault();
+    };
+    window.addEventListener("dragover", stop);
+    window.addEventListener("drop", stop);
+    return () => {
+      window.removeEventListener("dragover", stop);
+      window.removeEventListener("drop", stop);
+    };
+  }, []);
 
   // Cancel in-flight work and free previews if the step unmounts.
   useEffect(() => {

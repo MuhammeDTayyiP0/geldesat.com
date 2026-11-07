@@ -380,7 +380,7 @@ export const getListing = createServerFn({ method: "POST" })
          coalesce(p.phone_visibility, 'members') as phone_visibility, coalesce(p.show_whatsapp, true) as show_whatsapp,
          (l.approved_at is not null) as approved,
          (select count(*)::int from favorites where listing_id = l.id) as fav_count,
-         (select count(*)::int from phone_reveals where listing_id = l.id) as phone_reveal_count,
+         (select count(distinct viewer_id)::int from phone_reveals where listing_id = l.id) as phone_reveal_count,
          coalesce((select json_agg(b.kind) from boosts b where b.listing_id = l.id and b.ends_at > now()), '[]'::json) as boosts
        from listings l
        join categories c on c.id = l.category_id
@@ -447,7 +447,13 @@ export const getListing = createServerFn({ method: "POST" })
         (typeof rows[0].profile_phone === "string" && rows[0].profile_phone.trim())
       );
     return {
-      listing,
+      listing: {
+        ...listing,
+        // Units live on the category's attributes, not on the saved values.
+        attr_units: Object.fromEntries(
+          (await inheritedAttributes(listing.category_id)).flatMap((a) => (a.unit ? [[a.name, a.unit] as const] : [])),
+        ) as Record<string, string>,
+      },
       path,
       history: history.map((h) => ({ price: num(h.price), at: String(h.recorded_at) })),
       similar: filteredSimilar.slice(0, 4),

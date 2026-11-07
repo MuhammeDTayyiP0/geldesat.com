@@ -13,6 +13,7 @@ import {
   rateLimit,
   notify,
   normalizeTrPhone,
+  listingSelect,
   PHONE_UNAVAILABLE,
   revealListingPhone,
   viewerKey,
@@ -203,13 +204,16 @@ export const myListings = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const sql = await getSql();
     const rows = await sql.query<Record<string, unknown>>(
-      `select l.*, c.name as category_name, c.slug as category_slug,
+      `select ${listingSelect("", true)}, (l.approved_at is not null) as approved,
               coalesce((select json_agg(b.kind) from boosts b where b.listing_id = l.id and b.ends_at > now()), '[]'::json) as boosts
-       from listings l join categories c on c.id = l.category_id
-       where l.user_id = $1 order by l.created_at desc`,
+       from listings l
+       join categories c on c.id = l.category_id
+       left join profiles p on p.user_id = l.user_id
+       left join stores s on s.id = l.store_id
+       where l.user_id = $1 order by l.created_at desc limit 500`,
       [context.userId],
     );
-    return rows.map(mapListing);
+    return rows.map((row) => ({ ...mapListing(row), approved: Boolean(row.approved) }));
   });
 
 export const getListingForEdit = createServerFn({ method: "POST" })

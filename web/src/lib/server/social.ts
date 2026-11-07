@@ -8,6 +8,7 @@ import {
   ensureProfile,
   firstInWindow,
   hasOpenReport,
+  listingSelect,
   insertListingReport,
   mapListing,
   notify,
@@ -54,13 +55,17 @@ export const myFavorites = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const sql = await getSql();
     const rows = await sql.query<Record<string, unknown>>(
-      `select l.*, c.name as category_name, c.slug as category_slug,
+      `select ${listingSelect("", true)},
               coalesce((select json_agg(b.kind) from boosts b where b.listing_id = l.id and b.ends_at > now()), '[]'::json) as boosts
        from favorites f
        join listings l on l.id = f.listing_id
        join categories c on c.id = l.category_id
-       where f.user_id=$1 and l.status='ACTIVE' and (l.expires_at is null or l.expires_at > now())
-       order by f.created_at desc`,
+       left join profiles p on p.user_id = l.user_id
+       left join stores s on s.id = l.store_id
+       -- Sold and expired favorites stay listed with their state, so they do not silently vanish.
+       where f.user_id=$1 and l.status in ('ACTIVE','SOLD')
+       order by f.created_at desc
+       limit 500`,
       [context.userId],
     );
     return rows.map(mapListing);

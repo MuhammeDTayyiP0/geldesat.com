@@ -166,6 +166,7 @@ export async function processListingPhoto(input: Uint8Array): Promise<Buffer> {
     .resize({ width: w, height: h, fit: "fill" })
     .flatten({ background: "#ffffff" }) // transparent PNGs get white, not black
     .composite([{ input: listingWatermarkSvg(w, h) }])
+    .png({ compressionLevel: 1 }) // lossless step: the only lossy encode is the WebP below
     .toBuffer();
 
   for (const quality of [80, 72, 64]) {

@@ -60,12 +60,12 @@ Temiz çıkan alanlar: admin server fonksiyonlarının tamamı yetki kontrollü 
 - [ ] 21. **Y · Mobilde mesaj kaçıyor ve yanlış okundu.** Ön planda bağlantı kopup gelince telafi yok, yoklama yok; arkada kalan sohbet ekranı mesajları okundu yapıp push'u bastırıyor. `M/features/chat/stream.ts:32`, `M/app/mesaj/[id].tsx:89,162-173,183`.
 - [ ] 22. **Y · Dolandırıcılık uyarısı çalışmıyor.** `\b` Türkçe harfleri tanımıyor, ekleri kaçırıyor. Denenen 9 ifadeden 7'si yakalanmadı: "ön ödeme yapın", "ödeme linki atıyorum", "kaporayı gönder", "kaporası lazım", "önödeme lazım", "paparaya at", "whatsapptan yaz". `W/lib/chat-shared.ts:68-70`, `M/features/chat/shared.ts:31,34` → Unicode sınırı, ek toleransı, test.
 - [ ] 23. **Y · Tekrarlayan hatırlatma push'u.** Tekrar önleme `notifications` satırına bakıyor; `expiry` için uygulama içini kapatıp push'u açık bırakan kullanıcıda satır yazılmıyor, her süpürmede yeniden push gider. `W/lib/server/ops.ts:17-21`, `helpers.ts` `notify` → `listings.expiry_notified_at`.
-- [ ] 24. **Y · Model yılı "2.018" görünüyor.** Web detay ve kart, mobil kart ve detay. `W/components/listing/detail/ListingSections.tsx:140`, `W/lib/utils.ts:49`, `M/features/listing/ListingCard.tsx:26`, `M/app/ilan/[id].tsx:242`.
+- [x] 24. **Y · Model yılı "2.018" görünüyor.** Web detay ve kart, mobil kart ve detay. `W/components/listing/detail/ListingSections.tsx:140`, `W/lib/utils.ts:49`, `M/features/listing/ListingCard.tsx:26`, `M/app/ilan/[id].tsx:242`.
 - [ ] 25. **Y · Uygulama açılışı kırılgan.** Açılış ekranı zaman aşımı olmayan `get-session` isteğini bekliyor; hiç `ErrorBoundary` yok, hatalı OTA uygulamayı tümden kapatır, hata raporlama da yok. `M/app/_layout.tsx:24-34`, `M/auth/auth.ts:154`.
 - [ ] 26. **Y · Android taslak siliniyor.** Devam diyaloğunun dışına dokunmak veya geri tuşu onaysız `clearDraft()` çalıştırır. `M/ui/dialogs.ts:28`, `M/app/ilan-ver.tsx:125`.
 - [ ] 27. **Y · Hazır mesajlar silinebilir.** Liste yüklenemezken boş görünür, yeni ekleme tüm listenin üstüne yazar. `M/app/ayarlar/sablonlar.tsx:14-16,54`.
 - [ ] 28. **Y · 24 saatlik taslak fotoğrafı.** Sunucu bağlanmamış fotoğrafı 24 saatte siliyor; taslak bunu bilmiyor, Yayınla hangisi olduğunu söylemeden hata verir. `M/app/ilan-ver.tsx:123`, `W/lib/server/upload.server.ts:15-19`.
-- [ ] 29. **Y · Web'de taslak yok.** Yenileme veya geri tuşu tüm ilan formunu siler. `W/routes/ilan-ver.tsx:123-134`.
+- [x] 29. **Y · Web'de taslak yok.** Yenileme veya geri tuşu tüm ilan formunu siler. `W/routes/ilan-ver.tsx:123-134`.
 - [x] 30. **Y · "Süreyi uzat" gizli ilanı yayına alıyor.** Satıcının bilerek kapattığı ilan ve telefonu sessizce yayına döner; süresi dolmuş ilanda "Yayına al" başarı der ama ilan görünmez. Web ve mobil. `listing-write.ts:36-39`, `W/routes/ilanlarim.tsx:274-288`, `M/app/ilanlarim.tsx:167-174`, `W/routes/api/mobile/my-listings/$id.ts:51-55`.
 - [ ] 31. **Y · KVKK bağlantısı yanlış.** "Verilerimi indir" `/ayarlar/gizlilik`'i açıyor, indirme `/ayarlar/hesap` sayfasında. `M/app/ayarlar/gizlilik.tsx:77`.
 - [ ] 32. **Y · Fotoğraf balonunda menü açılmıyor.** İç `Pressable` uzun basmayı yutuyor; yanlış fotoğrafı silmek veya bildirmek pratikte erişilemez. `M/features/chat/Bubble.tsx:81,115,166`.
@@ -207,44 +207,44 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 
 **İlan detay `routes/ilan/$slug.tsx`**
 - [x] Y · `ListingSections.tsx:97`, `catalog.ts:335` — Sahibe "alıcılara Satıldı görünür" deniyor; alıcı 404 alıyor → SOLD'u aç ve noindex yap ya da metni düzelt.
-- [ ] O · `$slug.tsx:421`, `ListingSections.tsx:100,115` — Süresi dolmuş INACTIVE/SOLD'da sahip çıkmazda; metin "panelden yayına al" diyor.
+- [x] O · `$slug.tsx:421`, `ListingSections.tsx:100,115` — Süresi dolmuş INACTIVE/SOLD'da sahip çıkmazda; metin "panelden yayına al" diyor.
 - [x] O · `$slug.tsx:139-150,724-726` — `msg`, `review` ve açık durumlar başka ilana taşınıyor.
-- [ ] O · `ListingImageGallery.tsx:258` — Lightbox'ta dialog rolü ve odak yok.
-- [ ] O · `ListingImageGallery.tsx:337` — `justify-center` + `overflow-x-auto`, soldaki küçük resimlere ulaşılamıyor.
-- [ ] D · `ListingImageGallery.tsx:123,261` — Çapraz kaydırma fotoğraf değiştiriyor. `:341` — Küçük resim düğmeleri adsız. `:297` — Telefonda tam master indiriliyor.
+- [x] O · `ListingImageGallery.tsx:258` — Lightbox'ta dialog rolü ve odak yok.
+- [x] O · `ListingImageGallery.tsx:337` — `justify-center` + `overflow-x-auto`, soldaki küçük resimlere ulaşılamıyor.
+- [x] D · `ListingImageGallery.tsx:123,261` — Çapraz kaydırma fotoğraf değiştiriyor. `:341` — Küçük resim düğmeleri adsız. `:297` — Telefonda tam master indiriliyor.
 - [ ] D (olası) · `ListingImageGallery.tsx:52` — `pushState`, `getListing`'i yeniden çalıştırıyor.
-- [ ] D · `$slug.tsx:372,211-213`, `social.ts:37` — Süresi dolmuş ilanda "Favorile" hata veriyor. `$slug.tsx:175` — Favori listesi iki kez çekiliyor.
-- [ ] D · `helpers.ts:444` — Telefon sayacı tıklama sayıyor, tekil değil.
+- [x] D · `$slug.tsx:372,211-213`, `social.ts:37` — Süresi dolmuş ilanda "Favorile" hata veriyor. `$slug.tsx:175` — Favori listesi iki kez çekiliyor.
+- [x] D · `helpers.ts:444` — Telefon sayacı tıklama sayıyor, tekil değil.
 - [ ] D (olası) · `ListingSections.tsx:88-92`, `helpers.ts:272` — Red gerekçesi yalnız bildirimde.
-- [ ] D · `ListingSections.tsx:190` — Birim kayboluyor (aidat "1500"). D · `ListingDetailSkeleton.tsx:17,25` — İskelet farklı, sayfa zıplıyor.
+- [x] D · `ListingSections.tsx:190` — Birim kayboluyor (aidat "1500"). D · `ListingDetailSkeleton.tsx:17,25` — İskelet farklı, sayfa zıplıyor.
 
 **İlan ver `routes/ilan-ver.tsx`**
 - [x] O · `listing-write.ts:20,115-119` — `attrs` değişimi yeniden incelemeye girmiyor; onaylı ilana serbest metin eklenebilir.
-- [ ] O · `PhotoUploader.tsx:258` — 10 fotoğrafta bırakılan dosyayı tarayıcı açıyor, form kaybolur.
-- [ ] O · `ilan-ver.tsx:381,416`, `listing-write.ts:14` — 10 hane kabul, sunucu 1 milyar; hata son adımda. Mobilde 13 hane (`M/lib/format.ts:19`).
-- [ ] O (olası) · `ilan-ver.tsx:262-263`, `listing-write.ts:12-13` — Boşluklu başlık ham Zod JSON'u gösterebilir.
-- [ ] O · `ilan-ver.tsx:517-589`, `listing-write.ts:98-101` — Zorunlu BOOLEAN ve MULTI denetlenmiyor.
-- [ ] O · `ilan-ver.tsx:68-70` — `Number("")` temizlenen alanı 0 yapıyor, "0 km" görünür.
-- [ ] O · `ilan-ver.tsx:194,268`, `listing-write.ts:53-55`, mobil `ilan-ver.tsx:139,264` — Profil telefonu her ilana `phone_override` yazılıyor; numara değişince eski ilanlar eski kalır.
-- [ ] O · `ilan-ver.tsx:501` — Telefon adım 1'de denetlenmiyor.
-- [ ] O · `ilan-ver.tsx:300,388` — Metin düzeltmesi ilanı habersiz PENDING'e düşürüyor; yalnız fotoğraf adımı uyarıyor.
-- [ ] O · `ilan-ver.tsx:181,191` — Hata yakalama ve yarış koruması yok.
-- [ ] D · `:165-171,349` — "Kategoriler yükleniyor" sonsuza kalabilir. `:182-184,345` — Aynı yaprağı seçmek değerleri siliyor. `PhotoUploader.tsx:85,231` — Döndürme meşgul sayılmıyor.
-- [ ] D (olası) · `:192,218`, `listing-write.ts:112` — Mağaza kimliği düzenlemede yanlış atanabilir.
-- [ ] D · `:45,51,62` — Etiketler bağlı değil. `CategoryPicker.tsx:139` — `aria-label` yok. D (olası) · `:99`, `CategoryPicker.tsx:136,254` — Yer tutucu global arama vaat ediyor.
+- [x] O · `PhotoUploader.tsx:258` — 10 fotoğrafta bırakılan dosyayı tarayıcı açıyor, form kaybolur.
+- [x] O · `ilan-ver.tsx:381,416`, `listing-write.ts:14` — 10 hane kabul, sunucu 1 milyar; hata son adımda. Mobilde 13 hane (`M/lib/format.ts:19`).
+- [x] O (olası) · `ilan-ver.tsx:262-263`, `listing-write.ts:12-13` — Boşluklu başlık ham Zod JSON'u gösterebilir.
+- [x] O · `ilan-ver.tsx:517-589`, `listing-write.ts:98-101` — Zorunlu BOOLEAN ve MULTI denetlenmiyor.
+- [x] O · `ilan-ver.tsx:68-70` — `Number("")` temizlenen alanı 0 yapıyor, "0 km" görünür.
+- [x] O · `ilan-ver.tsx:194,268`, `listing-write.ts:53-55`, mobil `ilan-ver.tsx:139,264` — Profil telefonu her ilana `phone_override` yazılıyor; numara değişince eski ilanlar eski kalır.
+- [x] O · `ilan-ver.tsx:501` — Telefon adım 1'de denetlenmiyor.
+- [x] O · `ilan-ver.tsx:300,388` — Metin düzeltmesi ilanı habersiz PENDING'e düşürüyor; yalnız fotoğraf adımı uyarıyor.
+- [x] O · `ilan-ver.tsx:181,191` — Hata yakalama ve yarış koruması yok.
+- [x] D · `:165-171,349` — "Kategoriler yükleniyor" sonsuza kalabilir. `:182-184,345` — Aynı yaprağı seçmek değerleri siliyor. `PhotoUploader.tsx:85,231` — Döndürme meşgul sayılmıyor.
+- [x] D (olası) · `:192,218`, `listing-write.ts:112` — Mağaza kimliği düzenlemede yanlış atanabilir.
+- [x] D · `:45,51,62` — Etiketler bağlı değil. `CategoryPicker.tsx:139` — `aria-label` yok. D (olası) · `:99`, `CategoryPicker.tsx:136,254` — Yer tutucu global arama vaat ediyor.
 - [ ] D · `lib/data/geo.ts:85-111` — Mahalle verisi 4 ilde örnek.
 - [ ] D (olası) · `api/upload.ts:14-17` — Boyut `content-length`'e bağlı. `image-pipeline.server.ts:133-139` — HEIC sınırı çözümden sonra. D · `:165-172` — JPEG iki kez sıkıştırılıyor.
 
 **İlanlarım, favoriler, son bakılanlar**
-- [ ] O · `ilanlarim.tsx:65-69` — Hata "Yayında ilanınız yok" görünüyor; mükerrer ilana yol açabilir.
-- [ ] O · `ilanlarim.tsx:264,274`, `$slug.tsx:406,421` — SOLD için iki ekran farklı kural uyguluyor.
-- [ ] D · `account.ts:199-211` — Sayfalama yok, `l.*`. D · `ilanlarim.tsx:61` — Varsayılan sekme hep "Yayında". D · `:110-118,220` — Sekme ve görsel link erişilebilirliği.
+- [x] O · `ilanlarim.tsx:65-69` — Hata "Yayında ilanınız yok" görünüyor; mükerrer ilana yol açabilir.
+- [x] O · `ilanlarim.tsx:264,274`, `$slug.tsx:406,421` — SOLD için iki ekran farklı kural uyguluyor.
+- [x] D · `account.ts:199-211` — Sayfalama yok, `l.*`. D · `ilanlarim.tsx:61` — Varsayılan sekme hep "Yayında". D · `:110-118,220` — Sekme ve görsel link erişilebilirliği.
 - [x] D · `account.ts:148-156` — Sahibe "onaylandı" bildirimi. D · `account.ts:146-147` — Admin onayı süreyi yenilemiyor.
-- [ ] O · `social.ts:60`, `favoriler.tsx:53` — Satılan favori açıklamasız kayboluyor; web ve mobil.
-- [ ] O · `favoriler.tsx:32` — Hata "Henüz favori yok". D · `social.ts:55` — Limit yok, `l.*`.
-- [ ] O · `son-bakilanlar.tsx:107-110,123` — Rozetli satırlar 404'e gidiyor.
+- [x] O · `social.ts:60`, `favoriler.tsx:53` — Satılan favori açıklamasız kayboluyor; web ve mobil.
+- [x] O · `favoriler.tsx:32` — Hata "Henüz favori yok". D · `social.ts:55` — Limit yok, `l.*`.
+- [x] O · `son-bakilanlar.tsx:107-110,123` — Rozetli satırlar 404'e gidiyor.
 - [x] O · `recently-viewed.ts:29-37` — Reddedilen ve gizlenen ilanın başlığı, fiyatı ve fotoğrafı görünmeye devam ediyor.
-- [ ] O · `son-bakilanlar.tsx:37` — Hata boş görünüyor. D · `:125` — "şimdi baktınız", "5 Eki 2026 baktınız".
+- [x] O · `son-bakilanlar.tsx:37` — Hata boş görünüyor. D · `:125` — "şimdi baktınız", "5 Eki 2026 baktınız".
 
 ### 3.3 Web: mesajlaşma ve bildirim
 

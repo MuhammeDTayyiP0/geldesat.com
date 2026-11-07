@@ -16,6 +16,8 @@ export type CategoryRow = {
 };
 
 export type ListingCard = {
+  /** Set by the owner lists: whether moderation has approved it. */
+  approved?: boolean;
   id: string;
   /** Public listing number ("İlan No"), also the tail of the URL slug. */
   listing_no: number;

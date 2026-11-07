@@ -94,13 +94,13 @@ export function StatusBanner({
     );
   } else if (status === "SOLD") {
     title = "Bu ürün satıldı.";
-    body = isOwner ? "İlan alıcılara “Satıldı” olarak görünür; mesaj alınmaz." : "Benzer ilanlara aşağıdan göz atabilirsiniz.";
+    body = isOwner ? "İlan alıcılara “Satıldı” olarak görünür; mesaj alınmaz. Yeniden satışa çıkarmak için aşağıdaki panele bakın." : "Benzer ilanlara aşağıdan göz atabilirsiniz.";
   } else if (status === "INACTIVE") {
     title = "Bu ilan yayında değil.";
-    body = isOwner ? "Yalnızca siz görüyorsunuz. Yönetim panelinden tekrar yayına alabilirsiniz." : null;
+    body = isOwner ? (expired ? "Yalnızca siz görüyorsunuz. Süresi de dolmuş: önce süresini uzatın, sonra yayına alın." : "Yalnızca siz görüyorsunuz. Aşağıdaki panelden tekrar yayına alabilirsiniz.") : null;
   } else if (expired) {
     title = "Bu ilanın yayın süresi doldu.";
-    body = isOwner ? "Süreyi uzatarak ilanı tekrar yayına alabilirsiniz." : "Satıcıyla iletişim kapalıdır.";
+    body = isOwner ? "Süreyi uzatarak ilanı tekrar yayına alabilirsiniz." : "Bu ilanın süresi dolduğu için satıcıyla iletişim kapalı.";
   }
   if (!title) return null;
   return (
@@ -112,7 +112,7 @@ export function StatusBanner({
           {body ? <p className="mt-0.5 text-warn/85">{body}</p> : null}
         </div>
       </div>
-      {isOwner && expired && status === "ACTIVE" ? (
+      {isOwner && expired && (status === "ACTIVE" || status === "INACTIVE") ? (
         <Button size="sm" onClick={onRenew} disabled={busy} className="shrink-0">
           30 gün uzat
         </Button>
@@ -137,7 +137,8 @@ export function KeyFacts({ attrs }: { attrs: Record<string, string | number> }) 
     const key = f.keys.find((k) => attrs[k] !== undefined && attrs[k] !== "");
     if (!key) return [];
     const raw = attrs[key];
-    const value = typeof raw === "number" || /^\d+$/.test(String(raw)) ? Number(raw).toLocaleString("tr-TR") : String(raw);
+    // A year is not a quantity: 2018, not 2.018.
+    const value = key !== "Yıl" && (typeof raw === "number" || /^\d+$/.test(String(raw))) ? Number(raw).toLocaleString("tr-TR") : String(raw);
     return [{ ...f, value: f.unit && !value.includes(f.unit) ? `${value} ${f.unit}` : value }];
   }).slice(0, 4);
   if (facts.length < 2) return null;
@@ -166,7 +167,7 @@ function AttrValue({ value }: { value: string }) {
 }
 
 /** All category attributes; multi-select values become chips on a full-width row. */
-export function SpecsSection({ attrs }: { attrs: Record<string, string | number> }) {
+export function SpecsSection({ attrs, units = {} }: { attrs: Record<string, string | number>; units?: Record<string, string> }) {
   const entries = Object.entries(attrs).filter(([, v]) => v !== "" && v != null);
   if (!entries.length) return null;
   const single = entries.filter(([, v]) => !String(v).includes(", "));
@@ -188,6 +189,7 @@ export function SpecsSection({ attrs }: { attrs: Record<string, string | number>
               <dt className="text-muted">{k}</dt>
               <dd className="text-right font-medium">
                 <AttrValue value={String(v)} />
+                {units[k] ? ` ${units[k]}` : ""}
               </dd>
             </div>
           ))}

@@ -1,3 +1,4 @@
+import { ErrorState } from "@/components/common/ErrorState";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { History, ImageIcon, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -23,22 +24,32 @@ export const Route = createFileRoute("/son-bakilanlar")({
   component: RecentPage,
 });
 
+function viewedLabel(iso: string): string {
+  const days = (Date.now() - new Date(iso).getTime()) / 86_400_000;
+  if (days < 1 / 1440) return "az önce baktınız";
+  if (days > 30) return `${new Date(iso).toLocaleDateString("tr-TR", { day: "numeric", month: "short", year: "numeric" })} tarihinde baktınız`;
+  return `${listingAge(iso)} baktınız`;
+}
+
 /** The account's last 50 viewed listings; each can be removed, or the whole list cleared. */
 function RecentPage() {
   const { user, isPending } = useCurrentUserState();
   const [rows, setRows] = useState<RecentListing[] | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     if (!user) return;
     let alive = true;
+    setFailed(false);
     myRecentListings()
       .then((r) => alive && setRows(r))
-      .catch(() => alive && setRows([]));
+      .catch(() => alive && setFailed(true));
     return () => {
       alive = false;
     };
-  }, [user]);
+  }, [user, attempt]);
 
   if (!isPending && !user) return <RedirectToSignIn />;
 
@@ -89,7 +100,9 @@ function RecentPage() {
         ) : null
       }
     >
-      {isPending || !rows ? (
+      {failed ? (
+        <ErrorState message="Geçmişiniz yüklenemedi." onRetry={() => setAttempt((n) => n + 1)} />
+      ) : isPending || !rows ? (
         <CardListSkeleton count={5} />
       ) : rows.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border bg-surface p-12 text-center">
@@ -107,6 +120,8 @@ function RecentPage() {
               <Link
                 to="/ilan/$slug"
                 params={{ slug: l.slug }}
+                // Only hidden listings have nowhere to go; sold and expired ones still open.
+                disabled={l.status === "REJECTED" || l.status === "INACTIVE" || l.status === "PENDING"}
                 className={`flex min-w-0 flex-1 gap-3 p-3 pr-12 hover:bg-elevated ${l.live ? "" : "opacity-70"}`}
               >
                 <span className="relative size-20 shrink-0 overflow-hidden rounded-lg bg-elevated sm:h-20 sm:w-28">
@@ -122,7 +137,7 @@ function RecentPage() {
                   <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-subtle">
                     {!l.live ? <Badge tone="warn">{listingStatusLabel(l.status, isListingExpired(l))}</Badge> : null}
                     <span className="truncate">{[l.district, l.city].filter(Boolean).join(", ")}</span>
-                    <span>· {listingAge(l.viewed_at)} baktınız</span>
+                    <span>· {viewedLabel(l.viewed_at)}</span>
                   </span>
                 </span>
               </Link>

@@ -1,3 +1,4 @@
+import { ownerActions } from "@/lib/listing-status";
 import { createFileRoute, Link, notFound, redirect, useNavigate, useRouter } from "@tanstack/react-router";
 import { errorText } from "@/lib/error-text";
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -209,9 +210,9 @@ function ListingPage() {
       setFav(res.favorite);
       setFavorite(listing.id, res.favorite);
       toast.success(res.favorite ? "Favorilere eklendi" : "Favorilerden çıkarıldı");
-    } catch {
+    } catch (err) {
       setFav((v) => !v);
-      toast.error("Favori işlemi başarısız oldu");
+      toast.error(errorText(err, "Favori işlemi başarısız oldu"));
     } finally {
       setFavBusy(false);
     }
@@ -417,9 +418,14 @@ function ListingPage() {
                     </Button>
                   </div>
                 ) : null}
-                {(listing.status === "INACTIVE" || listing.status === "SOLD") && approved && !expired ? (
+                {ownerActions({ status: listing.status, approved: Boolean(approved), expired }).includes("publish") ? (
                   <Button variant="outline" disabled={ownerBusy} onClick={() => void setStatus("ACTIVE", "İlan tekrar yayında")}>
                     Tekrar yayına al
+                  </Button>
+                ) : null}
+                {expired && ownerActions({ status: listing.status, approved: Boolean(approved), expired }).includes("renew") ? (
+                  <Button variant="outline" disabled={ownerBusy} onClick={() => void renew()}>
+                    Süreyi 30 gün uzat
                   </Button>
                 ) : null}
                 <div className="flex items-center justify-between pt-1">
@@ -506,7 +512,7 @@ function ListingPage() {
 
         <div className="min-w-0 space-y-5 lg:col-start-1 lg:row-start-2">
           <KeyFacts attrs={listing.attrs} />
-          <SpecsSection attrs={listing.attrs} />
+          <SpecsSection attrs={listing.attrs} units={listing.attr_units} />
           <DescriptionSection text={listing.description} />
           <PriceHistorySection history={history} />
           <LocationSection city={listing.city} district={listing.district} neighborhood={listing.neighborhood} />

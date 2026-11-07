@@ -1,3 +1,4 @@
+import { useModalPanel } from "@/lib/use-modal-panel";
 import * as React from "react";
 import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, Maximize2, X, ImageIcon } from "lucide-react";
@@ -45,6 +46,8 @@ export function ListingImageGallery({ images, title, categoryName }: ListingImag
       window.history.back();
     }
   }, []);
+
+  const lightbox = useModalPanel(isFullscreen, closeFullscreen);
 
   const openFullscreen = React.useCallback(() => {
     setIsFullscreen(true);
@@ -120,7 +123,7 @@ export function ListingImageGallery({ images, title, categoryName }: ListingImag
     // In fullscreen: if user swipes down distinctly, close fullscreen!
     if (inFullscreen && diffY > 70 && Math.abs(diffY) > Math.abs(diffX)) {
       closeFullscreen();
-    } else if (Math.abs(diffX) > 40) {
+    } else if (Math.abs(diffX) > 40 && Math.abs(diffX) > Math.abs(diffY)) {
       if (diffX > 0) {
         nextImage();
       } else {
@@ -256,6 +259,11 @@ export function ListingImageGallery({ images, title, categoryName }: ListingImag
       {isFullscreen && mounted
         ? createPortal(
             <div
+              ref={lightbox}
+              role="dialog"
+              aria-modal="true"
+              aria-label={`${title} fotoğrafları`}
+              tabIndex={-1}
               className="fixed inset-0 z-[99999] flex flex-col bg-black/95 backdrop-blur-2xl animate-in fade-in duration-150 select-none cursor-zoom-out"
               onClick={closeFullscreen}
               onTouchStart={handleTouchStart}
@@ -295,6 +303,8 @@ export function ListingImageGallery({ images, title, categoryName }: ListingImag
                     photos are scaled up to the screen instead of sitting at their pixel size. */}
                 <img
                   src={validImages[currentIdx]}
+                  srcSet={photoSrcSet(validImages[currentIdx], [800, 1200])}
+                  sizes="100vw"
                   alt={`${title} - Büyük Görsel ${currentIdx + 1}`}
                   className="size-full cursor-default object-contain"
                   onClick={(e) => e.stopPropagation()}
@@ -334,13 +344,18 @@ export function ListingImageGallery({ images, title, categoryName }: ListingImag
               {/* Bottom Thumbnails Strip in Fullscreen */}
               {total > 1 ? (
                 <div
-                  className="listing-lightbox-thumbnails relative z-50 flex w-full items-center justify-center gap-2 overflow-x-auto px-4 pt-1 bg-gradient-to-t from-black/90 via-black/60 to-transparent scrollbar-none pointer-events-auto"
+                  className="listing-lightbox-thumbnails relative z-50 flex w-full items-center justify-start gap-2 overflow-x-auto sm:justify-center px-4 pt-1 bg-gradient-to-t from-black/90 via-black/60 to-transparent scrollbar-none pointer-events-auto"
                   onClick={(e) => e.stopPropagation()}
+                  onTouchStart={(e) => e.stopPropagation()}
+                  onTouchMove={(e) => e.stopPropagation()}
+                  onTouchEnd={(e) => e.stopPropagation()}
                 >
                   {validImages.map((img, i) => (
                     <button
                       key={`fs-${img}-${i}`}
                       type="button"
+                      aria-label={`Görsel ${i + 1}`}
+                      aria-current={i === currentIdx ? "true" : undefined}
                       onClick={() => setCurrentIdx(i)}
                       className={`relative h-14 w-18 shrink-0 overflow-hidden rounded-lg transition-all duration-150 cursor-pointer ${
                         i === currentIdx
