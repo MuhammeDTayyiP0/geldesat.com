@@ -1,5 +1,5 @@
 # dependencies
-/node_modules
+node_modules/
 /.pnp
 .pnp.*
 .yarn/*
@@ -11,15 +11,15 @@
 
 # production & build outputs
 dist
-/build
-/.next/
-/out/
+/web/build
+/web/.next/
+/web/out/
 .output/
 .nitro/
 .vercel
 
 # testing and local app artifacts
-/coverage
+/web/coverage
 .cache
 .app-env.json
 .grok
@@ -53,10 +53,18 @@ build.log
 # typescript & prisma
 *.tsbuildinfo
 next-env.d.ts
-/src/generated/prisma
+/web/src/generated/prisma
 
 # Uploads & local archives
-/public/uploads/*
-!/public/uploads/.gitkeep
+/web/public/uploads/*
+!/web/public/uploads/.gitkeep
 *.rar
 *.zip
+
+# Engram (graphify)
+.engram/
+/.graphify/
+
+# Generated / accidental
+.tanstack/
+/package-lock.json
