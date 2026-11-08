@@ -191,8 +191,8 @@ const uploadHeaders = { [UPLOAD_HEADER]: '1' };
 
 export const uploads = {
   /** Listing photo (the site converts and resizes it); returns its "/uploads/…" path. */
-  listingPhoto: (image: LocalImage) =>
-    request<{ url: string }>('/api/upload', { method: 'POST', form: imageForm(image), headers: uploadHeaders, timeoutMs: 90_000 }).then(
+  listingPhoto: (image: LocalImage, signal?: AbortSignal) =>
+    request<{ url: string }>('/api/upload', { method: 'POST', form: imageForm(image), headers: uploadHeaders, timeoutMs: 90_000, signal }).then(
       (r) => r.url,
     ),
   discardListingPhoto: (url: string) =>

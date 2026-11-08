@@ -2,7 +2,7 @@ import { ActivityIndicator, Pressable, StyleSheet, View, useWindowDimensions } f
 import { Image } from 'expo-image';
 import { ArrowLeft, ArrowRight, Camera, ImagePlus, RotateCcw, Star, Trash2 } from 'lucide-react-native';
 import { mediaUrl } from '@/lib/config';
-import { Badge, Button, Text, radius, space, useTheme } from '@/ui';
+import { Badge, Button, Text, confirm, radius, space, useTheme } from '@/ui';
 import { MAX_PHOTOS, type PhotoItem } from './draft';
 
 type Props = {
@@ -22,6 +22,16 @@ export function PhotoStep({ photos, onAdd, onRemove, onRetry, onMove, onCover, o
   const { width } = useWindowDimensions();
   const size = Math.floor((width - space.lg * 2 - space.sm * 2) / 3);
   const left = MAX_PHOTOS - photos.length;
+  const failed = photos.map((p, i) => ({ p, i })).filter(({ p }) => p.status === 'error');
+
+  const remove = async (p: PhotoItem, i: number) => {
+    // A finished photo is work; ask first. A failed or uploading one can go at once.
+    if (p.status === 'done') {
+      const ok = await confirm({ title: `${i + 1}. fotoğraf silinsin mi?`, confirmText: 'Sil', destructive: true });
+      if (!ok) return;
+    }
+    onRemove(p.key);
+  };
 
   return (
     <View style={styles.wrap}>
@@ -35,7 +45,8 @@ export function PhotoStep({ photos, onAdd, onRemove, onRetry, onMove, onCover, o
 
       <View style={styles.grid}>
         {photos.map((p, i) => {
-          const uri = p.localUri ?? mediaUrl(p.url, 480);
+          // The uploaded copy once there is one: the local file may be gone after a restart.
+          const uri = (p.status === 'done' ? mediaUrl(p.url, 480) : undefined) ?? p.localUri ?? mediaUrl(p.url, 480);
           return (
             <View key={p.key} style={[styles.tile, { width: size, height: size, backgroundColor: c.elevated }]}>
               <Pressable accessibilityRole="imagebutton" accessibilityLabel={`${i + 1}. fotoğrafı büyüt`} onPress={() => onOpen(i)} style={StyleSheet.absoluteFill}>
@@ -47,13 +58,24 @@ export function PhotoStep({ photos, onAdd, onRemove, onRetry, onMove, onCover, o
                   <ActivityIndicator color="#fff" />
                 </View>
               ) : p.status === 'error' ? (
-                <Pressable onPress={() => onRetry(p.key)} style={[styles.overlay, { backgroundColor: 'rgba(180,35,24,0.7)' }]}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`${i + 1}. fotoğraf yüklenemedi: ${p.error ?? ''}. Tekrar dene`}
+                  onPress={() => onRetry(p.key)}
+                  style={[styles.overlay, { backgroundColor: 'rgba(180,35,24,0.7)' }]}
+                >
                   <RotateCcw size={20} color="#fff" />
                   <Text variant="small" style={styles.white}>
                     Tekrar dene
                   </Text>
                 </Pressable>
               ) : null}
+              {/* Delete in its own corner: with four buttons in one row it was cut off on phones under 430 pt. */}
+              <View style={styles.deleteCorner}>
+                <Tool label={`${i + 1}. fotoğrafı sil`} onPress={() => void remove(p, i)}>
+                  <Trash2 size={15} color="#fff" />
+                </Tool>
+              </View>
               <View style={styles.tools}>
                 {i > 0 ? (
                   <Tool label="Sola taşı" onPress={() => onMove(p.key, -1)}>
@@ -70,10 +92,6 @@ export function PhotoStep({ photos, onAdd, onRemove, onRetry, onMove, onCover, o
                     <ArrowRight size={14} color="#fff" />
                   </Tool>
                 ) : null}
-                <View style={styles.flex} />
-                <Tool label="Sil" onPress={() => onRemove(p.key)}>
-                  <Trash2 size={14} color="#fff" />
-                </Tool>
               </View>
             </View>
           );
@@ -93,6 +111,16 @@ export function PhotoStep({ photos, onAdd, onRemove, onRetry, onMove, onCover, o
         ) : null}
       </View>
 
+      {failed.length ? (
+        <View style={[styles.errors, { backgroundColor: c.dangerSoft }]}>
+          {failed.map(({ p, i }) => (
+            <Text key={p.key} variant="caption" tone="danger">
+              {i + 1}. fotoğraf: {p.error ?? 'Yüklenemedi.'} Üstüne dokunarak tekrar deneyin ya da silin.
+            </Text>
+          ))}
+        </View>
+      ) : null}
+
       <View style={[styles.tips, { backgroundColor: c.elevated }]}>
         <Text variant="label">İpuçları</Text>
         <Text variant="caption" tone="muted">
@@ -106,7 +134,7 @@ export function PhotoStep({ photos, onAdd, onRemove, onRetry, onMove, onCover, o
 
 function Tool({ children, label, onPress }: { children: React.ReactNode; label: string; onPress: () => void }) {
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} hitSlop={4} onPress={onPress} style={styles.tool}>
+    <Pressable accessibilityRole="button" accessibilityLabel={label} hitSlop={8} onPress={onPress} style={styles.tool}>
       {children}
     </Pressable>
   );
@@ -122,7 +150,9 @@ const styles = StyleSheet.create({
   overlay: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center', gap: 4 },
   white: { color: '#fff' },
   tools: { position: 'absolute', left: 4, right: 4, bottom: 4, flexDirection: 'row', gap: 4 },
-  tool: { width: 26, height: 26, borderRadius: 13, backgroundColor: 'rgba(13,17,23,0.6)', alignItems: 'center', justifyContent: 'center' },
+  deleteCorner: { position: 'absolute', top: 4, right: 4 },
+  tool: { width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(13,17,23,0.6)', alignItems: 'center', justifyContent: 'center' },
+  errors: { padding: space.md, borderRadius: radius.md, gap: space.xs },
   add: { borderWidth: 1.5, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', gap: 4 },
   tips: { padding: space.md, borderRadius: radius.md, gap: space.xs },
 });

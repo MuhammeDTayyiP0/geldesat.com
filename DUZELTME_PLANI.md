@@ -202,12 +202,12 @@ Hepsi JS; `expo.version` değişmez, OTA ile gider.
 
 ## Faz 12: Mobil ilan verme (rapor 3.9)
 
-- [ ] Taslak: dismiss silmesin, hydrate kilidi, hesap ayrımı, 24 saat kontrolü (Madde 26, 28).
-- [ ] Android geri tuşu, `getPendingResultAsync`, idempotency anahtarı (sunucu dahil).
-- [ ] Kategori ve özellik hata durumları, telefon ve fiyat sınırı, yıl aralığı, metinler.
-- [ ] `PhotoStep` araç düzeni, hata gösterimi, yükleme iptali, iOS galeri izni.
-- [ ] İlanlarım: durum eylemleri Faz 2 listesinden, "Satıldı" onayı, önbellek, web uyumu.
-- [ ] Hazır mesajlar: hata, kayıt güvenliği (Madde 27).
+- [x] Taslak: dismiss silmesin, hydrate kilidi, hesap ayrımı, 24 saat kontrolü (Madde 26, 28).
+- [x] Android geri tuşu, `getPendingResultAsync`, idempotency anahtarı (sunucu dahil).
+- [x] Kategori ve özellik hata durumları, telefon ve fiyat sınırı, yıl aralığı, metinler.
+- [x] `PhotoStep` araç düzeni, hata gösterimi, yükleme iptali, iOS galeri izni.
+- [x] İlanlarım: durum eylemleri Faz 2 listesinden, "Satıldı" onayı, önbellek, web uyumu.
+- [x] Hazır mesajlar: hata, kayıt güvenliği (Madde 27).
 
 ## Faz 13: Mobil mesajlaşma ve hesap (rapor 3.10, 3.11)
 

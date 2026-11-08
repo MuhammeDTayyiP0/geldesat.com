@@ -1,5 +1,8 @@
 /** Shapes returned by the GeldeSat API (see web/src/routes/api/mobile and web/src/lib/server). */
 
+/** Owner actions the server allows (web/src/lib/listing-status.ts). */
+export type OwnerAction = 'edit' | 'publish' | 'hide' | 'sold' | 'renew' | 'delete';
+
 export type Listing = {
   id: string;
   listing_no?: number;
@@ -30,6 +33,8 @@ export type Listing = {
   store_name?: string;
   store_slug?: string;
   boosts?: string[];
+  /** My listings only: what the server accepts for this listing right now. */
+  ownerActions?: OwnerAction[];
 };
 
 /** A listing on "Son baktıklarım": when it was opened and whether it is still on the air. */
@@ -298,6 +303,7 @@ export type ListingInput = {
   images: string[];
   attrs: Record<string, string | number>;
   storeId?: string;
+  clientKey?: string;
 };
 
 export type ListingForEdit = {

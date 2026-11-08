@@ -1,4 +1,4 @@
-import { Linking } from 'react-native';
+import { Linking, Platform } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { confirm } from '@/ui/dialogs';
@@ -27,7 +27,9 @@ async function ensurePermission(kind: 'camera' | 'library'): Promise<boolean> {
 /** Pick up to `limit` photos from the library, or take one with the camera. */
 export async function pickPhotos(source: 'camera' | 'library', limit: number): Promise<PickedPhoto[]> {
   if (limit < 1) return [];
-  if (!(await ensurePermission(source))) return [];
+  // The system photo picker (iOS, Android 13+) needs no library permission; asking only
+  // blocks people who said no from a picker that would have worked.
+  if (source === 'camera' && !(await ensurePermission('camera'))) return [];
   const options: ImagePicker.ImagePickerOptions = {
     mediaTypes: ['images'],
     quality: 1,
@@ -36,7 +38,24 @@ export async function pickPhotos(source: 'camera' | 'library', limit: number): P
   };
   const result = source === 'camera' ? await ImagePicker.launchCameraAsync(options) : await ImagePicker.launchImageLibraryAsync(options);
   if (result.canceled) return [];
-  return result.assets.slice(0, limit).map((a) => ({ uri: a.uri, width: a.width, height: a.height, mimeType: a.mimeType, fileName: a.fileName }));
+  return result.assets.slice(0, limit).map(toPicked);
+}
+
+const toPicked = (a: ImagePicker.ImagePickerAsset): PickedPhoto => ({ uri: a.uri, width: a.width, height: a.height, mimeType: a.mimeType, fileName: a.fileName });
+
+/**
+ * Android may close the app while the camera is open (low memory). The photo
+ * taken then comes back here on the next start instead of being lost.
+ */
+export async function recoverPickedPhotos(): Promise<PickedPhoto[]> {
+  if (Platform.OS !== 'android') return [];
+  try {
+    const result = await ImagePicker.getPendingResultAsync();
+    if (!result || 'code' in result || result.canceled) return [];
+    return result.assets.map(toPicked);
+  } catch {
+    return [];
+  }
 }
 
 /**

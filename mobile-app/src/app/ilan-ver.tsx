@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, BackHandler, Pressable, StyleSheet, View } from 'react-native';
+import * as Crypto from 'expo-crypto';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView, type KeyboardAwareScrollViewRef } from 'react-native-keyboard-controller';
 import { useQuery } from '@tanstack/react-query';
 import { Check, ChevronLeft, ChevronRight, LayoutGrid, MapPin, Phone, X } from 'lucide-react-native';
 import { errorMessage } from '@/api/client';
-import { catalog, myListings, uploads } from '@/api/endpoints';
+import { account, catalog, myListings, uploads } from '@/api/endpoints';
 import { keys, queryClient, useMe } from '@/api/queries';
 import type { AttrDef, Category } from '@/api/types';
 import { useSession } from '@/auth/session';
@@ -18,12 +19,12 @@ import { AttrField } from '@/features/post/AttrField';
 import { PhotoReview } from '@/features/photos/PhotoReview';
 import { PhotoViewer } from '@/features/listing/Gallery';
 import { PhotoStep } from '@/features/post/PhotoStep';
-import { MAX_PHOTOS, STEP_TITLES, emptyDraft, needsPhoto, stepError, type Draft, type PhotoItem, type StepKey } from '@/features/post/draft';
+import { MAX_PHOTOS, PHOTO_KEEP_MS, STEP_TITLES, emptyDraft, needsPhoto, stepError, type Draft, type PhotoItem, type StepKey } from '@/features/post/draft';
 import { mediaUrl } from '@/lib/config';
 import { cleanPhone, formatNumber, formatPrice, locationLabel, maskPhoneInput, maskThousands, parseMasked } from '@/lib/format';
-import { pickPhotos, preparePhoto, type PickedPhoto } from '@/lib/photos';
+import { pickPhotos, preparePhoto, recoverPickedPhotos, type PickedPhoto } from '@/lib/photos';
 import { clearDraft, loadDraft, saveDraft } from '@/lib/storage';
-import { Button, Card, Divider, EmptyState, IconButton, Input, Loading, SelectField, Text, confirm, hairline, radius, space, toast, useTheme } from '@/ui';
+import { Button, Card, Divider, EmptyState, ErrorState, IconButton, Input, Loading, SelectField, Text, confirm, hairline, radius, space, toast, useTheme } from '@/ui';
 import { Image } from 'expo-image';
 
 export default function PostListingScreen() {
@@ -44,24 +45,28 @@ export default function PostListingScreen() {
       </View>
     );
   }
-  return <PostForm key={editId ?? 'new'} editId={editId} />;
+  return <PostForm key={editId ?? 'new'} editId={editId} owner={session.user.id} />;
 }
 
-function PostForm({ editId }: { editId?: string }) {
+function PostForm({ editId, owner }: { editId?: string; owner: string }) {
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const me = useMe();
-  const [draft, setDraft] = useState<Draft>(emptyDraft);
+  const [draft, setDraft] = useState<Draft>(() => (editId ? emptyDraft : { ...emptyDraft, clientKey: Crypto.randomUUID() }));
   const [step, setStep] = useState<StepKey>('category');
   const [ready, setReady] = useState(!editId);
+  // New listing: nothing is saved until the "continue the draft?" question is answered,
+  // or the empty form would overwrite the draft while the question is open.
+  const [hydrated, setHydrated] = useState(!!editId);
   const [busy, setBusy] = useState(false);
   const [picker, setPicker] = useState<'city' | 'district' | 'neighborhood' | null>(null);
   /** Photos just picked, shown full screen before anything uploads. */
   const [review, setReview] = useState<PickedPhoto[] | null>(null);
   const [viewing, setViewing] = useState<number | null>(null);
   const originalImages = useRef<string[]>([]);
-  const pending = useRef(new Map<string, PickedPhoto>());
+  /** Running uploads, so removing a photo stops its upload. */
+  const uploadsInFlight = useRef(new Map<string, AbortController>());
   const scrollRef = useRef<KeyboardAwareScrollViewRef>(null);
   const prefilled = useRef(false);
 
@@ -73,10 +78,13 @@ function PostForm({ editId }: { editId?: string }) {
     staleTime: 10 * 60_000,
   });
   const attributes = useMemo(() => attrsQuery.data ?? [], [attrsQuery.data]);
+  // While loading or after a failure the step stays, so required fields are not skipped silently.
+  const showAttributes = attributes.length > 0 || (!!leaf && leaf.has_children === false && (attrsQuery.isLoading || attrsQuery.isError));
+  const stepContext = { profilePhone: me.data ? !!me.data.profile?.phone : undefined, attributesFailed: attrsQuery.isError && !attrsQuery.data };
 
   const steps: StepKey[] = useMemo(
-    () => ['category', 'photos', 'details', ...(attributes.length ? (['attributes'] as const) : []), 'location', 'preview'],
-    [attributes.length],
+    () => ['category', 'photos', 'details', ...(showAttributes ? (['attributes'] as const) : []), 'location', 'preview'],
+    [showAttributes],
   );
   const stepIndex = steps.indexOf(step);
 
@@ -110,25 +118,44 @@ function PostForm({ editId }: { editId?: string }) {
         }
       })();
     } else {
-      void loadDraft<Draft>().then(async (saved) => {
-        if (cancelled || !saved || (!saved.path.length && !saved.title)) return;
+      void (async () => {
+        const stored = await loadDraft<Draft>(owner);
+        const saved = stored?.draft;
+        if (cancelled) return;
+        if (!stored || !saved || (!saved.path.length && !saved.title)) {
+          setHydrated(true);
+          return;
+        }
+        // A real choice: a tap outside or Android's back button must not delete the draft.
         const resume = await confirm({
           title: 'Kaydedilmiş taslak',
           message: `“${saved.title || saved.path.map((p) => p.name).join(' › ')}” taslağınıza devam etmek ister misiniz?`,
           confirmText: 'Devam et',
-          cancelText: 'Yeni ilan',
+          cancelText: 'Sil, yeni başla',
+          cancelable: false,
         });
         if (cancelled) return;
         if (resume) {
-          setDraft({ ...saved, photos: saved.photos.filter((p) => p.status === 'done') });
-          setStep(saved.path.length ? 'photos' : 'category');
+          const { photos, expired } = resumePhotos(saved.photos, stored.savedAt);
+          if (expired) toast.info(`${expired} fotoğrafın süresi doldu; lütfen yeniden ekleyin.`);
+          const leafPicked = saved.path[saved.path.length - 1]?.has_children === false;
+          setDraft({ ...saved, photos, clientKey: saved.clientKey ?? Crypto.randomUUID() });
+          setStep(leafPicked ? 'photos' : 'category');
         } else void clearDraft();
-      });
+        setHydrated(true);
+      })();
     }
     return () => {
       cancelled = true;
     };
-  }, [editId, router]);
+  }, [editId, owner, router]);
+
+  // A photo taken just before Android closed the app comes back for review.
+  useEffect(() => {
+    void recoverPickedPhotos().then((photos) => {
+      if (photos.length) setReview(photos.slice(0, MAX_PHOTOS));
+    });
+  }, []);
 
   useEffect(() => {
     if (editId || prefilled.current || !me.data?.profile) return;
@@ -144,45 +171,63 @@ function PostForm({ editId }: { editId?: string }) {
 
   // Keep a draft of new listings so an interrupted post is not lost.
   useEffect(() => {
-    if (editId || !ready) return;
-    const t = setTimeout(() => void saveDraft(draft), 600);
+    if (editId || !ready || !hydrated) return;
+    const t = setTimeout(() => void saveDraft(draft, owner), 600);
     return () => clearTimeout(t);
-  }, [draft, editId, ready]);
+  }, [draft, editId, ready, hydrated, owner]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ y: 0, animated: false });
   }, [step]);
 
   const update = useCallback((patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch })), []);
+  /** Photos removed while waiting to upload (the upload loop runs across renders). */
+  const removedKeys = useRef(new Set<string>());
 
   // ─── Photos ───────────────────────────────────────────────────────────────
   const setPhoto = (key: string, patch: Partial<PhotoItem>) =>
     setDraft((d) => ({ ...d, photos: d.photos.map((p) => (p.key === key ? { ...p, ...patch } : p)) }));
 
   const upload = async (key: string, photo: PickedPhoto) => {
+    const controller = new AbortController();
+    uploadsInFlight.current.set(key, controller);
     setPhoto(key, { status: 'uploading', error: undefined });
     try {
       const prepared = await preparePhoto(photo);
-      const url = await uploads.listingPhoto(prepared);
-      pending.current.delete(key);
-      setPhoto(key, { status: 'done', url });
+      const url = await uploads.listingPhoto(prepared, controller.signal);
+      if (controller.signal.aborted) {
+        // Removed while it was uploading: do not keep it on the server either.
+        void uploads.discardListingPhoto(url);
+        return;
+      }
+      setPhoto(key, { status: 'done', url, uploadedAt: Date.now(), source: undefined });
     } catch (e) {
-      setPhoto(key, { status: 'error', error: errorMessage(e) });
+      if (!controller.signal.aborted) setPhoto(key, { status: 'error', error: errorMessage(e) });
+    } finally {
+      if (uploadsInFlight.current.get(key) === controller) uploadsInFlight.current.delete(key);
     }
   };
 
   const addPhotos = async (source: 'camera' | 'library') => {
-    const picked = await pickPhotos(source, MAX_PHOTOS - draft.photos.length);
-    if (picked.length) setReview(picked);
+    try {
+      const picked = await pickPhotos(source, MAX_PHOTOS - draft.photos.length);
+      if (picked.length) setReview(picked);
+    } catch (e) {
+      toast.error(errorMessage(e, 'Fotoğraf seçilemedi.'));
+    }
   };
 
   /** The person checked the photos and tapped "ekle": now they upload, in the background. */
   const acceptPhotos = async (picked: PickedPhoto[]) => {
     setReview(null);
     const items = picked.map((p, i) => ({ key: `${Date.now()}-${i}`, photo: p }));
-    setDraft((d) => ({ ...d, photos: [...d.photos, ...items.map(({ key, photo }) => ({ key, localUri: photo.uri, status: 'uploading' as const }))] }));
+    setDraft((d) => ({
+      ...d,
+      photos: [...d.photos, ...items.map(({ key, photo }) => ({ key, localUri: photo.uri, status: 'uploading' as const, source: photo }))],
+    }));
     for (const { key, photo } of items) {
-      pending.current.set(key, photo);
+      // Removed before its turn came: skip it.
+      if (removedKeys.current.has(key)) continue;
       await upload(key, photo);
     }
   };
@@ -190,7 +235,8 @@ function PostForm({ editId }: { editId?: string }) {
   const removePhoto = (key: string) => {
     const item = draft.photos.find((p) => p.key === key);
     if (item?.url && !originalImages.current.includes(item.url)) void uploads.discardListingPhoto(item.url);
-    pending.current.delete(key);
+    uploadsInFlight.current.get(key)?.abort();
+    removedKeys.current.add(key);
     setDraft((d) => ({ ...d, photos: d.photos.filter((p) => p.key !== key) }));
   };
 
@@ -212,7 +258,7 @@ function PostForm({ editId }: { editId?: string }) {
 
   // ─── Navigation ───────────────────────────────────────────────────────────
   const next = () => {
-    const problem = stepError(step, draft, attributes);
+    const problem = stepError(step, draft, attributes, stepContext);
     if (problem) {
       toast.error(problem);
       return;
@@ -237,12 +283,26 @@ function PostForm({ editId }: { editId?: string }) {
       const ok = await confirm({ title: 'Değişiklikler kaydedilmeyecek', message: 'Düzenlemeden çıkılsın mı?', confirmText: 'Çık', destructive: true });
       if (!ok) return;
     }
-    router.back();
+    if (router.canGoBack()) router.back();
+    else router.replace('/');
   };
+
+  // Android back: one step back, like the "Geri" button, and the edit warning at the start.
+  const backRef = useRef(back);
+  useEffect(() => {
+    backRef.current = back;
+  });
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      backRef.current();
+      return true;
+    });
+    return () => sub.remove();
+  }, []);
 
   const publish = async () => {
     for (const s of steps) {
-      const problem = stepError(s, draft, attributes);
+      const problem = stepError(s, draft, attributes, stepContext);
       if (problem) {
         setStep(s);
         toast.error(problem);
@@ -252,6 +312,8 @@ function PostForm({ editId }: { editId?: string }) {
     if (!leaf) return;
     setBusy(true);
     try {
+      // Without the profile, storeId would be empty and the listing would leave its store.
+      const meData = me.data ?? (await queryClient.fetchQuery({ queryKey: keys.me, queryFn: account.me }));
       const result = await myListings.save({
         id: editId,
         categoryId: leaf.id,
@@ -264,14 +326,21 @@ function PostForm({ editId }: { editId?: string }) {
         phone: cleanPhone(draft.phone) || undefined,
         images: draft.photos.flatMap((p) => (p.url ? [p.url] : [])),
         attrs: Object.fromEntries(Object.entries(draft.attrs).filter(([, v]) => v !== undefined && v !== '')),
-        storeId: me.data?.store?.id,
+        storeId: meData?.store?.id,
+        clientKey: editId ? undefined : draft.clientKey,
       });
       if (!editId) await clearDraft();
       void queryClient.invalidateQueries({ queryKey: keys.myListings });
       void queryClient.invalidateQueries({ queryKey: keys.me });
-      void queryClient.invalidateQueries({ queryKey: keys.listing(result.id) });
+      void queryClient.invalidateQueries({ queryKey: ['listing'] });
       toast.success(
-        result.status === 'ACTIVE' ? (editId ? 'İlan güncellendi' : 'İlanınız yayında!') : 'İlanınız onaya gönderildi. Onaylanınca bildirim alacaksınız.',
+        result.status === 'ACTIVE'
+          ? editId
+            ? 'İlan güncellendi'
+            : 'İlanınız yayında!'
+          : result.status === 'PENDING'
+            ? 'İlanınız onaya gönderildi. Onaylanınca bildirim alacaksınız.'
+            : 'Değişiklikler kaydedildi. İlan yayında değil; İlanlarım’dan yayına alabilirsiniz.',
       );
       router.replace({ pathname: '/ilan/[id]', params: { id: result.id } });
     } catch (e) {
@@ -324,8 +393,9 @@ function PostForm({ editId }: { editId?: string }) {
             onAdd={(s) => void addPhotos(s)}
             onRemove={removePhoto}
             onRetry={(key) => {
-              const photo = pending.current.get(key);
+              const photo = draft.photos.find((p) => p.key === key)?.source;
               if (photo) void upload(key, photo);
+              else toast.error('Bu fotoğraf tekrar yüklenemiyor; silip yeniden ekleyin.');
             }}
             onMove={movePhoto}
             onCover={makeCover}
@@ -373,6 +443,7 @@ function PostForm({ editId }: { editId?: string }) {
           <View style={styles.form}>
             <Text tone="muted">Alıcılar ilanınızı bu bilgilerle filtreleyerek bulur.</Text>
             {attrsQuery.isLoading ? <ActivityIndicator color={c.primary} /> : null}
+            {attrsQuery.isError && !attrsQuery.data ? <ErrorState error={attrsQuery.error} onRetry={() => void attrsQuery.refetch()} compact /> : null}
             {attributes.map((a: AttrDef) => (
               <AttrField
                 key={a.id}
@@ -429,7 +500,7 @@ function PostForm({ editId }: { editId?: string }) {
           </View>
         ) : null}
 
-        {step === 'preview' ? <Preview draft={draft} attributes={attributes} onEdit={setStep} /> : null}
+        {step === 'preview' ? <Preview draft={draft} attributes={attributes} onEdit={setStep} editing={!!editId} /> : null}
       </KeyboardAwareScrollView>
 
       <View style={[styles.footer, { backgroundColor: c.surface, borderTopColor: c.border, paddingBottom: insets.bottom + space.sm }]}>
@@ -483,6 +554,24 @@ function PostForm({ editId }: { editId?: string }) {
       />
     </View>
   );
+}
+
+/**
+ * Photos of a resumed draft: uploaded ones the server has dropped by now (24 hours) go,
+ * unfinished ones come back as "try again" (their file is kept with the draft).
+ */
+function resumePhotos(photos: PhotoItem[], savedAt: number): { photos: PhotoItem[]; expired: number } {
+  let expired = 0;
+  const kept: PhotoItem[] = [];
+  for (const p of photos) {
+    if (p.status === 'done') {
+      if (Date.now() - (p.uploadedAt ?? savedAt) > PHOTO_KEEP_MS) expired++;
+      else kept.push(p);
+    } else if (p.source) {
+      kept.push({ ...p, status: 'error', error: 'Yükleme yarıda kaldı.' });
+    }
+  }
+  return { photos: kept, expired };
 }
 
 function TopBar({ title, onClose }: { title: string; onClose: () => void }) {
@@ -539,7 +628,9 @@ function CategoryStep({ path, onPath, onLeaf }: { path: Category[]; onPath: (pat
         </Card>
       ) : null}
 
-      {level.isLoading ? (
+      {level.isError && !level.data ? (
+        <ErrorState error={level.error} onRetry={() => void level.refetch()} compact />
+      ) : level.isLoading ? (
         <ActivityIndicator color={c.primary} style={styles.loading} />
       ) : (
         <View style={[styles.catList, { backgroundColor: c.surface, borderColor: c.border }]}>
@@ -593,14 +684,16 @@ function CategorySummary({ path, onChange }: { path: Category[]; onChange: () =>
   );
 }
 
-function Preview({ draft, attributes, onEdit }: { draft: Draft; attributes: AttrDef[]; onEdit: (step: StepKey) => void }) {
+function Preview({ draft, attributes, onEdit, editing }: { draft: Draft; attributes: AttrDef[]; onEdit: (step: StepKey) => void; editing: boolean }) {
   const { c } = useTheme();
   const cover = draft.photos[0];
   const coverUri = cover?.localUri ?? mediaUrl(cover?.url, 800);
   const attrRows = attributes.filter((a) => draft.attrs[a.name] !== undefined && draft.attrs[a.name] !== '');
   return (
     <View style={styles.form}>
-      <Text tone="muted">Yayınlamadan önce bilgileri kontrol edin. İlanınızı daha sonra “İlanlarım”dan düzenleyebilirsiniz.</Text>
+      <Text tone="muted">
+        {editing ? 'Kaydetmeden önce bilgileri kontrol edin.' : 'Yayınlamadan önce bilgileri kontrol edin. İlanınızı daha sonra “İlanlarım”dan düzenleyebilirsiniz.'}
+      </Text>
       <Card padded={false} style={styles.previewCard}>
         {coverUri ? <Image source={coverUri} style={styles.previewImage} contentFit="cover" /> : null}
         <View style={styles.previewBody}>
@@ -625,7 +718,8 @@ function Preview({ draft, attributes, onEdit }: { draft: Draft; attributes: Attr
       <PreviewRow label="Telefon" value={draft.phone || 'Profil telefonunuz'} onEdit={() => onEdit('location')} />
       <View style={[styles.rules, { backgroundColor: c.elevated }]}>
         <Text variant="caption" tone="muted">
-          Yayınla’ya dokunarak ilanınızın GeldeSat kullanım koşullarına uygun olduğunu onaylarsınız. Kurallara aykırı ilanlar kaldırılır.
+          {editing ? 'Kaydet’e' : 'Yayınla’ya'} dokunarak ilanınızın GeldeSat kullanım koşullarına uygun olduğunu onaylarsınız. Kurallara aykırı ilanlar
+          kaldırılır.
         </Text>
       </View>
     </View>

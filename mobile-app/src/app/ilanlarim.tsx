@@ -7,10 +7,10 @@ import { CircleCheck, Eye, EyeOff, ImageOff, LayoutGrid, MoreVertical, Pencil, P
 import { errorMessage } from '@/api/client';
 import { myListings } from '@/api/endpoints';
 import { keys, queryClient } from '@/api/queries';
-import type { Listing } from '@/api/types';
+import type { Listing, OwnerAction } from '@/api/types';
 import { useSession } from '@/auth/session';
 import { mediaUrl } from '@/lib/config';
-import { daysUntil, formatNumber, formatPrice, isListingExpired, listingStatusLabel } from '@/lib/format';
+import { daysUntil, formatDate, formatNumber, formatPrice, isListingExpired, listingStatusLabel } from '@/lib/format';
 import { Badge, Button, Chip, EmptyState, ErrorState, Header, ListRow, Loading, RowGroup, Sheet, Text, confirm, hairline, radius, space, toast, useTheme } from '@/ui';
 import { useFlag } from '@/lib/flags';
 
@@ -36,6 +36,19 @@ const TABS: { key: Tab; label: string }[] = [
 
 const daysLeft = daysUntil;
 
+/** The server's list when it sends one (same rules as the site); otherwise the app's own guess. */
+function actionsFor(l: Listing): Set<OwnerAction> {
+  if (l.ownerActions) return new Set(l.ownerActions);
+  const live = l.status === 'ACTIVE' && !isExpired(l);
+  const out: OwnerAction[] = ['delete'];
+  if (l.status !== 'SOLD') out.push('edit');
+  if (live) out.push('hide');
+  if (l.status === 'INACTIVE') out.push('publish');
+  if (l.status === 'ACTIVE' || l.status === 'INACTIVE') out.push('sold');
+  if (l.status !== 'REJECTED' && l.status !== 'SOLD' && l.status !== 'PENDING') out.push('renew');
+  return new Set(out);
+}
+
 export default function MyListingsScreen() {
   const { c } = useTheme();
   // Doping sales are closed while this is off: no entry points to an empty shop (K11).
@@ -54,9 +67,13 @@ export default function MyListingsScreen() {
 
   const action = useMutation({
     mutationFn: ({ listing, body }: { listing: Listing; body: Parameters<typeof myListings.action>[1] }) => myListings.action(listing.id, body),
-    onSuccess: (_, { body }) => {
+    onSuccess: (_, { listing, body }) => {
       void queryClient.invalidateQueries({ queryKey: keys.myListings });
       void queryClient.invalidateQueries({ queryKey: keys.me });
+      // Open copies of the listing, the seller page and favorites show its state too.
+      void queryClient.invalidateQueries({ queryKey: ['listing'] });
+      void queryClient.invalidateQueries({ queryKey: keys.favorites });
+      if (listing.user_id) void queryClient.invalidateQueries({ queryKey: keys.seller(listing.user_id) });
       const messages: Record<string, string> = {
         delete: 'İlan silindi',
         renew: 'İlan süresi 30 gün uzatıldı',
@@ -76,6 +93,18 @@ export default function MyListingsScreen() {
     if (body.action === 'delete') {
       afterClose.current = async () => {
         const ok = await confirm({ title: 'İlan silinsin mi?', message: 'Bu işlem geri alınamaz.', confirmText: 'Sil', destructive: true });
+        if (ok) action.mutate({ listing, body });
+      };
+      setMenu(null);
+      return;
+    }
+    if (body.action === 'status' && body.status === 'SOLD') {
+      afterClose.current = async () => {
+        const ok = await confirm({
+          title: 'Satıldı olarak işaretlensin mi?',
+          message: 'İlan yayından kalkar ve alıcılara “Satıldı” olarak görünür. Bekleyen teklifler kapanır.',
+          confirmText: 'Satıldı',
+        });
         if (ok) action.mutate({ listing, body });
       };
       setMenu(null);
@@ -105,6 +134,7 @@ export default function MyListingsScreen() {
   }
 
   const list = groups[tab];
+  const menuActions = menu ? actionsFor(menu) : new Set<OwnerAction>();
 
   return (
     <View style={[styles.flex, { backgroundColor: c.bg }]}>
@@ -153,7 +183,7 @@ export default function MyListingsScreen() {
                 thenGo(() => router.push({ pathname: '/ilan/[id]', params: { id } }));
               }}
             />
-            {menu.status !== 'SOLD' ? (
+            {menuActions.has('edit') ? (
               <ListRow
                 icon={Pencil}
                 label="Düzenle"
@@ -164,16 +194,16 @@ export default function MyListingsScreen() {
                 }}
               />
             ) : null}
-            {menu.status === 'ACTIVE' && !isExpired(menu) ? (
+            {menuActions.has('hide') ? (
               <ListRow icon={EyeOff} label="Yayından kaldır" onPress={() => void run(menu, { action: 'status', status: 'INACTIVE' })} />
             ) : null}
-            {menu.status === 'INACTIVE' ? (
+            {menuActions.has('publish') ? (
               <ListRow icon={Eye} label="Yayına al" onPress={() => void run(menu, { action: 'status', status: 'ACTIVE' })} />
             ) : null}
-            {menu.status === 'ACTIVE' || menu.status === 'INACTIVE' ? (
+            {menuActions.has('sold') ? (
               <ListRow icon={CircleCheck} label="Satıldı olarak işaretle" onPress={() => void run(menu, { action: 'status', status: 'SOLD' })} />
             ) : null}
-            {menu.status !== 'REJECTED' && menu.status !== 'SOLD' && menu.status !== 'PENDING' ? (
+            {menuActions.has('renew') ? (
               <ListRow icon={RefreshCw} label="Süreyi 30 gün uzat" onPress={() => void run(menu, { action: 'renew' })} />
             ) : null}
             {menu.status === 'ACTIVE' && dopingOn ? (
@@ -183,7 +213,7 @@ export default function MyListingsScreen() {
                 onPress={() => thenGo(() => router.push('/doping'))}
               />
             ) : null}
-            <ListRow icon={Trash2} label="Sil" danger onPress={() => void run(menu, { action: 'delete' })} />
+            {menuActions.has('delete') ? <ListRow icon={Trash2} label="Sil" danger onPress={() => void run(menu, { action: 'delete' })} /> : null}
           </RowGroup>
         ) : null}
       </Sheet>
@@ -198,33 +228,45 @@ function MyListingRow({ listing, onPress, onMenu }: { listing: Listing; onPress:
   const cover = mediaUrl(listing.images[0], 240);
   const tone = listing.status === 'ACTIVE' && !expired ? 'ok' : listing.status === 'REJECTED' ? 'danger' : listing.status === 'SOLD' ? 'neutral' : 'warn';
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.row, { backgroundColor: pressed ? c.elevated : c.surface, borderColor: c.border }]}>
-      <View style={[styles.thumb, { backgroundColor: c.elevated }]}>
-        {cover ? <Image source={cover} style={StyleSheet.absoluteFill} contentFit="cover" /> : <ImageOff size={20} color={c.subtle} />}
-      </View>
-      <View style={styles.info}>
-        <Text variant="label" numberOfLines={2}>
-          {listing.title}
-        </Text>
-        <Text variant="bodyStrong" tone="primary">
-          {formatPrice(listing.price, listing.currency)}
-        </Text>
-        <View style={styles.meta}>
-          <Badge label={listingStatusLabel(listing.status ?? '', expired)} tone={tone} />
-          <Text variant="small" tone="subtle">
-            {formatNumber(listing.view_count ?? 0)} görüntülenme
-          </Text>
+    <View style={[styles.rowWrap, { backgroundColor: c.surface, borderColor: c.border }]}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${listing.title}, ${formatPrice(listing.price, listing.currency)}, ${listingStatusLabel(listing.status ?? '', expired)}`}
+        onPress={onPress}
+        style={({ pressed }) => [styles.row, { backgroundColor: pressed ? c.elevated : c.surface }]}
+      >
+        <View style={[styles.thumb, { backgroundColor: c.elevated }]}>
+          {cover ? <Image source={cover} style={StyleSheet.absoluteFill} contentFit="cover" /> : <ImageOff size={20} color={c.subtle} />}
         </View>
-        {listing.status === 'ACTIVE' && left != null && left > 0 && left <= 7 ? (
-          <Text variant="small" tone="warn">
-            {left} gün içinde süresi doluyor
+        <View style={styles.info}>
+          <Text variant="label" numberOfLines={2}>
+            {listing.title}
           </Text>
-        ) : null}
-      </View>
-      <Pressable accessibilityLabel="İşlemler" hitSlop={10} onPress={onMenu} style={styles.more}>
+          <Text variant="bodyStrong" tone="primary">
+            {formatPrice(listing.price, listing.currency)}
+          </Text>
+          <View style={styles.meta}>
+            <Badge label={listingStatusLabel(listing.status ?? '', expired)} tone={tone} />
+            <Text variant="small" tone="subtle">
+              {formatNumber(listing.view_count ?? 0)} görüntülenme
+            </Text>
+          </View>
+          {listing.status === 'ACTIVE' && left != null && left > 0 && left <= 7 ? (
+            <Text variant="small" tone="warn">
+              {left} gün içinde süresi doluyor
+            </Text>
+          ) : listing.status === 'ACTIVE' && listing.expires_at ? (
+            <Text variant="small" tone="subtle">
+              {expired ? 'Süresi doldu' : 'Bitiş'}: {formatDate(listing.expires_at)}
+            </Text>
+          ) : null}
+        </View>
+      </Pressable>
+      {/* Beside the row, not inside it, so screen readers reach it. */}
+      <Pressable accessibilityRole="button" accessibilityLabel={`${listing.title}: işlemler`} onPress={onMenu} style={styles.more}>
         <MoreVertical size={20} color={c.muted} />
       </Pressable>
-    </Pressable>
+    </View>
   );
 }
 
@@ -232,9 +274,10 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   tabs: { paddingHorizontal: space.lg, paddingBottom: space.md, gap: space.sm },
   list: { padding: space.lg, gap: space.md, paddingBottom: space.xxxl },
-  row: { flexDirection: 'row', gap: space.md, padding: space.md, borderRadius: radius.lg, borderWidth: hairline },
+  rowWrap: { flexDirection: 'row', borderRadius: radius.lg, borderWidth: hairline, overflow: 'hidden' },
+  row: { flex: 1, flexDirection: 'row', gap: space.md, padding: space.md },
   thumb: { width: 88, height: 88, borderRadius: radius.md, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   info: { flex: 1, gap: 4 },
   meta: { flexDirection: 'row', alignItems: 'center', gap: space.sm, flexWrap: 'wrap' },
-  more: { padding: space.xs },
+  more: { width: 44, alignItems: 'center', paddingTop: space.md },
 });

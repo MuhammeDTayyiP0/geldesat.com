@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { Plus, RotateCw, SendHorizontal, Star, Trash2, X } from 'lucide-react-native';
 import { pickPhotos, rotatePhoto, type PickedPhoto } from '@/lib/photos';
-import { Badge, Button, IconButton, Text, font, radius, space, toast, useTheme } from '@/ui';
+import { Badge, Button, IconButton, Text, ToastHost, font, radius, space, toast, useTheme } from '@/ui';
 
 type Item = { key: string; photo: PickedPhoto };
 
@@ -39,6 +39,8 @@ export function PhotoReview(props: PhotoReviewProps) {
       supportedOrientations={['portrait']}
     >
       {props.photos ? <ReviewBody {...props} photos={props.photos} /> : null}
+      {/* Messages from this screen would otherwise show behind the modal. */}
+      <ToastHost active={props.photos !== null} />
     </Modal>
   );
 }
@@ -96,10 +98,14 @@ function ReviewBody({ photos, mode, max, existing = 0, onCancel, onConfirm }: Ph
   };
 
   const addMore = async () => {
-    const picked = await pickPhotos('library', max - items.length);
-    if (!picked.length) return;
-    setItems((list) => [...list, ...toItems(picked)].slice(0, max));
-    setIndex(items.length);
+    try {
+      const picked = await pickPhotos('library', max - items.length);
+      if (!picked.length) return;
+      setItems((list) => [...list, ...toItems(picked)].slice(0, max));
+      setIndex(items.length);
+    } catch {
+      toast.error('Fotoğraf seçilemedi.');
+    }
   };
 
   const confirm = () => {

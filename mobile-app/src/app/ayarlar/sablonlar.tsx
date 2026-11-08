@@ -7,7 +7,7 @@ import { errorMessage } from '@/api/client';
 import { chat } from '@/api/endpoints';
 import { keys, queryClient } from '@/api/queries';
 import { MAX_TEMPLATES, MAX_TEMPLATE_LENGTH } from '@/features/chat/shared';
-import { Button, Card, EmptyState, Header, IconButton, Input, Loading, Text, space, toast, useTheme } from '@/ui';
+import { Button, Card, EmptyState, ErrorState, Header, IconButton, Input, Loading, Text, space, toast, useTheme } from '@/ui';
 import { RequireSignIn } from '@/auth/RequireSignIn';
 
 /** Saved reply templates, offered as quick replies in chats (same list as on the website). */
@@ -24,18 +24,24 @@ function TemplatesScreen() {
   const { c } = useTheme();
   const query = useQuery({ queryKey: keys.templates, queryFn: chat.templates });
   const [saved, setItems] = useState<string[] | null>(null);
-  const items = saved ?? query.data ?? [];
+  // Saving replaces the whole list, so nothing is saved before the real list is known.
+  const known = saved ?? query.data ?? null;
+  const items = known ?? [];
   const [draft, setDraft] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const persist = async (next: string[]) => {
+  /** One save at a time, from the latest list; true when it worked. */
+  const persist = async (next: string[]): Promise<boolean> => {
+    if (saving || !known) return false;
     setSaving(true);
     try {
       const result = await chat.saveTemplates(next);
       setItems(result);
       queryClient.setQueryData(keys.templates, result);
+      return true;
     } catch (e) {
       toast.error(errorMessage(e));
+      return false;
     } finally {
       setSaving(false);
     }
@@ -46,6 +52,8 @@ function TemplatesScreen() {
       <Header title="Hazır mesajlarım" />
       {query.isLoading ? (
         <Loading />
+      ) : !known ? (
+        <ErrorState error={query.error} onRetry={() => void query.refetch()} />
       ) : (
         <ScrollView contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + space.xxxl }]} keyboardShouldPersistTaps="handled">
           <Text tone="muted">Sık yazdığınız mesajları kaydedin; sohbette ⚡ simgesiyle tek dokunuşla gönderin.</Text>
@@ -59,11 +67,11 @@ function TemplatesScreen() {
           <Button
             title="Ekle"
             icon={Plus}
-            disabled={!draft.trim() || items.length >= MAX_TEMPLATES}
+            disabled={!draft.trim() || items.length >= MAX_TEMPLATES || saving}
             loading={saving}
             onPress={async () => {
-              await persist([...items, draft.trim()]);
-              setDraft('');
+              // The text stays when saving fails, so it can be sent again.
+              if (await persist([...items, draft.trim()])) setDraft('');
             }}
           />
           {items.length >= MAX_TEMPLATES ? (
@@ -75,7 +83,14 @@ function TemplatesScreen() {
             items.map((t, i) => (
               <Card key={`${i}-${t}`} style={styles.item}>
                 <Text style={styles.flex}>{t}</Text>
-                <IconButton icon={Trash2} label="Sil" tone="danger" size={34} onPress={() => void persist(items.filter((_, j) => j !== i))} />
+                <IconButton
+                  icon={Trash2}
+                  label={`"${t.slice(0, 30)}" mesajını sil`}
+                  tone="danger"
+                  size={34}
+                  disabled={saving}
+                  onPress={() => void persist(items.filter((_, j) => j !== i))}
+                />
               </Card>
             ))
           ) : (

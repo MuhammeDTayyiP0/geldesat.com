@@ -69,20 +69,25 @@ export function useRecentSearches() {
 
 // ─── Listing draft (post wizard) ────────────────────────────────────────────
 
-const DRAFT_KEY = 'geldesat.listingDraft.v1';
+const DRAFT_KEY = 'geldesat.listingDraft.v2';
 
-export async function saveDraft<T>(draft: T) {
+/** A saved draft and when it was saved; only the account that wrote it gets it back. */
+export type StoredDraft<T> = { owner: string; savedAt: number; draft: T };
+
+export async function saveDraft<T>(draft: T, owner: string) {
   try {
-    await AsyncStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    const stored: StoredDraft<T> = { owner, savedAt: Date.now(), draft };
+    await AsyncStorage.setItem(DRAFT_KEY, JSON.stringify(stored));
   } catch {
     // ignore
   }
 }
 
-export async function loadDraft<T>(): Promise<T | null> {
+export async function loadDraft<T>(owner: string): Promise<StoredDraft<T> | null> {
   try {
     const raw = await AsyncStorage.getItem(DRAFT_KEY);
-    return raw ? (JSON.parse(raw) as T) : null;
+    const stored = raw ? (JSON.parse(raw) as StoredDraft<T>) : null;
+    return stored?.owner === owner ? stored : null;
   } catch {
     return null;
   }
@@ -90,7 +95,8 @@ export async function loadDraft<T>(): Promise<T | null> {
 
 export async function clearDraft() {
   try {
-    await AsyncStorage.removeItem(DRAFT_KEY);
+    // v1 drafts had no owner: dropped with the current one.
+    await AsyncStorage.multiRemove([DRAFT_KEY, 'geldesat.listingDraft.v1']);
   } catch {
     // ignore
   }

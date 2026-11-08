@@ -62,9 +62,9 @@ Temiz çıkan alanlar: admin server fonksiyonlarının tamamı yetki kontrollü 
 - [x] 23. **Y · Tekrarlayan hatırlatma push'u.** Tekrar önleme `notifications` satırına bakıyor; `expiry` için uygulama içini kapatıp push'u açık bırakan kullanıcıda satır yazılmıyor, her süpürmede yeniden push gider. `W/lib/server/ops.ts:17-21`, `helpers.ts` `notify` → `listings.expiry_notified_at`.
 - [x] 24. **Y · Model yılı "2.018" görünüyor.** Web detay ve kart, mobil kart ve detay. `W/components/listing/detail/ListingSections.tsx:140`, `W/lib/utils.ts:49`, `M/features/listing/ListingCard.tsx:26`, `M/app/ilan/[id].tsx:242`.
 - [x] 25. **Y · Uygulama açılışı kırılgan.** Açılış ekranı zaman aşımı olmayan `get-session` isteğini bekliyor; hiç `ErrorBoundary` yok, hatalı OTA uygulamayı tümden kapatır, hata raporlama da yok. `M/app/_layout.tsx:24-34`, `M/auth/auth.ts:154`.
-- [ ] 26. **Y · Android taslak siliniyor.** Devam diyaloğunun dışına dokunmak veya geri tuşu onaysız `clearDraft()` çalıştırır. `M/ui/dialogs.ts:28`, `M/app/ilan-ver.tsx:125`.
-- [ ] 27. **Y · Hazır mesajlar silinebilir.** Liste yüklenemezken boş görünür, yeni ekleme tüm listenin üstüne yazar. `M/app/ayarlar/sablonlar.tsx:14-16,54`.
-- [ ] 28. **Y · 24 saatlik taslak fotoğrafı.** Sunucu bağlanmamış fotoğrafı 24 saatte siliyor; taslak bunu bilmiyor, Yayınla hangisi olduğunu söylemeden hata verir. `M/app/ilan-ver.tsx:123`, `W/lib/server/upload.server.ts:15-19`.
+- [x] 26. **Y · Android taslak siliniyor.** Devam diyaloğunun dışına dokunmak veya geri tuşu onaysız `clearDraft()` çalıştırır. `M/ui/dialogs.ts:28`, `M/app/ilan-ver.tsx:125`.
+- [x] 27. **Y · Hazır mesajlar silinebilir.** Liste yüklenemezken boş görünür, yeni ekleme tüm listenin üstüne yazar. `M/app/ayarlar/sablonlar.tsx:14-16,54`.
+- [x] 28. **Y · 24 saatlik taslak fotoğrafı.** Sunucu bağlanmamış fotoğrafı 24 saatte siliyor; taslak bunu bilmiyor, Yayınla hangisi olduğunu söylemeden hata verir. `M/app/ilan-ver.tsx:123`, `W/lib/server/upload.server.ts:15-19`.
 - [x] 29. **Y · Web'de taslak yok.** Yenileme veya geri tuşu tüm ilan formunu siler. `W/routes/ilan-ver.tsx:123-134`.
 - [x] 30. **Y · "Süreyi uzat" gizli ilanı yayına alıyor.** Satıcının bilerek kapattığı ilan ve telefonu sessizce yayına döner; süresi dolmuş ilanda "Yayına al" başarı der ama ilan görünmez. Web ve mobil. `listing-write.ts:36-39`, `W/routes/ilanlarim.tsx:274-288`, `M/app/ilanlarim.tsx:167-174`, `W/routes/api/mobile/my-listings/$id.ts:51-55`.
 - [ ] 31. **Y · KVKK bağlantısı yanlış.** "Verilerimi indir" `/ayarlar/gizlilik`'i açıyor, indirme `/ayarlar/hesap` sayfasında. `M/app/ayarlar/gizlilik.tsx:77`.
@@ -483,22 +483,22 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 
 ### 3.9 Mobil: ilan verme
 
-- [ ] O · `ilan-ver.tsx:146-150` — Diyalog açıkken kayıt zamanlayıcısı taslağın üzerine boş yazıyor.
-- [ ] O · `lib/storage.ts:72`, `auth/auth.ts:169` — Taslak hesaba bağlı değil, çıkışta silinmiyor; ikinci kişi öncekinin başlık ve telefonunu görür.
-- [ ] O · `ilan-ver.tsx:69-80` — `attrsQuery` hatasında "Özellikler" adımı atlanıyor. O · `:507,542-576` — Kategori adımı hatası yok.
-- [ ] O · `ilan-ver.tsx:214-241` — Android geri tuşu onaysız kapatıyor; düzenlemeler kayboluyor.
-- [ ] O (olası) · `lib/photos.ts:37` — `getPendingResultAsync` yok; düşük bellekte çekilen fotoğraf kaybolur. O (olası) · `ilan-ver.tsx:255`, `api/client.ts:50` — İdempotency yok, mükerrer ilan.
-- [ ] O · `ilan-ver.tsx:273-275` — INACTIVE düzenlemede "onaya gönderildi" diyor. O · `draft.ts:80-86`, `ilan-ver.tsx:625` — Telefon yoksa hata Yayınla'da.
+- [x] O · `ilan-ver.tsx:146-150` — Diyalog açıkken kayıt zamanlayıcısı taslağın üzerine boş yazıyor.
+- [x] O · `lib/storage.ts:72`, `auth/auth.ts:169` — Taslak hesaba bağlı değil, çıkışta silinmiyor; ikinci kişi öncekinin başlık ve telefonunu görür.
+- [x] O · `ilan-ver.tsx:69-80` — `attrsQuery` hatasında "Özellikler" adımı atlanıyor. O · `:507,542-576` — Kategori adımı hatası yok.
+- [x] O · `ilan-ver.tsx:214-241` — Android geri tuşu onaysız kapatıyor; düzenlemeler kayboluyor.
+- [x] O (olası) · `lib/photos.ts:37` — `getPendingResultAsync` yok; düşük bellekte çekilen fotoğraf kaybolur. O (olası) · `ilan-ver.tsx:255`, `api/client.ts:50` — İdempotency yok, mükerrer ilan.
+- [x] O · `ilan-ver.tsx:273-275` — INACTIVE düzenlemede "onaya gönderildi" diyor. O · `draft.ts:80-86`, `ilan-ver.tsx:625` — Telefon yoksa hata Yayınla'da.
 - [ ] D · `:267` (olası) — `me` yoksa ilan mağazadan kopuyor. `:124,523,318` — Yarım kategori; kırıntı; özellikler siliniyor. `format.ts:19` — 13 hane. `:435` (olası) — Klavye düğmeyi örtüyor. `:603,628` — Düzenlemede "Yayınla". `:375` — Ölü gösterge.
-- [ ] Y (olası) · `features/post/PhotoStep.tsx:57-77,124-125` — Ortadaki fotoğrafta Sil düğmesi kırpılıyor; 430 pt altı (375 pt'de 11 pt görünür).
-- [ ] O · `PhotoStep.tsx:49-55`, `ilan-ver.tsx:170` — `PhotoItem.error` gösterilmiyor.
-- [ ] O · `ilan-ver.tsx:184-195` — Silinen fotoğrafın yüklemesi iptal edilmiyor, günlük 60 sınırına sayılıyor.
-- [ ] D · `:123` — `uploading`/`error` fotoğraflar atılıyor. D (olası) · `PhotoStep.tsx:38` — `localUri` öncelikli, boş kare. O · `lib/photos.ts:11-30` — iOS'ta galeri izni gereksiz; reddeden seçiciye ulaşamıyor.
-- [ ] D · `ilan-ver.tsx:174-177`, `PhotoReview.tsx:98-103` — `try/catch` yok. D (olası) · `PhotoReview.tsx:86` — Toast modalın altında. `PhotoStep.tsx:50,125` — Sabit renk, rol, 26 pt, Sil onaysız.
-- [ ] O · `AttrField.tsx:100-104` — Yıl aralığı yok; web 1950-gelecek yıl, sunucu denetlemiyor. D · `ui/Input.tsx:44-61` — Etiket bağlı değil.
-- [ ] O · `ilanlarim.tsx:170-172` — "Satıldı" onaysız, geri alma yok. O (olası) · `:198,221` — "İşlemler" VoiceOver'da ulaşılamayabilir.
-- [ ] D · `:54-56` — Önbellek geçersiz kılınmıyor. `:215-219` — Web'deki bitiş tarihi ve "Yenile" eksik. D (olası) · `api/mobile/my-listings.ts:16-20` — Sayfalama yok.
-- [ ] O · `ayarlar/sablonlar.tsx:26-31,53-56` — Hata yutuluyor, metin siliniyor. D · `:67` — Art arda silmede silinen geri gelebilir.
+- [x] Y (olası) · `features/post/PhotoStep.tsx:57-77,124-125` — Ortadaki fotoğrafta Sil düğmesi kırpılıyor; 430 pt altı (375 pt'de 11 pt görünür).
+- [x] O · `PhotoStep.tsx:49-55`, `ilan-ver.tsx:170` — `PhotoItem.error` gösterilmiyor.
+- [x] O · `ilan-ver.tsx:184-195` — Silinen fotoğrafın yüklemesi iptal edilmiyor, günlük 60 sınırına sayılıyor.
+- [x] D · `:123` — `uploading`/`error` fotoğraflar atılıyor. D (olası) · `PhotoStep.tsx:38` — `localUri` öncelikli, boş kare. O · `lib/photos.ts:11-30` — iOS'ta galeri izni gereksiz; reddeden seçiciye ulaşamıyor.
+- [x] D · `ilan-ver.tsx:174-177`, `PhotoReview.tsx:98-103` — `try/catch` yok. D (olası) · `PhotoReview.tsx:86` — Toast modalın altında. `PhotoStep.tsx:50,125` — Sabit renk, rol, 26 pt, Sil onaysız.
+- [x] O · `AttrField.tsx:100-104` — Yıl aralığı yok; web 1950-gelecek yıl, sunucu denetlemiyor. D · `ui/Input.tsx:44-61` — Etiket bağlı değil.
+- [x] O · `ilanlarim.tsx:170-172` — "Satıldı" onaysız, geri alma yok. O (olası) · `:198,221` — "İşlemler" VoiceOver'da ulaşılamayabilir.
+- [x] D · `:54-56` — Önbellek geçersiz kılınmıyor. `:215-219` — Web'deki bitiş tarihi ve "Yenile" eksik. D (olası) · `api/mobile/my-listings.ts:16-20` — Sayfalama yok.
+- [x] O · `ayarlar/sablonlar.tsx:26-31,53-56` — Hata yutuluyor, metin siliniyor. D · `:67` — Art arda silmede silinen geri gelebilir.
 - OTA uyumu: bu akışta OTA ile gönderilemeyecek bir ekleme yok; `app.json` ve `package.json` diff'i yalnız satır sonu.
 
 ### 3.10 Mobil: mesajlaşma ve bildirim
