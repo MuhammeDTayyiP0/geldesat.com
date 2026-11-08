@@ -23,6 +23,8 @@ export type ChatMessage = {
   reply: { id: string; sender_id: string; content: string; kind: string } | null;
   created_at: string;
   read_at: string | null;
+  /** The sender app's own id for the message (retries, replacing the "sending…" bubble). */
+  client_id?: string;
 };
 
 /** Sender may delete a message for everyone within this window. */

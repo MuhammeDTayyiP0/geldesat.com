@@ -19,7 +19,7 @@ import {
 /** Messages per page when opening a chat or scrolling back. */
 const THREAD_PAGE = 60;
 /** Message columns, plus the quoted message (if replying) as JSON; valid in SELECT and RETURNING. */
-const MSG_COLUMNS = `id, sender_id, content, kind, meta, deleted_at, created_at, read_at, reply_to,
+const MSG_COLUMNS = `id, sender_id, content, kind, meta, deleted_at, created_at, read_at, reply_to, client_id,
   (select json_build_object('id', r.id, 'sender_id', r.sender_id, 'kind', r.kind,
           'content', case when r.deleted_at is null then r.content else '${DELETED_MESSAGE_TEXT}' end)
    from messages r where r.id = messages.reply_to) as reply`;
@@ -38,6 +38,8 @@ export function mapMsg(m: Record<string, unknown>, hideRead = false): ChatMessag
     created_at: asIso(m.created_at),
     read_at: !hideRead && m.read_at ? asIso(m.read_at) : null,
     reply: deleted ? null : asJson<ChatMessage["reply"]>(m.reply, null),
+    // Lets the sender's app swap its "sending…" bubble for this one, also when the live event arrives first.
+    ...(m.client_id ? { client_id: String(m.client_id) } : {}),
   };
 }
 
@@ -81,18 +83,36 @@ async function deliver(
   sql: Sql,
   conv: Conv,
   senderId: string,
-  message: { content: string; kind?: ChatMessage["kind"]; meta?: ChatMessage["meta"]; replyTo?: string },
+  message: { content: string; kind?: ChatMessage["kind"]; meta?: ChatMessage["meta"]; replyTo?: string; clientId?: string },
 ): Promise<ChatMessage> {
+  const sentBefore = async () =>
+    message.clientId
+      ? (await sql.query<Record<string, unknown>>(
+          `select ${MSG_COLUMNS} from messages where conversation_id=$1 and sender_id=$2 and client_id=$3`,
+          [conv.id, senderId, message.clientId],
+        ))[0]
+      : undefined;
+  // A retry of a message that already went out: answer with it, deliver nothing new.
+  const earlier = await sentBefore();
+  if (earlier) return mapMsg(earlier);
   const id = newId("msg");
   // A reply may only quote a message from the same chat.
   const replyTo = message.replyTo
     ? ((await sql.query<{ id: string }>("select id from messages where id=$1 and conversation_id=$2", [message.replyTo, conv.id]))[0]?.id ?? null)
     : null;
-  const rows = await sql.query<Record<string, unknown>>(
-    `insert into messages (id, conversation_id, sender_id, content, kind, meta, reply_to)
-     values ($1,$2,$3,$4,$5,$6::jsonb,$7) returning ${MSG_COLUMNS}`,
-    [id, conv.id, senderId, message.content, message.kind ?? "text", message.meta ? JSON.stringify(message.meta) : null, replyTo],
-  );
+  let rows: Record<string, unknown>[];
+  try {
+    rows = await sql.query<Record<string, unknown>>(
+      `insert into messages (id, conversation_id, sender_id, content, kind, meta, reply_to, client_id)
+       values ($1,$2,$3,$4,$5,$6::jsonb,$7,$8) returning ${MSG_COLUMNS}`,
+      [id, conv.id, senderId, message.content, message.kind ?? "text", message.meta ? JSON.stringify(message.meta) : null, replyTo, message.clientId ?? null],
+    );
+  } catch (error) {
+    // The same retry arrived twice at once and the other one won.
+    const winner = (error as { code?: string }).code === "23505" ? await sentBefore() : undefined;
+    if (winner) return mapMsg(winner);
+    throw error;
+  }
   await sql.query("update conversations set updated_at=now() where id=$1", [conv.id]);
   await reopenConversation(sql, conv.id);
   const msg = mapMsg(rows[0]);
@@ -154,6 +174,8 @@ export const sendMessage = createServerFn({ method: "POST" })
       conversationId: z.string(),
       content: z.string().trim().min(1, "Mesaj boş olamaz").max(2000),
       replyTo: z.string().max(60).optional(),
+      /** Chosen by the app per message; the same id twice is delivered once. */
+      clientId: z.string().regex(/^[A-Za-z0-9_-]{8,64}$/).optional(),
     }),
   )
   .handler(async ({ context, data }) => {
@@ -161,7 +183,7 @@ export const sendMessage = createServerFn({ method: "POST" })
     const sql = await getSql();
     const conv = await myConversation(sql, data.conversationId, context.userId);
     await assertCanMessage(sql, context.userId, otherOf(conv, context.userId));
-    return deliver(sql, conv, context.userId, { content: data.content.trim(), replyTo: data.replyTo });
+    return deliver(sql, conv, context.userId, { content: data.content.trim(), replyTo: data.replyTo, clientId: data.clientId });
   });
 
 /** Share a meeting point: coordinates from the browser and/or a typed place name. */
