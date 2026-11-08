@@ -7,8 +7,11 @@ import { errorStatus, publicErrorMessage } from "@/lib/server/errors";
 export const Route = createFileRoute("/api/mobile/sellers/$id")({
   server: {
     handlers: {
-      GET: async ({ params }) => {
+      GET: async ({ params, request }) => {
         try {
+          // Later pages of the seller's listings (the first comes with the profile).
+          const rawOffset = Number(new URL(request.url).searchParams.get("offset") ?? 0);
+          const offset = Number.isInteger(rawOffset) && rawOffset > 0 ? Math.min(rawOffset, 10_000) : 0;
           const sql = await getSql();
           const rows = await sql.query<Record<string, unknown>>(
             `select p.user_id,p.display_name,p.bio,p.city,p.created_at,p.avatar_url,
@@ -28,7 +31,7 @@ export const Route = createFileRoute("/api/mobile/sellers/$id")({
               `select ${listingSelect("", true)},
                       coalesce((select json_agg(b.kind) from boosts b where b.listing_id=l.id and b.ends_at>now()),'[]'::json) as boosts
                from listings l join categories c on c.id=l.category_id left join profiles p on p.user_id=l.user_id left join stores s on s.id=l.store_id
-               where l.user_id=$1 and l.status='ACTIVE' and (l.expires_at is null or l.expires_at>now()) order by l.created_at desc limit 24`, [params.id],
+               where l.user_id=$1 and l.status='ACTIVE' and (l.expires_at is null or l.expires_at>now()) order by l.created_at desc limit 24 offset $2`, [params.id, offset],
             ),
           ]);
           const seller = rows[0];

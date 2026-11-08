@@ -111,9 +111,19 @@ async function deliver(
 
 export const startConversation = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator(z.object({ listingId: z.string(), content: z.string().trim().min(1, "Mesaj boş olamaz").max(2000) }))
+  .validator(
+    z
+      .object({
+        listingId: z.string(),
+        content: z.string().trim().min(1, "Mesaj boş olamaz").max(2000).optional(),
+        // An opening offer instead of (or after) a message: no filler text is sent.
+        offer: z.number().int().min(1).max(1_000_000_000).optional(),
+      })
+      .refine((d) => d.content !== undefined || d.offer !== undefined, "Mesaj boş olamaz"),
+  )
   .handler(async ({ context, data }) => {
     rateLimit(`msg:${context.userId}`, 40, 60_000);
+    if (data.offer !== undefined) rateLimit(`offer:${context.userId}`, 10, 60_000);
     const sql = await getSql();
     await ensureProfile(context.userId);
     const listing = await sql.query<{ id: string; user_id: string; status: string }>(
@@ -132,7 +142,8 @@ export const startConversation = createServerFn({ method: "POST" })
       "select id, buyer_id, seller_id, listing_id from conversations where listing_id=$1 and buyer_id=$2",
       [data.listingId, context.userId],
     ))[0];
-    await deliver(sql, conv, context.userId, { content: data.content.trim() });
+    if (data.content) await deliver(sql, conv, context.userId, { content: data.content });
+    if (data.offer !== undefined) await deliverOffer(sql, conv, context.userId, data.offer);
     return { conversationId: conv.id };
   });
 
@@ -183,6 +194,22 @@ export const sendLocation = createServerFn({ method: "POST" })
  * other's pending offer with a counter offer (`counterTo`). One offer is open
  * at a time: a new one withdraws (or, for the answered one, counters) the rest.
  */
+/** A new offer card; earlier pending offers in the chat close (the countered one as "countered"). */
+async function deliverOffer(sql: Sql, conv: Conv, userId: string, amount: number, counterTo?: string) {
+  const closed = await sql.query<Record<string, unknown>>(
+    `update messages set meta = jsonb_set(meta, '{status}', to_jsonb(case when id = $2 then 'countered' else 'withdrawn' end))
+     where conversation_id=$1 and kind='offer' and deleted_at is null and meta->>'status'='pending'
+     returning ${MSG_COLUMNS}`,
+    [conv.id, counterTo ?? ""],
+  );
+  for (const m of closed) broadcastChatUpdate(conv.id, mapMsg(m));
+  return deliver(sql, conv, userId, {
+    content: `${counterTo ? "Karşı teklif" : "Teklif"}: ${formatPrice(amount)}`,
+    kind: "offer",
+    meta: { amount, status: "pending", counter: Boolean(counterTo) },
+  });
+}
+
 export const sendOffer = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(
@@ -212,18 +239,7 @@ export const sendOffer = createServerFn({ method: "POST" })
     } else if (conv.buyer_id !== context.userId) {
       throw new Error("Satıcı yalnızca gelen bir teklife karşı teklif verebilir.");
     }
-    const closed = await sql.query<Record<string, unknown>>(
-      `update messages set meta = jsonb_set(meta, '{status}', to_jsonb(case when id = $2 then 'countered' else 'withdrawn' end))
-       where conversation_id=$1 and kind='offer' and deleted_at is null and meta->>'status'='pending'
-       returning ${MSG_COLUMNS}`,
-      [conv.id, data.counterTo ?? ""],
-    );
-    for (const m of closed) broadcastChatUpdate(conv.id, mapMsg(m));
-    return deliver(sql, conv, context.userId, {
-      content: `${data.counterTo ? "Karşı teklif" : "Teklif"}: ${formatPrice(data.amount)}`,
-      kind: "offer",
-      meta: { amount: data.amount, status: "pending", counter: Boolean(data.counterTo) },
-    });
+    return deliverOffer(sql, conv, context.userId, data.amount, data.counterTo);
   });
 
 /** The person who received a pending offer accepts or declines it. */
