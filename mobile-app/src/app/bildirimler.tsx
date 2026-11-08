@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useMutation, useQuery } from '@tanstack/react-query';
@@ -39,12 +39,15 @@ export default function NotificationsScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [unread]);
 
+  // navigate, not push: a chat already open is brought back instead of being stacked twice.
   const open = (n: AppNotification) => {
     const route = appRouteForWebPath(n.link);
-    if (route) router.push(route);
+    if (route) router.navigate(route);
     // A page the app has no screen for opens on the website.
     else if (n.link && n.link !== '/') void WebBrowser.openBrowserAsync(webUrl(n.link));
   };
+
+  const [pulling, setPulling] = useState(false);
 
   return (
     <View style={[styles.flex, { backgroundColor: c.bg }]}>
@@ -62,7 +65,16 @@ export default function NotificationsScreen() {
         <FlatList
           data={query.data?.notifications ?? []}
           keyExtractor={(n) => n.id}
-          refreshControl={<RefreshControl refreshing={query.isRefetching} onRefresh={() => void query.refetch()} tintColor={c.primary} />}
+          refreshControl={
+            <RefreshControl
+              refreshing={pulling}
+              onRefresh={() => {
+                setPulling(true);
+                void query.refetch().finally(() => setPulling(false));
+              }}
+              tintColor={c.primary}
+            />
+          }
           ItemSeparatorComponent={() => <Divider inset={72} />}
           contentContainerStyle={query.data?.notifications.length ? undefined : styles.flexGrow}
           ListEmptyComponent={

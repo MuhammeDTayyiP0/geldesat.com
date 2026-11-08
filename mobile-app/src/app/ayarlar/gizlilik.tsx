@@ -1,4 +1,5 @@
-import { Linking, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import * as WebBrowser from 'expo-web-browser';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Check, CheckCheck, Download, MessageCircle } from 'lucide-react-native';
@@ -60,6 +61,7 @@ function PrivacySettings() {
                 label={o.label}
                 detail={o.detail}
                 onPress={() => update({ phone_visibility: o.value })}
+                checked={s.phone_visibility === o.value}
                 right={s.phone_visibility === o.value ? <Check size={18} color={c.primary} /> : <View style={styles.spacer} />}
               />
             ))}
@@ -68,8 +70,13 @@ function PrivacySettings() {
             <ListRow
               icon={MessageCircle}
               label="WhatsApp ile iletişim"
-              detail="İlanlarınızda WhatsApp düğmesi gösterilir"
-              switchValue={s.show_whatsapp}
+              detail={
+                s.phone_visibility === 'hidden'
+                  ? 'Numaranız gizliyken WhatsApp düğmesi de gösterilmez'
+                  : 'İlanlarınızda WhatsApp düğmesi gösterilir'
+              }
+              switchValue={s.show_whatsapp && s.phone_visibility !== 'hidden'}
+              disabled={s.phone_visibility === 'hidden'}
               onSwitch={(v) => update({ show_whatsapp: v })}
             />
             <ListRow
@@ -84,8 +91,8 @@ function PrivacySettings() {
             <ListRow
               icon={Download}
               label="Verilerimi indir"
-              detail="KVKK kapsamında verilerinizin kopyası (web sitesinde)"
-              onPress={() => void Linking.openURL(webUrl('/ayarlar/gizlilik'))}
+              detail="KVKK kapsamında verilerinizin kopyası. Sitede Ayarlar → Hesap sayfası açılır; orada giriş yapmanız gerekebilir."
+              onPress={() => void WebBrowser.openBrowserAsync(webUrl('/ayarlar/hesap'))}
             />
           </RowGroup>
           <Text variant="caption" tone="subtle">

@@ -7,7 +7,9 @@ import { Lock, Mail, UserRound, X } from 'lucide-react-native';
 import Svg, { Path } from 'react-native-svg';
 import { errorMessage } from '@/api/client';
 import { keys, queryClient, useConfig } from '@/api/queries';
+import * as WebBrowser from 'expo-web-browser';
 import { requestPasswordReset, signInWithEmail, signInWithGoogle, signUpWithEmail } from '@/auth/auth';
+import { webUrl } from '@/lib/config';
 import { Button, IconButton, Input, BrandIcon, Segmented, Text, hairline, radius, space, toast, useTheme, type TextInputRef } from '@/ui';
 
 type Mode = 'signin' | 'signup' | 'forgot';
@@ -18,9 +20,11 @@ export default function SignInScreen() {
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { reason } = useLocalSearchParams<{ reason?: string }>();
+  const params = useLocalSearchParams<{ reason?: string; mode?: string }>();
+  // The screen can be opened by a link: a reason with an address or a long text is not shown.
+  const reason = params.reason && params.reason.length <= 90 && !/https?:|www\./i.test(params.reason) ? params.reason : undefined;
   const { data: config } = useConfig();
-  const [mode, setMode] = useState<Mode>('signin');
+  const [mode, setMode] = useState<Mode>(params.mode === 'signup' ? 'signup' : 'signin');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -98,7 +102,7 @@ export default function SignInScreen() {
             {mode === 'signup' ? 'Hesap oluşturun' : mode === 'forgot' ? 'Şifrenizi mi unuttunuz?' : 'GeldeSat’a giriş yapın'}
           </Text>
           <Text tone="muted" center>
-            {reason ??
+            {(mode === 'signin' ? reason : undefined) ??
               (mode === 'forgot'
                 ? 'E-posta adresinize sıfırlama bağlantısı gönderelim.'
                 : 'İlan verin, mesajlaşın ve favorilerinizi her cihazda görün.')}
@@ -219,11 +223,12 @@ export default function SignInScreen() {
         {mode === 'signup' ? (
           <Text variant="caption" tone="subtle" center>
             Üye olarak{' '}
-            <Text variant="caption" tone="primary" onPress={() => router.push({ pathname: '/sayfa/[slug]', params: { slug: 'uyelik' } })}>
+            {/* In the browser: a page pushed from this modal would open underneath it on iOS. */}
+            <Text variant="caption" tone="primary" onPress={() => void WebBrowser.openBrowserAsync(webUrl('/sayfa/uyelik'))}>
               Üyelik Sözleşmesi
             </Text>{' '}
             ve{' '}
-            <Text variant="caption" tone="primary" onPress={() => router.push({ pathname: '/sayfa/[slug]', params: { slug: 'kvkk' } })}>
+            <Text variant="caption" tone="primary" onPress={() => void WebBrowser.openBrowserAsync(webUrl('/sayfa/kvkk'))}>
               KVKK Aydınlatma Metni
             </Text>
             ’ni kabul etmiş olursunuz.

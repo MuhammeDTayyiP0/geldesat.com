@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import { Linking, Pressable, StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
-import { Check, CheckCheck, HandCoins, MapPin, ShieldAlert } from 'lucide-react-native';
+import { Check, CheckCheck, Clock, HandCoins, MapPin, RotateCcw, ShieldAlert } from 'lucide-react-native';
 import type { ChatMessage } from '@/api/types';
 import { API_BASE_URL, mediaUrl } from '@/lib/config';
 import { formatPrice, formatTime } from '@/lib/format';
@@ -18,6 +18,10 @@ type Props = {
   grouped: boolean;
   highlighted?: boolean;
   onLongPress: (m: ChatMessage) => void;
+  /** Own messages: sent and read times (also offered to screen readers). */
+  onInfo?: (m: ChatMessage) => void;
+  /** A message that failed to send (sohbet_v2). */
+  onRetry?: (m: ChatMessage) => void;
   onOpenImage: (path: string) => void;
   onQuotePress: (id: string) => void;
   onOffer: (m: ChatMessage, action: 'accept' | 'reject' | 'counter') => void;
@@ -41,6 +45,8 @@ export const Bubble = memo(function Bubble({
   grouped,
   highlighted,
   onLongPress,
+  onInfo,
+  onRetry,
   onOpenImage,
   onQuotePress,
   onOffer,
@@ -53,9 +59,14 @@ export const Bubble = memo(function Bubble({
   const sub = mine ? 'rgba(255,255,255,0.75)' : c.subtle;
   const risk = !mine && !m.deleted && m.kind === 'text' ? messageRisk(m.content) : null;
 
-  const ticks = mine && showReads ? (
-    m.read_at ? <CheckCheck size={14} color={mine ? '#9fd0ff' : c.primary} /> : <Check size={14} color={sub} />
-  ) : null;
+  const ticks =
+    m.pending === 'sending' ? (
+      <Clock size={13} color={sub} />
+    ) : mine && showReads ? (
+      m.read_at ? <CheckCheck size={14} color={mine ? '#9fd0ff' : c.primary} /> : <Check size={14} color={sub} />
+    ) : null;
+  // Inner buttons (photo, place, quote) pass a long press on, so the menu opens from anywhere on the bubble.
+  const longPress = () => !m.deleted && onLongPress(m);
 
   const footer = (
     <View style={styles.footer}>
@@ -73,12 +84,16 @@ export const Bubble = memo(function Bubble({
         {m.content}
       </Text>
     );
-  } else if (m.content === LISTING_PHOTO_MSG && listingImage) {
-    body = <Image source={mediaUrl(listingImage, 480)} style={styles.image} contentFit="cover" />;
+  } else if (m.content === LISTING_PHOTO_MSG) {
+    body = listingImage ? (
+      <Image source={mediaUrl(listingImage, 480)} style={styles.image} contentFit="cover" accessibilityLabel="İlan fotoğrafı" />
+    ) : (
+      <Text style={{ color: fg }}>📷 İlan fotoğrafı</Text>
+    );
   } else if (m.kind === 'image' && m.meta?.image_id) {
     const path = chatImagePath(m.meta.image_id);
     body = (
-      <Pressable onPress={() => onOpenImage(path)} accessibilityRole="imagebutton" accessibilityLabel="Fotoğrafı büyüt">
+      <Pressable onPress={() => onOpenImage(path)} onLongPress={longPress} delayLongPress={280} accessibilityRole="imagebutton" accessibilityLabel="Fotoğrafı büyüt">
         <Image source={{ uri: `${API_BASE_URL}${path}`, headers: authHeaders }} style={styles.image} contentFit="cover" transition={150} />
       </Pressable>
     );
@@ -96,7 +111,8 @@ export const Bubble = memo(function Bubble({
         <Text variant="title" style={{ color: fg }}>
           {formatPrice(m.meta.amount)}
         </Text>
-        <Text variant="small" style={{ color: status.tone === 'ok' ? c.ok : status.tone === 'danger' ? c.danger : sub, fontWeight: '700' }}>
+        {/* On your own (blue) bubble green and red were unreadable: white there. */}
+        <Text variant="small" style={{ color: mine ? '#ffffff' : status.tone === 'ok' ? c.ok : status.tone === 'danger' ? c.danger : sub, fontWeight: '700' }}>
           {status.label}
         </Text>
         {!mine && pending ? (
@@ -112,7 +128,11 @@ export const Bubble = memo(function Bubble({
     const lat = m.meta?.lat;
     const lng = m.meta?.lng;
     body = (
-      <Pressable onPress={() => void Linking.openURL(mapsUrl(m.meta ?? {}))} style={styles.location} accessibilityRole="link" accessibilityLabel={`Konum: ${m.meta?.label ?? m.content}. Haritada aç`}>
+      <Pressable
+        onPress={() => void Linking.openURL(mapsUrl(m.meta ?? {}))}
+        onLongPress={longPress}
+        delayLongPress={280}
+        style={styles.location} accessibilityRole="link" accessibilityLabel={`Konum: ${m.meta?.label ?? m.content}. Haritada aç`}>
         {lat != null && lng != null ? (
           <MapThumb lat={lat} lng={lng} width={232} height={136} />
         ) : (
@@ -151,8 +171,21 @@ export const Bubble = memo(function Bubble({
   return (
     <View style={[styles.wrap, mine ? styles.right : styles.left, { marginTop: grouped ? 2 : space.sm }]}>
       <Pressable
-        onLongPress={() => !m.deleted && onLongPress(m)}
+        onLongPress={longPress}
         delayLongPress={280}
+        accessible
+        accessibilityLabel={`${mine ? 'Siz' : otherName}: ${m.kind === 'image' ? 'Fotoğraf' : m.content}, ${formatTime(m.created_at)}${
+          m.pending === 'sending' ? ', gönderiliyor' : m.pending === 'failed' ? ', gönderilemedi' : mine && showReads && m.read_at ? ', okundu' : ''
+        }`}
+        accessibilityActions={
+          m.deleted
+            ? undefined
+            : [{ name: 'longpress', label: 'Mesaj seçenekleri' }, ...(mine && onInfo ? [{ name: 'info', label: 'Mesaj bilgisi' }] : [])]
+        }
+        onAccessibilityAction={(e) => {
+          if (e.nativeEvent.actionName === 'longpress') longPress();
+          else if (e.nativeEvent.actionName === 'info') onInfo?.(m);
+        }}
         style={[
           styles.bubble,
           { backgroundColor: bg, borderColor: c.border },
@@ -165,6 +198,8 @@ export const Bubble = memo(function Bubble({
         {m.reply && !m.deleted ? (
           <Pressable
             onPress={() => m.reply && onQuotePress(m.reply.id)}
+            onLongPress={longPress}
+            delayLongPress={280}
             style={[styles.quote, { backgroundColor: mine ? 'rgba(255,255,255,0.15)' : c.elevated, borderLeftColor: mine ? '#fff' : c.primary }]}
           >
             <Text variant="small" style={{ color: mine ? '#fff' : c.primary, fontWeight: '700' }}>
@@ -178,6 +213,14 @@ export const Bubble = memo(function Bubble({
         {body}
         {footer}
       </Pressable>
+      {m.pending === 'failed' ? (
+        <Pressable accessibilityRole="button" onPress={() => onRetry?.(m)} style={styles.failed} hitSlop={6}>
+          <RotateCcw size={13} color={c.danger} />
+          <Text variant="small" tone="danger">
+            Gönderilemedi · tekrar dene
+          </Text>
+        </Pressable>
+      ) : null}
       {risk ? (
         <View style={[styles.risk, { backgroundColor: c.warnSoft }]}>
           <ShieldAlert size={14} color={c.warn} />
@@ -211,5 +254,6 @@ const styles = StyleSheet.create({
   pin: { height: 96, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   link: { textDecorationLine: 'underline' },
   quote: { borderLeftWidth: 3, borderRadius: 8, paddingHorizontal: space.sm, paddingVertical: 4 },
+  failed: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4, paddingHorizontal: 4 },
   risk: { flexDirection: 'row', gap: 4, alignItems: 'center', marginTop: 4, paddingHorizontal: space.sm, paddingVertical: 4, borderRadius: 8 },
 });

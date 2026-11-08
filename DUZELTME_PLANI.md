@@ -211,14 +211,14 @@ Hepsi JS; `expo.version` değişmez, OTA ile gider.
 
 ## Faz 13: Mobil mesajlaşma ve hesap (rapor 3.10, 3.11)
 
-- [ ] Yeniden bağlanmada ve ön plana dönüşte telafi, 30 sn yoklama, heartbeat (Madde 21).
-- [ ] Odak: `useIsFocused` ile okundu ve akış (Madde 21).
-- [ ] İyimser gönderim, yeniden deneme, istemci mesaj kimliği, fotoğraf hatası. Anahtar: `sohbet_v2`.
-- [ ] Liste: yerel gün ayrımı, hedefe kaydırma, okunmamış ayracı, konum koruma, composer ayrımı.
-- [ ] Balon: uzun basma (Madde 32), bilgi menüsü, ekran okuyucu eylemleri, teklif kartı kontrastı, sabit renkler.
-- [ ] Sekme: sheet kuralı, ön planda yenileme, rozet, kaydırma kontrastı. Push izni dönüşü.
-- [ ] `LocationPicker`: yer adı, klavye, Leaflet paketleme.
-- [ ] Hesap: silme akışı ve banner (Madde 13), `Verilerimi indir` (Madde 31), "Üye ol" modu, avatar seçimi, açık oturumlar, gizlilik uyumu, tercih yarışı.
+- [x] Yeniden bağlanmada ve ön plana dönüşte telafi, 30 sn yoklama, heartbeat (Madde 21).
+- [x] Odak: `useIsFocused` ile okundu ve akış (Madde 21).
+- [x] İyimser gönderim, yeniden deneme, istemci mesaj kimliği, fotoğraf hatası. Anahtar: `sohbet_v2`.
+- [x] Liste: yerel gün ayrımı, hedefe kaydırma, okunmamış ayracı, konum koruma, composer ayrımı.
+- [x] Balon: uzun basma (Madde 32), bilgi menüsü, ekran okuyucu eylemleri, teklif kartı kontrastı, sabit renkler.
+- [x] Sekme: sheet kuralı, ön planda yenileme, rozet, kaydırma kontrastı. Push izni dönüşü.
+- [~] `LocationPicker`: yer adı, klavye, Leaflet paketleme.
+- [x] Hesap: silme akışı ve banner (Madde 13), `Verilerimi indir` (Madde 31), "Üye ol" modu, avatar seçimi, açık oturumlar, gizlilik uyumu, tercih yarışı.
 - [ ] **OTA noktası:** önce `--channel preview` veya `--rollout 10`.
 
 ## Faz 14: Mağaza sürümü

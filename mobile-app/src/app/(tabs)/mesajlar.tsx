@@ -61,9 +61,15 @@ export default function InboxScreen() {
     });
   }, [inbox.data, filter, q]);
 
-  const refresh = () => {
-    void queryClient.invalidateQueries({ queryKey: keys.inbox });
-    void queryClient.invalidateQueries({ queryKey: keys.counts });
+  // The spinner only for a pull: background refreshes (every minute, on return) stay quiet.
+  const [pulling, setPulling] = useState(false);
+  const refresh = async () => {
+    await Promise.all([queryClient.invalidateQueries({ queryKey: keys.inbox }), queryClient.invalidateQueries({ queryKey: keys.counts })]);
+  };
+  const pull = async () => {
+    setPulling(true);
+    await refresh();
+    setPulling(false);
   };
 
   const act = useMutation({
@@ -73,12 +79,11 @@ export default function InboxScreen() {
       else if (action === 'read') await chat.markRead(cv.id);
       else await chat.remove(cv.id);
     },
-    onSuccess: refresh,
+    onSuccess: () => void refresh(),
     onError: (e) => toast.error(errorMessage(e)),
   });
 
   const run = async (cv: Conversation, action: InboxAction) => {
-    setMenu(null);
     if (action === 'delete') {
       const ok = await confirm({
         title: 'Sohbet silinsin mi?',
@@ -89,6 +94,12 @@ export default function InboxScreen() {
       if (!ok) return;
     }
     act.mutate({ cv, action });
+  };
+  // From the menu sheet: act once it has closed (a confirm opened while it closes freezes the app).
+  const afterMenu = useRef<(() => void) | null>(null);
+  const fromMenu = (cv: Conversation, action: InboxAction) => {
+    afterMenu.current = () => void run(cv, action);
+    setMenu(null);
   };
 
   if (session.status !== 'signedIn') {
@@ -140,7 +151,8 @@ export default function InboxScreen() {
           ref={listRef}
           data={rows}
           keyExtractor={(cv) => cv.id}
-          refreshControl={<RefreshControl refreshing={inbox.isRefetching} onRefresh={refresh} tintColor={c.primary} />}
+          refreshControl={<RefreshControl refreshing={pulling} onRefresh={() => void pull()} tintColor={c.primary} />}
+          keyboardShouldPersistTaps="handled"
           ItemSeparatorComponent={() => <Divider inset={88} />}
           contentContainerStyle={rows.length ? undefined : styles.emptyWrap}
           ListEmptyComponent={
@@ -157,26 +169,37 @@ export default function InboxScreen() {
                 me={session.user.id}
                 onPress={() => router.push({ pathname: '/mesaj/[id]', params: { id: item.id } })}
                 onLongPress={() => setMenu(item)}
+                onAction={(action) => void run(item, action)}
               />
             </SwipeableInboxRow>
           )}
         />
       )}
 
-      <Sheet visible={!!menu} onClose={() => setMenu(null)} title={menu?.other_name} subtitle={menu?.listing_title}>
+      <Sheet
+        visible={!!menu}
+        onClose={() => setMenu(null)}
+        onDismissed={() => {
+          const next = afterMenu.current;
+          afterMenu.current = null;
+          next?.();
+        }}
+        title={menu?.other_name}
+        subtitle={menu?.listing_title}
+      >
         {menu ? (
           <RowGroup>
             {menu.unread || menu.marked_unread ? (
-              <ListRow icon={CheckCheck} label="Okundu işaretle" onPress={() => void run(menu, 'read')} />
+              <ListRow icon={CheckCheck} label="Okundu işaretle" onPress={() => fromMenu(menu, 'read')} />
             ) : (
-              <ListRow icon={MailOpen} label="Okunmadı işaretle" onPress={() => void run(menu, 'unread')} />
+              <ListRow icon={MailOpen} label="Okunmadı işaretle" onPress={() => fromMenu(menu, 'unread')} />
             )}
             {menu.archived ? (
-              <ListRow icon={ArchiveRestore} label="Arşivden çıkar" onPress={() => void run(menu, 'unarchive')} />
+              <ListRow icon={ArchiveRestore} label="Arşivden çıkar" onPress={() => fromMenu(menu, 'unarchive')} />
             ) : (
-              <ListRow icon={Archive} label="Arşivle" onPress={() => void run(menu, 'archive')} />
+              <ListRow icon={Archive} label="Arşivle" onPress={() => fromMenu(menu, 'archive')} />
             )}
-            <ListRow icon={Trash2} label="Sohbeti sil" danger onPress={() => void run(menu, 'delete')} />
+            <ListRow icon={Trash2} label="Sohbeti sil" danger onPress={() => fromMenu(menu, 'delete')} />
           </RowGroup>
         ) : null}
       </Sheet>
@@ -191,7 +214,7 @@ type InboxAction = 'archive' | 'unarchive' | 'unread' | 'read' | 'delete';
  * opens the full menu.
  */
 function SwipeableInboxRow({ cv, onAction, children }: { cv: Conversation; onAction: (action: InboxAction) => void; children: ReactNode }) {
-  const { c } = useTheme();
+  const { c, dark } = useTheme();
   const unread = cv.unread > 0 || cv.marked_unread;
   const act = (methods: SwipeableMethods, action: InboxAction) => {
     methods.close();
@@ -207,7 +230,7 @@ function SwipeableInboxRow({ cv, onAction, children }: { cv: Conversation; onAct
       overshootRight={false}
       renderLeftActions={(_p, _t, methods) => (
         <SwipeAction
-          color={c.primary}
+          color={c.primarySolid}
           icon={unread ? CheckCheck : MailOpen}
           label={unread ? 'Okundu' : 'Okunmadı'}
           onPress={() => act(methods, unread ? 'read' : 'unread')}
@@ -216,12 +239,12 @@ function SwipeableInboxRow({ cv, onAction, children }: { cv: Conversation; onAct
       renderRightActions={(_p, _t, methods) => (
         <View style={styles.actions}>
           <SwipeAction
-            color={c.muted}
+            color={dark ? '#475467' : c.muted}
             icon={cv.archived ? ArchiveRestore : Archive}
             label={cv.archived ? 'Çıkar' : 'Arşivle'}
             onPress={() => act(methods, cv.archived ? 'unarchive' : 'archive')}
           />
-          <SwipeAction color={c.danger} icon={Trash2} label="Sil" onPress={() => act(methods, 'delete')} />
+          <SwipeAction color={c.urgentSolid} icon={Trash2} label="Sil" onPress={() => act(methods, 'delete')} />
         </View>
       )}
     >
@@ -241,7 +264,20 @@ function SwipeAction({ color, icon: Icon, label, onPress }: { color: string; ico
   );
 }
 
-function InboxRow({ cv, me, onPress, onLongPress }: { cv: Conversation; me: string; onPress: () => void; onLongPress: () => void }) {
+function InboxRow({
+  cv,
+  me,
+  onPress,
+  onLongPress,
+  onAction,
+}: {
+  cv: Conversation;
+  me: string;
+  onPress: () => void;
+  onLongPress: () => void;
+  /** The swipe actions, offered to screen readers as actions on the row. */
+  onAction: (action: InboxAction) => void;
+}) {
   const { c } = useTheme();
   const unread = cv.unread > 0 || cv.marked_unread;
   const mine = cv.last_sender_id === me;
@@ -251,6 +287,21 @@ function InboxRow({ cv, me, onPress, onLongPress }: { cv: Conversation; me: stri
       onPress={onPress}
       onLongPress={onLongPress}
       delayLongPress={300}
+      accessibilityRole="button"
+      accessibilityLabel={`${cv.other_name}, ${cv.listing_title}${unread ? ', okunmamış' : ''}`}
+      accessibilityActions={[
+        { name: 'longpress', label: 'Seçenekler' },
+        { name: 'read', label: unread ? 'Okundu işaretle' : 'Okunmadı işaretle' },
+        { name: 'archive', label: cv.archived ? 'Arşivden çıkar' : 'Arşivle' },
+        { name: 'delete', label: 'Sohbeti sil' },
+      ]}
+      onAccessibilityAction={(e) => {
+        const name = e.nativeEvent.actionName;
+        if (name === 'longpress') onLongPress();
+        else if (name === 'read') onAction(unread ? 'read' : 'unread');
+        else if (name === 'archive') onAction(cv.archived ? 'unarchive' : 'archive');
+        else if (name === 'delete') onAction('delete');
+      }}
       style={({ pressed }) => [styles.row, { backgroundColor: pressed ? c.elevated : c.surface }]}
     >
       <View>

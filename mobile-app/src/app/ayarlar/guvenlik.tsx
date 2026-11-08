@@ -4,11 +4,11 @@ import { StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useQuery } from '@tanstack/react-query';
-import { KeyRound, Mail, UserX } from 'lucide-react-native';
+import { KeyRound, LogOut, Mail, UserX } from 'lucide-react-native';
 import { errorMessage } from '@/api/client';
 import { account } from '@/api/endpoints';
 import { keys, queryClient } from '@/api/queries';
-import { changePassword, requestPasswordReset, sendVerificationEmail, signOut } from '@/auth/auth';
+import { changePassword, requestPasswordReset, sendVerificationEmail, signOut, signOutOtherDevices } from '@/auth/auth';
 import { useSession } from '@/auth/session';
 import { formatDate } from '@/lib/format';
 import { Button, Card, Header, Input, ListRow, RowGroup, Sheet, Text, confirm, space, toast, useTheme } from '@/ui';
@@ -29,6 +29,7 @@ function SecuritySettings() {
   const session = useSession();
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
+  const [repeat, setRepeat] = useState('');
   const [busy, setBusy] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const deletion = useQuery({ queryKey: keys.deletion, queryFn: account.deletionStatus });
@@ -36,11 +37,13 @@ function SecuritySettings() {
 
   const submit = async () => {
     if (next.length < 8) return toast.error('Yeni şifre en az 8 karakter olmalı.');
+    if (next !== repeat) return toast.error('Yeni şifreler aynı değil.');
     setBusy(true);
     try {
       await changePassword(current, next);
       setCurrent('');
       setNext('');
+      setRepeat('');
       toast.success('Şifreniz değiştirildi. Diğer cihazlardaki oturumlar kapatıldı.');
     } catch (e) {
       toast.error(errorMessage(e));
@@ -70,6 +73,9 @@ function SecuritySettings() {
                 try {
                   await account.restore();
                   await queryClient.invalidateQueries({ queryKey: keys.deletion });
+                  // The listings are back: everything showing them refreshes.
+                  void queryClient.invalidateQueries({ queryKey: keys.myListings });
+                  void queryClient.invalidateQueries({ queryKey: keys.me });
                   toast.success('Hesabınız geri alındı');
                 } catch (e) {
                   toast.error(errorMessage(e));
@@ -91,7 +97,16 @@ function SecuritySettings() {
             textContentType="newPassword"
             hint="En az 8 karakter"
           />
-          <Button title="Şifreyi değiştir" loading={busy} disabled={!current || !next} onPress={() => void submit()} />
+          <Input
+            label="Yeni şifre (tekrar)"
+            secureTextEntry
+            value={repeat}
+            onChangeText={setRepeat}
+            autoComplete="new-password"
+            textContentType="newPassword"
+            error={repeat && next !== repeat ? 'Şifreler aynı değil' : null}
+          />
+          <Button title="Şifreyi değiştir" loading={busy} disabled={!current || !next || !repeat} onPress={() => void submit()} />
           <Text variant="caption" tone="subtle">
             Google ile giriş yaptıysanız şifreniz yoktur; aşağıdan e-postanıza şifre belirleme bağlantısı isteyebilirsiniz.
           </Text>
@@ -118,6 +133,25 @@ function SecuritySettings() {
               try {
                 await sendVerificationEmail(email);
                 toast.success('Doğrulama e-postası gönderildi');
+              } catch (e) {
+                toast.error(errorMessage(e));
+              }
+            }}
+          />
+          <ListRow
+            icon={LogOut}
+            label="Diğer cihazlardan çıkış yap"
+            detail="Bu telefon dışındaki tüm oturumlar kapanır"
+            onPress={async () => {
+              const ok = await confirm({
+                title: 'Diğer cihazlardan çıkış yapılsın mı?',
+                message: 'Başka telefon ve bilgisayarlardaki GeldeSat oturumlarınız kapanır; oralara bildirim gitmez.',
+                confirmText: 'Çıkış yap',
+              });
+              if (!ok) return;
+              try {
+                await signOutOtherDevices();
+                toast.success('Diğer cihazlardaki oturumlar kapatıldı.');
               } catch (e) {
                 toast.error(errorMessage(e));
               }

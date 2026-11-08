@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
+import { AppState, Platform, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import Constants from 'expo-constants';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider, usePathname, useRouter, type ErrorBoundaryProps } from 'expo-router';
@@ -15,9 +15,9 @@ import { restoreSession } from '@/auth/auth';
 import { useSession } from '@/auth/session';
 import { clearPrivateQueries, queryClient, useConfig, useCounts } from '@/api/queries';
 import { ForceUpdate } from '@/features/app/ForceUpdate';
-import { resetChatStream, subscribeChatStream } from '@/features/chat/stream';
+import { onStreamResume, resetChatStream, subscribeChatStream } from '@/features/chat/stream';
 import { appRouteForWebPath } from '@/lib/links';
-import { notificationLink, registerForPush } from '@/lib/push';
+import { ensurePushRegistered, notificationLink, registerForPush } from '@/lib/push';
 import { loadCachedConfig } from '@/lib/configCache';
 import { flushErrorReports, installGlobalErrorHandler, reportError, setErrorScreen } from '@/lib/errorReport';
 import { useOtaUpdates } from '@/lib/ota';
@@ -129,8 +129,18 @@ function SessionEffects() {
     previousUser.current = userId;
     if (!userId) return;
     void registerForPush().catch(() => undefined);
+    // Back in the foreground or reconnected: badges and the inbox may be minutes old.
+    const offResume = onStreamResume(() => {
+      void queryClient.invalidateQueries({ queryKey: ['counts'] });
+      void queryClient.invalidateQueries({ queryKey: ['inbox'] });
+      void queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    });
+    // Notifications allowed later in the phone's settings: register this device then.
+    const appState = AppState.addEventListener('change', (next) => {
+      if (next === 'active') void ensurePushRegistered().catch(() => undefined);
+    });
     // Live inbox: keep the tab badges and the conversation list current.
-    return subscribeChatStream((event) => {
+    const offStream = subscribeChatStream((event) => {
       if (event.type === 'new_message' || event.type === 'read_update' || event.type === 'inbox_ping') {
         void queryClient.invalidateQueries({ queryKey: ['counts'] });
         void queryClient.invalidateQueries({ queryKey: ['inbox'] });
@@ -139,6 +149,11 @@ function SessionEffects() {
         void queryClient.invalidateQueries({ queryKey: ['notifications'] });
       }
     });
+    return () => {
+      offResume();
+      appState.remove();
+      offStream();
+    };
   }, [userId]);
 
   useEffect(() => {
@@ -147,7 +162,8 @@ function SessionEffects() {
       if (!response) return;
       const link = notificationLink(response);
       const route = link ? appRouteForWebPath(link) : null;
-      router.push(route ?? '/bildirimler');
+      // navigate, not push: tapping a second push for the open chat does not stack it again.
+      router.navigate(route ?? '/bildirimler');
       void queryClient.invalidateQueries({ queryKey: ['counts'] });
     };
     const last = Notifications.getLastNotificationResponse();

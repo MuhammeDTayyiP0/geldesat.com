@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, TextInput, View } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { ActivityIndicator, AppState, FlatList, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { useIsFocused, useLocalSearchParams, useRouter } from 'expo-router';
+import * as Crypto from 'expo-crypto';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import * as Clipboard from 'expo-clipboard';
@@ -31,7 +32,8 @@ import { errorMessage } from '@/api/client';
 import { account, chat, uploads } from '@/api/endpoints';
 import { keys, queryClient } from '@/api/queries';
 import type { ChatMessage } from '@/api/types';
-import { getToken, useSession } from '@/auth/session';
+import { useSession } from '@/auth/session';
+import { useFlag } from '@/lib/flags';
 import { Bubble } from '@/features/chat/Bubble';
 import { SwipeToReply } from '@/features/chat/SwipeToReply';
 import { LocationPicker } from '@/features/chat/LocationPicker';
@@ -74,8 +76,29 @@ const MAX_CHAT_PHOTOS = 5;
 function sortMessages(list: ChatMessage[]): ChatMessage[] {
   const byId = new Map<string, ChatMessage>();
   for (const m of list) byId.set(m.id, m);
-  return [...byId.values()].sort((a, b) => a.created_at.localeCompare(b.created_at));
+  // A confirmed message replaces its "sending…" bubble (same client id).
+  const confirmed = new Set([...byId.values()].filter((m) => !m.pending && m.client_id).map((m) => m.client_id));
+  return [...byId.values()].filter((m) => !(m.pending && m.client_id && confirmed.has(m.client_id))).sort((a, b) => a.created_at.localeCompare(b.created_at));
 }
+
+/**
+ * Merge new and changed messages. A changed message older than everything loaded
+ * (an old offer answered) is left out: added at the top it would move the
+ * "load older" cursor past the messages in between.
+ */
+function mergeMessages(list: ChatMessage[], incoming: ChatMessage[]): ChatMessage[] {
+  const oldest = list.find((m) => !m.pending)?.created_at;
+  const known = new Set(list.map((m) => m.id));
+  return sortMessages([...list, ...incoming.filter((m) => known.has(m.id) || !oldest || m.created_at >= oldest)]);
+}
+
+/** Calendar day in the phone's time zone (created_at is UTC). */
+function localDay(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+}
+
+const newClientId = () => Crypto.randomUUID();
 
 export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -84,7 +107,16 @@ export default function ChatScreen() {
   const router = useRouter();
   const session = useSession();
   const me = session.status === 'signedIn' ? session.user.id : '';
-  const authHeaders = useMemo(() => ({ Authorization: `Bearer ${getToken() ?? ''}` }), []);
+  const token = session.status === 'signedIn' ? session.token : '';
+  // Follows the session: a token from before a new sign-in would get 401 for photos.
+  const authHeaders = useMemo(() => ({ Authorization: `Bearer ${token}` }), [token]);
+  // Only the chat on screen counts as read and as "being viewed" (which also silences its push).
+  const focused = useIsFocused();
+  const focusedRef = useRef(focused);
+  useEffect(() => {
+    focusedRef.current = focused;
+  }, [focused]);
+  const chatV2 = useFlag('sohbet_v2');
 
   const thread = useQuery({ queryKey: keys.thread(id), queryFn: () => chat.thread(id), staleTime: 0, enabled: !!me, refetchOnReconnect: false });
   const templates = useQuery({ queryKey: keys.templates, queryFn: chat.templates, enabled: !!me, staleTime: 5 * 60_000 });
@@ -97,6 +129,8 @@ export default function ChatScreen() {
   const [text, setText] = useState('');
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const [sending, setSending] = useState(false);
+  /** Shown above the box while photos upload ("Fotoğraflar gönderiliyor (2/3)…"). */
+  const [uploadNote, setUploadNote] = useState<string | null>(null);
   /** Photos picked for sending, shown full screen first (caption, turn, remove). */
   const [review, setReview] = useState<PickedPhoto[] | null>(null);
   const [quick, setQuick] = useState(false);
@@ -133,6 +167,8 @@ export default function ChatScreen() {
 
   const data = thread.data;
   const conv = data?.conversation;
+  // sohbet_v2: the first unread message from when the chat opened gets a divider, and the list starts there.
+  const firstUnreadId = data?.firstUnreadId ?? null;
 
   // Take the server's page whenever the thread (re)loads; live events add to it afterwards.
   const [syncedAt, setSyncedAt] = useState(0);
@@ -155,17 +191,41 @@ export default function ChatScreen() {
   }, [id]);
 
   useEffect(() => {
-    if (data) markRead();
-  }, [data, markRead]);
+    if (data && focused) markRead();
+  }, [data, focused, markRead]);
 
-  // Live events for this chat.
+  // Where the last catch-up started (phone clock, with a margin for clock drift).
+  const syncedFrom = useRef<string | null>(null);
   useEffect(() => {
-    if (!me) return;
+    // A fresh page from the server: changes after it (an offer answered, a message deleted) come with the next catch-up.
+    if (syncedAt) syncedFrom.current = new Date(syncedAt - 2 * 60_000).toISOString();
+  }, [syncedAt]);
+  const catchUp = useCallback(() => {
+    const newest = [...messagesRef.current].reverse().find((m) => !m.pending);
+    const after = syncedFrom.current ?? newest?.created_at;
+    if (!after) return;
+    const startedAt = new Date(Date.now() - 2 * 60_000).toISOString();
+    void chat
+      .poll(id, after)
+      .then((r) => {
+        syncedFrom.current = startedAt;
+        const reads = new Map(r.reads.map((x) => [x.id, x.read_at]));
+        setMessages((cur) => mergeMessages(cur, r.messages).map((m) => (reads.has(m.id) ? { ...m, read_at: reads.get(m.id) ?? m.read_at } : m)));
+        setPresence({ online: r.other_online, lastSeen: r.other_last_seen });
+        if (r.messages.some((m) => m.sender_id !== me) && focusedRef.current) markRead();
+      })
+      .catch(() => undefined);
+  }, [id, me, markRead]);
+
+  // Live events for this chat, only while it is on screen; coming back catches up.
+  useEffect(() => {
+    if (!me || !focused) return;
+    if (messagesRef.current.length) catchUp();
     const off = subscribeChatStream((event) => {
       if (event.conversationId !== id) return;
       if (event.type === 'message' || event.type === 'message_update') {
         const msg = event.message as ChatMessage;
-        setMessages((list) => sortMessages([...list, { ...msg, kind: msg.kind ?? 'text', meta: msg.meta ?? null, deleted: !!msg.deleted, reply: msg.reply ?? null }]));
+        setMessages((list) => mergeMessages(list, [{ ...msg, kind: msg.kind ?? 'text', meta: msg.meta ?? null, deleted: !!msg.deleted, reply: msg.reply ?? null }]));
         if (event.type === 'message' && msg.sender_id !== me && awayRef.current) setUnseen((n) => n + 1);
         if (event.type === 'message' && msg.sender_id !== me) {
           setTyping(false);
@@ -180,26 +240,19 @@ export default function ChatScreen() {
         typingTimer.current = setTimeout(() => setTyping(false), 4000);
       }
     }, id);
-    const offResume = onStreamResume(() => {
-      // Catch up on anything sent while the app was in the background.
-      const last = messagesRef.current[messagesRef.current.length - 1];
-      if (!last) return;
-      void chat
-        .poll(id, last.created_at)
-        .then((r) => {
-          const reads = new Map(r.reads.map((x) => [x.id, x.read_at]));
-          setMessages((cur) => sortMessages([...cur, ...r.messages]).map((m) => (reads.has(m.id) ? { ...m, read_at: reads.get(m.id) ?? m.read_at } : m)));
-          setPresence({ online: r.other_online, lastSeen: r.other_last_seen });
-          if (r.messages.some((m) => m.sender_id !== me)) markRead();
-        })
-        .catch(() => undefined);
-    });
+    // Back from the background, or the connection came back: fetch what was missed.
+    const offResume = onStreamResume(catchUp);
+    // A safety net for a connection that looks open but delivers nothing.
+    const poll = setInterval(() => {
+      if (AppState.currentState === 'active') catchUp();
+    }, 30_000);
     return () => {
       off();
       offResume();
+      clearInterval(poll);
       if (typingTimer.current) clearTimeout(typingTimer.current);
     };
-  }, [id, me, markRead]);
+  }, [id, me, focused, markRead, catchUp]);
 
   // Inverted list: newest first, with day separators.
   const rows = useMemo<Row[]>(() => {
@@ -207,19 +260,21 @@ export default function ChatScreen() {
     for (let i = messages.length - 1; i >= 0; i--) {
       const m = messages[i];
       const prev = messages[i - 1];
-      const sameDay = prev && prev.created_at.slice(0, 10) === m.created_at.slice(0, 10);
+      const sameDay = prev && localDay(prev.created_at) === localDay(m.created_at);
       const grouped = !!prev && sameDay && prev.sender_id === m.sender_id && new Date(m.created_at).getTime() - new Date(prev.created_at).getTime() < 5 * 60_000;
       out.push({ type: 'message', message: m, grouped });
-      if (!sameDay) out.push({ type: 'day', key: `day-${m.created_at.slice(0, 10)}`, label: dayLabel(m.created_at) });
+      if (chatV2 && m.id === firstUnreadId) out.push({ type: 'day', key: 'unread', label: 'Okunmamış mesajlar' });
+      if (!sameDay) out.push({ type: 'day', key: `day-${localDay(m.created_at)}`, label: dayLabel(m.created_at) });
     }
     return out;
-  }, [messages]);
+  }, [messages, chatV2, firstUnreadId]);
 
   const loadOlder = async () => {
-    if (!hasMore || loadingOlder || !messages[0]) return;
+    const oldest = messages.find((m) => !m.pending);
+    if (!hasMore || loadingOlder || !oldest) return;
     setLoadingOlder(true);
     try {
-      const r = await chat.older(id, messages[0].created_at);
+      const r = await chat.older(id, oldest.created_at);
       setMessages((list) => sortMessages([...r.messages, ...list]));
       setHasMore(r.hasMore);
     } catch (e) {
@@ -231,24 +286,51 @@ export default function ChatScreen() {
 
   const appendOwn = (msg: ChatMessage) => setMessages((list) => sortMessages([...list, msg]));
 
-  const send = async (content: string) => {
+  /**
+   * Send a message. `fromInput`: the text came from the box (cleared now, put back on
+   * failure only if nothing new was typed); a quick reply leaves the box alone.
+   * With sohbet_v2 the message shows at once as "sending…" and a failed one can be
+   * tapped to retry; the same client id makes a retry safe on the server.
+   */
+  const send = async (content: string, { fromInput = true, retry }: { fromInput?: boolean; retry?: ChatMessage } = {}) => {
     const value = content.trim();
-    if (!value || sending) return;
-    setSending(true);
-    const reply = replyTo;
-    setText('');
-    setReplyTo(null);
-    setQuick(false);
+    if (!value || (sending && !chatV2)) return;
+    const reply = retry ? (retry.reply ? messagesRef.current.find((m) => m.id === retry.reply?.id) ?? null : null) : replyTo;
+    const clientId = retry?.client_id ?? newClientId();
+    if (!retry) {
+      if (fromInput) setText('');
+      setReplyTo(null);
+      setQuick(false);
+    }
+    const local: ChatMessage = {
+      id: `local-${clientId}`,
+      client_id: clientId,
+      sender_id: me,
+      content: value,
+      kind: 'text',
+      meta: null,
+      deleted: false,
+      reply: reply ? { id: reply.id, sender_id: reply.sender_id, content: reply.content, kind: reply.kind } : null,
+      created_at: retry?.created_at ?? new Date().toISOString(),
+      read_at: null,
+      pending: 'sending',
+    };
+    if (chatV2) setMessages((list) => sortMessages([...list.filter((m) => m.id !== local.id), local]));
+    else setSending(true);
     try {
-      appendOwn(await chat.send(id, value, reply?.id));
+      appendOwn(await chat.send(id, value, reply?.id, clientId));
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       void queryClient.invalidateQueries({ queryKey: keys.inbox });
     } catch (e) {
-      setText(value);
-      setReplyTo(reply);
+      if (chatV2) {
+        setMessages((list) => list.map((m) => (m.id === local.id ? { ...m, pending: 'failed' } : m)));
+      } else if (fromInput) {
+        setText((current) => (current.trim() ? current : value));
+        setReplyTo((current) => current ?? reply);
+      }
       toast.error(errorMessage(e));
     } finally {
-      setSending(false);
+      if (!chatV2) setSending(false);
     }
   };
 
@@ -263,8 +345,12 @@ export default function ChatScreen() {
 
   const sendPhoto = async (source: 'camera' | 'library') => {
     setSheet(null);
-    const picked = await pickPhotos(source, MAX_CHAT_PHOTOS);
-    if (picked.length) setReview(picked);
+    try {
+      const picked = await pickPhotos(source, MAX_CHAT_PHOTOS);
+      if (picked.length) setReview(picked);
+    } catch (e) {
+      toast.error(errorMessage(e, 'Fotoğraf seçilemedi.'));
+    }
   };
 
   /** Sent only after the review screen: the photos in order, then the caption as a message. */
@@ -275,8 +361,10 @@ export default function ChatScreen() {
     const reply = caption ? replyTo : null;
     if (caption) setReplyTo(null);
     let sent = 0;
+    setUploadNote(photos.length > 1 ? `Fotoğraflar gönderiliyor (1/${photos.length})…` : 'Fotoğraf gönderiliyor…');
     try {
       for (const photo of photos) {
+        if (photos.length > 1) setUploadNote(`Fotoğraflar gönderiliyor (${sent + 1}/${photos.length})…`);
         const prepared = await preparePhoto(photo);
         appendOwn(await uploads.chatPhoto(id, prepared));
         sent += 1;
@@ -286,13 +374,15 @@ export default function ChatScreen() {
     } catch (e) {
       const rest = photos.length - sent;
       toast.error(rest > 0 && sent > 0 ? `${sent} fotoğraf gönderildi, ${rest} tanesi gönderilemedi. ${errorMessage(e)}` : errorMessage(e));
-      // Keep a caption that did not go out, so it is not lost.
-      if (caption && sent === photos.length) {
-        setText(caption);
-        setReplyTo(reply);
+      // Nothing is lost: the caption goes back into the box and unsent photos back into review.
+      if (caption) {
+        setText((current) => (current.trim() ? current : caption));
+        setReplyTo((current) => current ?? reply);
       }
+      if (sent < photos.length) setReview(photos.slice(sent));
     } finally {
       setSending(false);
+      setUploadNote(null);
       void queryClient.invalidateQueries({ queryKey: keys.inbox });
     }
   };
@@ -338,6 +428,40 @@ export default function ChatScreen() {
     setTimeout(() => setHighlight(null), 2200);
   };
 
+  // Stable callbacks for the memoized bubbles: typing in the box must not re-render every message.
+  const latest = useRef({ jumpTo, respondOffer, send });
+  useEffect(() => {
+    latest.current = { jumpTo, respondOffer, send };
+  });
+  const openActions = useCallback(
+    (m: ChatMessage) => {
+      if (m.pending) return;
+      void Haptics.selectionAsync();
+      setSelected(m);
+      setSelectedDeletable(m.sender_id === me && Date.now() - new Date(m.created_at).getTime() < DELETE_WINDOW_MS);
+      setSheet('actions');
+    },
+    [me],
+  );
+  const openInfo = useCallback((m: ChatMessage) => {
+    setSelected(m);
+    setSheet('info');
+  }, []);
+  const retrySend = useCallback((m: ChatMessage) => void latest.current.send(m.content, { retry: m }), []);
+  const quotePress = useCallback((mid: string) => void latest.current.jumpTo(mid), []);
+  const offerAction = useCallback((m: ChatMessage, a: 'accept' | 'reject' | 'counter') => void latest.current.respondOffer(m, a), []);
+
+  // sohbet_v2: open at the first unread message, once per load.
+  const scrolledToUnread = useRef<number | null>(null);
+  useEffect(() => {
+    if (!chatV2 || !firstUnreadId || scrolledToUnread.current === syncedAt) return;
+    const index = rows.findIndex((row) => row.type === 'day' && row.key === 'unread');
+    if (index < 3) return;
+    scrolledToUnread.current = syncedAt;
+    const t = setTimeout(() => listRef.current?.scrollToIndex({ index, viewPosition: 0.9, animated: false }), 250);
+    return () => clearTimeout(t);
+  }, [chatV2, firstUnreadId, rows, syncedAt]);
+
   if (!me) {
     return (
       <View style={[styles.flex, { backgroundColor: c.bg }]}>
@@ -349,12 +473,19 @@ export default function ChatScreen() {
   if (thread.isError && !thread.data) {
     return (
       <View style={[styles.flex, { backgroundColor: c.bg, paddingTop: insets.top }]}>
-        <IconButton icon={ChevronLeft} label="Geri" onPress={() => router.back()} />
+        <IconButton icon={ChevronLeft} label="Geri" onPress={() => (router.canGoBack() ? router.back() : router.replace('/mesajlar'))} />
         <ErrorState error={thread.error} onRetry={() => thread.refetch()} />
       </View>
     );
   }
-  if (!data || !conv) return <Loading />;
+  if (!data || !conv) {
+    return (
+      <View style={[styles.flex, { backgroundColor: c.bg, paddingTop: insets.top }]}>
+        <IconButton icon={ChevronLeft} label="Geri" onPress={() => (router.canGoBack() ? router.back() : router.replace('/mesajlar'))} />
+        <Loading />
+      </View>
+    );
+  }
 
   const blocked = data.blockedByMe || data.blockedByOther || conv.other_closed;
   const buying = conv.role === 'buying';
@@ -434,7 +565,13 @@ export default function ChatScreen() {
           onEndReachedThreshold={0.3}
           keyboardDismissMode="interactive"
           keyboardShouldPersistTaps="handled"
-          onScrollToIndexFailed={() => undefined}
+          // The target is not measured yet: scroll near it, then try again.
+          onScrollToIndexFailed={(info) => {
+            listRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
+            setTimeout(() => listRef.current?.scrollToIndex({ index: info.index, viewPosition: 0.5, animated: true }), 120);
+          }}
+          // Reading older messages: a new one arriving does not push the screen away.
+          maintainVisibleContentPosition={away ? { minIndexForVisible: 1 } : undefined}
           scrollEventThrottle={64}
           onScroll={(e) => {
             // Inverted list: offset 0 is the newest message.
@@ -487,15 +624,12 @@ export default function ChatScreen() {
                 highlighted={highlight === item.message.id}
                 otherName={conv.other_name}
                 listingImage={conv.listing_image}
-                onLongPress={(m) => {
-                  void Haptics.selectionAsync();
-                  setSelected(m);
-                  setSelectedDeletable(m.sender_id === me && Date.now() - new Date(m.created_at).getTime() < DELETE_WINDOW_MS);
-                  setSheet('actions');
-                }}
+                onLongPress={openActions}
+                onInfo={openInfo}
+                onRetry={retrySend}
                 onOpenImage={setViewer}
-                onQuotePress={(mid) => void jumpTo(mid)}
-                onOffer={(m, a) => void respondOffer(m, a)}
+                onQuotePress={quotePress}
+                onOffer={offerAction}
               />
               </SwipeToReply>
             )
@@ -558,6 +692,14 @@ export default function ChatScreen() {
           </View>
         ) : (
           <View style={[styles.composer, { backgroundColor: c.surface, borderTopColor: c.border, paddingBottom: insets.bottom + space.sm }]}>
+            {uploadNote ? (
+              <View style={styles.uploadNote} accessibilityLiveRegion="polite">
+                <ActivityIndicator color={c.primary} size="small" />
+                <Text variant="small" tone="muted">
+                  {uploadNote}
+                </Text>
+              </View>
+            ) : null}
             {pendingOfferFromOther && !quick && !replyTo ? (
               <Text variant="small" tone="primary" style={styles.offerHint}>
                 {conv.other_name} {formatPrice(pendingOfferFromOther.meta?.amount ?? 0)} teklif verdi. Yukarıdan yanıtlayabilirsiniz.
@@ -571,7 +713,7 @@ export default function ChatScreen() {
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.quick}
                 keyboardShouldPersistTaps="handled"
-                renderItem={({ item }) => <Chip label={item} onPress={() => void send(item)} />}
+                renderItem={({ item }) => <Chip label={item} onPress={() => void send(item, { fromInput: false })} />}
               />
             ) : null}
             {replyTo ? (
@@ -697,6 +839,9 @@ export default function ChatScreen() {
                 setSheet(null);
               }}
             />
+            {selected.sender_id === me ? (
+              <ListRow icon={CheckCheck} label="Mesaj bilgisi" onPress={() => thenClose(() => setSheet('info'))} />
+            ) : null}
             {selected.kind === 'text' ? (
               <ListRow
                 icon={Copy}
@@ -946,6 +1091,7 @@ function SearchSheet({ visible, onClose, conversationId, onPick }: { visible: bo
 }
 
 const styles = StyleSheet.create({
+  uploadNote: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.md, paddingBottom: space.xs },
   flex: { flex: 1 },
   header: { borderBottomWidth: hairline, paddingBottom: space.sm, gap: space.sm },
   headRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: space.xs },

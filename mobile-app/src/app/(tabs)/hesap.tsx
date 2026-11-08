@@ -3,9 +3,11 @@ import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-n
 import { useRouter, useScrollToTop, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Bell, ChevronRight, Heart, History, LayoutGrid, MessageCircle, Rocket, Settings, Store } from 'lucide-react-native';
+import { useQuery } from '@tanstack/react-query';
+import { account } from '@/api/endpoints';
 import { keys, queryClient, useCounts, useMe } from '@/api/queries';
 import { useSession } from '@/auth/session';
-import { formatNumber } from '@/lib/format';
+import { formatDate, formatNumber } from '@/lib/format';
 import { Avatar, Badge, BrandIcon, Button, IconButton, ListRow, RowGroup, Stars, Text, hairline, radius, space, useTheme } from '@/ui';
 import { useFlag } from '@/lib/flags';
 
@@ -21,6 +23,9 @@ export default function AccountScreen() {
   const signedIn = session.status === 'signedIn';
   const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
   useScrollToTop(scrollRef);
+  // A deletion in progress is said where people look first, with the way back.
+  const deletion = useQuery({ queryKey: keys.deletion, queryFn: account.deletionStatus, enabled: signedIn, staleTime: 5 * 60_000 });
+  const purgeAt = deletion.data?.purgeAt;
 
   const topBar = (
     <View style={[styles.top, { paddingTop: insets.top + space.sm }]}>
@@ -44,7 +49,7 @@ export default function AccountScreen() {
             Ücretsiz ilan verin, satıcılarla mesajlaşın, favorilerinizi kaydedin.
           </Text>
           <Button title="Giriş yap" size="lg" block onPress={() => router.push('/giris')} />
-          <Button title="Üye ol" size="lg" variant="outline" block onPress={() => router.push('/giris')} />
+          <Button title="Üye ol" size="lg" variant="outline" block onPress={() => router.push({ pathname: '/giris', params: { mode: 'signup' } })} />
         </View>
       </ScrollView>
     );
@@ -71,6 +76,21 @@ export default function AccountScreen() {
       }
     >
       {topBar}
+
+      {purgeAt ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.push('/ayarlar/guvenlik')}
+          style={[styles.card, { backgroundColor: c.dangerSoft, borderColor: c.dangerSoft }]}
+        >
+          <Text variant="label" tone="danger">
+            Hesabınız {formatDate(purgeAt)} tarihinde silinecek
+          </Text>
+          <Text variant="caption" tone="muted">
+            İlanlarınız gizli. Vazgeçtiyseniz dokunun ve “Hesabımı geri al”ı seçin.
+          </Text>
+        </Pressable>
+      ) : null}
 
       {/* "Hesabım" is only a menu; what others see is the public profile ("Profilimi gör"). */}
       <View style={[styles.card, { backgroundColor: c.surface, borderColor: c.border }]}>

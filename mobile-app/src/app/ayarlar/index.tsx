@@ -165,7 +165,10 @@ export default function SettingsScreen() {
               <ListRow icon={LogOut} label="Çıkış yap" danger onPress={() => void doSignOut()} />
             </RowGroup>
           ) : (
-            <Button title="Giriş yap / Üye ol" onPress={() => router.push('/giris')} />
+            <>
+              <Button title="Giriş yap" onPress={() => router.push('/giris')} />
+              <Button title="Üye ol" variant="outline" onPress={() => router.push({ pathname: '/giris', params: { mode: 'signup' } })} />
+            </>
           )
         ) : null}
 

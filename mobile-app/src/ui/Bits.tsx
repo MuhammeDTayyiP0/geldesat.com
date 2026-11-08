@@ -179,6 +179,7 @@ export function ListRow({
   danger,
   right,
   disabled,
+  checked,
 }: {
   icon?: LucideIcon;
   label: string;
@@ -190,6 +191,8 @@ export function ListRow({
   danger?: boolean;
   right?: ReactNode;
   disabled?: boolean;
+  /** One choice of several (a radio row): announced as selected, no chevron. */
+  checked?: boolean;
 }) {
   const { c } = useTheme();
   const content = (
@@ -227,7 +230,7 @@ export function ListRow({
           importantForAccessibility={onPress ? 'auto' : 'no-hide-descendants'}
           accessibilityLabel={label}
         />
-      ) : onPress ? (
+      ) : onPress && checked === undefined ? (
         <ChevronRight size={18} color={c.subtle} />
       ) : null}
     </>
@@ -250,7 +253,9 @@ export function ListRow({
   if (!onPress) return <View style={[styles.row, disabled && styles.disabled]}>{content}</View>;
   return (
     <Pressable
-      accessibilityRole="button"
+      accessibilityRole={checked === undefined ? 'button' : 'radio'}
+      accessibilityState={checked === undefined ? { disabled: !!disabled } : { checked, disabled: !!disabled }}
+      accessibilityHint={detail}
       disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => [styles.row, pressed && { backgroundColor: c.elevated }, disabled && styles.disabled]}

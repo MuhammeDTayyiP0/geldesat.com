@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Linking, ScrollView, StyleSheet, View } from 'react-native';
 import { useMutation, useQuery } from '@tanstack/react-query';
@@ -7,7 +7,7 @@ import { errorMessage } from '@/api/client';
 import { account } from '@/api/endpoints';
 import { keys, queryClient } from '@/api/queries';
 import type { AccountSettings, NotifyPrefs, NotifyType } from '@/api/types';
-import { pushPermissionGranted, registerForPush } from '@/lib/push';
+import { canAskForPush, pushPermissionGranted, registerForPush } from '@/lib/push';
 import { Button, Card, ErrorState, Header, ListRow, Loading, RowGroup, Text, space, toast, useTheme } from '@/ui';
 import { RequireSignIn } from '@/auth/RequireSignIn';
 
@@ -38,13 +38,18 @@ function NotificationSettings() {
     void pushPermissionGranted().then(setSystemOn);
   }, []);
 
+  // Quick taps send several saves; only the newest one's answer is applied, so an older
+  // answer arriving last cannot undo a later choice.
+  const saveSeq = useRef(0);
   const savePrefs = useMutation({
-    mutationFn: account.updateNotifyPrefs,
-    onSuccess: (r) => {
+    mutationFn: ({ next }: { next: NotifyPrefs; seq: number }) => account.updateNotifyPrefs(next),
+    onSuccess: (r, { seq }) => {
+      if (seq !== saveSeq.current) return;
       setPrefs(r.prefs);
       queryClient.setQueryData<AccountSettings>(keys.settings, (d) => (d ? { ...d, notify_prefs: r.prefs } : d));
     },
-    onError: (e) => {
+    onError: (e, { seq }) => {
+      if (seq !== saveSeq.current) return;
       toast.error(errorMessage(e));
       setPrefs(null);
     },
@@ -59,7 +64,7 @@ function NotificationSettings() {
     if (!prefs) return;
     const next = { ...prefs, [type]: { ...prefs[type], [channel]: value } };
     setPrefs(next);
-    savePrefs.mutate(next);
+    savePrefs.mutate({ next, seq: ++saveSeq.current });
   };
 
   return (
@@ -89,10 +94,13 @@ function NotificationSettings() {
                 size="sm"
                 variant="outline"
                 onPress={async () => {
+                  // The phone's own question while it may still be asked; the settings only when it may not.
+                  if (!(await canAskForPush())) {
+                    void Linking.openSettings();
+                    return;
+                  }
                   await registerForPush().catch(() => undefined);
-                  const granted = await pushPermissionGranted();
-                  setSystemOn(granted);
-                  if (!granted) void Linking.openSettings();
+                  setSystemOn(await pushPermissionGranted());
                 }}
               />
             </Card>

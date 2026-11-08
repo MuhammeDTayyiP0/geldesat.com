@@ -207,6 +207,10 @@ export type ChatMessage = {
   reply: { id: string; sender_id: string; content: string; kind: string } | null;
   created_at: string;
   read_at: string | null;
+  /** This app's own id for a message it sent (retries, swapping the "sending" bubble). */
+  client_id?: string;
+  /** App only: a message not confirmed by the server yet, or one that failed. */
+  pending?: 'sending' | 'failed';
 };
 
 export type Conversation = {

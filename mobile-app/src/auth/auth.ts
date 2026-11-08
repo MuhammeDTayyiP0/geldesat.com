@@ -98,6 +98,19 @@ export async function changePassword(currentPassword: string, newPassword: strin
   }
 }
 
+/** End every other session of the account (lost phone, shared computer). This phone stays signed in. */
+export async function signOutOtherDevices(): Promise<void> {
+  const response = await timedFetch(`${API_BASE_URL}/api/auth/revoke-other-sessions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}`, ...originHeaders },
+    body: '{}',
+  });
+  if (!response.ok) {
+    const data = ((await response.json().catch(() => ({}))) ?? {}) as AuthBody;
+    throw new ApiError(translateAuthError(data, response.status), response.status);
+  }
+}
+
 export async function sendVerificationEmail(email: string): Promise<void> {
   await authPost('/send-verification-email', { email, callbackURL: `${SITE_URL}/` });
 }

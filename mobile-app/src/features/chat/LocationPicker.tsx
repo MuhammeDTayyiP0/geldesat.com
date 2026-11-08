@@ -9,7 +9,8 @@ import { geo, type GeoPlace } from '@/api/endpoints';
 import { MapCanvas, type MapCanvasHandle } from '@/features/map/MapCanvas';
 import type { MapEvent } from '@/features/map/mapHtml';
 import { TURKEY_CENTER } from '@/features/map/tiles';
-import { Button, IconButton, Text, font, hairline, radius, shadow, space, toast, useTheme } from '@/ui';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { Button, IconButton, Text, ToastHost, font, hairline, radius, shadow, space, toast, useTheme } from '@/ui';
 
 type Props = {
   visible: boolean;
@@ -28,7 +29,12 @@ const MIN_PLACE_ZOOM = 12;
 export function LocationPicker({ visible, onClose, onSend }: Props) {
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose} statusBarTranslucent>
-      {visible ? <PickerBody onClose={onClose} onSend={onSend} /> : null}
+      {/* The place name field sits at the bottom: the keyboard pushes it up instead of covering it. */}
+      <KeyboardAvoidingView behavior="padding" style={styles.flex}>
+        {visible ? <PickerBody onClose={onClose} onSend={onSend} /> : null}
+      </KeyboardAvoidingView>
+      {/* Errors from here would otherwise show behind the modal. */}
+      <ToastHost active={visible} />
     </Modal>
   );
 }
@@ -58,7 +64,11 @@ function PickerBody({ onClose, onSend }: Omit<Props, 'visible'>) {
         if (fly) toast.info('Konum izni verilmedi. Haritayı kaydırarak bir yer seçebilirsiniz.');
         return;
       }
-      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      // A phone without a fix would wait forever: give up after 15 seconds.
+      const pos = await Promise.race([
+        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High }),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 15_000)),
+      ]);
       const here = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy ?? null };
       setMine(here);
       map.current?.flyTo(here.lat, here.lng, 17);

@@ -21,15 +21,31 @@ let retryTimer: ReturnType<typeof setTimeout> | null = null;
 let retryDelay = 2000;
 let appState: AppStateStatus = (AppState.currentState as AppStateStatus | null) ?? 'active';
 const reconnectListeners = new Set<() => void>();
+/** A connection was open before: the next one that opens may have missed events in between. */
+let hadConnection = false;
+/** The server sends a heartbeat every 20 s; this long without any byte means a dead connection. */
+const SILENCE_MS = 50_000;
+let watchdog: ReturnType<typeof setTimeout> | null = null;
+
+function notifyReconnect() {
+  for (const fn of reconnectListeners) fn();
+}
+
+function feedWatchdog(request: XMLHttpRequest) {
+  if (watchdog) clearTimeout(watchdog);
+  watchdog = setTimeout(() => {
+    // Silent for too long (a proxy or a network switch dropped it without closing it): start over.
+    if (xhr === request) sync(true);
+  }, SILENCE_MS);
+}
 
 AppState.addEventListener('change', (next) => {
   const wasActive = appState === 'active';
   appState = next;
   if (next === 'active' && !wasActive) {
     retryDelay = 2000;
+    // Events may have been missed while away: screens refetch once the new connection opens.
     sync(true);
-    // Events may have been missed while away: let screens refetch.
-    for (const fn of reconnectListeners) fn();
   } else if (next !== 'active') {
     close();
   }
@@ -45,6 +61,10 @@ function close() {
   if (retryTimer) {
     clearTimeout(retryTimer);
     retryTimer = null;
+  }
+  if (watchdog) {
+    clearTimeout(watchdog);
+    watchdog = null;
   }
   const old = xhr;
   xhr = null;
@@ -88,6 +108,7 @@ function sync(force = false) {
   currentUrl = url;
   let seen = 0;
   let buffer = '';
+  let opened = false;
   request.open('GET', `${API_BASE_URL}${url}`);
   request.setRequestHeader('Accept', 'text/event-stream');
   request.setRequestHeader('Cache-Control', 'no-cache');
@@ -95,6 +116,13 @@ function sync(force = false) {
   request.onprogress = () => {
     if (xhr !== request) return;
     retryDelay = 2000;
+    feedWatchdog(request);
+    if (!opened) {
+      opened = true;
+      // A reconnect, a switch to another chat or a return from the background: catch up.
+      if (hadConnection) notifyReconnect();
+      hadConnection = true;
+    }
     const text = request.responseText;
     buffer += text.slice(seen);
     seen = text.length;
@@ -117,6 +145,7 @@ function sync(force = false) {
     scheduleRetry();
   };
   request.send();
+  feedWatchdog(request);
 }
 
 /** Listen to the shared stream; pass `conversationId` while a thread is open. Returns the unsubscribe. */
@@ -144,5 +173,6 @@ export function onStreamResume(fn: () => void): () => void {
 
 /** Reconnect with the current token (after sign-in) or drop the stream (after sign-out). */
 export function resetChatStream() {
+  hadConnection = false;
   sync(true);
 }

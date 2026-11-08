@@ -141,8 +141,9 @@ export const chat = {
   /** Opens (or reuses) the chat for a listing with a first message, an opening offer, or both. */
   start: (listingId: string, first: { content?: string; offer?: number }) =>
     rpc<{ conversationId: string }>('startConversation', { listingId, ...first }),
-  send: (conversationId: string, content: string, replyTo?: string) =>
-    rpc<ChatMessage>('sendMessage', { conversationId, content, replyTo }),
+  /** `clientId`: the same id on a retry, so a message that already went out is not sent twice. */
+  send: (conversationId: string, content: string, replyTo?: string, clientId?: string) =>
+    rpc<ChatMessage>('sendMessage', { conversationId, content, replyTo, clientId }),
   sendLocation: (conversationId: string, label: string, lat?: number, lng?: number) =>
     rpc<ChatMessage>('sendLocation', { conversationId, label, lat, lng }),
   offer: (conversationId: string, amount: number, counterTo?: string) =>
