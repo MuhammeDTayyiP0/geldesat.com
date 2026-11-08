@@ -9,8 +9,8 @@ import { keys } from '@/api/queries';
 import type { SortKey } from '@/api/types';
 import { ListingGrid } from '@/features/listing/ListingGrid';
 import { FilterSheet } from '@/features/search/FilterSheet';
-import { SORTS, activeFilterCount, toSearchFilters, type FilterState } from '@/features/search/filters';
-import { formatNumber } from '@/lib/format';
+import { SORTS, activeFilterCount, toSearchFilters, withoutCategory, type FilterState } from '@/features/search/filters';
+import { formatNumber, uniqueById } from '@/lib/format';
 import { rememberSearch } from '@/lib/storage';
 import { Button, Chip, EmptyState, ErrorState, IconButton, ListRow, RowGroup, Sheet, Text, font, hairline, radius, space, useTheme } from '@/ui';
 
@@ -60,7 +60,8 @@ export default function ResultsScreen() {
     queryFn: ({ pageParam }) => catalog.search(toSearchFilters(filters, pageParam, LIMIT)),
     getNextPageParam: (last) => (last.result.page < last.result.pages ? last.result.page + 1 : undefined),
   });
-  const listings = useMemo(() => results.data?.pages.flatMap((p) => p.result.listings) ?? [], [results.data]);
+  // New listings shift later pages, so the same listing can come twice; the list keys need one each.
+  const listings = useMemo(() => uniqueById(results.data?.pages.flatMap((p) => p.result.listings) ?? []), [results.data]);
   const total = results.data?.pages[0]?.result.total;
   const inferred = results.data?.pages[0]?.inferredCategorySlug;
   const inferredInfo = useQuery({
@@ -120,7 +121,7 @@ export default function ResultsScreen() {
     <View style={[styles.flex, { backgroundColor: c.bg }]}>
       <View style={[styles.top, { paddingTop: insets.top + space.xs, backgroundColor: c.surface, borderBottomColor: c.border }]}>
         <View style={styles.searchRow}>
-          <IconButton icon={ChevronLeft} label="Geri" onPress={() => router.back()} />
+          <IconButton icon={ChevronLeft} label="Geri" onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} />
           <View style={[styles.field, { backgroundColor: c.elevated }]}>
             <Search size={18} color={c.subtle} />
             <TextInput
@@ -168,7 +169,7 @@ export default function ResultsScreen() {
             <Chip
               label={categoryName ?? 'Kategori'}
               selected
-              onRemove={() => setFilters((f) => ({ ...f, category: undefined, categoryName: undefined, attrs: {} }))}
+              onRemove={() => setFilters(withoutCategory)}
             />
           ) : null}
           {filters.city ? (
@@ -184,6 +185,7 @@ export default function ResultsScreen() {
       </View>
 
       <ListingGrid
+          bottomInset={insets.bottom}
         listings={listings}
         layout={layout}
         loading={results.isLoading}
@@ -192,6 +194,8 @@ export default function ResultsScreen() {
         onRefresh={() => results.refetch()}
         onEndReached={() => results.hasNextPage && !results.isFetchingNextPage && results.fetchNextPage()}
         loadingMore={results.isFetchingNextPage}
+        loadMoreError={results.isFetchNextPageError}
+        onRetryMore={() => void results.fetchNextPage()}
         empty={
           results.isError && !results.data ? (
             <ErrorState error={results.error} onRetry={() => results.refetch()} />

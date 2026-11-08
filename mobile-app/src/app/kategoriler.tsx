@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { FlatList, Pressable, StyleSheet, View } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useState } from 'react';
+import { BackHandler, FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronRight, LayoutGrid } from 'lucide-react-native';
 import { catalog } from '@/api/endpoints';
@@ -15,7 +15,7 @@ import { Chip, Divider, ErrorState, Header, Loading, Text, hairline, radius, spa
  * stays on the server). "Bu kategorideki ilanlar" opens results at any level.
  */
 export default function CategoriesScreen() {
-  const { c } = useTheme();
+  const { c, dark } = useTheme();
   const router = useRouter();
   const { root } = useLocalSearchParams<{ root?: string }>();
   const [path, setPath] = useState<string[]>(root ? [root] : []);
@@ -28,16 +28,32 @@ export default function CategoriesScreen() {
 
   const openResults = (cat: Category) => router.push({ pathname: '/sonuclar', params: { category: cat.slug, title: cat.name } });
 
+  // The previous level stays on screen while the next one loads; a tap on it would build a wrong path.
+  const switching = level.isPlaceholderData;
   const pick = (cat: Category) => {
+    if (switching) return;
     if (cat.has_children === false) openResults(cat);
     else setPath([...path, cat.id]);
   };
+  const minDepth = root ? 1 : 0;
+
+  // Android back: up one level first, like the header arrow.
+  useFocusEffect(
+    useCallback(() => {
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        if (path.length <= minDepth) return false;
+        setPath((p) => p.slice(0, -1));
+        return true;
+      });
+      return () => sub.remove();
+    }, [path.length, minDepth]),
+  );
 
   return (
     <View style={[styles.flex, { backgroundColor: c.bg }]}>
       <Header
         title={current?.name ?? 'Kategoriler'}
-        onBack={path.length > (root ? 1 : 0) ? () => setPath(path.slice(0, -1)) : undefined}
+        onBack={path.length > minDepth ? () => setPath(path.slice(0, -1)) : undefined}
       >
         {pathRows.length ? (
           <FlatList
@@ -65,6 +81,7 @@ export default function CategoriesScreen() {
           data={children}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
+          style={switching ? styles.switching : undefined}
           ListHeaderComponent={
             current ? (
               <Pressable
@@ -87,7 +104,7 @@ export default function CategoriesScreen() {
           }
           ItemSeparatorComponent={() => <Divider inset={path.length ? space.lg : 68} />}
           renderItem={({ item, index }) => {
-            const { icon: Icon, tint } = categoryIcon(item.icon);
+            const { icon: Icon, tint } = categoryIcon(item.icon, dark);
             const count = counts[item.id];
             return (
               <Pressable
@@ -153,4 +170,5 @@ const styles = StyleSheet.create({
   last: { borderBottomWidth: hairline, borderBottomLeftRadius: radius.lg, borderBottomRightRadius: radius.lg },
   icon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   empty: { padding: space.xl },
+  switching: { opacity: 0.5 },
 });

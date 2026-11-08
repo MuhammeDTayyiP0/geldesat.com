@@ -106,6 +106,7 @@ export function IconButton({
   filled,
   badge,
   disabled,
+  fill,
 }: {
   icon: LucideIcon;
   onPress?: () => void;
@@ -115,6 +116,8 @@ export function IconButton({
   filled?: boolean;
   badge?: ReactNode;
   disabled?: boolean;
+  /** Filled icon (a favorite heart). */
+  fill?: boolean;
 }) {
   const { c } = useTheme();
   const color = tone === 'primary' ? c.primary : tone === 'danger' ? c.danger : tone === 'onImage' ? '#fff' : c.fg;
@@ -123,6 +126,7 @@ export function IconButton({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityState={fill === undefined ? undefined : { selected: fill }}
       hitSlop={Math.max(6, Math.ceil((44 - size) / 2))}
       disabled={disabled}
       onPress={onPress}
@@ -131,7 +135,7 @@ export function IconButton({
         { width: size, height: size, borderRadius: size / 2, backgroundColor: pressed ? c.elevated : bg, opacity: disabled ? 0.4 : 1 },
       ]}
     >
-      <Icon size={Math.round(size * 0.5)} color={color} strokeWidth={2} />
+      <Icon size={Math.round(size * 0.5)} color={color} fill={fill ? color : 'transparent'} strokeWidth={2} />
       {badge}
     </Pressable>
   );

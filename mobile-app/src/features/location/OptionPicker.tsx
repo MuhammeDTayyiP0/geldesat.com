@@ -22,6 +22,11 @@ const ALL_CITIES = TURKEY_CITIES.map((c) => c.name).sort((a, b) => a.localeCompa
 export function OptionPicker({ visible, onClose, title, options = ALL_CITIES, value, onSelect, allLabel }: Props) {
   const { c } = useTheme();
   const [q, setQ] = useState('');
+  const [wasVisible, setWasVisible] = useState(visible);
+  if (visible !== wasVisible) {
+    setWasVisible(visible);
+    if (visible) setQ('');
+  }
   const filtered = useMemo(() => {
     const term = q.trim().toLocaleLowerCase('tr');
     return term ? options.filter((o) => o.toLocaleLowerCase('tr').includes(term)) : options;

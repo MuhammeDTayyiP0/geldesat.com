@@ -62,7 +62,8 @@ export const listings = {
   recent: () => rpc<RecentListing[]>('myRecentListings'),
   /** Remove one listing from the history, or all of it with `null`. */
   removeRecent: (listingId: string | null) => rpc('removeRecentListing', { listingId }),
-  seller: (id: string) => request<{ seller: Seller; listings: Listing[] }>(`/api/mobile/sellers/${encodeURIComponent(id)}`),
+  seller: (id: string, offset = 0) =>
+    request<{ seller: Seller; listings: Listing[] }>(`/api/mobile/sellers/${encodeURIComponent(id)}${offset ? `?offset=${offset}` : ''}`),
   store: (slug: string) => request<{ store: Store; listings: Listing[] }>(`/api/mobile/stores/${encodeURIComponent(slug)}`),
 };
 
@@ -137,7 +138,9 @@ export const chat = {
     ),
   markRead: (conversationId: string) => rpc('markThreadRead', { conversationId }),
   typing: (conversationId: string) => rpc('sendTyping', { conversationId }),
-  start: (listingId: string, content: string) => rpc<{ conversationId: string }>('startConversation', { listingId, content }),
+  /** Opens (or reuses) the chat for a listing with a first message, an opening offer, or both. */
+  start: (listingId: string, first: { content?: string; offer?: number }) =>
+    rpc<{ conversationId: string }>('startConversation', { listingId, ...first }),
   send: (conversationId: string, content: string, replyTo?: string) =>
     rpc<ChatMessage>('sendMessage', { conversationId, content, replyTo }),
   sendLocation: (conversationId: string, label: string, lat?: number, lng?: number) =>

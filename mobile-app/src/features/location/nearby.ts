@@ -5,10 +5,22 @@ import { TURKEY_CITIES } from '@/data/locations';
 
 const KEY = 'geldesat.nearbyCity.v1';
 
+/** Turkish letters folded, so "Istanbul" or "Izmir" from the device's geocoder match too. */
+const fold = (s: string) =>
+  s
+    .toLocaleLowerCase('tr')
+    .replace(/i̇/g, 'i')
+    .replace(/[ıi]/g, 'i')
+    .replace(/ş/g, 's')
+    .replace(/ğ/g, 'g')
+    .replace(/ü/g, 'u')
+    .replace(/ö/g, 'o')
+    .replace(/ç/g, 'c');
+
 function matchCity(name: string | null | undefined): string | null {
   if (!name) return null;
-  const n = name.toLocaleLowerCase('tr').replace(/\s+(ili|province)$/i, '').trim();
-  return TURKEY_CITIES.find((c) => c.name.toLocaleLowerCase('tr') === n)?.name ?? null;
+  const n = fold(name.replace(/\s+(ili|province)$/i, '').trim());
+  return TURKEY_CITIES.find((c) => fold(c.name) === n)?.name ?? null;
 }
 
 let cached: string | null | undefined;

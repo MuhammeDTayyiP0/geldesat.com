@@ -1,6 +1,8 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useScrollToTop } from 'expo-router';
+import type { FlashListRef } from '@shopify/flash-list';
+import type { Listing } from '@/api/types';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { Bell, ChevronRight, Heart, LocateFixed, MapPin, Search, Sparkles } from 'lucide-react-native';
@@ -12,7 +14,7 @@ import { ListingGrid } from '@/features/listing/ListingGrid';
 import { ListingRail } from '@/features/listing/ListingRail';
 import { useNearbyCity } from '@/features/location/nearby';
 import { OptionPicker } from '@/features/location/OptionPicker';
-import { formatNumber } from '@/lib/format';
+import { formatNumber, uniqueById } from '@/lib/format';
 import { CountDot, EmptyState, ErrorState, IconButton, Skeleton, Text, Wordmark, hairline, radius, space, toast, useTheme } from '@/ui';
 
 const PAGE = 20;
@@ -31,6 +33,9 @@ export default function DiscoverScreen() {
   const nearby = useNearbyCity();
   const [cityPicker, setCityPicker] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  // Tapping the tab again scrolls back to the top.
+  const listRef = useRef<FlashListRef<Listing>>(null);
+  useScrollToTop(listRef);
 
   const stats = useQuery({ queryKey: keys.stats, queryFn: catalog.stats, staleTime: 5 * 60_000 });
   const urgent = useQuery({ queryKey: keys.rail('urgent'), queryFn: () => catalog.listings({ urgent: true, limit: 12 }) });
@@ -57,7 +62,7 @@ export default function DiscoverScreen() {
     select: (rows) => rows.filter((r) => r.live).slice(0, 12),
   });
   const recent = session.status === 'signedIn' ? (recentQuery.data ?? []) : [];
-  const latest = useMemo(() => feed.data?.pages.flatMap((p) => p.listings) ?? [], [feed.data]);
+  const latest = useMemo(() => uniqueById(feed.data?.pages.flatMap((p) => p.listings) ?? []), [feed.data]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -214,6 +219,7 @@ export default function DiscoverScreen() {
       </View>
 
       <ListingGrid
+        listRef={listRef}
         listings={showFeed ? latest : []}
         loading={showFeed && feed.isLoading}
         header={header}
@@ -221,6 +227,8 @@ export default function DiscoverScreen() {
         onRefresh={onRefresh}
         onEndReached={() => showFeed && feed.hasNextPage && !feed.isFetchingNextPage && feed.fetchNextPage()}
         loadingMore={feed.isFetchingNextPage}
+        loadMoreError={showFeed && feed.isFetchNextPageError}
+        onRetryMore={() => void feed.fetchNextPage()}
         empty={
           !showFeed ? null : feed.isError && !feed.data ? (
             <ErrorState error={feed.error} onRetry={() => feed.refetch()} compact />
@@ -256,7 +264,7 @@ function CategoryStrip({
   counts: Record<string, number>;
   loading: boolean;
 }) {
-  const { c } = useTheme();
+  const { c, dark } = useTheme();
   const router = useRouter();
   if (loading) {
     return (
@@ -274,7 +282,7 @@ function CategoryStrip({
     <View style={styles.catWrap}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.catRow}>
         {roots.map((cat) => {
-          const { icon: Icon, tint } = categoryIcon(cat.icon);
+          const { icon: Icon, tint } = categoryIcon(cat.icon, dark);
           return (
             <Pressable
               key={cat.id}

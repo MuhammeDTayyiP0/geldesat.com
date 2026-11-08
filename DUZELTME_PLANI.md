@@ -192,13 +192,13 @@ Hepsi JS; `expo.version` değişmez, OTA ile gider.
 
 ## Faz 11: Mobil keşif (rapor 3.8)
 
-- [ ] Kalp ve önbellek anahtarı, giriş sonrası yenileme (3.8 Y).
-- [ ] WhatsApp, "Ara" koşulu, eski slug, yıl biçimi (Madde 11, 24).
-- [ ] Ara ızgarası, odak, ilan no araması, kategori hataları (Madde 45).
-- [ ] Sonuçlar: görünmez filtre, tekilleştirme, sonraki sayfa hatası, liste performansı.
-- [ ] Teklifin mesajsız sohbet açması, durum çubuğu, `Share`, sahip paneli ve fiyat geçmişi uyumu.
-- [ ] Satıcı sayfalama, 404 durumları, favori ve son bakılan düzeltmeleri, `links.ts` eşlemeleri.
-- [ ] Erişilebilirlik: iç içe Pressable kalıpları; koyu tema ikon renkleri.
+- [x] Kalp ve önbellek anahtarı, giriş sonrası yenileme (3.8 Y).
+- [x] WhatsApp, "Ara" koşulu, eski slug, yıl biçimi (Madde 11, 24).
+- [x] Ara ızgarası, odak, ilan no araması, kategori hataları (Madde 45).
+- [x] Sonuçlar: görünmez filtre, tekilleştirme, sonraki sayfa hatası, liste performansı.
+- [x] Teklifin mesajsız sohbet açması, durum çubuğu, `Share`, sahip paneli ve fiyat geçmişi uyumu.
+- [x] Satıcı sayfalama, 404 durumları, favori ve son bakılan düzeltmeleri, `links.ts` eşlemeleri.
+- [x] Erişilebilirlik: iç içe Pressable kalıpları; koyu tema ikon renkleri.
 
 ## Faz 12: Mobil ilan verme (rapor 3.9)
 

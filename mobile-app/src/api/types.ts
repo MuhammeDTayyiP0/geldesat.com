@@ -54,6 +54,10 @@ export type ListingDetail = {
   sellerStats: { rating_avg: number; rating_count: number };
   favoriteCount: number;
   phoneRevealCount: number;
+  /** Whether "Ara" can show a number; missing from servers before 2026-11. */
+  hasPhone?: boolean;
+  phoneVisibility?: 'everyone' | 'members' | 'hidden';
+  showWhatsapp?: boolean;
   reviewEligibility: { eligible: boolean; existing: { rating: number; comment: string | null } | null };
 };
 

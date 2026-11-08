@@ -17,7 +17,7 @@ export function MessageSheet({ listing, visible, onClose }: { listing: Listing; 
   const router = useRouter();
   const [text, setText] = useState('');
   const send = useMutation({
-    mutationFn: (content: string) => chat.start(listing.id, content),
+    mutationFn: (content: string) => chat.start(listing.id, { content }),
     onSuccess: ({ conversationId }) => {
       setText('');
       onClose();
@@ -64,11 +64,8 @@ export function OfferSheet({ listing, visible, onClose }: { listing: Listing; vi
   const value = parseMasked(amount) ?? 0;
   const suggestions = [0.9, 0.85, 0.8].map((r) => Math.round((listing.price * r) / 100) * 100).filter((n) => n > 0);
   const send = useMutation({
-    mutationFn: async () => {
-      const { conversationId } = await chat.start(listing.id, 'Merhaba, bu ilan için bir teklifim var.');
-      await chat.offer(conversationId, value);
-      return conversationId;
-    },
+    // One call: the offer card opens the chat, so no filler message, and a retry cannot send two.
+    mutationFn: async () => (await chat.start(listing.id, { offer: value })).conversationId,
     onSuccess: (conversationId) => {
       setAmount('');
       onClose();
@@ -109,7 +106,20 @@ export function OfferSheet({ listing, visible, onClose }: { listing: Listing; vi
 }
 
 /** Seller's number after "Telefonu göster": call, WhatsApp, copy. */
-export function PhoneSheet({ phone, visible, onClose, sellerName }: { phone: string | null; visible: boolean; onClose: () => void; sellerName?: string }) {
+export function PhoneSheet({
+  phone,
+  visible,
+  onClose,
+  sellerName,
+  whatsapp = true,
+}: {
+  phone: string | null;
+  visible: boolean;
+  onClose: () => void;
+  sellerName?: string;
+  /** The seller's "WhatsApp'tan yazılabilsin" setting. */
+  whatsapp?: boolean;
+}) {
   const digits = cleanPhone(phone);
   const intl = digits.startsWith('0') ? `90${digits.slice(1)}` : digits;
   return (
@@ -119,7 +129,7 @@ export function PhoneSheet({ phone, visible, onClose, sellerName }: { phone: str
       </Text>
       <RowGroup>
         <ListRow icon={Phone} label="Ara" onPress={() => void Linking.openURL(`tel:${digits}`)} />
-        <ListRow icon={MessageCircle} label="WhatsApp ile yaz" onPress={() => void Linking.openURL(`https://wa.me/${intl}`)} />
+        {whatsapp ? <ListRow icon={MessageCircle} label="WhatsApp ile yaz" onPress={() => void Linking.openURL(`https://wa.me/${intl}`)} /> : null}
         <ListRow
           icon={Copy}
           label="Numarayı kopyala"
@@ -168,11 +178,13 @@ export function ReportSheet({ listingId, visible, onClose }: { listingId: string
 
 export function ReviewSheet({
   listingId,
+  sellerId,
   visible,
   onClose,
   existing,
 }: {
   listingId: string;
+  sellerId?: string;
   visible: boolean;
   onClose: () => void;
   existing: { rating: number; comment: string | null } | null;
@@ -184,7 +196,9 @@ export function ReviewSheet({
     mutationFn: () => listings.review(listingId, rating, comment.trim() || undefined),
     onSuccess: () => {
       toast.success('Değerlendirmeniz kaydedildi');
-      void queryClient.invalidateQueries({ queryKey: keys.listing(listingId) });
+      // Every open copy of the listing (by id, address or number) and the seller page show the rating.
+      void queryClient.invalidateQueries({ queryKey: ['listing'] });
+      if (sellerId) void queryClient.invalidateQueries({ queryKey: keys.seller(sellerId) });
       onClose();
     },
     onError: (e) => toast.error(errorMessage(e)),

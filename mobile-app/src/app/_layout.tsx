@@ -124,6 +124,8 @@ function SessionEffects() {
     resetChatStream();
     // However the session ended (sign-out, expired, deleted account), nothing of that account stays on screen.
     if (previousUser.current && previousUser.current !== userId) clearPrivateQueries();
+    // Signed in: open listings learn the favorite and owner state of the account.
+    if (userId && previousUser.current !== userId) void queryClient.invalidateQueries({ queryKey: ['listing'] });
     previousUser.current = userId;
     if (!userId) return;
     void registerForPush().catch(() => undefined);

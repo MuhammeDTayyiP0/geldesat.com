@@ -6,7 +6,7 @@ import { catalog } from '@/api/endpoints';
 import { keys } from '@/api/queries';
 import type { Category } from '@/api/types';
 import { formatNumber } from '@/lib/format';
-import { Divider, Sheet, Text, radius, space, useTheme } from '@/ui';
+import { Divider, Sheet, Text, radius, space, useTheme, ErrorState } from '@/ui';
 import { categoryIcon } from './categoryIcon';
 
 type Props = {
@@ -20,7 +20,7 @@ type Props = {
 
 /** Drill-down category chooser in a sheet, loading one level at a time. */
 export function CategoryPicker({ visible, onClose, mode, initialPath = [], onPick }: Props) {
-  const { c } = useTheme();
+  const { c, dark } = useTheme();
   const [path, setPath] = useState<string[]>(initialPath);
   const [wasVisible, setWasVisible] = useState(visible);
   if (visible !== wasVisible) {
@@ -67,12 +67,14 @@ export function CategoryPicker({ visible, onClose, mode, initialPath = [], onPic
         </Pressable>
       ) : null}
 
-      {level.isFetching && !level.data ? (
+      {level.isError && !level.data ? (
+        <ErrorState error={level.error} onRetry={() => void level.refetch()} compact />
+      ) : level.isFetching && !level.data ? (
         <ActivityIndicator color={c.primary} style={styles.loading} />
       ) : (
         <View style={[styles.list, { borderColor: c.border, backgroundColor: c.surface }]}>
           {children.map((cat, i) => {
-            const { icon: Icon, tint } = categoryIcon(cat.icon);
+            const { icon: Icon, tint } = categoryIcon(cat.icon, dark);
             return (
               <View key={cat.id}>
                 {i ? <Divider inset={space.lg} /> : null}

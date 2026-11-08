@@ -81,7 +81,20 @@ export default function RecentScreen() {
               action={<Button title="İlanlara göz at" variant="outline" onPress={() => router.navigate('/')} />}
             />
           }
-          renderItem={({ item }) => <RecentRow item={item} onOpen={() => router.push({ pathname: '/ilan/[id]', params: { id: item.id } })} onRemove={() => remove.mutate(item.id)} />}
+          renderItem={({ item }) => (
+            <RecentRow
+              item={item}
+              onOpen={() => {
+                // Sold and expired listings still open; hidden, pending or removed ones are not public.
+                if (!item.live && item.status !== 'ACTIVE' && item.status !== 'SOLD') {
+                  toast.info('Bu ilan artık yayında değil.');
+                  return;
+                }
+                router.push({ pathname: '/ilan/[id]', params: { id: item.id } });
+              }}
+              onRemove={() => remove.mutate(item.id)}
+            />
+          )}
         />
       )}
     </View>
@@ -92,33 +105,38 @@ function RecentRow({ item, onOpen, onRemove }: { item: RecentListing; onOpen: ()
   const { c } = useTheme();
   const cover = mediaUrl(item.images[0], 240);
   return (
-    <Pressable
-      onPress={onOpen}
-      style={({ pressed }) => [styles.row, { backgroundColor: pressed ? c.elevated : c.surface, opacity: item.live ? 1 : 0.7 }]}
-    >
-      <View style={[styles.thumb, { backgroundColor: c.elevated }]}>
-        {cover ? (
-          <Image source={cover} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={item.id} />
-        ) : (
-          <ImageOff size={20} color={c.subtle} />
-        )}
-      </View>
-      <View style={styles.flex}>
-        <Text variant="bodyStrong" tone="primary" numberOfLines={1}>
-          {formatPrice(item.price, item.currency)}
-        </Text>
-        <Text variant="caption" numberOfLines={2}>
-          {item.title}
-        </Text>
-        <View style={styles.meta}>
-          {!item.live ? <Badge label={listingStatusLabel(item.status ?? '', isListingExpired(item))} tone="warn" /> : null}
-          <Text variant="small" tone="subtle" numberOfLines={1} style={styles.flex}>
-            {timeAgo(item.viewed_at)} baktınız
-          </Text>
+    <View style={[styles.line, { backgroundColor: c.surface }]}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${item.title}, ${formatPrice(item.price, item.currency)}`}
+        onPress={onOpen}
+        style={({ pressed }) => [styles.row, { backgroundColor: pressed ? c.elevated : c.surface, opacity: item.live ? 1 : 0.7 }]}
+      >
+        <View style={[styles.thumb, { backgroundColor: c.elevated }]}>
+          {cover ? (
+            <Image source={cover} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={item.id} />
+          ) : (
+            <ImageOff size={20} color={c.subtle} />
+          )}
         </View>
-      </View>
-      <IconButton icon={X} label="Geçmişten kaldır" onPress={onRemove} />
-    </Pressable>
+        <View style={styles.flex}>
+          <Text variant="bodyStrong" tone="primary" numberOfLines={1}>
+            {formatPrice(item.price, item.currency)}
+          </Text>
+          <Text variant="caption" numberOfLines={2}>
+            {item.title}
+          </Text>
+          <View style={styles.meta}>
+            {!item.live ? <Badge label={listingStatusLabel(item.status ?? '', isListingExpired(item))} tone="warn" /> : null}
+            <Text variant="small" tone="subtle" numberOfLines={1} style={styles.flex}>
+              Son bakış: {timeAgo(item.viewed_at)}
+            </Text>
+          </View>
+        </View>
+      </Pressable>
+      {/* Beside the row, not inside it: screen readers reach it on its own. */}
+      <IconButton icon={X} label={`${item.title}: geçmişten kaldır`} onPress={onRemove} />
+    </View>
   );
 }
 
@@ -127,7 +145,8 @@ const styles = StyleSheet.create({
   flexGrow: { flexGrow: 1 },
   list: { paddingBottom: space.xxl },
   note: { paddingHorizontal: space.lg, paddingVertical: space.sm },
-  row: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingLeft: space.lg, paddingRight: space.xs, paddingVertical: space.md },
+  line: { flexDirection: 'row', alignItems: 'center', paddingRight: space.xs },
+  row: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.md, paddingLeft: space.lg, paddingRight: space.xs, paddingVertical: space.md },
   thumb: { width: 84, height: 72, borderRadius: radius.md, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   meta: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginTop: 2 },
 });

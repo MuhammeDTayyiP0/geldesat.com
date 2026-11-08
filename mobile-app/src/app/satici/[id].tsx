@@ -1,17 +1,21 @@
-import { Share, StyleSheet, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Pressable, Share, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
-import { BadgeCheck, CalendarDays, Eye, LayoutGrid, MapPin, Pencil, Share2, Store } from 'lucide-react-native';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { BadgeCheck, CalendarDays, Eye, LayoutGrid, MapPin, Pencil, Share2, Store, UserX } from 'lucide-react-native';
+import { ApiError } from '@/api/client';
 import { listings } from '@/api/endpoints';
-import { keys } from '@/api/queries';
+import { keys, queryClient } from '@/api/queries';
 import { useSession } from '@/auth/session';
 import { ListingGrid } from '@/features/listing/ListingGrid';
 import { webUrl } from '@/lib/config';
-import { formatDate, memberSince } from '@/lib/format';
+import { formatDate, memberSince, uniqueById } from '@/lib/format';
 import { Avatar, Button, Card, EmptyState, ErrorState, Header, IconButton, Loading, Stars, Text, radius, space, useTheme } from '@/ui';
 
 export default function SellerScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const insets = useSafeAreaInsets();
   const { c } = useTheme();
   const router = useRouter();
   const query = useQuery({ queryKey: keys.seller(id), queryFn: () => listings.seller(id) });
@@ -19,6 +23,25 @@ export default function SellerScreen() {
   const session = useSession();
   const isOwner = session.status === 'signedIn' && session.user.id === id;
   const store = seller?.store;
+  const [allReviews, setAllReviews] = useState(false);
+
+  // The profile brings the first 24 listings; the rest load as the list scrolls.
+  const PAGE = 24;
+  const more = useInfiniteQuery({
+    queryKey: [...keys.seller(id), 'more'],
+    initialPageParam: PAGE,
+    queryFn: ({ pageParam }) => listings.seller(id, pageParam).then((r) => r.listings),
+    getNextPageParam: (last, pages) => (last.length === PAGE ? PAGE * (pages.length + 1) : undefined),
+    enabled: false,
+  });
+  const firstPage = query.data?.listings;
+  const allListings = useMemo(() => uniqueById([...(firstPage ?? []), ...(more.data?.pages.flat() ?? [])]), [firstPage, more.data]);
+  const hasMore = !!seller && (firstPage?.length ?? 0) === PAGE && (more.data ? more.hasNextPage : true);
+  const loadMore = () => {
+    if (!hasMore || more.isFetching) return;
+    void (more.data ? more.fetchNextPage() : more.refetch());
+  };
+  const notFound = query.error instanceof ApiError && query.error.status === 404;
 
   return (
     <View style={[styles.flex, { backgroundColor: c.bg }]}>
@@ -36,13 +59,23 @@ export default function SellerScreen() {
       />
       {query.isLoading ? (
         <Loading />
+      ) : notFound ? (
+        <EmptyState icon={UserX} title="Satıcı bulunamadı" message="Bu hesap kapatılmış ya da askıya alınmış olabilir." />
       ) : query.isError || !seller ? (
         <ErrorState error={query.error} onRetry={() => query.refetch()} />
       ) : (
         <ListingGrid
-          listings={query.data?.listings ?? []}
+          bottomInset={insets.bottom}
+          listings={allListings}
           refreshing={query.isRefetching}
-          onRefresh={() => void query.refetch()}
+          onRefresh={() => {
+            queryClient.removeQueries({ queryKey: [...keys.seller(id), 'more'] });
+            void query.refetch();
+          }}
+          onEndReached={loadMore}
+          loadingMore={more.isFetching}
+          loadMoreError={more.isError}
+          onRetryMore={loadMore}
           header={
             <View style={styles.header}>
               {isOwner ? (
@@ -106,7 +139,7 @@ export default function SellerScreen() {
               {seller.reviews.length ? (
                 <View style={styles.reviews}>
                   <Text variant="subheading">Değerlendirmeler</Text>
-                  {seller.reviews.slice(0, 5).map((r) => (
+                  {seller.reviews.slice(0, allReviews ? undefined : 5).map((r) => (
                     <Card key={r.id} style={styles.review}>
                       <View style={styles.row}>
                         <Stars value={r.rating} size={12} />
@@ -117,6 +150,15 @@ export default function SellerScreen() {
                       {r.comment ? <Text variant="caption">{r.comment}</Text> : null}
                     </Card>
                   ))}
+                  {seller.reviews.length > 5 && !allReviews ? (
+                    <Pressable accessibilityRole="button" hitSlop={8} onPress={() => setAllReviews(true)}>
+                      <Text variant="label" tone="primary">
+                        {seller.rating_count > seller.reviews.length
+                          ? `Son ${seller.reviews.length} değerlendirmeyi göster`
+                          : `Tüm ${seller.reviews.length} değerlendirmeyi göster`}
+                      </Text>
+                    </Pressable>
+                  ) : null}
                 </View>
               ) : null}
               <Text variant="subheading">İlanları</Text>

@@ -1,39 +1,58 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState, type ComponentRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter, useScrollToTop } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronRight, Clock, Hash, Search, X } from 'lucide-react-native';
-import { useRoots } from '@/api/queries';
+import { ApiError } from '@/api/client';
+import { listings } from '@/api/endpoints';
+import { keys, queryClient, useRoots } from '@/api/queries';
 import { categoryIcon } from '@/features/catalog/categoryIcon';
 import { formatNumber } from '@/lib/format';
 import { clearSearches, forgetSearch, rememberSearch, useRecentSearches } from '@/lib/storage';
-import { Divider, Skeleton, Text, font, hairline, radius, space, useTheme, type TextInputRef } from '@/ui';
+import { Divider, ErrorState, Skeleton, Text, font, hairline, radius, space, useTheme, type TextInputRef } from '@/ui';
 
 export default function SearchTab() {
-  const { c } = useTheme();
+  const { c, dark } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { focus } = useLocalSearchParams<{ focus?: string }>();
   const inputRef = useRef<TextInputRef>(null);
+  const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
+  useScrollToTop(scrollRef);
   const [q, setQ] = useState('');
   const recent = useRecentSearches();
   const roots = useRoots();
 
-  useEffect(() => {
-    if (focus) {
+  // Every time the home search box sends people here, not only the first: the tab stays mounted.
+  useFocusEffect(
+    useCallback(() => {
+      if (!focus) return;
       const t = setTimeout(() => inputRef.current?.focus(), 250);
+      router.setParams({ focus: undefined });
       return () => clearTimeout(t);
-    }
-  }, [focus]);
+    }, [focus, router]),
+  );
 
-  const submit = (term: string) => {
+  const [opening, setOpening] = useState(false);
+  const submit = async (term: string) => {
     const value = term.trim();
-    if (!value) return;
+    if (!value || opening) return;
     void rememberSearch(value);
-    // A bare listing number opens that listing.
+    // A number may be a listing number, or just something in a title (a phone, a model): try the listing first.
     if (/^\d{7,15}$/.test(value)) {
-      router.push({ pathname: '/ilan/[id]', params: { id: value } });
-      return;
+      setOpening(true);
+      try {
+        await queryClient.fetchQuery({ queryKey: keys.listing(value), queryFn: () => listings.detail(value), staleTime: 30_000 });
+        router.push({ pathname: '/ilan/[id]', params: { id: value } });
+        return;
+      } catch (e) {
+        if (!(e instanceof ApiError && e.status === 404)) {
+          router.push({ pathname: '/ilan/[id]', params: { id: value } });
+          return;
+        }
+      } finally {
+        setOpening(false);
+      }
     }
     router.push({ pathname: '/sonuclar', params: { q: value } });
   };
@@ -51,7 +70,7 @@ export default function SearchTab() {
             placeholder="Marka, model, ürün veya ilan no"
             placeholderTextColor={c.subtle}
             returnKeyType="search"
-            onSubmitEditing={() => submit(q)}
+            onSubmitEditing={() => void submit(q)}
             autoCorrect={false}
             style={[styles.input, { color: c.fg }]}
             accessibilityLabel="Arama"
@@ -64,12 +83,16 @@ export default function SearchTab() {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+      <ScrollView ref={scrollRef} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
         {q.trim() ? (
-          <Pressable onPress={() => submit(q)} style={[styles.suggest, { backgroundColor: c.surface, borderColor: c.border }]}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => void submit(q)}
+            style={[styles.suggest, { backgroundColor: c.surface, borderColor: c.border }]}
+          >
             {/^\d{7,15}$/.test(q.trim()) ? <Hash size={18} color={c.primary} /> : <Search size={18} color={c.primary} />}
             <Text style={styles.flex} numberOfLines={1}>
-              {/^\d{7,15}$/.test(q.trim()) ? `İlan no ${q.trim()} ile aç` : `“${q.trim()}” için ara`}
+              {opening ? 'İlan aranıyor…' : /^\d{7,15}$/.test(q.trim()) ? `İlan no ${q.trim()} ya da “${q.trim()}” ara` : `“${q.trim()}” için ara`}
             </Text>
             <ChevronRight size={18} color={c.subtle} />
           </Pressable>
@@ -79,7 +102,7 @@ export default function SearchTab() {
           <View style={styles.section}>
             <View style={styles.sectionHead}>
               <Text variant="subheading">Son aramalar</Text>
-              <Pressable hitSlop={8} onPress={() => void clearSearches()}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Son aramaları temizle" hitSlop={8} onPress={() => void clearSearches()}>
                 <Text variant="label" tone="primary">
                   Temizle
                 </Text>
@@ -89,15 +112,23 @@ export default function SearchTab() {
               {recent.map((term, i) => (
                 <View key={term}>
                   {i ? <Divider inset={48} /> : null}
-                  <Pressable onPress={() => submit(term)} style={({ pressed }) => [styles.recentRow, pressed && { backgroundColor: c.elevated }]}>
-                    <Clock size={18} color={c.subtle} />
-                    <Text style={styles.flex} numberOfLines={1}>
-                      {term}
-                    </Text>
-                    <Pressable accessibilityLabel={`${term} aramasını sil`} hitSlop={10} onPress={() => void forgetSearch(term)}>
+                  {/* The delete button sits beside the row, not inside it, so screen readers reach it. */}
+                  <View style={styles.recentLine}>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`${term} ara`}
+                      onPress={() => void submit(term)}
+                      style={({ pressed }) => [styles.recentRow, pressed && { backgroundColor: c.elevated }]}
+                    >
+                      <Clock size={18} color={c.subtle} />
+                      <Text style={styles.flex} numberOfLines={1}>
+                        {term}
+                      </Text>
+                    </Pressable>
+                    <Pressable accessibilityRole="button" accessibilityLabel={`${term} aramasını sil`} onPress={() => void forgetSearch(term)} style={styles.recentDelete}>
                       <X size={16} color={c.subtle} />
                     </Pressable>
-                  </Pressable>
+                  </View>
                 </View>
               ))}
             </View>
@@ -114,10 +145,14 @@ export default function SearchTab() {
             </Pressable>
           </View>
           <View style={styles.grid}>
-            {roots.isLoading
+            {roots.isError && !roots.data ? (
+              <View style={styles.flex}>
+                <ErrorState error={roots.error} onRetry={() => void roots.refetch()} compact />
+              </View>
+            ) : roots.isLoading
               ? [0, 1, 2, 3, 4, 5].map((i) => <Skeleton key={i} height={84} rounded={14} style={styles.tileSkeleton} />)
               : (roots.data?.roots ?? []).map((cat) => {
-                  const { icon: Icon, tint } = categoryIcon(cat.icon);
+                  const { icon: Icon, tint } = categoryIcon(cat.icon, dark);
                   const count = roots.data?.counts[cat.id];
                   return (
                     <Pressable
@@ -159,10 +194,13 @@ const styles = StyleSheet.create({
   section: { gap: space.md },
   sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   card: { borderRadius: radius.lg, borderWidth: hairline, overflow: 'hidden' },
-  recentRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: space.lg, minHeight: 50 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  recentLine: { flexDirection: 'row', alignItems: 'center' },
+  recentRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.md, paddingLeft: space.lg, minHeight: 50 },
+  recentDelete: { width: 48, minHeight: 50, alignItems: 'center', justifyContent: 'center' },
+  // Two columns on every width: 2 × 48.8% plus a fixed gap did not fit 360 dp phones.
+  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: space.sm },
   tile: {
-    width: '48.8%',
+    width: '48.5%',
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.sm,
@@ -172,5 +210,5 @@ const styles = StyleSheet.create({
     minHeight: 72,
   },
   tileIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  tileSkeleton: { width: '48.8%' },
+  tileSkeleton: { width: '48.5%' },
 });

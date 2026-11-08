@@ -10,7 +10,7 @@ import { CategoryPicker } from '@/features/catalog/CategoryPicker';
 import { OptionPicker } from '@/features/location/OptionPicker';
 import { maskThousands } from '@/lib/format';
 import { Button, Chip, Input, ListRow, RowGroup, SelectField, Sheet, Text, space } from '@/ui';
-import { hasAreaFilter, hasVehicleFilters, optionAttributes, type FilterState } from './filters';
+import { hasAreaFilter, hasVehicleFilters, optionAttributes, withoutCategory, type FilterState } from './filters';
 
 type Props = {
   visible: boolean;
@@ -140,7 +140,7 @@ export function FilterSheet({ visible, onClose, value, onApply }: Props) {
         visible={picker === 'category'}
         onClose={() => setPicker(null)}
         mode="filter"
-        onPick={(cat) => setDraft((d) => ({ ...d, category: cat?.slug, categoryName: cat?.name, attrs: {}, minYear: undefined, maxYear: undefined, minKm: undefined, maxKm: undefined, minM2: undefined, maxM2: undefined }))}
+        onPick={(cat) => setDraft((d) => ({ ...withoutCategory(d), category: cat?.slug, categoryName: cat?.name }))}
       />
       <OptionPicker
         visible={picker === 'city'}

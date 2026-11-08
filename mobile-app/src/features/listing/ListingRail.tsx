@@ -1,7 +1,9 @@
+import { useCallback } from 'react';
 import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ChevronRight } from 'lucide-react-native';
 import type { Listing } from '@/api/types';
+import { useSession } from '@/auth/session';
 import { Skeleton, Text, space, useTheme } from '@/ui';
 import { ListingCard } from './ListingCard';
 import { useFavoriteIds, useToggleFavorite } from './favorites';
@@ -26,6 +28,10 @@ export function ListingRail({
   const router = useRouter();
   const favoriteIds = useFavoriteIds();
   const toggleFavorite = useToggleFavorite();
+  const session = useSession();
+  const me = session.status === 'signedIn' ? session.user.id : null;
+  const open = useCallback((item: { id: string }) => router.push({ pathname: '/ilan/[id]', params: { id: item.id } }), [router]);
+  const favorite = useCallback((item: { id: string }) => toggleFavorite(item as Listing), [toggleFavorite]);
   if (!loading && !items?.length) return null;
   return (
     <View style={styles.wrap}>
@@ -69,8 +75,8 @@ export function ListingRail({
               layout="rail"
               listing={item}
               favorite={favoriteIds.has(item.id)}
-              onFavorite={() => toggleFavorite(item as Listing)}
-              onPress={() => router.push({ pathname: '/ilan/[id]', params: { id: item.id } })}
+              onFavorite={'user_id' in item && item.user_id === me ? undefined : favorite}
+              onPress={open}
             />
           )}
         />

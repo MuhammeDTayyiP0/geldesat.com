@@ -7,12 +7,15 @@ import { mediaUrl } from '@/lib/config';
 import { formatNumber, formatPrice, timeAgo } from '@/lib/format';
 import { Badge, Text, radius, space, useTheme } from '@/ui';
 
+type CardListing = Pick<Listing, 'id' | 'title' | 'price' | 'currency' | 'images' | 'city' | 'district' | 'created_at' | 'attrs'> &
+  Partial<Pick<Listing, 'boosts' | 'category_name' | 'featured_until' | 'user_id'>>;
+
 type Props = {
-  listing: Pick<Listing, 'id' | 'title' | 'price' | 'currency' | 'images' | 'city' | 'district' | 'created_at' | 'attrs'> &
-    Partial<Pick<Listing, 'boosts' | 'category_name' | 'featured_until'>>;
-  onPress: () => void;
+  listing: CardListing;
+  /** Stable callbacks (they get the listing back), so the memoized card skips re-renders. */
+  onPress: (listing: CardListing) => void;
   favorite?: boolean;
-  onFavorite?: () => void;
+  onFavorite?: (listing: CardListing) => void;
   layout?: 'grid' | 'row' | 'rail';
 };
 
@@ -66,19 +69,22 @@ export const ListingCard = memo(function ListingCard({ listing, onPress, favorit
           {featured && layout !== 'row' ? <Badge label="VİTRİN" tone="primary" /> : null}
         </View>
       ) : null}
-      {onFavorite ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={favorite ? 'Favorilerden çıkar' : 'Favorilere ekle'}
-          hitSlop={8}
-          onPress={onFavorite}
-          style={styles.heart}
-        >
-          <Heart size={18} color={favorite ? '#f04438' : '#ffffff'} fill={favorite ? '#f04438' : 'rgba(0,0,0,0.25)'} strokeWidth={2.2} />
-        </Pressable>
-      ) : null}
     </View>
   );
+
+  // A sibling of the card's pressable, not inside it: screen readers reach both.
+  const heart = onFavorite ? (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={favorite ? `${listing.title}: favorilerden çıkar` : `${listing.title}: favorilere ekle`}
+      accessibilityState={{ selected: !!favorite }}
+      hitSlop={5}
+      onPress={() => onFavorite(listing)}
+      style={[styles.heart, layout === 'row' && styles.heartRow]}
+    >
+      <Heart size={18} color={favorite ? '#f04438' : '#ffffff'} fill={favorite ? '#f04438' : 'rgba(0,0,0,0.25)'} strokeWidth={2.2} />
+    </Pressable>
+  ) : null;
 
   const body = (
     <View style={layout === 'row' ? styles.rowBody : styles.body}>
@@ -108,20 +114,25 @@ export const ListingCard = memo(function ListingCard({ listing, onPress, favorit
   );
 
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${listing.title}, ${formatPrice(listing.price, listing.currency)}`}
-      onPress={onPress}
-      style={({ pressed }) => [
+    <View
+      style={[
         layout === 'row' ? styles.row : styles.card,
         layout === 'rail' && styles.rail,
-        { backgroundColor: c.surface, borderColor: c.border, opacity: pressed ? 0.85 : 1 },
+        { backgroundColor: c.surface, borderColor: c.border },
         urgent && layout === 'row' && { borderColor: c.urgent },
       ]}
     >
-      {image}
-      {body}
-    </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${listing.title}, ${formatPrice(listing.price, listing.currency)}`}
+        onPress={() => onPress(listing)}
+        style={({ pressed }) => [layout === 'row' ? styles.rowInner : styles.flexCol, { opacity: pressed ? 0.85 : 1 }]}
+      >
+        {image}
+        {body}
+      </Pressable>
+      {heart}
+    </View>
   );
 });
 
@@ -141,6 +152,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  heartRow: { right: undefined, left: 128 - 34 - space.xs },
+  flexCol: { flex: 1 },
+  rowInner: { flex: 1, flexDirection: 'row' },
   body: { padding: space.sm + 2, gap: 3 },
   price: { fontSize: 16 },
   title: { minHeight: 36 },

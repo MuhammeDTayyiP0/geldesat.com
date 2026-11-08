@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Linking, Pressable, ScrollView, Share, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { Linking, Platform, Pressable, ScrollView, Share, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import {
@@ -59,9 +60,16 @@ import {
 
 type SheetName = 'message' | 'offer' | 'phone' | 'report' | 'review' | null;
 
+/** Deep links open this screen first: going back then lands on the home screen. */
+function useGoBack() {
+  const router = useRouter();
+  return () => (router.canGoBack() ? router.back() : router.replace('/'));
+}
+
 export default function ListingScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { c } = useTheme();
+  const { c, dark } = useTheme();
+  const goBack = useGoBack();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const router = useRouter();
@@ -102,7 +110,7 @@ export default function ListingScreen() {
     return (
       <View style={[styles.flex, { backgroundColor: c.bg, paddingTop: insets.top }]}>
         <View style={styles.backOnly}>
-          <IconButton icon={ChevronLeft} label="Geri" onPress={() => router.back()} />
+          <IconButton icon={ChevronLeft} label="Geri" onPress={goBack} />
         </View>
         {notFound ? (
           <EmptyState icon={Eye} title="İlan yayında değil" message="Bu ilan kaldırılmış, satılmış veya süresi dolmuş olabilir." />
@@ -144,8 +152,12 @@ export default function ListingScreen() {
 
   const share = () => {
     const url = webUrl(`/ilan/${listing.slug}`);
-    void Share.share({ message: `${listing.title} – ${formatPrice(listing.price, listing.currency)}\n${url}`, url });
+    const text = `${listing.title} – ${formatPrice(listing.price, listing.currency)}`;
+    // iOS adds `url` itself; Android only shares the message.
+    void Share.share(Platform.OS === 'ios' ? { message: text, url } : { message: `${text}\n${url}` });
   };
+  // Older servers do not say; then the button stays and the server answers.
+  const canCall = data.hasPhone !== false;
 
   const openMap = () => {
     const q = listing.lat != null && listing.lng != null ? `${listing.lat},${listing.lng}` : locationLabel(listing.city, listing.district, listing.neighborhood);
@@ -169,6 +181,11 @@ export default function ListingScreen() {
                 <Text variant="caption" tone="muted" style={styles.flex}>
                   {live && daysLeft != null ? `Bu sizin ilanınız · ${daysLeft} gün kaldı` : 'Bu sizin ilanınız'}
                 </Text>
+              </View>
+              <View style={styles.ownerStats}>
+                <OwnerStat label="Görüntülenme" value={listing.view_count ?? 0} />
+                <OwnerStat label="Favori" value={data.favoriteCount} />
+                <OwnerStat label="Telefon" value={data.phoneRevealCount} />
               </View>
               {expired && listing.status === 'ACTIVE' ? (
                 <View style={[styles.expired, { backgroundColor: c.warnSoft }]}>
@@ -239,7 +256,7 @@ export default function ListingScreen() {
             {attrs.map(([key, value]) => (
               <View key={key}>
                 <Divider inset={space.lg} />
-                <InfoRow label={key} value={typeof value === 'number' ? formatNumber(value) : String(value)} />
+                <InfoRow label={key} value={attrText(value)} />
               </View>
             ))}
           </Card>
@@ -260,11 +277,40 @@ export default function ListingScreen() {
             </View>
           ) : null}
 
+          {data.history.length > 1 ? (
+            <View style={styles.section}>
+              <Text variant="subheading">Fiyat geçmişi</Text>
+              <Card padded={false}>
+                {data.history.map((h, i) => (
+                  <View key={`${h.at}-${i}`}>
+                    {i > 0 ? <Divider inset={space.lg} /> : null}
+                    <InfoRow label={formatDate(h.at)} value={formatPrice(h.price, listing.currency)} />
+                  </View>
+                ))}
+              </Card>
+            </View>
+          ) : null}
+
           <SellerCard listing={listing} rating={data.sellerStats} onPress={() => listing.user_id && router.push({ pathname: '/satici/[id]', params: { id: listing.user_id } })} />
 
           {data.reviews.length ? (
             <View style={styles.section}>
-              <Text variant="subheading">Satıcı yorumları</Text>
+              <View style={styles.row}>
+                <Text variant="subheading" style={styles.flex}>
+                  Satıcı yorumları
+                </Text>
+                {listing.user_id && data.sellerStats.rating_count > 3 ? (
+                  <Pressable
+                    accessibilityRole="link"
+                    hitSlop={8}
+                    onPress={() => router.push({ pathname: '/satici/[id]', params: { id: listing.user_id ?? '' } })}
+                  >
+                    <Text variant="label" tone="primary">
+                      Tümünü gör ({data.sellerStats.rating_count})
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </View>
               {data.reviews.slice(0, 3).map((r) => (
                 <Card key={r.id} style={styles.review}>
                   <View style={styles.row}>
@@ -331,7 +377,7 @@ export default function ListingScreen() {
           scrolled && [{ backgroundColor: c.surface, borderBottomColor: c.border, borderBottomWidth: hairline }],
         ]}
       >
-        <IconButton icon={ChevronLeft} label="Geri" tone={scrolled ? 'default' : 'onImage'} onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} />
+        <IconButton icon={ChevronLeft} label="Geri" tone={scrolled ? 'default' : 'onImage'} onPress={goBack} />
         <Text variant="bodyStrong" numberOfLines={1} style={[styles.flex, { opacity: scrolled ? 1 : 0 }]}>
           {listing.title}
         </Text>
@@ -341,6 +387,7 @@ export default function ListingScreen() {
             icon={Heart}
             label={data.isFavorite ? 'Favorilerden çıkar' : 'Favorilere ekle'}
             tone={data.isFavorite ? 'danger' : scrolled ? 'default' : 'onImage'}
+            fill={data.isFavorite}
             onPress={() => toggleFavorite(listing)}
           />
         ) : null}
@@ -348,7 +395,7 @@ export default function ListingScreen() {
 
       {!isOwner && live ? (
         <View style={[styles.actionBar, { backgroundColor: c.surface, borderTopColor: c.border, paddingBottom: insets.bottom + space.sm }, shadow(2)]}>
-          <Button title="Ara" icon={Phone} variant="outline" loading={phoneBusy} onPress={revealPhone} style={styles.flex} />
+          {canCall ? <Button title="Ara" icon={Phone} variant="outline" loading={phoneBusy} onPress={revealPhone} style={styles.flex} /> : null}
           <Button
             title="Teklif"
             icon={HandCoins}
@@ -371,10 +418,37 @@ export default function ListingScreen() {
           <MessageSheet listing={listing} visible={sheet === 'message'} onClose={() => setSheet(null)} />
           <OfferSheet listing={listing} visible={sheet === 'offer'} onClose={() => setSheet(null)} />
           <ReportSheet listingId={listing.id} visible={sheet === 'report'} onClose={() => setSheet(null)} />
-          <ReviewSheet listingId={listing.id} existing={data.reviewEligibility.existing} visible={sheet === 'review'} onClose={() => setSheet(null)} />
+          <ReviewSheet listingId={listing.id} sellerId={listing.user_id} existing={data.reviewEligibility.existing} visible={sheet === 'review'} onClose={() => setSheet(null)} />
         </>
       ) : null}
-      <PhoneSheet phone={phone} sellerName={listing.store_name ?? listing.seller_name} visible={sheet === 'phone'} onClose={() => setSheet(null)} />
+      <PhoneSheet
+        phone={phone}
+        sellerName={listing.store_name ?? listing.seller_name}
+        whatsapp={data.showWhatsapp !== false}
+        visible={sheet === 'phone'}
+        onClose={() => setSheet(null)}
+      />
+      {/* Light icons over the photos, the theme's own once the header turns solid. */}
+      <StatusBar style={scrolled ? (dark ? 'light' : 'dark') : 'light'} />
+    </View>
+  );
+}
+
+/** Attribute values as people read them: yes/no, grouped numbers. */
+function attrText(value: unknown): string {
+  if (value === true || value === 'true') return 'Evet';
+  if (value === false || value === 'false') return 'Hayır';
+  if (Array.isArray(value)) return value.join(', ');
+  return typeof value === 'number' ? formatNumber(value) : String(value);
+}
+
+function OwnerStat({ label, value }: { label: string; value: number }) {
+  return (
+    <View style={styles.ownerStat}>
+      <Text variant="bodyStrong">{formatNumber(value)}</Text>
+      <Text variant="small" tone="muted">
+        {label}
+      </Text>
     </View>
   );
 }
@@ -458,12 +532,12 @@ function SellerCard({ listing, rating, onPress }: { listing: Listing; rating: { 
 function DetailSkeleton({ height }: { height: number }) {
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
-  const router = useRouter();
+  const goBack = useGoBack();
   return (
     <View style={[styles.flex, { backgroundColor: c.bg }]}>
       <Skeleton height={height} rounded={0} />
       <View style={[styles.topBar, { paddingTop: insets.top + space.xs }]}>
-        <IconButton icon={ChevronLeft} label="Geri" tone="onImage" onPress={() => router.back()} />
+        <IconButton icon={ChevronLeft} label="Geri" tone="onImage" onPress={goBack} />
       </View>
       <View style={styles.body}>
         <Skeleton width="45%" height={30} />
@@ -485,6 +559,8 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   body: { padding: space.lg, gap: space.lg },
   ownerCard: { gap: space.md, borderWidth: 1 },
+  ownerStats: { flexDirection: 'row', gap: space.sm },
+  ownerStat: { flex: 1, alignItems: 'center', gap: 2 },
   titleBlock: { gap: space.sm },
   drop: { flexDirection: 'row', alignItems: 'center', gap: space.xs, alignSelf: 'flex-start', paddingHorizontal: space.sm, paddingVertical: 4, borderRadius: radius.sm },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs },

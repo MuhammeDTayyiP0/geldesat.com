@@ -1,5 +1,6 @@
+import { useRef, type ComponentRef } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
-import { useRouter, type Href } from 'expo-router';
+import { useRouter, useScrollToTop, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Bell, ChevronRight, Heart, History, LayoutGrid, MessageCircle, Rocket, Settings, Store } from 'lucide-react-native';
 import { keys, queryClient, useCounts, useMe } from '@/api/queries';
@@ -18,6 +19,8 @@ export default function AccountScreen() {
   const me = useMe();
   const { data: counts } = useCounts();
   const signedIn = session.status === 'signedIn';
+  const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
+  useScrollToTop(scrollRef);
 
   const topBar = (
     <View style={[styles.top, { paddingTop: insets.top + space.sm }]}>
@@ -53,6 +56,7 @@ export default function AccountScreen() {
 
   return (
     <ScrollView
+      ref={scrollRef}
       style={{ backgroundColor: c.bg }}
       contentContainerStyle={styles.content}
       refreshControl={

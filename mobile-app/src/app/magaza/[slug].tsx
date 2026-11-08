@@ -2,9 +2,11 @@ import { useEffect } from 'react';
 import { View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
+import { Store } from 'lucide-react-native';
+import { ApiError } from '@/api/client';
 import { listings } from '@/api/endpoints';
 import { keys } from '@/api/queries';
-import { ErrorState, Header, Loading, useTheme } from '@/ui';
+import { EmptyState, ErrorState, Header, Loading, useTheme } from '@/ui';
 
 /**
  * A store is shown on its owner's profile, so there is one public page per
@@ -25,7 +27,15 @@ export default function StoreRedirect() {
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
       <Header title="Mağaza" />
-      {query.isError && !query.data ? <ErrorState error={query.error} onRetry={() => query.refetch()} /> : <Loading />}
+      {query.isError && !query.data ? (
+        query.error instanceof ApiError && query.error.status === 404 ? (
+          <EmptyState icon={Store} title="Mağaza bulunamadı" message="Bu mağaza kapatılmış ya da adresi değişmiş olabilir." />
+        ) : (
+          <ErrorState error={query.error} onRetry={() => query.refetch()} />
+        )
+      ) : (
+        <Loading />
+      )}
     </View>
   );
 }

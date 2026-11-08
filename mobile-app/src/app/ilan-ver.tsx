@@ -501,7 +501,7 @@ function TopBar({ title, onClose }: { title: string; onClose: () => void }) {
 
 /** Inline drill-down: tap through the tree until a leaf is reached. */
 function CategoryStep({ path, onPath, onLeaf }: { path: Category[]; onPath: (path: Category[]) => void; onLeaf: () => void }) {
-  const { c } = useTheme();
+  const { c, dark } = useTheme();
   const leafPicked = path.length > 0 && path[path.length - 1]?.has_children === false;
   const browsePath = (leafPicked ? path.slice(0, -1) : path).map((p) => p.id);
   const level = useQuery({ queryKey: keys.browse(browsePath), queryFn: () => catalog.browse(browsePath), placeholderData: (p) => p });
@@ -545,7 +545,7 @@ function CategoryStep({ path, onPath, onLeaf }: { path: Category[]; onPath: (pat
         <View style={[styles.catList, { backgroundColor: c.surface, borderColor: c.border }]}>
           {children.map((cat, i) => {
             const selected = leafPicked && path[path.length - 1]?.id === cat.id;
-            const { icon: Icon, tint } = categoryIcon(cat.icon);
+            const { icon: Icon, tint } = categoryIcon(cat.icon, dark);
             return (
               <View key={cat.id}>
                 {i ? <Divider inset={space.lg} /> : null}

@@ -22,11 +22,12 @@ export type FilterState = {
 };
 
 export const SORTS: { value: SortKey; label: string }[] = [
-  { value: 'date_desc', label: 'En yeni' },
-  { value: 'date_asc', label: 'En eski' },
+  // Same names as the site's sort menu.
+  { value: 'date_desc', label: 'En yeni ilanlar' },
+  { value: 'date_asc', label: 'En eski ilanlar' },
   { value: 'price_asc', label: 'Fiyat: düşükten yükseğe' },
   { value: 'price_desc', label: 'Fiyat: yüksekten düşüğe' },
-  { value: 'views_desc', label: 'En çok görüntülenen' },
+  { value: 'views_desc', label: 'En çok incelenenler' },
 ];
 
 const num = (v?: string) => {
@@ -34,21 +35,37 @@ const num = (v?: string) => {
   return digits ? Number(digits) : undefined;
 };
 
+/** "En az 500, en çok 100" means 100-500: an empty result for a reversed range helps nobody. */
+function ordered(min?: string, max?: string): [number | undefined, number | undefined] {
+  const a = num(min);
+  const b = num(max);
+  return a != null && b != null && a > b ? [b, a] : [a, b];
+}
+
+/** Category-specific ranges and options go with the category, so none stays as an invisible filter. */
+export function withoutCategory(state: FilterState): FilterState {
+  return { ...state, category: undefined, categoryName: undefined, attrs: {}, minYear: undefined, maxYear: undefined, minKm: undefined, maxKm: undefined, minM2: undefined, maxM2: undefined };
+}
+
 export function toSearchFilters(state: FilterState, page: number, limit: number): SearchFilters {
   const attrs = Object.fromEntries(Object.entries(state.attrs).filter(([, v]) => v.length));
+  const [minPrice, maxPrice] = ordered(state.minPrice, state.maxPrice);
+  const [minYear, maxYear] = ordered(state.minYear, state.maxYear);
+  const [minKm, maxKm] = ordered(state.minKm, state.maxKm);
+  const [minM2, maxM2] = ordered(state.minM2, state.maxM2);
   return {
     q: state.q?.trim() || undefined,
     category: state.category || undefined,
     city: state.city || undefined,
     district: state.district || undefined,
-    minPrice: num(state.minPrice),
-    maxPrice: num(state.maxPrice),
-    minYear: num(state.minYear),
-    maxYear: num(state.maxYear),
-    minKm: num(state.minKm),
-    maxKm: num(state.maxKm),
-    minM2: num(state.minM2),
-    maxM2: num(state.maxM2),
+    minPrice,
+    maxPrice,
+    minYear,
+    maxYear,
+    minKm,
+    maxKm,
+    minM2,
+    maxM2,
     sort: state.sort,
     urgent: state.urgent || undefined,
     featured: state.featured || undefined,

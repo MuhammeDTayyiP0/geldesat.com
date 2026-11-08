@@ -44,7 +44,7 @@ Temiz çıkan alanlar: admin server fonksiyonlarının tamamı yetki kontrollü 
 - [x] 8. **Y · Reddedilen ilan askı kalkınca yayına dönüyor.** Admin reddi `status_before_ban`'ı temizlemiyor. `W/lib/server/admin/users.ts:288`, `W/lib/server/admin/listings.ts:292` → her admin durum değişikliğinde sıfırla.
 - [x] 9. **Y · Onay denetimsiz.** Toplu onay kaynak durumu ve satıcı askısını kontrol etmiyor: "Tümü"nden seçilince SATILDI, REDDEDİLDİ ve askıdaki satıcının ilanları yayına girer. `listings.ts:282-305` → `status='PENDING'` koşulu. Ayrıca `A` kısayolu `e.repeat` ve yükleme kontrolü yapmıyor; basılı tutmak sıradaki ilanı görmeden onaylar. `W/routes/admin/moderasyon.tsx:141-143`.
 - [x] 10. **Y · Okundu gizliliği sızıyor.** Eski REST ucu `read_receipts` ayarına bakmadan `read_at` döndürüyor ve yayınlıyor. Mevcut uygulama bu ucu çağırmıyor, ama açık. `W/routes/api/mobile/conversations/$id.ts:23-41` → RPC mantığını uygula veya uçları kapat.
-- [ ] 11. **Y · Satıcının WhatsApp ayarı uygulamada geçersiz.** "WhatsApp ile yaz" her zaman görünüyor, mobil API `show_whatsapp` döndürmüyor. `M/features/listing/ListingSheets.tsx:122`, `W/routes/api/mobile/listings/$id.ts` → alanı ekle, koşula bağla; web önce deploy edilmeli.
+- [x] 11. **Y · Satıcının WhatsApp ayarı uygulamada geçersiz.** "WhatsApp ile yaz" her zaman görünüyor, mobil API `show_whatsapp` döndürmüyor. `M/features/listing/ListingSheets.tsx:122`, `W/routes/api/mobile/listings/$id.ts` → alanı ekle, koşula bağla; web önce deploy edilmeli.
 - [x] 12. **Y · Oturumu kapanmış telefona mesaj push'u.** 401'de, çevrimdışı çıkışta ve hesap silmede sunucudaki token kalıyor; şifre değişse bile çalınan telefon mesaj önizlemesi alır. `M/api/client.ts:68-70`, `M/lib/push.ts:47-48`, `M/app/ayarlar/guvenlik.tsx:125,159` → oturum kapanışında sunucuda sil, token'ı oturuma bağla.
 - [x] 13. **Y · Hesap silme metni yanlış, veri kaybına yol açabilir.** Mobil "giriş yaparak geri alabilirsiniz" diyor; giriş geri almıyor, açık `restoreMyAccount` gerekiyor ve düğme yalnız Şifre ve güvenlik içinde. Kullanıcı geri aldığını sanar, 30 gün sonra veri silinir. `M/app/ayarlar/guvenlik.tsx:126,172`, `W/lib/server/settings.ts:132` → belirgin banner ve doğru metin.
 - [ ] 14. **Y (olası) · IP tabanlı sınırlar.** `x-forwarded-for` ilk değerine dayanıyor; proxy'ye göre sahtelenebilir veya herkes aynı IP'yi paylaşıp haksız 429 alabilir. `W/lib/server/helpers.ts` `viewerKey`, `web/docker-compose.yml:27` → gerçek zinciri doğrula, güvenilir tek kaynak kullan, portu kapat.
@@ -87,7 +87,7 @@ Temiz çıkan alanlar: admin server fonksiyonlarının tamamı yetki kontrollü 
 - [x] 42. **Y · Satıcı sayfası 24 ilanda duruyor.** "İlanlar (100)" yazarken 76 ilana ulaşılamıyor; web ve mobil. Yorumlar da 20'de kesiliyor. `W/routes/satici/$id.tsx:23,223`, `W/routes/api/mobile/sellers/$id.ts:32`, `W/lib/server/account.ts:342`.
 - [x] 43. **O · Sitemap `lastmod` geçersiz.** `String(Date).slice(0,10)` "Sat Nov 07" üretir; `timestamptz` için parser yok. `web/server/middleware/seo.ts:206`, `W/lib/db.ts:107-109` → canlı sitemap'ten doğrula, `TO_CHAR`.
 - [ ] 44. **Y · Mağaza riski (olası).** iOS'ta Google girişi var, Apple ile giriş yok (native değişiklik ve mağaza sürümü gerekir). `.well-known` dosyaları üretimde 404, paylaşılan ilan linkleri uygulamayı açmaz. `M/app/giris.tsx:198`, `mobile-app/app.json:23,40-50`, `web/server/middleware/app-links.ts:18`.
-- [ ] 45. **Y · 360dp Android'de Ara ızgarası tek sütuna düşüyor (olası).** `width: 48.8%` + `gap: 8` sığmıyor. `M/app/(tabs)/ara.tsx:165,175`.
+- [x] 45. **Y · 360dp Android'de Ara ızgarası tek sütuna düşüyor (olası).** `width: 48.8%` + `gap: 8` sığmıyor. `M/app/(tabs)/ara.tsx:165,175`.
 
 ---
 
@@ -456,30 +456,30 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 
 ### 3.8 Mobil: keşif
 
-- [ ] D · `(tabs)/_layout.tsx:76` — Sekme dokunuşu başa kaydırmıyor.
-- [ ] O (olası) · `(tabs)/index.tsx:57`, `sonuclar.tsx:63` — Tekrar eden ilan elenmiyor, anahtar çakışır.
+- [x] D · `(tabs)/_layout.tsx:76` — Sekme dokunuşu başa kaydırmıyor.
+- [x] O (olası) · `(tabs)/index.tsx:57`, `sonuclar.tsx:63` — Tekrar eden ilan elenmiyor, anahtar çakışır.
 - [ ] D · `index.tsx:128,144,254,136` — Boş şehir durumu; kart "şehir seç" diyor ama izin istiyor; kategori şeridi; rol eksik.
-- [ ] O (olası) · `(tabs)/ara.tsx:22` — İkinci dokunuşta klavye açılmaz. O · `ara.tsx:34` — 7-15 haneli her sayı ilan sanılıyor.
-- [ ] D · `ara.tsx:117` — Kategori hatası yok. O (olası) · `ara.tsx:97` — Silme VoiceOver'da ulaşılamayabilir.
-- [ ] O · `sonuclar.tsx:171` — Kategori kaldırılınca Yıl/KM/m² görünmez filtre olarak kalıyor. O · `:193`, `index.tsx:193` — Sonraki sayfa hatası sessiz.
-- [ ] D · `sonuclar.tsx:74,106,123`, `features/search/filters.ts:25` — Başlık ve metin eski; korumasız `back()`; sıralama adı farklı.
-- [ ] O · `kategoriler.tsx:22` — Yüklenirken eski liste duruyor, ikinci dokunuş yolu bozuyor. D · `:40` — Android geri tuşu ekrandan çıkıyor.
-- [ ] Y · `app/ilan/[id].tsx:77`, `features/listing/favorites.ts:34,42`, `ListingSheets.tsx:187` — Slug veya numarayla açılan ilanda kalp ve sayaç değişmiyor; ikinci dokunuş sessizce favoriden çıkarıyor.
-- [ ] O · `app/giris.tsx:35` — Girişte yalnız `me` yenileniyor; `isOwner`, `isFavorite` anonim kalıyor.
-- [ ] O · `ilan/[id].tsx:100,105,466` — Çevrimdışı dönüşte tam ekran hata; korumasız geri, derin bağlantıda ölü ekran.
-- [ ] O · `ListingSheets.tsx:68` — Her teklif önce "Merhaba..." mesajı gönderiyor; hata ve yeniden denemede çoğalıyor.
-- [ ] O · `ilan/[id].tsx:343` — Favori kalbi fotoğraf üstünde zor seçiliyor, dolu değil.
-- [ ] O (olası) · `_layout.tsx:46` — Durum çubuğu koyu fotoğrafta okunmuyor.
-- [ ] O · `lib/format.ts:102` — "2025'den beri üye".
+- [x] O (olası) · `(tabs)/ara.tsx:22` — İkinci dokunuşta klavye açılmaz. O · `ara.tsx:34` — 7-15 haneli her sayı ilan sanılıyor.
+- [x] D · `ara.tsx:117` — Kategori hatası yok. O (olası) · `ara.tsx:97` — Silme VoiceOver'da ulaşılamayabilir.
+- [x] O · `sonuclar.tsx:171` — Kategori kaldırılınca Yıl/KM/m² görünmez filtre olarak kalıyor. O · `:193`, `index.tsx:193` — Sonraki sayfa hatası sessiz.
+- [x] D · `sonuclar.tsx:74,106,123`, `features/search/filters.ts:25` — Başlık ve metin eski; korumasız `back()`; sıralama adı farklı.
+- [x] O · `kategoriler.tsx:22` — Yüklenirken eski liste duruyor, ikinci dokunuş yolu bozuyor. D · `:40` — Android geri tuşu ekrandan çıkıyor.
+- [x] Y · `app/ilan/[id].tsx:77`, `features/listing/favorites.ts:34,42`, `ListingSheets.tsx:187` — Slug veya numarayla açılan ilanda kalp ve sayaç değişmiyor; ikinci dokunuş sessizce favoriden çıkarıyor.
+- [x] O · `app/giris.tsx:35` — Girişte yalnız `me` yenileniyor; `isOwner`, `isFavorite` anonim kalıyor.
+- [x] O · `ilan/[id].tsx:100,105,466` — Çevrimdışı dönüşte tam ekran hata; korumasız geri, derin bağlantıda ölü ekran.
+- [x] O · `ListingSheets.tsx:68` — Her teklif önce "Merhaba..." mesajı gönderiyor; hata ve yeniden denemede çoğalıyor.
+- [x] O · `ilan/[id].tsx:343` — Favori kalbi fotoğraf üstünde zor seçiliyor, dolu değil.
+- [x] O (olası) · `_layout.tsx:46` — Durum çubuğu koyu fotoğrafta okunmuyor.
+- [x] O · `lib/format.ts:102` — "2025'den beri üye".
 - [ ] D · `ilan/[id].tsx:147,308,188,242` — Çift link (olası); "bildir/şikayet"; web'deki sahip paneli, fiyat geçmişi, "Tümünü gör" eksik; BOOLEAN ham (olası).
-- [ ] O · `satici/[id].tsx:109` — 20 yorumun 5'i, "tümü" yok. D · `:40`, `magaza/[slug].tsx:28` — 404'te "Yüklenemedi". D · `ListingSheets.tsx:187` — `keys.seller` yenilenmiyor.
-- [ ] O · `favorites.ts:30,47-50` — Liste yüklenmeden dokununca kalp ters dönebilir. O (olası) · `favoriler.tsx:51` — "Fiyat düşünce haberdar olursunuz" diyor, böyle bildirim bulunamadı. O · `favoriler.tsx:37` — Dolu liste hata ekranına dönüyor. D · `ListingGrid.tsx:61` — Kendi ilanında kalp.
-- [ ] O · `api/queries.ts:108` — `keys.recent`, `deletion`, `forEdit` çıkışta silinmiyor.
-- [ ] O · `son-bakilanlar.tsx:84,60` — Yayında olmayan satır 404; hata listeyi eziyor. D · `:116` — "12 Eki 2026 baktınız". O (olası) · `:120` — Kaldır düğmesi VoiceOver.
-- [ ] O (olası) · `ListingCard.tsx:70` — Kalp iç içe. O · `CategoryPicker.tsx:70,30` — Hata yok, `post` dalı ölü. O · `features/catalog/categoryIcon.ts:18` — Koyu temada 2,3:1.
-- [ ] D · `lib/links.ts:44` — `/search` parametreleri, `/son-bakilanlar`, `/ayarlar/*` eşlenmemiş. D (olası) · `:16` — Bozuk `%` hata fırlatıyor; `nearby.ts:10` — "Istanbul" eşleşmiyor; `mapHtml.ts:18` — Leaflet unpkg'den, hata yok.
-- [ ] D · `FilterSheet.tsx:48` — En az > en çok. `OptionPicker.tsx:24,56` — Arama metni kalıyor. `ListingGrid.tsx:47` — Ölü prop, iPhone alt boşluğu.
-- [ ] O · `ListingGrid.tsx:55`, `ListingCard` — `memo` etkisiz; `sonuclar`'da her tuş tüm kartları çiziyor.
+- [x] O · `satici/[id].tsx:109` — 20 yorumun 5'i, "tümü" yok. D · `:40`, `magaza/[slug].tsx:28` — 404'te "Yüklenemedi". D · `ListingSheets.tsx:187` — `keys.seller` yenilenmiyor.
+- [x] O · `favorites.ts:30,47-50` — Liste yüklenmeden dokununca kalp ters dönebilir. O (olası) · `favoriler.tsx:51` — "Fiyat düşünce haberdar olursunuz" diyor, böyle bildirim bulunamadı. O · `favoriler.tsx:37` — Dolu liste hata ekranına dönüyor. D · `ListingGrid.tsx:61` — Kendi ilanında kalp.
+- [x] O · `api/queries.ts:108` — `keys.recent`, `deletion`, `forEdit` çıkışta silinmiyor.
+- [x] O · `son-bakilanlar.tsx:84,60` — Yayında olmayan satır 404; hata listeyi eziyor. D · `:116` — "12 Eki 2026 baktınız". O (olası) · `:120` — Kaldır düğmesi VoiceOver.
+- [x] O (olası) · `ListingCard.tsx:70` — Kalp iç içe. O · `CategoryPicker.tsx:70,30` — Hata yok, `post` dalı ölü. O · `features/catalog/categoryIcon.ts:18` — Koyu temada 2,3:1.
+- [x] D · `lib/links.ts:44` — `/search` parametreleri, `/son-bakilanlar`, `/ayarlar/*` eşlenmemiş. D (olası) · `:16` — Bozuk `%` hata fırlatıyor; `nearby.ts:10` — "Istanbul" eşleşmiyor; `mapHtml.ts:18` — Leaflet unpkg'den, hata yok.
+- [x] D · `FilterSheet.tsx:48` — En az > en çok. `OptionPicker.tsx:24,56` — Arama metni kalıyor. `ListingGrid.tsx:47` — Ölü prop, iPhone alt boşluğu.
+- [x] O · `ListingGrid.tsx:55`, `ListingCard` — `memo` etkisiz; `sonuclar`'da her tuş tüm kartları çiziyor.
 
 ### 3.9 Mobil: ilan verme
 

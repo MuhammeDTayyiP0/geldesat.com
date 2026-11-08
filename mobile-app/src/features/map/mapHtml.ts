@@ -23,7 +23,7 @@ export function mapHtml(initial: MapCenter, dark: boolean): string {
 </style>
 </head><body>
 <div id="map"></div>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" onerror="document.body.innerHTML='<p style=&quot;font:14px sans-serif;color:#888;text-align:center;margin-top:40%&quot;>Harita yüklenemedi. İnternet bağlantınızı kontrol edin.</p>'"></script>
 <script>
   function post(msg){
     var s = JSON.stringify(msg);

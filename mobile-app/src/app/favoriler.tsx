@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Heart, LayoutGrid, List } from 'lucide-react-native';
@@ -9,6 +10,7 @@ import { Button, EmptyState, ErrorState, Header, IconButton, useTheme } from '@/
 
 export default function FavoritesScreen() {
   const { c } = useTheme();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const session = useSession();
   const favorites = useFavorites();
@@ -38,6 +40,7 @@ export default function FavoritesScreen() {
         <ErrorState error={favorites.error} onRetry={() => favorites.refetch()} />
       ) : (
         <ListingGrid
+          bottomInset={insets.bottom}
           listings={favorites.data ?? []}
           layout={layout}
           loading={favorites.isLoading}
@@ -48,7 +51,7 @@ export default function FavoritesScreen() {
             <EmptyState
               icon={Heart}
               title="Henüz favoriniz yok"
-              message="İlanlardaki kalp simgesine dokunarak favorilerinize ekleyebilirsiniz. Fiyat düşünce haberdar olursunuz."
+              message="İlanlardaki kalp simgesine dokunarak favorilerinize ekleyebilirsiniz; her cihazınızda burada görünür."
               action={<Button title="İlanlara göz at" variant="outline" onPress={() => router.navigate('/')} />}
             />
           }

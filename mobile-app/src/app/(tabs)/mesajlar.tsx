@@ -1,6 +1,6 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { FlatList, Pressable, RefreshControl, StyleSheet, TextInput, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useScrollToTop } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Image } from 'expo-image';
@@ -40,6 +40,8 @@ type Filter = 'all' | 'buying' | 'selling' | 'archived';
 
 export default function InboxScreen() {
   const { c } = useTheme();
+  const listRef = useRef<FlatList>(null);
+  useScrollToTop(listRef);
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const session = useSession();
@@ -135,6 +137,7 @@ export default function InboxScreen() {
         <ErrorState error={inbox.error} onRetry={() => inbox.refetch()} />
       ) : (
         <FlatList
+          ref={listRef}
           data={rows}
           keyExtractor={(cv) => cv.id}
           refreshControl={<RefreshControl refreshing={inbox.isRefetching} onRefresh={refresh} tintColor={c.primary} />}

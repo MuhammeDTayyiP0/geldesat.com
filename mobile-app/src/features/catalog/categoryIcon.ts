@@ -27,6 +27,22 @@ const ICONS: Record<string, { icon: LucideIcon; tint: string }> = {
   paw: { icon: PawPrint, tint: '#ca8504' },
 };
 
-export function categoryIcon(key: string | null | undefined): { icon: LucideIcon; tint: string } {
-  return (key && ICONS[key]) || { icon: Folder, tint: '#1a4fd8' };
+/** Lighter tints for the dark theme: the light ones fall to about 2.3:1 on a dark card. */
+const DARK_TINTS: Record<string, string> = {
+  home: '#6f95ff',
+  car: '#f97066',
+  bag: '#a48afb',
+  cog: '#98a2b3',
+  tractor: '#f79009',
+  wrench: '#2ed3b7',
+  grad: '#b692f6',
+  briefcase: '#47cd89',
+  users: '#f670c7',
+  paw: '#fac515',
+};
+
+export function categoryIcon(key: string | null | undefined, dark = false): { icon: LucideIcon; tint: string } {
+  const found = key ? ICONS[key] : undefined;
+  if (!found) return { icon: Folder, tint: dark ? '#6f95ff' : '#1a4fd8' };
+  return dark ? { icon: found.icon, tint: DARK_TINTS[key as string] ?? found.tint } : found;
 }

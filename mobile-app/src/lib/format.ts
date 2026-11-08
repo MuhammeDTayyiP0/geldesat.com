@@ -95,11 +95,20 @@ export function lastSeenLabel(online: boolean, lastSeen: string | null): string 
   return `Son görülme ${formatDate(d)}`;
 }
 
+/** "den/dan/ten/tan" after a number as it is read aloud (2023'ten, 2026'dan, 2030'dan, 2000'den). */
+export function ablative(n: number): string {
+  const ONES = ['', 'den', 'den', 'ten', 'ten', 'ten', 'dan', 'den', 'den', 'dan'];
+  const TENS = ['', 'dan', 'den', 'dan', 'tan', 'den', 'tan', 'ten', 'den', 'dan'];
+  if (n % 10) return ONES[n % 10];
+  if (n % 100) return TENS[(n % 100) / 10];
+  return 'den'; // yüz, bin
+}
+
 export function memberSince(iso: string | null | undefined): string {
   if (!iso) return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  return `${MONTHS[d.getMonth()]} ${d.getFullYear()}'den beri üye`;
+  return `${MONTHS[d.getMonth()]} ${d.getFullYear()}'${ablative(d.getFullYear())} beri üye`;
 }
 
 /** Past its end date: still ACTIVE in the database but shown to no one (same rule as the website and server). */
@@ -166,4 +175,10 @@ export function maskPhoneInput(value: string): string {
 
 export function plural(n: number, word: string): string {
   return `${formatNumber(n)} ${word}`;
+}
+
+/** First of each id, in order (pages of a feed can overlap when new listings arrive). */
+export function uniqueById<T extends { id: string }>(items: T[]): T[] {
+  const seen = new Set<string>();
+  return items.filter((item) => !seen.has(item.id) && Boolean(seen.add(item.id)));
 }
