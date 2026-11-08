@@ -52,19 +52,18 @@ export function BottomNav() {
         </Link>
 
         {/* 3. İlan Ver (Ortadaki Özel Yuvarlak Havada Buton - Sahibinden Standartlarında) */}
-        <div className="flex flex-col items-center justify-center">
-          <Link
-            to="/ilan-ver"
+        {/* The label is part of the link, so tapping the text works too. */}
+        <Link to="/ilan-ver" aria-label="İlan Ver" className="group flex flex-col items-center justify-center">
+          <span
             className={cn(
-              "group relative -mt-6 flex size-12.5 items-center justify-center rounded-full bg-primary-solid text-primary-fg ring-4 ring-surface shadow-md shadow-primary/25 transition-transform active:scale-95",
+              "relative -mt-6 flex size-12.5 items-center justify-center rounded-full bg-primary-solid text-primary-fg ring-4 ring-surface shadow-md shadow-primary/25 transition-transform active:scale-95",
               isPost && "ring-primary/30",
             )}
-            aria-label="İlan Ver"
           >
             <Plus className="size-6 stroke-[2.8] text-primary-fg transition-transform group-hover:rotate-90 duration-200" />
-          </Link>
+          </span>
           <span className="mt-0.5 text-[10px] font-bold text-fg">İlan Ver</span>
-        </div>
+        </Link>
 
         {/* 4. Mesajlar */}
         <Link

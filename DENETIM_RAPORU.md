@@ -47,7 +47,7 @@ Temiz çıkan alanlar: admin server fonksiyonlarının tamamı yetki kontrollü 
 - [x] 11. **Y · Satıcının WhatsApp ayarı uygulamada geçersiz.** "WhatsApp ile yaz" her zaman görünüyor, mobil API `show_whatsapp` döndürmüyor. `M/features/listing/ListingSheets.tsx:122`, `W/routes/api/mobile/listings/$id.ts` → alanı ekle, koşula bağla; web önce deploy edilmeli.
 - [x] 12. **Y · Oturumu kapanmış telefona mesaj push'u.** 401'de, çevrimdışı çıkışta ve hesap silmede sunucudaki token kalıyor; şifre değişse bile çalınan telefon mesaj önizlemesi alır. `M/api/client.ts:68-70`, `M/lib/push.ts:47-48`, `M/app/ayarlar/guvenlik.tsx:125,159` → oturum kapanışında sunucuda sil, token'ı oturuma bağla.
 - [x] 13. **Y · Hesap silme metni yanlış, veri kaybına yol açabilir.** Mobil "giriş yaparak geri alabilirsiniz" diyor; giriş geri almıyor, açık `restoreMyAccount` gerekiyor ve düğme yalnız Şifre ve güvenlik içinde. Kullanıcı geri aldığını sanar, 30 gün sonra veri silinir. `M/app/ayarlar/guvenlik.tsx:126,172`, `W/lib/server/settings.ts:132` → belirgin banner ve doğru metin.
-- [ ] 14. **Y (olası) · IP tabanlı sınırlar.** `x-forwarded-for` ilk değerine dayanıyor; proxy'ye göre sahtelenebilir veya herkes aynı IP'yi paylaşıp haksız 429 alabilir. `W/lib/server/helpers.ts` `viewerKey`, `web/docker-compose.yml:27` → gerçek zinciri doğrula, güvenilir tek kaynak kullan, portu kapat.
+- [~] 14. **Y (olası) · IP tabanlı sınırlar.** `x-forwarded-for` ilk değerine dayanıyor; proxy'ye göre sahtelenebilir veya herkes aynı IP'yi paylaşıp haksız 429 alabilir. `W/lib/server/helpers.ts` `viewerKey`, `web/docker-compose.yml:27` → gerçek zinciri doğrula, güvenilir tek kaynak kullan, portu kapat. — **Kapanış:** Kod hazır (`TRUSTED_IP_HEADER`); Coolify proxy zincirini senin doğrulaman gerekiyor.
 - [x] 15. **O · Kredi çift yükleme.** Durum transaction dışında okunuyor, `update` koşulsuz. Satış şu an kapalı, açılmadan düzeltilmeli. `W/lib/server/admin/business.ts:195-202`.
 
 ### Kullanıcı akışını bozan hatalar
@@ -86,7 +86,7 @@ Temiz çıkan alanlar: admin server fonksiyonlarının tamamı yetki kontrollü 
 - [x] 41. **Y · Arama kalitesi düşük.** Tek parça `ILIKE`; kelime bölme, Türkçe karakter eşleme ve kategori adı yok. "Honda Civic" sırası tutmazsa, "kiralik" hiç bulunmaz. `W/lib/server/catalog.ts:85-105`.
 - [x] 42. **Y · Satıcı sayfası 24 ilanda duruyor.** "İlanlar (100)" yazarken 76 ilana ulaşılamıyor; web ve mobil. Yorumlar da 20'de kesiliyor. `W/routes/satici/$id.tsx:23,223`, `W/routes/api/mobile/sellers/$id.ts:32`, `W/lib/server/account.ts:342`.
 - [x] 43. **O · Sitemap `lastmod` geçersiz.** `String(Date).slice(0,10)` "Sat Nov 07" üretir; `timestamptz` için parser yok. `web/server/middleware/seo.ts:206`, `W/lib/db.ts:107-109` → canlı sitemap'ten doğrula, `TO_CHAR`.
-- [ ] 44. **Y · Mağaza riski (olası).** iOS'ta Google girişi var, Apple ile giriş yok (native değişiklik ve mağaza sürümü gerekir). `.well-known` dosyaları üretimde 404, paylaşılan ilan linkleri uygulamayı açmaz. `M/app/giris.tsx:198`, `mobile-app/app.json:23,40-50`, `web/server/middleware/app-links.ts:18`.
+- [~] 44. **Y · Mağaza riski (olası).** iOS'ta Google girişi var, Apple ile giriş yok (native değişiklik ve mağaza sürümü gerekir). `.well-known` dosyaları üretimde 404, paylaşılan ilan linkleri uygulamayı açmaz. `M/app/giris.tsx:198`, `mobile-app/app.json:23,40-50`, `web/server/middleware/app-links.ts:18`. — **Kapanış:** Mağaza sürümü ertelendi: ücretli Apple üyeliği yok (Faz 14).
 - [x] 45. **Y · 360dp Android'de Ara ızgarası tek sütuna düşüyor (olası).** `width: 48.8%` + `gap: 8` sığmıyor. `M/app/(tabs)/ara.tsx:165,175`.
 
 ---
@@ -120,10 +120,10 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 ### 3.1 Web: vitrin
 
 **Ana sayfa `routes/index.tsx`**
-- [ ] O · `index.tsx:317`, `router.tsx:33` — `scrollRestoration` kapalı; 3. sayfadan ilana girip dönünce başa düşülüyor → aç, akış sayfasını sakla.
+- [x] O · `index.tsx:317`, `router.tsx:33` — `scrollRestoration` kapalı; 3. sayfadan ilana girip dönünce başa düşülüyor → aç, akış sayfasını sakla.
 - [x] D · `catalog.ts:168` — "Yeni ilanlar" başında eski vitrin ilanları çıkabilir → saf `created_at`.
 - [x] D · `index.tsx:184,192` — Uzun kök kategori adları `line-clamp-1` ile kesiliyor.
-- [ ] D (olası) · `index.tsx:220,353` — `NearbyRail` içeriği itiyor; ekran dışı görsele `priority` veriliyor.
+- [~] D (olası) · `index.tsx:220,353` — `NearbyRail` içeriği itiyor; ekran dışı görsele `priority` veriliyor. — **Kapanış:** Görsel önceliği ölçmeden değiştirilmedi.
 - [x] D · `index.tsx:72,78` — HowTo şemasında "milyonlarca alıcı" iddiası; Google bu zengin sonucu kaldırdı.
 - [x] D · `lib/nearby-city.ts:73-76` — Zaman aşımı da "izin verilmedi" görünüyor.
 
@@ -136,13 +136,13 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 - [x] D · `Filters.tsx:53,88-103` — Form değil, Enter çalışmıyor; en az > en çok kontrolü yok.
 - [x] D · `Filters.tsx:222-233` — Çoklu seçimde `aria-pressed` yok.
 - [x] D · `search.tsx:526-541` — `?page=999` "ilan yok" diyor → son sayfaya yönlendir.
-- [ ] D · `search.tsx:369-375`, `catalog.ts:266-270` — Tahmin edilen kategori seçili gibi görünüyor, "Tüm Kategoriler" çalışmıyor.
-- [ ] D · `search.tsx:229,371,384` — Kategori değişince gizli filtreler kalıyor.
-- [ ] D · `search.tsx:673-676` — Harita linki `city` gönderiyor, `/harita` okumuyor.
-- [ ] D · `search.tsx:107`, `category/$slug.tsx:143` — Görünüm tercihi saklanmıyor, varsayılanlar farklı.
-- [ ] D · `search.tsx:654` — Yüzen çubuk güvenli alanı hesaba katmıyor.
-- [ ] D · `search.tsx:335,625-633` — Arama kutusunda etiket, sayfada `aria-current` yok.
-- [ ] D · `search.tsx:542-546`, `doping.tsx:22`, `satici/$id.tsx:148-158` — `<a>` içinde `<button>`.
+- [x] D · `search.tsx:369-375`, `catalog.ts:266-270` — Tahmin edilen kategori seçili gibi görünüyor, "Tüm Kategoriler" çalışmıyor.
+- [x] D · `search.tsx:229,371,384` — Kategori değişince gizli filtreler kalıyor.
+- [x] D · `search.tsx:673-676` — Harita linki `city` gönderiyor, `/harita` okumuyor.
+- [x] D · `search.tsx:107`, `category/$slug.tsx:143` — Görünüm tercihi saklanmıyor, varsayılanlar farklı.
+- [x] D · `search.tsx:654` — Yüzen çubuk güvenli alanı hesaba katmıyor.
+- [~] D · `search.tsx:335,625-633` — Arama kutusunda etiket, sayfada `aria-current` yok. — **Kapanış:** Kısmen: arama kutusuna etiket eklendi; sayfalamada `aria-current` yok.
+- [x] D · `search.tsx:542-546`, `doping.tsx:22`, `satici/$id.tsx:148-158` — `<a>` içinde `<button>`.
 
 **Kategori `routes/category/$slug.tsx`**
 - [x] O · `:291-326` — Sayfalama `<button>`, `href` yok; SEO ve yeni sekme kaybı → `Link`.
@@ -150,12 +150,12 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 - [x] O · `lib/seo.ts:96-100` — "Satılık Daire Konut İlanları" başlığı → yaprak adını kullan.
 - [x] O · `lib/seo.ts:47-50,75,115-118,161`, `search.tsx:324` — "İş İlanları İlanları"; `GENERIC_ROOTS` ASCII yazıldığı için eşleşmiyor → slug ile kontrol.
 - [x] O · `:274-280,356` — Filtre boşken "Bu kategoride ilan yok"; masaüstünde temizleme ve çip yok.
-- [ ] O · `:268`, `CategoryPicker.tsx` — Büyük kategorilerde seçici ilanların önüne geçiyor, `counts` verilmiyor.
-- [ ] D · `:386` — "Filtreleri Uygula (N)" mevcut sonucun sayısını gösteriyor.
+- [~] O · `:268`, `CategoryPicker.tsx` — Büyük kategorilerde seçici ilanların önüne geçiyor, `counts` verilmiyor. — **Kapanış:** Ertelendi: büyük kategori seçicisi ve sayılar ayrı iş.
+- [~] D · `:386` — "Filtreleri Uygula (N)" mevcut sonucun sayısını gösteriyor. — **Kapanış:** Ertelendi: düğme sayısı küçük bir metin işi.
 - [x] D · `:195-214` — `apply` `neighborhood`, `q`, `urgent`, `featured` değerlerini düşürüyor.
 - [x] D · `:311` — Aktif sayfa `bg-ink`, koyu temada 1,04:1 → `bg-primary`.
 - [x] D · `:239`, `lib/seo.ts:179` — Sayı biçimsiz; "satılık ve kiralık" metni iş ilanlarına uymuyor.
-- [ ] D · `:191-193,226` — Ölü kod; breadcrumb `aria-label` yok.
+- [~] D · `:191-193,226` — Ölü kod; breadcrumb `aria-label` yok. — **Kapanış:** Ertelendi: ölü kod ve breadcrumb etiketi.
 - [x] D (olası) · `CategoryPicker.tsx:68` — `q` alt kategoriye geçince kalıyor → `key={cat.id}`.
 
 **Harita `routes/harita.tsx`**
@@ -169,8 +169,8 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 - [x] O · `sayfa/$slug.tsx:175` — "Son güncelleme: 16 Eylül 2026" sabit; `updated_at` yok.
 - [x] D · `sayfa/$slug.tsx:173,204` — Hakkımızda ve İletişim'de de "Yasal belge" ve Adana mahkemeleri notu.
 - [x] D · `sayfa/$slug.tsx:119-123`, `Footer.tsx:76` — E-posta tıklanamıyor.
-- [ ] D (olası) · `sayfa/$slug.tsx:154,197` — Çapa başlığı üst menü altında kalabilir.
-- [ ] D (olası) · `account.ts:392` — `getStore` herkese açık yanıtta `phone` dönüyor (bkz. mağaza formu bulgusu).
+- [x] D (olası) · `sayfa/$slug.tsx:154,197` — Çapa başlığı üst menü altında kalabilir.
+- [x] D (olası) · `account.ts:392` — `getStore` herkese açık yanıtta `phone` dönüyor (bkz. mağaza formu bulgusu).
 - [x] O · `account.ts:342`, `satici/$id.tsx:224` — Yorum sayısı toplam, liste 20.
 - [x] D · `satici/$id.tsx:220-240` — `tablist` eksik. D (olası) · `:69,74-83` — `Person` şemasında `aggregateRating`.
 
@@ -179,7 +179,7 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 - [x] D · `__root.tsx:142-148` — "İçeriğe atla" yok. D · `__root.tsx:57-62`, `harita.tsx:10-17` — OG etiketleri ana sayfadan miras.
 - [x] D · `styles.css:127` — Seçim rengi koyu temada okunmuyor. D (olası) · `styles.css:99` — `scroll-behavior: smooth` sayfa geçişini ağırlaştırıyor.
 - [x] O · `nav-data.ts:144-177,192-251` — "Dizüstü", "Apple iPhone" kök kategoriye gidiyor; `bilgisayar`, `cep-telefonu` var.
-- [ ] O · `nav-data.ts:26-274`, `SearchBar.tsx:129-135` — `sanayi`, `ozel-ders`, `yardimci` menüde yok.
+- [~] O · `nav-data.ts:26-274`, `SearchBar.tsx:129-135` — `sanayi`, `ozel-ders`, `yardimci` menüde yok. — **Kapanış:** Menü elle yazılı (kök neden 7); veritabanından üretmek ayrı iş.
 - [x] O · `Navbar.tsx:351`, `MegaMenu.tsx:47,59`, `MobileNavigationDrawer.tsx:224,238` — Menü noindex `/search?category=` adresine gidiyor → `/category/$slug`.
 - [x] O · `Navbar.tsx:320-336` — "Tüm Kategoriler" yalnız fareyle açılıyor.
 - [x] O · `MobileNavigationDrawer.tsx:40-44,51,54` — Kilit çalışmıyor, dialog adı, Esc, odak yok, kapanış animasyonu engelli.
@@ -190,11 +190,11 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 - [x] D (olası) · `SearchBar.tsx:192-194,146,166` — Panel yükseklik sınırsız; çift X.
 - [x] D · `SearchBar.tsx:156,283`, `nav-data.ts:276` — "kategori ile ara" ve "Popüler Aramalar" gerçeği yansıtmıyor.
 - [x] D · `Navbar.tsx:341,361` — `no-scrollbar` tanımsız, `py-0.2` geçersiz. D · Dosya sonlarında kalıntı yorumlar.
-- [ ] D · `BottomNav.tsx:65` — "İlan Ver" yazısı linkin dışında.
+- [x] D · `BottomNav.tsx:65` — "İlan Ver" yazısı linkin dışında.
 - [x] O · `CookieBanner.tsx:16-19` — Tercih hiç okunmuyor, iki düğme aynı; politika tarayıcı kaydını silmeyi öneriyor. D · `:17` — Depolama kapalıysa banner kapanmıyor.
 - [x] D · `catalog.ts:510`, `Footer.tsx:38-46` — Footer için IBAN ve banka alanları da herkese dönüyor.
 - [x] D · `styles.css:218-220`, `Footer.tsx:81` — Mobilde çift alt boşluk.
-- [ ] D · `NotFound.tsx:145-151` — Arama kutusunda etiket yok.
+- [x] D · `NotFound.tsx:145-151` — Arama kutusunda etiket yok.
 - [x] O · `ListingCard.tsx:99-105,137` — Favori düğmesi `<a>` içinde. D · `ListingCard.tsx:45-47,104` — Girişsiz favoride yalnız hata toast'ı, 36 px alan.
 - [x] D · `components/ui/badge.tsx:19` — Koyu temada ACİL rozeti 2,8:1.
 
@@ -212,10 +212,10 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 - [x] O · `ListingImageGallery.tsx:258` — Lightbox'ta dialog rolü ve odak yok.
 - [x] O · `ListingImageGallery.tsx:337` — `justify-center` + `overflow-x-auto`, soldaki küçük resimlere ulaşılamıyor.
 - [x] D · `ListingImageGallery.tsx:123,261` — Çapraz kaydırma fotoğraf değiştiriyor. `:341` — Küçük resim düğmeleri adsız. `:297` — Telefonda tam master indiriliyor.
-- [ ] D (olası) · `ListingImageGallery.tsx:52` — `pushState`, `getListing`'i yeniden çalıştırıyor.
+- [~] D (olası) · `ListingImageGallery.tsx:52` — `pushState`, `getListing`'i yeniden çalıştırıyor. — **Kapanış:** Olası; ekrana bakmadan değiştirilmedi.
 - [x] D · `$slug.tsx:372,211-213`, `social.ts:37` — Süresi dolmuş ilanda "Favorile" hata veriyor. `$slug.tsx:175` — Favori listesi iki kez çekiliyor.
 - [x] D · `helpers.ts:444` — Telefon sayacı tıklama sayıyor, tekil değil.
-- [ ] D (olası) · `ListingSections.tsx:88-92`, `helpers.ts:272` — Red gerekçesi yalnız bildirimde.
+- [~] D (olası) · `ListingSections.tsx:88-92`, `helpers.ts:272` — Red gerekçesi yalnız bildirimde. — **Kapanış:** Gerekçe için sütun yok; detay sayfası bildirime yönlendiriyor.
 - [x] D · `ListingSections.tsx:190` — Birim kayboluyor (aidat "1500"). D · `ListingDetailSkeleton.tsx:17,25` — İskelet farklı, sayfa zıplıyor.
 
 **İlan ver `routes/ilan-ver.tsx`**
@@ -232,8 +232,8 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 - [x] D · `:165-171,349` — "Kategoriler yükleniyor" sonsuza kalabilir. `:182-184,345` — Aynı yaprağı seçmek değerleri siliyor. `PhotoUploader.tsx:85,231` — Döndürme meşgul sayılmıyor.
 - [x] D (olası) · `:192,218`, `listing-write.ts:112` — Mağaza kimliği düzenlemede yanlış atanabilir.
 - [x] D · `:45,51,62` — Etiketler bağlı değil. `CategoryPicker.tsx:139` — `aria-label` yok. D (olası) · `:99`, `CategoryPicker.tsx:136,254` — Yer tutucu global arama vaat ediyor.
-- [ ] D · `lib/data/geo.ts:85-111` — Mahalle verisi 4 ilde örnek.
-- [ ] D (olası) · `api/upload.ts:14-17` — Boyut `content-length`'e bağlı. `image-pipeline.server.ts:133-139` — HEIC sınırı çözümden sonra. D · `:165-172` — JPEG iki kez sıkıştırılıyor.
+- [~] D · `lib/data/geo.ts:85-111` — Mahalle verisi 4 ilde örnek. — **Kapanış:** Veri işi: mahalle listesi kaynaktan doldurulmalı.
+- [~] D (olası) · `api/upload.ts:14-17` — Boyut `content-length`'e bağlı. `image-pipeline.server.ts:133-139` — HEIC sınırı çözümden sonra. D · `:165-172` — JPEG iki kez sıkıştırılıyor. — **Kapanış:** Olası; ölçmeden değiştirilmedi (boyut sınırı ayrıca okunurken uygulanıyor).
 
 **İlanlarım, favoriler, son bakılanlar**
 - [x] O · `ilanlarim.tsx:65-69` — Hata "Yayında ilanınız yok" görünüyor; mükerrer ilana yol açabilir.
@@ -251,8 +251,8 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 **Sohbet listesi `routes/mesajlar.tsx`**
 - [x] Y · `:89`, `retention.ts:35-40` — Arşivdeki sohbet yeni mesajda istemcide çıkıyor, 60 sn içinde geri dönüyor; rozet ve e-posta saymıyor.
 - [x] O · `:283` — "Okundu işaretle" mesajları okundu yapmıyor. O · `:60,196` — Tek başarısız yenileme listeyi siliyor.
-- [ ] D · `:277` — Menü dokunmatik tablette görünmüyor. `:124,169` — Arşiv boşalınca seçili sekme yok. `:31` — `REJECTED` eşlemesi yok. `:168-175` — Eksik sekme yapısı. `:248` — 11 px düşük kontrast. `:284,288`, `$id.tsx:704` — Eksik ifade. `:60` — "Konuşma"/"sohbet" tutarsız.
-- [ ] D (olası) · `:76-94` — `known` güncelleyici içinde okunuyor.
+- [~] D · `:277` — Menü dokunmatik tablette görünmüyor. `:124,169` — Arşiv boşalınca seçili sekme yok. `:31` — `REJECTED` eşlemesi yok. `:168-175` — Eksik sekme yapısı. `:248` — 11 px düşük kontrast. `:284,288`, `$id.tsx:704` — Eksik ifade. `:60` — "Konuşma"/"sohbet" tutarsız. — **Kapanış:** Ertelendi: web mesajlar listesindeki küçük arayüz maddeleri.
+- [~] D (olası) · `:76-94` — `known` güncelleyici içinde okunuyor. — **Kapanış:** Olası; davranış hatası gözlenmedi.
 
 **Sohbet `routes/mesajlar/$id.tsx`**
 - [x] Y · `:482-485,558-560,379-382,1184-1186` — Devam eden sonuçlar açık sohbete yazılıyor; A'nın mesajı B'de görünür (bkz. madde 16).
@@ -265,17 +265,17 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 - [x] O · `:276,363-364,907` — İlk okunmamışa değil en alta açılıyor.
 - [x] O · `:507-512,561-563` — Başarısız fotoğraf kayboluyor, açıklama yine gidiyor.
 - [x] O · `:427-435` — Aramada debounce yok, her harf istek; hata "Sonuç yok".
-- [ ] O (olası) · `:136,445,891-947` — Her tuşta tüm mesajlar yeniden çiziliyor. `:357-366`, `MessageBubble.tsx:123` — Görsel boyutu ayrılmıyor.
-- [ ] O · `:1-1566` — Dosya bölünmeli: `useChatThread` (223-250, 252-347, 368-425), `useChatViewport` (186-213), `ChatComposer` (440-451, 496-569, 1013-1168), `ThreadHeader` (614-735), `ThreadSearch` (427-435, 737-778), `ListingStrip` (781-823), `MessageList` (826-966), diyaloglar (1293-1566).
+- [~] O (olası) · `:136,445,891-947` — Her tuşta tüm mesajlar yeniden çiziliyor. `:357-366`, `MessageBubble.tsx:123` — Görsel boyutu ayrılmıyor. — **Kapanış:** Ertelendi: dosya bölünmeden (aşağıdaki madde) ele alınmadı.
+- [~] O · `:1-1566` — Dosya bölünmeli: `useChatThread` (223-250, 252-347, 368-425), `useChatViewport` (186-213), `ChatComposer` (440-451, 496-569, 1013-1168), `ThreadHeader` (614-735), `ThreadSearch` (427-435, 737-778), `ListingStrip` (781-823), `MessageList` (826-966), diyaloglar (1293-1566). — **Kapanış:** Karar: ekrana bakmadan 1600 satırı taşımak gereksiz risk; sonra, ekranla birlikte.
 - [x] D · `:1128-1137` — Odakta her seferinde en alta kayıyor. `:1140` — Telefonda Enter gönderiyor. `:1145-1150` — Panoda görsel varsa metin yapıştırılmıyor. `:1072-1079` — Sürükle-bırak yalnız yazı alanında.
 - [x] D · `:696-714` — `catch` yok. `:706-718` — Arşivde de "Arşivle" yazıyor. `:252-262,859` — `hasMore` sıfırlanmıyor. `:981` — Satılmış ilanda "hâlâ satılık" hızlı yanıtı. `:1207-1208` — Hazır cevap metnin üstüne yazıyor. `:1239` — Silme uyarısı eksik. `:808-816` — Telefonda ilan şeridi tıklanmıyor.
-- [ ] D (olası) · `:1349` — Teklif 10 hane, sunucu 1 milyar. `:830-832` — `role="log"` açılışta onlarca mesaj okutabilir.
-- [ ] D · `:1285,1553` — `alt` ve etiket yok. `:727,1427,1461` — "şikâyet" yazımı.
+- [~] D (olası) · `:1349` — Teklif 10 hane, sunucu 1 milyar. `:830-832` — `role="log"` açılışta onlarca mesaj okutabilir. — **Kapanış:** Ertelendi: teklif uzunluğu sunucuda 1 milyarla sınırlı; `role="log"` cihazda denenmeli.
+- [~] D · `:1285,1553` — `alt` ve etiket yok. `:727,1427,1461` — "şikâyet" yazımı. — **Kapanış:** Ertelendi: alt metin ve "şikâyet" yazımı.
 
 **Bildirimler `routes/bildirimler.tsx`**
 - [x] O · `:50` — Hata "Bildirim yok" görünüyor.
 - [x] D · `:47` — `catch` yok. `:38-54` — Sayfa canlı değil. `social.ts:161,179` — 50 gösteriliyor, hepsi okundu oluyor. `retention.ts:16-31` — Sohbet silinince zil rozeti kalıyor. `:91-93` — Bağlantı değil düğme. `chat.ts:104` — Başlık hep "Yeni mesaj". `notification-prefs.ts:3` — Metin alıcıyı kapsamıyor.
-- [ ] D (olası) · `:101` — Uzun gövde kırılmıyor.
+- [~] D (olası) · `:101` — Uzun gövde kırılmıyor. — **Kapanış:** Olası; uzun gövde örneği görülmedi.
 
 **Sohbet sunucusu ve bileşenleri**
 - [x] O · `chat.ts:389-390,450-451,485-494` — Engel varken çevrimiçi ve son görülme açık, `sendTyping` engeli denetlemiyor.
@@ -285,14 +285,14 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 - [x] O · `chat.ts:328,387` — `other_closed` yasaklı hesabı içermiyor.
 - [x] D · `chat.ts:565-567` — Arşivli işaretli sohbet rozete +1 ekliyor. `:545-549` — Yeni mesaj şikayeti kaydedilmiyor ama başarı dönüyor (mobil raporu bunu O sayıyor). `message-digest.ts:37` — Yasaklılar özete dahil. `user-blocks.ts:2` — Yinelenen işlev.
 - [x] O · `Navbar.tsx:98-101,106` — Tek olay zincirleme istek üretiyor.
-- [ ] D · `lib/chat-stream.ts:20-21,47-53` — Geçersiz kimlikte 403 tüm akışı kesip 5 sn'de bir deniyor. `:61-67` — Gereksiz bağlantı.
-- [ ] D (olası) · `api/chat/stream.ts:13` — Oturum yalnız bağlantıda denetleniyor. `api/chat/image.ts:17-37` — HEIF boyut denetimini atlıyor, işleme üyelikten önce.
+- [~] D · `lib/chat-stream.ts:20-21,47-53` — Geçersiz kimlikte 403 tüm akışı kesip 5 sn'de bir deniyor. `:61-67` — Gereksiz bağlantı. — **Kapanış:** Ertelendi: web sohbet akışının yeniden deneme kuralı.
+- [~] D (olası) · `api/chat/stream.ts:13` — Oturum yalnız bağlantıda denetleniyor. `api/chat/image.ts:17-37` — HEIF boyut denetimini atlıyor, işleme üyelikten önce. — **Kapanış:** Ertelendi: akış oturumunun süreli denetimi ve HEIF sırası (sınırlar zaten var).
 - [x] O · `api/tiles/$z/$x/$y.ts:34-62` — Kimliksiz, sınırsız OSM vekili; IP engellenirse harita herkes için bozulur.
-- [ ] D · `MapThumb.tsx:8-25` — OSM atfı yok.
+- [x] D · `MapThumb.tsx:8-25` — OSM atfı yok.
 - [x] O · `LocationPicker.tsx:81-92,131-137` — Seçilen yer adı ters kodlamayla eziliyor; mobilde de aynı (`M/features/chat/LocationPicker.tsx:87-99,118-124`).
 - [x] O · `MessageBubble.tsx:170` — "Kabul et" koyu temada 2:1. D · `:220` — Kendi balonu 3,71:1.
 - [x] D · `MessageBubble.tsx:237` — Silinmiş mesaj alıntısı. `:267` — Başarısız balonda menü yok. `LocationPicker.tsx:84-110` — Takılı gösterge, yarış. `components/ui/dialog.tsx:73` — İngilizce "Close".
-- [ ] D (olası) · `MapThumb.tsx:8` — 256 px taşabilir. `LocationPicker.tsx:179` — 15 px, iOS yakınlaştırır.
+- [~] D (olası) · `MapThumb.tsx:8` — 256 px taşabilir. `LocationPicker.tsx:179` — 15 px, iOS yakınlaştırır. — **Kapanış:** Olası; cihazda bakılmalı.
 
 ### 3.4 Web: hesap ve ayarlar
 
@@ -301,7 +301,7 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 - [x] O · `lib/auth/server.ts:78-85` — Doğrulama linkinin sonucu bildirilmiyor, `?error=` okunmuyor.
 - [x] O · `lib/auth/server.ts:57` — `session.expiresIn` yok, varsayılan 7 gün; uygulamayı 7 gün açmayan düşer.
 - [x] O · `lib/auth/server.ts:68-70` — Sıfırlama postası isteğin içinde; süreden hesap varlığı anlaşılır, SMTP takılırsa bekler.
-- [ ] D · `login.tsx:41` — Kayıt e-postanın varlığını açıklıyor. D (olası) · `:43,48`, `sifre-sifirla.tsx:110-111` — Başarı toast'ı tam sayfa geçişte kayboluyor.
+- [~] D · `login.tsx:41` — Kayıt e-postanın varlığını açıklıyor. D (olası) · `:43,48`, `sifre-sifirla.tsx:110-111` — Başarı toast'ı tam sayfa geçişte kayboluyor. — **Kapanış:** Better Auth davranışı; e-posta varlığını gizlemek doğrulamalı kayıt akışı ister.
 - [x] D · `login.tsx:22-30` — Oturumlu kullanıcı yönlendirilmiyor. `:97` — Ad kırpılmıyor. `:84-89` — Seçili durum yok. `:34-37` — Ölü dal, düğme neden kapalı belli değil. `:112` — Şifre göster yok.
 - [x] D · `sifre-sifirla.tsx:108-113` — Süresi dolan token'da yeni bağlantı yolu yok.
 
@@ -309,7 +309,7 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 - [x] Y · `ayarlar/magaza.tsx:35-50`, `use-current-user.ts:40-50` — Sekmeye dönünce kaydedilmemiş mağaza formu siliniyor → `user?.id`.
 - [x] O · `magaza.tsx:41-42`, `account.ts:262,392-412` — Kişisel numara alana dolduruluyor, kaydedilince `stores.phone` olup herkese açık yanıtta dönüyor. O · `magaza.tsx:49-52` — Sonsuz yükleme. D · `:41,28,44,71,86-90` — İl önerisi kafa karıştırıyor, ölü `slug`, `<a><button>`.
 - [x] O · `profil.tsx:31-33,47` — `getMe` hatası sonsuz iskelet. O · `api/avatar.ts:39`, `ayarlar/profil.tsx:85`, `AccountShell.tsx:10-11` — `user.image` ve `avatar_url` ayrışıyor.
-- [ ] D · `profil.tsx:88,102` — Kontrast; doping satırı.
+- [~] D · `profil.tsx:88,102` — Kontrast; doping satırı. — **Kapanış:** Kısmen: doping satırı anahtara bağlandı (Faz 8); kontrast kontrol edilmedi.
 - [x] D · `ayarlar/index.tsx:45-53,58,66,25-30` — Odak halkası, kontrast, arama Destek ve Çıkış'ı kapsamıyor.
 - [x] O · `api/hesap/verilerim.ts:25-51` — KVKK dışa aktarımı eksik: konum, `kind/meta`, sohbet görselleri, şablonlar, kredi, doping, cihazlar. Yorum "her şey" diyor.
 - [x] O · `ayarlar/hesap.tsx:47`, `verilerim.ts:21,86` — Sınır aşılınca hata JSON'u dosya olarak iniyor.
@@ -331,13 +331,13 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 
 ### 3.5 Web: admin operasyon
 
-- [ ] D (olası) · `routes/admin.tsx:11` — `confirmedOnClient` sıfırlanmıyor.
+- [~] D (olası) · `routes/admin.tsx:11` — `confirmedOnClient` sıfırlanmıyor. — **Kapanış:** Yalnız istemci kısayolu; tüm admin işlemleri sunucuda yeniden doğrulanıyor.
 
 **Kontrol paneli**
 - [x] O · `admin/dashboard.ts:89,97,100` — Süresi dolanlar "yayında" sayılıyor, iki farklı sayı.
-- [ ] O (olası) · `dashboard.ts:23-25,33-34,68` — `created_at` indeksleri yok, 2 dakikada bir tarama.
-- [ ] D · `dashboard.ts:26`, `index.tsx:243` — "Yeni sohbet" `updated_at` ile sayılıyor. `index.tsx:240,247-248` — Haftalık kartta haftalık olmayanlar. `:69`, `moderasyon.tsx:59` — "5 gündır". `:112,121-122` — "0 toplam" yüklenirken. `dashboard.ts:12-35` — Kullanılmayan sorgular.
-- [ ] D (olası) · `index.tsx:40,150-156,185` — Grafikte sabit renk.
+- [x] O (olası) · `dashboard.ts:23-25,33-34,68` — `created_at` indeksleri yok, 2 dakikada bir tarama.
+- [~] D · `dashboard.ts:26`, `index.tsx:243` — "Yeni sohbet" `updated_at` ile sayılıyor. `index.tsx:240,247-248` — Haftalık kartta haftalık olmayanlar. `:69`, `moderasyon.tsx:59` — "5 gündır". `:112,121-122` — "0 toplam" yüklenirken. `dashboard.ts:12-35` — Kullanılmayan sorgular. — **Kapanış:** Kısmen: "Aktif sohbet" adı doğru, "gündır" düzeldi; haftalık kart ve yükleniyor metni bakılmadı.
+- [~] D (olası) · `index.tsx:40,150-156,185` — Grafikte sabit renk. — **Kapanış:** Ertelendi: grafik renkleri.
 
 **İlanlar ve ListingSheet**
 - [x] O · `ilanlar.tsx:111` — Seçim filtre değişince kalıyor; görünmeyen ilan toplu silinir.
@@ -351,8 +351,8 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 **Moderasyon**
 - [x] O · `moderasyon.tsx:134-158` — `R` sonrası `1-7` input'a yazılıyor; fareyle Reddet'te `A` açık, `Esc` kapatmıyor.
 - [x] O · `listings.ts:281-292` — İki moderatör çakışır, çelişkili bildirim gider → koşullu güncelle.
-- [ ] O (olası) · `moderasyon.tsx:78-79` — Telefonda liste panelin üstünde.
-- [ ] D · `:20`, `listings.ts:112-129` — Ağır yenileme. `:155` — Ok sayacı taşıyor. `:214-337` — Etiket eksikleri.
+- [~] O (olası) · `moderasyon.tsx:78-79` — Telefonda liste panelin üstünde. — **Kapanış:** Cihazda bakılmalı.
+- [~] D · `:20`, `listings.ts:112-129` — Ağır yenileme. `:155` — Ok sayacı taşıyor. `:214-337` — Etiket eksikleri. — **Kapanış:** Ertelendi: admin ilan listesi yenileme ve etiketler.
 
 **Kullanıcılar**
 - [x] O · `users.ts:237-258,359` — Tek admin kademesi; ek doğrulama yok, eşzamanlı sıfır admin kalabilir.
@@ -361,8 +361,8 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 - [x] O · `users.ts:161-163`, `listings.ts:186` — "Hakkında şikayet" ilan sahibine sayılıyor; mağdur riskli görünür.
 - [x] O · `users.ts:380`, `UserSheet.tsx:515-521`, `finans.tsx:280` — ±100.000 onaysız kredi, negatif bakiye, kendine yükleme.
 - [x] O · `users.ts:336`, `business.ts:96`, `listings.ts:409` — Audit'te önce/sonra yok.
-- [ ] O (olası) · `account-purge.ts:23-24`, `business.ts:161-163` — Üye silinince ödeme kayıtları ve geçmiş gelir siliniyor; mali müşavire sorulmalı.
-- [ ] D · `users.ts:55`, `business.ts:29`, `listings.ts:184` — "Yayında" süre koşulsuz. `users.ts:406` — `//alan.com` kabul ediliyor. `kullanicilar.tsx:178`, `ilanlar.tsx:376` — `<tr onClick>`. `UserSheet.tsx:252-362` — Silinme iptali yok.
+- [~] O (olası) · `account-purge.ts:23-24`, `business.ts:161-163` — Üye silinince ödeme kayıtları ve geçmiş gelir siliniyor; mali müşavire sorulmalı. — **Kapanış:** Mali müşavire sorulacak; kod değiştirilmedi.
+- [~] D · `users.ts:55`, `business.ts:29`, `listings.ts:184` — "Yayında" süre koşulsuz. `users.ts:406` — `//alan.com` kabul ediliyor. `kullanicilar.tsx:178`, `ilanlar.tsx:376` — `<tr onClick>`. `UserSheet.tsx:252-362` — Silinme iptali yok. — **Kapanış:** Kısmen: mağaza sayısı canlı kurala bağlı; kullanıcı listesi, `<tr onClick>` ve silinme iptali bakılmadı.
 
 **Şikayetler**
 - [x] O · `moderation.ts:62`, `sikayetler.tsx:221` — Görsel şikayetinde moderatör görseli görmüyor.
@@ -378,8 +378,8 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 - [x] D · `magazalar.tsx:84-94` — Aramada "Henüz mağaza yok". `business.ts:78,107-119` — Adres boşaltma; askıdakine mağaza. D (olası) · `magazalar.tsx:63` — Paketin etkisi yok. `ui.tsx:67,123` — `text-violet-700` koyu temada 2,5:1.
 - [x] O · `account.ts:136-148,170-174`, `listing-write.ts:68` — Admin site üzerinden işlem yaparsa audit yazılmıyor.
 - [x] D · `content.ts:279` — Eski admin süzülemiyor. `format.ts:127-128` — `user.unban` kırmızı, `listing.deactivate` yeşil. `kayitlar.tsx:70,88-99,33-47` — Klavyesiz; kırık "aç"; filtre yok. `AuditList.tsx:16` — Ölü prop.
-- [ ] D · `ui.tsx:235-246` — Debounce eski değeri URL'ye yazıyor. `dashboard.ts:195-207` — `#` ve boşluk normalize edilmiyor, indeks devre dışı. `AdminShell.tsx:153-163` — Mobil menüde odak ve Esc yok. `listings.ts:10`, `moderation.ts:41,124-127` — Ölü kod.
-- [ ] D (olası) · `format.ts:139-141` — Ham Zod JSON. `AdminShell.tsx:192-198` — Linux'ta ⌘; "Siteye git" mobilde gizli.
+- [~] D · `ui.tsx:235-246` — Debounce eski değeri URL'ye yazıyor. `dashboard.ts:195-207` — `#` ve boşluk normalize edilmiyor, indeks devre dışı. `AdminShell.tsx:153-163` — Mobil menüde odak ve Esc yok. `listings.ts:10`, `moderation.ts:41,124-127` — Ölü kod. — **Kapanış:** Kısmen: debounce, `#`/boşluklu ilan no araması ve mobil menüde Esc düzeldi; kalan maddeler bakılmadı.
+- [~] D (olası) · `format.ts:139-141` — Ham Zod JSON. `AdminShell.tsx:192-198` — Linux'ta ⌘; "Siteye git" mobilde gizli. — **Kapanış:** Kısmen: Zod hataları Türkçe metne çevriliyor; ⌘ ve "Siteye git" bakılmadı.
 
 ### 3.6 Web: admin yapılandırma
 
@@ -387,35 +387,35 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 - [x] O · `config.ts:105`, `CookieBanner.tsx:27` — `gs-uid` 1 yıllık kimlik çerezi "Sadece zorunlu" seçene de yazılıyor; metinle çelişiyor (hukukçuya sor).
 - [x] O (olası) · `hooks.tsx:22` — Ham Zod JSON; "1.2" sürüm yazınca kayıt düşer.
 - [x] D · `ayarlar.tsx:112,91` — IBAN ve iletişim metinleri gerçeği yansıtmıyor. `content.ts:186,202` — IBAN sağlaması yok, audit eksik. `:188` — 0850 kabul edilmiyor. `ayarlar.tsx:20` — Yenileme hatası formu siliyor. `config.ts:50,74` — Hatada kapalı anahtar açık görünür. `flags.ts:110` — Kapalı anahtar adları herkese gidiyor. `ayarlar.tsx:57,215,75` — Durum duyurulmuyor; "Onaysız yayın" onaysız.
-- [ ] D (olası) · `config.ts:81` — Kimliksizler aynı `guest` kovasında.
+- [~] D (olası) · `config.ts:81` — Kimliksizler aynı `guest` kovasında. — **Kapanış:** Yalnız çerezsiz istemciler; site her ziyaretçiye `gs-uid` veriyor.
 
 **Özellikler**
 - [x] O (olası) · `ozellikler.tsx:255`, `attributes.ts:120` — Kullanımdaki özelliğin türü uyarısız değişiyor.
 - [x] D · `attributes.ts:65` — Kullanım sayısı ada göre, kategoriler karışıyor. `ozellikler.tsx:292` — Hata "bağlı değil" görünüyor.
 
 **Güncellemeler (OTA)**
-- [ ] O · `mobile-app/app.json`, `W/lib/server/ota.ts` — Kod imzası yok; sızan token tüm telefonlarda kod çalıştırır (mağaza sürümü gerekir).
+- [~] O · `mobile-app/app.json`, `W/lib/server/ota.ts` — Kod imzası yok; sızan token tüm telefonlarda kod çalıştırır (mağaza sürümü gerekir). — **Kapanış:** Mağaza sürümüyle birlikte (Faz 14, ertelendi).
 - [x] O · `guncellemeler.tsx:167` — "Herkese aç (%100)" onaysız.
 - [x] O · `migrations/0031_ota_updates.sql:6` — `ota_assets` birikiyor, temizleme yok.
 - [x] D · `guncellemeler.tsx:21` — "Yayında" platformu yok sayıyor. `admin/ota.ts:104` — Yeniden yayın `critical` kopyalıyor. `guncellemeler.tsx:42` — Geçersiz yüzde sessiz. `api/ota/publish/update.ts:49` — Yayın audit'te yok.
-- [ ] D (olası) · `api/ota/manifest.ts:18` — Her açılışta 30 tam satır. `assets/$hash.ts:41` — `gzipSync` event loop'u kilitleyebilir.
+- [~] D (olası) · `api/ota/manifest.ts:18` — Her açılışta 30 tam satır. `assets/$hash.ts:41` — `gzipSync` event loop'u kilitleyebilir. — **Kapanış:** Kısmen: gzip artık bloklamıyor; manifest 30 satırla sınırlı, ölçülmedi.
 
 **Kategoriler**
 - [x] O · `CategoryPanel.tsx:506`, `CategoryPickerDialog.tsx:133` — Toplu aktarım onaysız; çift tıklama binlerce ilanı taşır.
 - [x] O · `categories.ts:339` — "İlan sayısına göre" yalnız doğrudan ilanları sayıyor.
-- [ ] O · `kategoriler.tsx:212`, `CategoryPanel.tsx:134` — Sekme veya kategori değişimi düzenlemeyi uyarısız siler.
+- [~] O · `kategoriler.tsx:212`, `CategoryPanel.tsx:134` — Sekme veya kategori değişimi düzenlemeyi uyarısız siler. — **Kapanış:** Faz 8 onay koruması eklendi; tüm yollar ekranda denenmedi.
 - [x] D · `categories.ts:274` — Kardeşte aynı ad. `CategoryPanel.tsx:298` — 500 üstü sessiz atılıyor. `CategoryTree.tsx:326,595` — Erişilebilirlik; arama vurgusu koyu temada. `CategoryPickerDialog.tsx:96` — Sonsuz yükleme. `categories.ts:344` — Ölü kod.
-- [ ] D (olası) · `CategoryPanel.tsx:135` — Eski adla form. `categories.ts:301` — Eşzamanlı taşımada döngü. `CategoryTree.tsx:360,374,331` — Çok satır, odak, ok tuşları. `categories.ts:274` — Slug değişiminde 301 yok.
+- [~] D (olası) · `CategoryPanel.tsx:135` — Eski adla form. `categories.ts:301` — Eşzamanlı taşımada döngü. `CategoryTree.tsx:360,374,331` — Çok satır, odak, ok tuşları. `categories.ts:274` — Slug değişiminde 301 yok. — **Kapanış:** Kısmen: döngü koruması ve eski slug yönlendirmesi var (Faz 8); ağaçta klavye ve odak yok.
 
 **Sayfalar, duyurular, finans, sistem**
 - [x] O · `sayfalar.tsx:171`, `content.ts:37` — Altbilgiye bağlı sayfa adresi değişebiliyor; üyelik formu linkleri 404 olur.
 - [x] O · `sayfalar.tsx:60` — Başka sayfa seçmek metni uyarısız siler.
 - [x] O · `content.ts:42,52` — Yasal metin geçmişi yok.
-- [ ] D · `sayfalar.tsx:186,173` — Önizleme canlıdan farklı; boşluk `dirty` bırakıyor.
+- [~] D · `sayfalar.tsx:186,173` — Önizleme canlıdan farklı; boşluk `dirty` bırakıyor. — **Kapanış:** Kısmen: ortak önizleme (Faz 8); boşlukta `dirty` bakılmadı.
 - [x] O · `content.ts:115`, `duyurular.tsx:100` — Duyuru `notify_prefs`'e bakmıyor, ekran "kapatabilirler" diyor (ticari ileti için hukukçuya sor).
 - [x] O (olası) · `content.ts:128` — Push'lar istek içinde sıralı; zaman aşımında yeniden gönderim, üyelere ikinci bildirim.
 - [x] D · `content.ts:137,115` — Sayı şişiyor, ölü token silinmiyor, rozet güncellenmiyor. `duyurular.tsx:48,162` — Push kutusu açık kalıyor; hata boş görünüyor.
-- [ ] D · `finans.tsx:184,187,138,310` — Kontrast, etiket, boş durumlar. `business.ts:217` — Kayıtta tutar yok. D (olası) · `finans.tsx:157` — Kısaltılmış no aranamıyor.
+- [~] D · `finans.tsx:184,187,138,310` — Kontrast, etiket, boş durumlar. `business.ts:217` — Kayıtta tutar yok. D (olası) · `finans.tsx:157` — Kısaltılmış no aranamıyor. — **Kapanış:** Ertelendi: finans sayfası kontrast, etiket, tutar.
 - [x] O · `content.ts:384`, `message-digest.ts:31` — SMTP yokken "gönderildi" diyor; görevler sayı dönmüyor.
 - [x] D · `content.ts:352,356` — Cron yalnız secret varlığına bakıyor; OTA ve `ota_assets` görünmüyor. `sistem.tsx:46,50` — Danger yok; tek hata sayfayı siliyor. D (olası) · `content.ts:310` — Dakikada 16 `count(*)`.
 
@@ -458,7 +458,7 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 
 - [x] D · `(tabs)/_layout.tsx:76` — Sekme dokunuşu başa kaydırmıyor.
 - [x] O (olası) · `(tabs)/index.tsx:57`, `sonuclar.tsx:63` — Tekrar eden ilan elenmiyor, anahtar çakışır.
-- [ ] D · `index.tsx:128,144,254,136` — Boş şehir durumu; kart "şehir seç" diyor ama izin istiyor; kategori şeridi; rol eksik.
+- [~] D · `index.tsx:128,144,254,136` — Boş şehir durumu; kart "şehir seç" diyor ama izin istiyor; kategori şeridi; rol eksik. — **Kapanış:** Ertelendi: ana sayfa konum kartı metni ve roller.
 - [x] O (olası) · `(tabs)/ara.tsx:22` — İkinci dokunuşta klavye açılmaz. O · `ara.tsx:34` — 7-15 haneli her sayı ilan sanılıyor.
 - [x] D · `ara.tsx:117` — Kategori hatası yok. O (olası) · `ara.tsx:97` — Silme VoiceOver'da ulaşılamayabilir.
 - [x] O · `sonuclar.tsx:171` — Kategori kaldırılınca Yıl/KM/m² görünmez filtre olarak kalıyor. O · `:193`, `index.tsx:193` — Sonraki sayfa hatası sessiz.
@@ -471,7 +471,7 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 - [x] O · `ilan/[id].tsx:343` — Favori kalbi fotoğraf üstünde zor seçiliyor, dolu değil.
 - [x] O (olası) · `_layout.tsx:46` — Durum çubuğu koyu fotoğrafta okunmuyor.
 - [x] O · `lib/format.ts:102` — "2025'den beri üye".
-- [ ] D · `ilan/[id].tsx:147,308,188,242` — Çift link (olası); "bildir/şikayet"; web'deki sahip paneli, fiyat geçmişi, "Tümünü gör" eksik; BOOLEAN ham (olası).
+- [~] D · `ilan/[id].tsx:147,308,188,242` — Çift link (olası); "bildir/şikayet"; web'deki sahip paneli, fiyat geçmişi, "Tümünü gör" eksik; BOOLEAN ham (olası). — **Kapanış:** Kısmen: sahip paneli, fiyat geçmişi, "Tümünü gör", Evet/Hayır yapıldı (Faz 11); "şikâyet" yazımı kaldı.
 - [x] O · `satici/[id].tsx:109` — 20 yorumun 5'i, "tümü" yok. D · `:40`, `magaza/[slug].tsx:28` — 404'te "Yüklenemedi". D · `ListingSheets.tsx:187` — `keys.seller` yenilenmiyor.
 - [x] O · `favorites.ts:30,47-50` — Liste yüklenmeden dokununca kalp ters dönebilir. O (olası) · `favoriler.tsx:51` — "Fiyat düşünce haberdar olursunuz" diyor, böyle bildirim bulunamadı. O · `favoriler.tsx:37` — Dolu liste hata ekranına dönüyor. D · `ListingGrid.tsx:61` — Kendi ilanında kalp.
 - [x] O · `api/queries.ts:108` — `keys.recent`, `deletion`, `forEdit` çıkışta silinmiyor.
@@ -489,7 +489,7 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 - [x] O · `ilan-ver.tsx:214-241` — Android geri tuşu onaysız kapatıyor; düzenlemeler kayboluyor.
 - [x] O (olası) · `lib/photos.ts:37` — `getPendingResultAsync` yok; düşük bellekte çekilen fotoğraf kaybolur. O (olası) · `ilan-ver.tsx:255`, `api/client.ts:50` — İdempotency yok, mükerrer ilan.
 - [x] O · `ilan-ver.tsx:273-275` — INACTIVE düzenlemede "onaya gönderildi" diyor. O · `draft.ts:80-86`, `ilan-ver.tsx:625` — Telefon yoksa hata Yayınla'da.
-- [ ] D · `:267` (olası) — `me` yoksa ilan mağazadan kopuyor. `:124,523,318` — Yarım kategori; kırıntı; özellikler siliniyor. `format.ts:19` — 13 hane. `:435` (olası) — Klavye düğmeyi örtüyor. `:603,628` — Düzenlemede "Yayınla". `:375` — Ölü gösterge.
+- [~] D · `:267` (olası) — `me` yoksa ilan mağazadan kopuyor. `:124,523,318` — Yarım kategori; kırıntı; özellikler siliniyor. `format.ts:19` — 13 hane. `:435` (olası) — Klavye düğmeyi örtüyor. `:603,628` — Düzenlemede "Yayınla". `:375` — Ölü gösterge. — **Kapanış:** Kısmen: profil bekleme, yarım kategori, düzenleme metinleri yapıldı (Faz 12); kırıntı, 13 hane, klavye kaldı.
 - [x] Y (olası) · `features/post/PhotoStep.tsx:57-77,124-125` — Ortadaki fotoğrafta Sil düğmesi kırpılıyor; 430 pt altı (375 pt'de 11 pt görünür).
 - [x] O · `PhotoStep.tsx:49-55`, `ilan-ver.tsx:170` — `PhotoItem.error` gösterilmiyor.
 - [x] O · `ilan-ver.tsx:184-195` — Silinen fotoğrafın yüklemesi iptal edilmiyor, günlük 60 sınırına sayılıyor.
@@ -508,7 +508,7 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 - [x] O (olası) · `stream.ts:105-118`, `api/chat/stream.ts:65-72` — Heartbeat izleyici yok; ölü bağlantı push'u bastırır.
 - [x] O · `chat.ts:436-439`, `mesaj/[id].tsx:187-194` — Arka plandaki teklif ve silme güncellenmiyor.
 - [x] O (olası) · `mesaj/[id].tsx:166-168,222` — Eski teklif güncellemesi `loadOlder` imlecini bozuyor; aradaki mesajlar yüklenmez.
-- [ ] O · `_layout.tsx:81-83`, `mesaj/[id].tsx:151-152` — Tek mesaj üç geçersiz kılma. O · `:104,144,192` — Presence yenilenmiyor.
+- [~] O · `_layout.tsx:81-83`, `mesaj/[id].tsx:151-152` — Tek mesaj üç geçersiz kılma. O · `:104,144,192` — Presence yenilenmiyor. — **Kapanış:** Ertelendi: tek mesajda üç yenileme ve varlık bilgisi.
 
 **Gönderim**
 - [x] O · `mesaj/[id].tsx:234-253` — İyimser gönderim ve yeniden deneme yok; hata anında yeni metin siliniyor.
@@ -518,58 +518,58 @@ Bölüm 1'de geçen maddeler burada tekrarlanmadı.
 **Liste**
 - [x] O · `:210,213` — Gün ayrımı UTC; 00:00-02:59 mesajları önceki günde.
 - [x] O · `:325,437` — `onScrollToIndexFailed` boş, alıntıya gidilmiyor. O · `:327-331,527` — Arama hedefine kaydırma yok.
-- [ ] O · `:168,243` — Eski bölümde yeni mesaj boşlukla ekleniyor; yukarıdayken kendi mesajına kaydırma yok.
+- [~] O · `:168,243` — Eski bölümde yeni mesaj boşlukla ekleniyor; yukarıdayken kendi mesajına kaydırma yok. — **Kapanış:** Kısmen: okurken yeni mesaj ekranı itmiyor; kendi mesajına kaydırma yok.
 - [x] O (olası) · `:427-438` — `maintainVisibleContentPosition` yok. O · `:137-145` — `firstUnreadId` kullanılmıyor.
-- [ ] O · `:97,363,456-500`, `Bubble.tsx:36` — Her tuşta görünür satırlar yeniden işleniyor.
+- [~] O · `:97,363,456-500`, `Bubble.tsx:36` — Her tuşta görünür satırlar yeniden işleniyor. — **Kapanış:** Kısmen: balonlar sabit (yeniden çizilmiyor); mesaj kutusu ayrılmadı.
 
 **Hata, engel, gezinme, balon**
 - [x] O · `mesaj/[id].tsx:349`, `(tabs)/mesajlar.tsx:134`, `bildirimler.tsx:59` — Yenileme hatası dolu ekranı siliyor.
-- [ ] D · `:787,370` — Koşulsuz `back()`. `:87` — `authHeaders` bir kez; girişten sonra 401. `:692-698,470` — Engelde "Yanıtla". `:919,931-936` — Arama hatası yok. `:342-357` — Geri düğmesi yok.
-- [ ] D (olası) · `:560,963,974` — Klavye boşluğu, düğme çakışması.
+- [~] D · `:787,370` — Koşulsuz `back()`. `:87` — `authHeaders` bir kez; girişten sonra 401. `:692-698,470` — Engelde "Yanıtla". `:919,931-936` — Arama hatası yok. `:342-357` — Geri düğmesi yok. — **Kapanış:** Kısmen: geri düğmeleri ve oturum başlığı düzeldi; engelde "Yanıtla" ve arama hatası kaldı.
+- [~] D (olası) · `:560,963,974` — Klavye boşluğu, düğme çakışması. — **Kapanış:** Cihazda bakılmalı.
 - [x] O · `:472-479,691-733`, `SwipeToReply.tsx:22` — "Mesaj bilgisi" yalnız kaydırmayla. O · `Bubble.tsx:153-155` — Balonda rol ve eylem yok.
 - [x] O · `Bubble.tsx:99` — Kendi teklif kartında sonuç metni kontrastı 1,02-1,94.
-- [ ] D · `Bubble.tsx:57,76,174` — Ölü dal; `::ilan-foto::` ham metin (olası). Sabit renkler: `mesaj/[id].tsx:615,972`, `Bubble.tsx:53-170`, `(tabs)/mesajlar.tsx:233,303,317`, `LocationPicker.tsx:228`, `MapThumb.tsx:22`.
+- [~] D · `Bubble.tsx:57,76,174` — Ölü dal; `::ilan-foto::` ham metin (olası). Sabit renkler: `mesaj/[id].tsx:615,972`, `Bubble.tsx:53-170`, `(tabs)/mesajlar.tsx:233,303,317`, `LocationPicker.tsx:228`, `MapThumb.tsx:22`. — **Kapanış:** Kısmen: ilan fotoğrafı metni düzeldi; sabit renkler kaldı.
 
 **Mesajlar sekmesi, bildirimler, push**
 - [x] Y (olası) · `(tabs)/mesajlar.tsx:78-88,163` — "Sohbeti sil" sheet kapanırken onay açıyor; `Sheet.tsx:24-28` bunun dondurduğunu yazıyor.
 - [x] O · `_layout.tsx:80-88`, `api/queries.ts:17` — Ön plana dönünce liste ve rozetler 60 sn eski kalıyor.
 - [x] O (olası) · `(tabs)/mesajlar.tsx:140`, `bildirimler.tsx:65` — Arka plan yenilemede spinner.
 - [x] O · `(tabs)/mesajlar.tsx:216-233` — Koyu temada kaydırma eylemleri 2,31-2,79. O · `:199-252` — Eylemlerin ekran okuyucu yolu yok.
-- [ ] O · `chat.ts:565-567` — Rozet arşivdekini sayıyor.
-- [ ] D · `(tabs)/mesajlar.tsx:137,146-147,292` — `keyboardShouldPersistTaps`; filtre boş metni; durum adı. `chat.ts:96-97,313` — Arşivde sayaç yok; 300 sohbet sınırı.
-- [ ] O (olası) · `bildirimler.tsx:44`, `_layout.tsx:97` — Aynı sohbet yığına iki kez eklenebilir. D · `bildirimler.tsx:34-40,74-77` — 50 gösterip hepsini okundu yapıyor; rol yok.
-- [ ] O · `_layout.tsx:123`, `helpers.ts:291-296`, `chat.ts:104` — Tek mesaj ikonda 2 yazıyor. O · `helpers.ts:291-296`, `chat.ts:558-571` — Push rozeti arşivliyi sayıyor.
+- [~] O · `chat.ts:565-567` — Rozet arşivdekini sayıyor. — **Kapanış:** Kontrol edilmedi.
+- [~] D · `(tabs)/mesajlar.tsx:137,146-147,292` — `keyboardShouldPersistTaps`; filtre boş metni; durum adı. `chat.ts:96-97,313` — Arşivde sayaç yok; 300 sohbet sınırı. — **Kapanış:** Kısmen: dokunma kalıcılığı eklendi; boş filtre metni ve 300 sınırı kaldı.
+- [~] O (olası) · `bildirimler.tsx:44`, `_layout.tsx:97` — Aynı sohbet yığına iki kez eklenebilir. D · `bildirimler.tsx:34-40,74-77` — 50 gösterip hepsini okundu yapıyor; rol yok. — **Kapanış:** Kısmen: aynı sohbet iki kez açılmıyor; 50 bildirim kuralı kaldı.
+- [~] O · `_layout.tsx:123`, `helpers.ts:291-296`, `chat.ts:104` — Tek mesaj ikonda 2 yazıyor. O · `helpers.ts:291-296`, `chat.ts:558-571` — Push rozeti arşivliyi sayıyor. — **Kapanış:** Kontrol edilmedi.
 - [x] O · `_layout.tsx:72-78`, `ayarlar/bildirimler.tsx:26-28,80-85` — İzin ayarlardan verilince token kaydedilmiyor.
-- [ ] D · `lib/push.ts:35`, `_layout.tsx:78` — İzin bağlamsız isteniyor; iOS'ta ikinci şans yok.
+- [~] D · `lib/push.ts:35`, `_layout.tsx:78` — İzin bağlamsız isteniyor; iOS'ta ikinci şans yok. — **Kapanış:** Ürün kararı: izni bağlamlı sormak ayrı iş.
 - [x] O · `ui/Toast.tsx:21`, `LocationPicker.tsx:58,66,137`, `mesaj/[id].tsx:857,898` — Toast modalın arkasında; hatalar görünmüyor.
 - [x] O (olası) · `LocationPicker.tsx:148,219-263` — Alan klavye altında. `mapHtml.ts:18,26` — CDN hatasında boş harita.
-- [ ] D (olası) · `tiles.ts:9`, `LocationPicker.tsx:61`, `MapThumb.tsx:12,22` — Atıf WebView'da açılıyor; konum zaman aşımı yok; koyu tema.
+- [~] D (olası) · `tiles.ts:9`, `LocationPicker.tsx:61`, `MapThumb.tsx:12,22` — Atıf WebView'da açılıyor; konum zaman aşımı yok; koyu tema. — **Kapanış:** Kısmen: konum zaman aşımı eklendi; atıf ve koyu tema kaldı.
 
 ### 3.11 Mobil: hesap ve temel
 
-- [ ] D · `_layout.tsx:78` — Bildirim izni bağlamsız. O · `package.json:5` — Hata raporlama yok; `--rollout 10` çökme oranını göremez.
+- [~] D · `_layout.tsx:78` — Bildirim izni bağlamsız. O · `package.json:5` — Hata raporlama yok; `--rollout 10` çökme oranını göremez. — **Kapanış:** Kısmen: hata raporlama eklendi (Faz 10); bildirim izni hâlâ bağlamsız.
 - [x] Y (olası) · `app/giris.tsx:222,226` — iOS'ta modal üstünden yasal sayfa modalın altına açılıyor; metin okunamadan üye olunur.
-- [ ] O · `giris.tsx:219` — Üyelik onayı örtük; Google ile ilk gelen metin görmeden hesap açar. O (olası) · `:85` — Android'de kapatma durum çubuğu altında. O · `:229` — "Aydınlatma Metni'ni kabul" hukuken sorunlu.
-- [ ] D · `giris.tsx:21,101` — `reason` dışarıdan metin yazdırabilir (olası); yanlış modda görünüyor. `:111-114,184,190` — Eski hata kalıyor. `:54` — Doğrulama postası söylenmiyor.
-- [ ] O (olası) · `app/oauth.tsx:8`, `giris.tsx:33-37` — Android'de Google sonrası yanlış ekran; cihazda denenmeli. D (olası) · `auth.ts:134` — Askı nedeni görünmüyor.
+- [~] O · `giris.tsx:219` — Üyelik onayı örtük; Google ile ilk gelen metin görmeden hesap açar. O (olası) · `:85` — Android'de kapatma durum çubuğu altında. O · `:229` — "Aydınlatma Metni'ni kabul" hukuken sorunlu. — **Kapanış:** Hukukçuya sorulacak: üyelik onayı ve metin.
+- [~] D · `giris.tsx:21,101` — `reason` dışarıdan metin yazdırabilir (olası); yanlış modda görünüyor. `:111-114,184,190` — Eski hata kalıyor. `:54` — Doğrulama postası söylenmiyor. — **Kapanış:** Kısmen: dışarıdan gelen metin süzülüyor, yalnız girişte görünüyor; eski hata ve doğrulama metni kaldı.
+- [~] O (olası) · `app/oauth.tsx:8`, `giris.tsx:33-37` — Android'de Google sonrası yanlış ekran; cihazda denenmeli. D (olası) · `auth.ts:134` — Askı nedeni görünmüyor. — **Kapanış:** Cihazda denenmeli.
 - [x] O · `(tabs)/hesap.tsx:41`, `ayarlar/index.tsx:169` — "Üye ol" giriş sekmesini açıyor. D · `hesap.tsx:144,109` — Doping satırı; rol.
 - [x] O · `ayarlar/index.tsx:96-105`, `auth.ts:169-184` — Kötü ağda "Çıkış yap" takılıyor, hesap açık kalıyor → önce yerel temizlik. D · `:80`, `magaza.tsx:54` — `mailto` hatası; `:126` — Rol yok.
 - [x] Y (olası) · `ayarlar/profil.tsx:60-61` — Sheet kapanırken kamera açılıyor; `Sheet.tsx` yorumu dondurduğunu yazıyor → `onDismissed`.
-- [ ] O · `profil.tsx:88` — Sonsuz yükleme. D · `:61,42` — `try` dışı; kaydedilmemiş uyarısı yok.
-- [ ] O (olası) · `guvenlik.tsx:163` — "Şifre hatalı" toast'ı modal altında. O · `:172` — Silme metni saklananları söylemiyor. O · `:72-88,106` — `hasPassword` ve doğrulama durumu yok. O · `:44` — Açık oturumlar ve diğer cihazlardan çıkış yok.
+- [~] O · `profil.tsx:88` — Sonsuz yükleme. D · `:61,42` — `try` dışı; kaydedilmemiş uyarısı yok. — **Kapanış:** Kısmen: sonsuz yükleme düzeldi (Faz 10); kaydedilmemiş uyarısı yok.
+- [~] O (olası) · `guvenlik.tsx:163` — "Şifre hatalı" toast'ı modal altında. O · `:172` — Silme metni saklananları söylemiyor. O · `:72-88,106` — `hasPassword` ve doğrulama durumu yok. O · `:44` — Açık oturumlar ve diğer cihazlardan çıkış yok. — **Kapanış:** Kısmen: toast modalda görünüyor, diğer cihazlardan çıkış var; `hasPassword` ve oturum listesi yok.
 - [x] D · `:28` — Şifre tekrar alanı yok. `:56-68` — Geri alma sonrası yenileme yok.
 - [x] O · `gizlilik.tsx:47-53` — Seçili durum duyurulmuyor. D · `Bits.tsx:214`, `gizlilik.tsx:52,61` — Gereksiz ok; "Kimse" iken WhatsApp açık.
 - [x] O · `ayarlar/bildirimler.tsx:32-33,47-51` (olası) — Hızlı kayıtlar tercih kaybettiriyor. O · `Bits.tsx:207` — `Switch` etiketsiz. D · `:114-116,84` — İyimser yok; reddedince ayarlar açılıyor.
-- [ ] D · `engellenenler.tsx:45` — Küçük hedef, ad yok. O · `magaza.tsx:37,46` — `me` hatasında sahibe "Başvur" görünüyor. D (olası) · `:76` — `store.plan` ham.
+- [~] D · `engellenenler.tsx:45` — Küçük hedef, ad yok. O · `magaza.tsx:37,46` — `me` hatasında sahibe "Başvur" görünüyor. D (olası) · `:76` — `store.plan` ham. — **Kapanış:** Ertelendi: engellenenler hedefi ve mağaza planı metni.
 - [x] O · `auth.ts:23,89` — Giriş ve şifre isteklerinde zaman aşımı yok, düğme sonsuz dönebilir.
 - [x] D (olası) · `auth.ts:158-161` — Bakım sayfası oturumu siliyor. `:101-102` — Bellekte oturumda yeni token atlanıyor. `api/client.ts:69` — Eski istek yeni oturumu kapatabilir.
 - [x] O · `app/ayarlar/` — Ortak oturum koruması yok; misafirde sonsuz yükleme.
-- [ ] D · `api/queries.ts:90` — Yapılandırma önbelleği hesaba bağlı değil. D (olası) · `Bits.tsx:20`, `theme.ts:97`, `endpoints.ts:45,114` — Ölü kod.
+- [~] D · `api/queries.ts:90` — Yapılandırma önbelleği hesaba bağlı değil. D (olası) · `Bits.tsx:20`, `theme.ts:97`, `endpoints.ts:45,114` — Ölü kod. — **Kapanış:** Kısmen: yapılandırma önbelleği hesaba bağlı (Faz 10); ölü kod kaldı.
 - [x] Y (olası) · `ui/Sheet.tsx:105,162-166` — `paddingBottom` mutlak konumda etkisiz; iOS'ta klavye şifre alanını ve onayı örtüyor → cihazda doğrula, `translateY`.
 - [x] O · `ui/Input.tsx:43` — Etiket bağlı değil. O · `ui/Toast.tsx:60` — VoiceOver duyurusu yok. O · `ui/theme.ts:14,44,45,50` — Kontrast (bkz. Bölüm 2).
 - [x] O (olası) · `Button.tsx:23,89`, `Bits.tsx:318` — Sabit yükseklik, büyük yazıda kırpılma. Alt boşluklarda `insets.bottom` yok: `profil.tsx:142`, `guvenlik.tsx:188`, `gizlilik.tsx:90`, `bildirimler.tsx:127`, `engellenenler.tsx:31`, `yasal.tsx:43`.
-- [ ] D · `Input.tsx:63`, `Bits.tsx:14,139,318`, `Header.tsx:45`, `Sheet.tsx:107`, `Button.tsx:23` — Rol ve 44 pt eksikleri. `Toast.tsx:32-35` — Yeni toast silinebiliyor.
-- [ ] D · `app.json:45-46` — Android filtresi yalnız `/ilan/` (mağaza sürümü gerekir). D (olası) · `app.json:10-15` — OTA imzası yok (bkz. 3.6).
+- [~] D · `Input.tsx:63`, `Bits.tsx:14,139,318`, `Header.tsx:45`, `Sheet.tsx:107`, `Button.tsx:23` — Rol ve 44 pt eksikleri. `Toast.tsx:32-35` — Yeni toast silinebiliyor. — **Kapanış:** Kısmen: toast ve dokunma hedefleri düzeldi (Faz 10); bazı roller kaldı.
+- [~] D · `app.json:45-46` — Android filtresi yalnız `/ilan/` (mağaza sürümü gerekir). D (olası) · `app.json:10-15` — OTA imzası yok (bkz. 3.6). — **Kapanış:** Mağaza sürümüyle birlikte (Faz 14, ertelendi).
 - [x] D · `scripts/ota-publish.mjs:135-167` — Native değişiklik kontrolü yok; yönergenin en kritik kuralı insan dikkatine bağlı → fingerprint kontrolü.
 
 ---

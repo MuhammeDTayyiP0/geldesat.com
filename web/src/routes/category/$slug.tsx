@@ -3,6 +3,7 @@ import { useModalPanel } from "@/lib/use-modal-panel";
 import { createFileRoute, Link, useNavigate, notFound } from "@tanstack/react-router";
 import { ChevronRight, LayoutGrid, List as ListIcon, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useViewPreference } from "@/lib/use-view-pref";
 import { getCategory, searchCatalog } from "@/lib/server/catalog";
 import { attrsToSearch, parseAttrs, parseSearch, toFilters } from "@/lib/search-params";
 import { buildCategorySeo, getCategoryHierarchicalName, BASE_URL, DEFAULT_OG_IMAGE, jsonLd, listingsHeading } from "@/lib/seo";
@@ -128,7 +129,7 @@ function CategoryPage() {
   const search = Route.useSearch();
   const { cat, result } = Route.useLoaderData();
   const nav = useNavigate();
-  const [view, setView] = useState<"list" | "grid">("list");
+  const [view, setView] = useViewPreference();
   const [mobile, setMobile] = useState(false);
   const [mobileVisible, setMobileVisible] = useState(false);
 

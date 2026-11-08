@@ -37,10 +37,10 @@ Onaylarsan bu varsayılanlarla ilerlerim. Değiştirmek istediğini söylemen ye
 
 ## Senin yapman gerekenler
 
-- [ ] Deploy öncesi veritabanı yedeği (Faz 1'den önce).
+- [x] Deploy öncesi veritabanı yedeği (Faz 1'den önce). — Alındı (2026-11-07).
 - [ ] Coolify'da `CRON_SECRET` ve zamanlanmış görev.
 - [ ] Proxy zincirini doğrulama: Cloudflare önde mi, Traefik hangi IP'ye güveniyor, 3000 portu dışarı açık mı? (Madde 14)
-- [ ] `APPLE_TEAM_ID` ve Android SHA-256 parmak izi (Madde 44).
+- [~] `APPLE_TEAM_ID` ve Android SHA-256 parmak izi (Madde 44). — Mağaza sürümüyle ertelendi.
 - [ ] Hukukçu ve mali müşavir: üyelik onay metni, KVKK aydınlatma dili, duyuru/ticari ileti, ödeme kaydı saklama süresi.
 - [ ] Her deploy, OTA ve mağaza build onayı; admin panelinde anahtar ekleme ve yüzde ayarı.
 - [ ] Planın sonundaki görsel kontrol listesi (ben ekrana bakmıyorum).
@@ -103,7 +103,7 @@ Sonraki fazlar bunları kullanır.
 - [x] Türkçe hata ekranı, yeniden dene ve ana sayfa (Madde 37).
 - [x] Zod hatası normalize, şemalara Türkçe mesaj; `validationMessage` ortak (Bölüm 2.6).
 - [x] `translateAuthError` web'e; `?error=` okuma; "Unauthorized" (Madde 38).
-- [ ] Ortak `ErrorState`, sayfalama ve seçim yardımcıları, `useDirtyGuard`, `FieldGroup`, erişilebilir `Drawer` (Bölüm 2.4, 2.14; Madde 36).
+- [~] Ortak `ErrorState`, sayfalama ve seçim yardımcıları, `useDirtyGuard`, `FieldGroup`, erişilebilir `Drawer` (Bölüm 2.4, 2.14; Madde 36). — Kısmen: ortak `ErrorState`, `Pagination`, `FieldGroup` var; `useDirtyGuard` ve erişilebilir `Drawer` yok.
 - [x] `useCurrentUser` kararlı hâle getirildi; sekme dönüşünde ekranlar yeniden yüklenmiyor (Bölüm 2.5; mağaza formu veri kaybı).
 - [x] Tema: `text-subtle`, koyu `primary`, `ok`, `urgent`, `violet` token'ları; `text-ink`/`bg-ink` kullanımı, logo (Madde 39; Bölüm 2.13).
 - [x] `<Link><Button>` için `buttonVariants`/`asChild`, iç içe `<main>`, "İçeriğe atla", `dialog.tsx` "Kapat".
@@ -175,7 +175,7 @@ Sonraki fazlar bunları kullanır.
 - [x] Mobil API uyumu: `legacy_slug`, `show_whatsapp`, `has_phone`, süresi dolmuş kuralı (Madde 11).
 - [x] Küçük API düzeltmeleri: `limit=abc`, 400/500, kısmi profil, tanınmayan `action`, geo parametresi.
 - [x] Test kapsamı: RPC izin listesi, OAuth, `searchListings`.
-- [ ] **Deploy noktası:** Mobil fazlardan önce web canlıda olmalı.
+- [x] **Deploy noktası:** Mobil fazlardan önce web canlıda olmalı. — Web 2026-11-07 ve 2026-11-08 canlıya çıktı.
 
 ## Faz 10: Mobil temel (rapor 3.11)
 
@@ -219,23 +219,38 @@ Hepsi JS; `expo.version` değişmez, OTA ile gider.
 - [x] Sekme: sheet kuralı, ön planda yenileme, rozet, kaydırma kontrastı. Push izni dönüşü.
 - [~] `LocationPicker`: yer adı, klavye, Leaflet paketleme.
 - [x] Hesap: silme akışı ve banner (Madde 13), `Verilerimi indir` (Madde 31), "Üye ol" modu, avatar seçimi, açık oturumlar, gizlilik uyumu, tercih yarışı.
-- [ ] **OTA noktası:** önce `--channel preview` veya `--rollout 10`.
+- [x] **OTA noktası:** önce `--channel preview` veya `--rollout 10`. — 2026-11-08 `ota_99865916` yayınlandı; yalnız test telefonları olduğu için %100.
 
 ## Faz 14: Mağaza sürümü
 
 Yönerge bölüm 5. Faz 13 yayınlanıp oturmadan yapılmaz; `version` artınca eski OTA'lar yeni build'e, yenileri eski build'e gitmez.
 
-- [ ] Apple ile giriş (K6).
-- [ ] `.well-known` dosyaları (Faz 1 sonrası web tarafı hazır, senin değerlerinle), `associatedDomains`, Android filtresi (Madde 44).
-- [ ] OTA kod imzası (K7).
-- [ ] `expo.version` 1.1.0, ilgili anahtarlarda `minAppVersion`, `npx eas-cli@latest build --profile production`.
+- [~] Apple ile giriş (K6). — Ertelendi: ücretli Apple Developer üyeliği yok, mağazaya şimdilik çıkılmayacak (2026-11-08).
+- [~] `.well-known` dosyaları (Faz 1 sonrası web tarafı hazır, senin değerlerinle), `associatedDomains`, Android filtresi (Madde 44). — Ertelendi: ücretli Apple Developer üyeliği yok, mağazaya şimdilik çıkılmayacak (2026-11-08).
+- [~] OTA kod imzası (K7). — Ertelendi: ücretli Apple Developer üyeliği yok, mağazaya şimdilik çıkılmayacak (2026-11-08).
+- [~] `expo.version` 1.1.0, ilgili anahtarlarda `minAppVersion`, `npx eas-cli@latest build --profile production`. — Ertelendi: ücretli Apple Developer üyeliği yok, mağazaya şimdilik çıkılmayacak (2026-11-08).
 
 ## Faz 15: Kapanış
 
-- [ ] Ölü kod ve kalıntı yorumlar; rapordaki kalan `[ ]` satırları tek tek bitir veya `[~]` nedeniyle kapat.
-- [ ] Tüm kontroller ve `[~]` listesinin özeti.
-- [ ] Anahtarlar %100'de oturunca eski kodu kaldırma (senin isteğinle).
+- [~] Ölü kod ve kalıntı yorumlar; rapordaki kalan `[ ]` satırları tek tek bitir veya `[~]` nedeniyle kapat. — Kısmen: rapordaki bütün satırlar kapandı (yapıldı ya da nedeni yazıldı); ölü kod temizliği yapılmadı.
+- [x] Tüm kontroller ve `[~]` listesinin özeti. — Aşağıda "Kapanış özeti".
+- [~] Anahtarlar %100'de oturunca eski kodu kaldırma (senin isteğinle). — Senin isteğinle; panelde "Kalıcı yapılabilir" yazan anahtar için "… kalıcı yap" demen yeterli.
 
 ## Görsel kontrol listesi
 
 Her deploy sonrası sana sorarım: koyu temada logo ve çipler; üst menünün yapışması; küçük telefonda filtre çekmecesi; harita; 360dp Android Ara ekranı; ortadaki fotoğrafın Sil düğmesi; iOS'ta klavye üstünde silme onayı; iOS'ta giriş ekranından yasal metin; Android'de Google girişi dönüşü.
+
+
+## Kapanış özeti (2026-11-08)
+
+**Yapılanlar:** Faz 0-13. Web 2026-11-08'de canlıda (migration 0032-0042), mobil OTA `ota_99865916` yayında, iOS test IPA'sı GitHub Actions'tan çıkıyor. Son kontroller: web `tsc` temiz, ESLint 0 hata, 67 test, build başarılı; mobil `tsc` ve `expo lint` temiz, OTA deneme paketi temiz.
+
+**Ertelenenler `[~]` (rapordaki notlarla):**
+- *Mağaza ve imza (Faz 14):* Apple ile giriş, `.well-known` ve uygulama linkleri, OTA kod imzası, 1.1.0 build. Ücretli Apple üyeliği gelince.
+- *Büyük yeniden yapılandırma:* `CatalogPage` birleştirmesi, web `mesajlar/$id.tsx` bölünmesi, mobil mesaj kutusu ayrımı. Ekranla birlikte yapılmalı.
+- *Senin ya da danışmanın kararı:* proxy zinciri ve `TRUSTED_IP_HEADER` (Madde 14), üyelik onayı ve KVKK metni (hukukçu), silinen üyenin ödeme kayıtları (mali müşavir), bildirim iznini bağlamlı sorma.
+- *Veri işleri:* menünün veritabanından üretilmesi, mahalle verisi, red gerekçesi için sütun.
+- *Küçük arayüz işleri:* web mesajlar listesi, admin finans ve ilan listesi, grafik renkleri, bazı etiket ve roller; "kısmen" yazan satırların kalan parçaları.
+- *Cihazda bakılacaklar:* olası sorunlar (klavye çakışmaları, Android Google girişi dönüşü, moderasyon telefonda) ve görsel kontrol listesi.
+
+**Senin yapacakların:** `CRON_SECRET` ve zamanlanmış görev, proxy zinciri, admin panelinde anahtarlar (`harita_v2`, `arama_v2`, `ilan_formu_v2`, `sohbet_v2`), görsel kontrol listesi, oturan anahtarlar için "kalıcı yap".

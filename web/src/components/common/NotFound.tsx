@@ -144,6 +144,7 @@ export function NotFound({
             </div>
             <input
               type="text"
+              aria-label="Sitede ara"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="GeldeSat'ta ilan, ürün veya hizmet arayın..."

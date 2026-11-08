@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useViewPreference } from "@/lib/use-view-pref";
 import { getCategory, listCategoryRoots, searchCatalogWithContext } from "@/lib/server/catalog";
 import { attrsToSearch, parseAttrs, parseSearch, toFilters, type CatalogSearch } from "@/lib/search-params";
 
@@ -33,6 +34,17 @@ const SORT_OPTIONS = [
   { value: "price_desc", label: "Fiyat: Yüksekten Düşüğe" },
   { value: "views_desc", label: "En Çok İncelenenler" },
 ];
+
+/** Filters that only exist inside a category (year, km, m², its options). */
+const CATEGORY_ONLY_CLEARED = {
+  minYear: undefined,
+  maxYear: undefined,
+  minKm: undefined,
+  maxKm: undefined,
+  minM2: undefined,
+  maxM2: undefined,
+  attrs: undefined,
+};
 
 export const Route = createFileRoute("/search")({
   validateSearch: (s: Record<string, unknown>) => parseSearch(s),
@@ -53,6 +65,8 @@ export const Route = createFileRoute("/search")({
       attributes: categoryContext?.attributes ?? [],
       currentCategory: categoryContext?.category ?? null,
       categoryPath: categoryContext?.path ?? [],
+      // Guessed from the results, not chosen: shown as a suggestion, not as the selected category.
+      categoryInferred: Boolean(categoryContext && !requestedCategory?.category),
       categoryChildren: categoryContext?.children ?? [],
       categoryRoots: categoryData.roots,
     };
@@ -88,12 +102,13 @@ function SearchPage() {
     attributes,
     currentCategory,
     categoryPath,
+    categoryInferred,
     categoryChildren,
     categoryRoots,
   } = Route.useLoaderData();
   const nav = useNavigate();
 
-  const [view, setView] = useState<"list" | "grid">("grid");
+  const [view, setView] = useViewPreference();
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
   const [mobileFilterVisible, setMobileFilterVisible] = useState(false);
   const [mobileSortOpen, setMobileSortOpen] = useState(false);
@@ -161,6 +176,8 @@ function SearchPage() {
 
   function apply(extra?: Partial<CatalogSearch>, values: FilterState = filters) {
     const filters = values;
+    // Another category: its year, km, m² and option filters would stay as invisible filters.
+    const categoryChanged = extra && "category" in extra && extra.category !== search.category;
     const next: CatalogSearch = {
       ...search,
       category: filters.category,
@@ -179,6 +196,7 @@ function SearchPage() {
       attrs: attrsToSearch(filters.attrs),
       page: "1",
       ...extra,
+      ...(categoryChanged ? CATEGORY_ONLY_CLEARED : {}),
     };
     void nav({ to: "/search", search: next });
     closeFilterDrawer();
@@ -227,7 +245,7 @@ function SearchPage() {
     activeChips.push({
       id: "category",
       label: `Kategori: ${catName}`,
-      onRemove: () => removeFromSearch({ category: undefined }),
+      onRemove: () => removeFromSearch({ category: undefined, ...CATEGORY_ONLY_CLEARED }),
     });
   }
 
@@ -334,6 +352,7 @@ function SearchPage() {
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4.5 -translate-y-1/2 text-subtle" />
           <Input
+            aria-label="İlan ara"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             placeholder="Kelime, marka veya ilan no ile arayın..."
@@ -359,13 +378,25 @@ function SearchPage() {
       </form>
 
       {/* 2. Hızlı Kategori Gezintisi (Yatay Kaydırılabilir Çipler) */}
-      <details open={Boolean(currentCategory)} className="mb-4 rounded-xl border border-border bg-surface px-3 sm:px-4">
+      <details open={Boolean(currentCategory) && !categoryInferred} className="mb-4 rounded-xl border border-border bg-surface px-3 sm:px-4">
         <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-fg">
-          <span>Kategori{currentCategory ? ` · ${currentCategory.name}` : ""}</span>
+          <span>Kategori{currentCategory && !categoryInferred ? ` · ${currentCategory.name}` : ""}</span>
           <span className="text-xs font-medium text-muted">Kategoriye göre daralt</span>
         </summary>
         <div className="border-t border-border/70 py-3">
-          {categoryPath.length > 0 ? (
+          {categoryInferred && currentCategory ? (
+            <div className="mb-3 flex flex-wrap items-center gap-1.5 text-xs text-muted">
+              <span>Sonuçların çoğu</span>
+              <button
+                type="button"
+                onClick={() => apply({ category: currentCategory.slug })}
+                className="font-semibold text-primary hover:underline"
+              >
+                {currentCategory.name}
+              </button>
+              <span>kategorisinde. Bu kategoride aramak için dokunun.</span>
+            </div>
+          ) : categoryPath.length > 0 ? (
             <div className="mb-3 flex flex-wrap items-center gap-1.5 text-xs text-muted">
               <button
                 type="button"
@@ -603,7 +634,6 @@ function SearchPage() {
         <div className="h-4 w-px bg-border" />
         <Link
           to="/harita"
-          search={{ city: search.city }}
           className="flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-semibold text-fg hover:bg-elevated transition-transform active:scale-95"
         >
           <MapPin className="size-3.5 text-primary" />

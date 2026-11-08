@@ -196,7 +196,9 @@ export const adminGlobalSearch = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const sql = await getSql();
     const like = likeTerm(data.q);
-    const digits = /^\d{4,15}$/.test(data.q) ? data.q : null;
+    // "#1000234" or "1000 234" is a listing number too.
+    const number = data.q.replace(/^#/, "").replace(/\s/g, "");
+    const digits = /^\d{4,15}$/.test(number) ? number : null;
     const [listings, users, categories, stores] = await Promise.all([
       sql.query<Record<string, unknown>>(
         `select l.id, l.listing_no, l.title, l.status

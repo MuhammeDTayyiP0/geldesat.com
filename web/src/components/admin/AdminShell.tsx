@@ -150,10 +150,18 @@ function Chrome({ children }: { children: ReactNode }) {
 
       {/* Mobile drawer */}
       {mobileOpen ? (
-        <div className="fixed inset-0 z-50 lg:hidden">
+        <div
+          className="fixed inset-0 z-50 lg:hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Yönetim menüsü"
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setMobileOpen(false);
+          }}
+        >
           <button type="button" aria-label="Menüyü kapat" className="absolute inset-0 bg-ink/50" onClick={() => setMobileOpen(false)} />
           <aside className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col bg-[#0f1524] shadow-2xl">
-            <button type="button" onClick={() => setMobileOpen(false)} className="absolute right-3 top-4 rounded-lg p-1.5 text-white/60 hover:bg-white/10 hover:text-white" aria-label="Kapat">
+            <button type="button" autoFocus onClick={() => setMobileOpen(false)} className="absolute right-3 top-4 rounded-lg p-1.5 text-white/60 hover:bg-white/10 hover:text-white" aria-label="Kapat">
               <X className="size-5" />
             </button>
             {brand}

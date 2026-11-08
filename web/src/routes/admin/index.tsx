@@ -240,7 +240,8 @@ function Dashboard() {
           <CardHead title="Haftalık etkileşim" />
           <div className="grid grid-cols-2 gap-px bg-border">
             {[
-              { label: "Yeni sohbet", value: k.conversations_7d, icon: MessageCircle },
+              // Conversations have no creation date: this counts chats with activity this week.
+              { label: "Aktif sohbet", value: k.conversations_7d, icon: MessageCircle },
               { label: "Telefon gösterimi", value: k.phone_reveals_7d, icon: Eye },
               { label: "Favoriye ekleme", value: k.favorites_7d, icon: Check },
               { label: "Yeni şikayet", value: k.reports_7d, icon: MessageSquareWarning },
