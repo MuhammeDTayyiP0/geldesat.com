@@ -22,6 +22,8 @@ export const ListingInput = z.object({
   images: z.array(z.string()).max(10),
   attrs: z.record(z.string(), z.union([z.string(), z.number()])),
   storeId: z.string().optional(),
+  /** New listings only: the same key twice returns the listing created the first time. */
+  clientKey: z.string().regex(/^[A-Za-z0-9_-]{8,64}$/).optional(),
 });
 
 export type ListingInputData = z.infer<typeof ListingInput>;
@@ -146,6 +148,15 @@ export async function saveListingRecord(userId: string, data: ListingInputData) 
   }
 
   await assertStoreOwner(userId);
+  const sent = async () =>
+    data.clientKey
+      ? (await sql.query<{ id: string; slug: string; status: string }>(
+          "select id, slug, status from listings where user_id=$1 and client_key=$2",
+          [userId, data.clientKey],
+        ))[0]
+      : undefined;
+  const already = await sent();
+  if (already) return already;
   const id = newId("lst");
   const listingNo = (await sql.query<{ n: string }>("select nextval('listing_no_seq')::text as n"))[0].n;
   const slug = listingSlug(data.title, listingNo);
@@ -157,14 +168,23 @@ export async function saveListingRecord(userId: string, data: ListingInputData) 
     const next = isAdmin || mode === "none" || claimedFirst ? "ACTIVE" : "PENDING";
     await tx.query(
       `insert into listings (id,slug,user_id,store_id,category_id,title,description,price,status,city,district,
-        neighborhood,lat,lng,images,attrs,phone_override,expires_at,approved_at,listing_no)
+        neighborhood,lat,lng,images,attrs,phone_override,expires_at,approved_at,listing_no,client_key)
        values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::jsonb,$16::jsonb,$17,now()+interval '30 days',
-         case when $9::text = 'ACTIVE' then now() end,$18::bigint)`,
+         case when $9::text = 'ACTIVE' then now() end,$18::bigint,$19)`,
       [id,slug,userId,data.storeId || null,data.categoryId,data.title,data.description,data.price,next,data.city,data.district,
-        data.neighborhood || null,coords?.lat ?? null,coords?.lng ?? null,JSON.stringify(data.images),JSON.stringify(attrs),phoneOverride,listingNo],
+        data.neighborhood || null,coords?.lat ?? null,coords?.lng ?? null,JSON.stringify(data.images),JSON.stringify(attrs),phoneOverride,listingNo,
+        data.clientKey ?? null],
     );
     await tx.query("insert into price_history (listing_id,price) values ($1,$2)", [id,data.price]);
     return next;
+  }).catch(async (error: unknown) => {
+    // Lost the race to an identical request: answer with the listing that one created.
+    if ((error as { code?: string }).code === "23505" && data.clientKey) {
+      const winner = await sent();
+      if (winner) return { winner };
+    }
+    throw error;
   });
+  if (typeof status === "object") return status.winner;
   return { id, slug, status };
 }
