@@ -205,16 +205,21 @@ export function MessageBubble({
       className={cn("group/msg relative flex items-center gap-1 touch-pan-y", mine ? "flex-row-reverse" : "flex-row")}
       style={swipe.dx ? { transform: `translateX(${swipe.dx}px)` } : { transition: "transform 180ms ease-out" }}
     >
-      {swipe.dx ? (
-        <span
-          aria-hidden="true"
-          className="absolute -left-10 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-full bg-elevated text-muted"
-          style={{ opacity: Math.min(1, swipe.dx / SWIPE_TRIGGER), transform: `translateY(-50%) scale(${0.6 + 0.4 * Math.min(1, swipe.dx / SWIPE_TRIGGER)})` }}
-        >
-          <Reply className="size-4" />
-        </span>
-      ) : null}
-      <div className={cn("flex max-w-[min(78%,28rem)] flex-col", mine ? "items-end" : "items-start")}>
+      <div className={cn("relative flex max-w-[min(78%,28rem)] flex-col", mine ? "items-end" : "items-start")}>
+        {/* Next to the bubble, not at the screen edge: your own messages sit on the right. */}
+        {swipe.dx ? (
+          <span
+            aria-hidden="true"
+            className={cn(
+              "absolute top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-full bg-elevated text-muted",
+              // Your own bubble has the options button on its left: the icon goes past it.
+              mine ? "-left-[4.25rem]" : "-left-10",
+            )}
+            style={{ opacity: Math.min(1, swipe.dx / SWIPE_TRIGGER), transform: `translateY(-50%) scale(${0.6 + 0.4 * Math.min(1, swipe.dx / SWIPE_TRIGGER)})` }}
+          >
+            <Reply className="size-4" />
+          </span>
+        ) : null}
         <div
           className={cn(
             "rounded-2xl px-3.5 py-2 text-[15px] shadow-2xs transition-shadow md:text-sm",

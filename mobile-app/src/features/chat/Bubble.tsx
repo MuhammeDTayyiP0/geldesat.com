@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { Linking, Pressable, StyleSheet, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { Image } from 'expo-image';
 import { Check, CheckCheck, Clock, HandCoins, MapPin, RotateCcw, ShieldAlert } from 'lucide-react-native';
 import type { ChatMessage } from '@/api/types';
@@ -27,6 +27,8 @@ type Props = {
   onOffer: (m: ChatMessage, action: 'accept' | 'reject' | 'counter') => void;
   otherName: string;
   listingImage: string | null;
+  /** Where the bubble sits in its row (for the swipe-to-reply icon). */
+  onLayout?: (e: LayoutChangeEvent) => void;
 };
 
 const OFFER_STATUS: Record<string, { label: string; tone: 'ok' | 'danger' | 'muted' | 'primary' }> = {
@@ -52,6 +54,7 @@ export const Bubble = memo(function Bubble({
   onOffer,
   otherName,
   listingImage,
+  onLayout,
 }: Props) {
   const { c } = useTheme();
   const bg = mine ? c.bubbleMine : c.bubbleOther;
@@ -169,7 +172,7 @@ export const Bubble = memo(function Bubble({
   }
 
   return (
-    <View style={[styles.wrap, mine ? styles.right : styles.left, { marginTop: grouped ? 2 : space.sm }]}>
+    <View onLayout={onLayout} style={[styles.wrap, mine ? styles.right : styles.left, { marginTop: grouped ? 2 : space.sm }]}>
       <Pressable
         onLongPress={longPress}
         delayLongPress={280}

@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { useCallback, useState, type ReactNode } from 'react';
+import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
 import Animated, { interpolate, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
@@ -11,11 +11,19 @@ import { useTheme } from '@/ui';
 const TRIGGER = 64;
 const MAX = 96;
 /**
- * Screen-edge strip left to the system: iOS swipe-back starts at the left
- * edge, Android gesture navigation at both. A drag starting here is "go back",
- * never a reply. The rows span the full list width, so this is the screen edge.
+ * Left strip that belongs to "go back" (the chat screen lets iOS swipe-back
+ * start anywhere in it, see BACK_SWIPE_END), and the right strip Android
+ * gesture navigation uses. A drag starting here is never a reply. The rows
+ * span the full list width, so these are measured from the screen edges.
  */
-const EDGE = 30;
+export const BACK_SWIPE_ZONE = 60;
+const RIGHT_EDGE = 30;
+/**
+ * iOS decides on swipe-back once the finger has moved ~10pt, so its strip is a
+ * little wider than ours: a back swipe that starts at the zone's border still
+ * counts, and every drag starting past the border is a reply.
+ */
+export const BACK_SWIPE_END = BACK_SWIPE_ZONE + 16;
 
 function tick() {
   void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -31,8 +39,12 @@ export function SwipeToReply({
   onReply,
   onInfo,
   disabled,
+  mine,
 }: {
-  children: ReactNode;
+  /** Gets the layout callback for the bubble, so the reply icon can sit right next to it. */
+  children: (onBubbleLayout: (e: LayoutChangeEvent) => void) => ReactNode;
+  /** Your own message, on the right: the reply icon appears just left of it, not at the screen edge. */
+  mine?: boolean;
   onReply: () => void;
   /** Only for your own messages. */
   onInfo?: () => void;
@@ -42,12 +54,16 @@ export function SwipeToReply({
   const tx = useSharedValue(0);
   const armed = useSharedValue(0);
   const allowLeft = Boolean(onInfo);
+  const [bubbleX, setBubbleX] = useState<number | null>(null);
+  const onBubbleLayout = useCallback((e: LayoutChangeEvent) => setBubbleX(e.nativeEvent.layout.x), []);
+  // The bubble row has an 8px side padding; the 32px icon sits 8px before the bubble.
+  const replyLeft = mine && bubbleX != null ? Math.max(12, bubbleX - 32) : 12;
 
   const pan = usePanGesture({
     enabled: !disabled,
     activeOffsetX: allowLeft ? [-14, 14] : 14,
     failOffsetY: [-12, 12],
-    hitSlop: { left: -EDGE, right: -EDGE },
+    hitSlop: { left: -BACK_SWIPE_ZONE, right: -RIGHT_EDGE },
     onUpdate: (e) => {
       'worklet';
       let x = e.translationX;
@@ -92,7 +108,7 @@ export function SwipeToReply({
 
   return (
     <View>
-      <Animated.View pointerEvents="none" style={[styles.icon, styles.left, { backgroundColor: c.elevated }, replyStyle]}>
+      <Animated.View pointerEvents="none" style={[styles.icon, { left: replyLeft, backgroundColor: c.elevated }, replyStyle]}>
         <Reply size={16} color={c.muted} />
       </Animated.View>
       {allowLeft ? (
@@ -101,7 +117,7 @@ export function SwipeToReply({
         </Animated.View>
       ) : null}
       <GestureDetector gesture={pan}>
-        <Animated.View style={rowStyle}>{children}</Animated.View>
+        <Animated.View style={rowStyle}>{children(onBubbleLayout)}</Animated.View>
       </GestureDetector>
     </View>
   );
@@ -118,6 +134,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  left: { left: 12 },
   right: { right: 12 },
 });

@@ -21,6 +21,7 @@ import { ensurePushRegistered, notificationLink, registerForPush } from '@/lib/p
 import { loadCachedConfig } from '@/lib/configCache';
 import { flushErrorReports, installGlobalErrorHandler, reportError, setErrorScreen } from '@/lib/errorReport';
 import { useOtaUpdates } from '@/lib/ota';
+import { BACK_SWIPE_END } from '@/features/chat/SwipeToReply';
 import { loadThemePref } from '@/lib/themePref';
 import { isOlderVersion } from '@/lib/version';
 import { Button, Text, ToastHost, space, useTheme } from '@/ui';
@@ -85,9 +86,9 @@ export default function RootLayout() {
                     <Stack.Screen name="(tabs)" />
                     <Stack.Screen name="ilan-ver" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
                     <Stack.Screen name="giris" options={{ presentation: 'modal' }} />
-                    {/* iOS 26 turns on swipe-back from anywhere on the screen; in chat a drag
-                        to the right is "reply", so going back stays on the screen edge. */}
-                    <Stack.Screen name="mesaj/[id]" options={{ fullScreenGestureEnabled: false }} />
+                    {/* In chat a drag to the right is "reply", so swipe-back is limited to a wide
+                        strip on the left (not just the thin screen edge, not the whole screen). */}
+                    <Stack.Screen name="mesaj/[id]" options={{ fullScreenGestureEnabled: true, gestureResponseDistance: { end: BACK_SWIPE_END } }} />
                   </Stack>
                 </UpdateGate>
               ) : null}

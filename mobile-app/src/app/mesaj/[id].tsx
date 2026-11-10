@@ -606,6 +606,7 @@ export default function ChatScreen() {
                 </View>
               ) : (
                 <SwipeToReply
+                  mine={item.message.sender_id === me}
                   disabled={blocked || item.message.deleted}
                   onReply={() => {
                     setReplyTo(item.message);
@@ -620,22 +621,25 @@ export default function ChatScreen() {
                       : undefined
                   }
                 >
-                <Bubble
-                  message={item.message}
-                  mine={item.message.sender_id === me}
-                  showReads={data.showReads}
-                  authHeaders={authHeaders}
-                  grouped={item.grouped}
-                  highlighted={highlight === item.message.id}
-                  otherName={conv.other_name}
-                  listingImage={conv.listing_image}
-                  onLongPress={openActions}
-                  onInfo={openInfo}
-                  onRetry={retrySend}
-                  onOpenImage={setViewer}
-                  onQuotePress={quotePress}
-                  onOffer={offerAction}
-                />
+                  {(onBubbleLayout) => (
+                    <Bubble
+                      message={item.message}
+                      mine={item.message.sender_id === me}
+                      showReads={data.showReads}
+                      authHeaders={authHeaders}
+                      grouped={item.grouped}
+                      highlighted={highlight === item.message.id}
+                      otherName={conv.other_name}
+                      listingImage={conv.listing_image}
+                      onLongPress={openActions}
+                      onInfo={openInfo}
+                      onRetry={retrySend}
+                      onOpenImage={setViewer}
+                      onQuotePress={quotePress}
+                      onOffer={offerAction}
+                      onLayout={onBubbleLayout}
+                    />
+                  )}
                 </SwipeToReply>
               )
             }
