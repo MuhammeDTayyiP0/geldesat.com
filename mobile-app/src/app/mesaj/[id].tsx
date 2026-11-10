@@ -3,7 +3,7 @@ import { ActivityIndicator, AppState, FlatList, Pressable, StyleSheet, TextInput
 import { useIsFocused, useLocalSearchParams, useRouter } from 'expo-router';
 import * as Crypto from 'expo-crypto';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { KeyboardAvoidingView, useKeyboardState } from 'react-native-keyboard-controller';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
@@ -37,7 +37,7 @@ import { useFlag } from '@/lib/flags';
 import { Bubble } from '@/features/chat/Bubble';
 import { SwipeToReply } from '@/features/chat/SwipeToReply';
 import { LocationPicker } from '@/features/chat/LocationPicker';
-import { BUYER_QUICK_REPLIES, CHAT_REPORT_REASONS, DELETE_WINDOW_MS, SELLER_QUICK_REPLIES } from '@/features/chat/shared';
+import { BUYER_QUICK_REPLIES, CHAT_REPORT_REASONS, DELETE_WINDOW_MS, LISTING_PHOTO_MSG, SELLER_QUICK_REPLIES, previewText } from '@/features/chat/shared';
 import { onStreamResume, subscribeChatStream } from '@/features/chat/stream';
 import { PhotoViewer } from '@/features/listing/Gallery';
 import { PhotoReview } from '@/features/photos/PhotoReview';
@@ -104,6 +104,8 @@ export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
+  // The keyboard covers the home indicator, so the composer drops that inset while it is up.
+  const keyboardUp = useKeyboardState((k) => k.isVisible);
   const router = useRouter();
   const session = useSession();
   const me = session.status === 'signedIn' ? session.user.id : '';
@@ -555,115 +557,118 @@ export default function ChatScreen() {
       </View>
 
       <KeyboardAvoidingView behavior="padding" style={styles.flex}>
-        <FlatList
-          ref={listRef}
-          data={rows}
-          inverted
-          keyExtractor={(r) => (r.type === 'day' ? r.key : r.message.id)}
-          contentContainerStyle={styles.list}
-          onEndReached={() => void loadOlder()}
-          onEndReachedThreshold={0.3}
-          keyboardDismissMode="interactive"
-          keyboardShouldPersistTaps="handled"
-          // The target is not measured yet: scroll near it, then try again.
-          onScrollToIndexFailed={(info) => {
-            listRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
-            setTimeout(() => listRef.current?.scrollToIndex({ index: info.index, viewPosition: 0.5, animated: true }), 120);
-          }}
-          // Reading older messages: a new one arriving does not push the screen away.
-          maintainVisibleContentPosition={away ? { minIndexForVisible: 1 } : undefined}
-          scrollEventThrottle={64}
-          onScroll={(e) => {
-            // Inverted list: offset 0 is the newest message.
-            const isAway = e.nativeEvent.contentOffset.y > 320;
-            if (isAway !== awayRef.current) {
-              awayRef.current = isAway;
-              setAway(isAway);
-              if (!isAway) setUnseen(0);
-            }
-          }}
-          ListFooterComponent={loadingOlder ? <ActivityIndicator color={c.primary} style={styles.older} /> : undefined}
-          ListEmptyComponent={
-            <View style={styles.emptyChat}>
-              <Text tone="muted" center>
-                Sohbete bir mesajla başlayın.
-              </Text>
-            </View>
-          }
-          renderItem={({ item }) =>
-            item.type === 'day' ? (
-              <View style={styles.day}>
-                <View style={[styles.dayPill, { backgroundColor: c.elevated }]}>
-                  <Text variant="small" tone="muted">
-                    {item.label}
-                  </Text>
-                </View>
-              </View>
-            ) : (
-              <SwipeToReply
-                disabled={blocked || item.message.deleted}
-                onReply={() => {
-                  setReplyTo(item.message);
-                  inputRef.current?.focus();
-                }}
-                onInfo={
-                  item.message.sender_id === me && !item.message.deleted
-                    ? () => {
-                        setSelected(item.message);
-                        setSheet('info');
-                      }
-                    : undefined
-                }
-              >
-              <Bubble
-                message={item.message}
-                mine={item.message.sender_id === me}
-                showReads={data.showReads}
-                authHeaders={authHeaders}
-                grouped={item.grouped}
-                highlighted={highlight === item.message.id}
-                otherName={conv.other_name}
-                listingImage={conv.listing_image}
-                onLongPress={openActions}
-                onInfo={openInfo}
-                onRetry={retrySend}
-                onOpenImage={setViewer}
-                onQuotePress={quotePress}
-                onOffer={offerAction}
-              />
-              </SwipeToReply>
-            )
-          }
-        />
-
-        {away && !jumped ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={unseen ? `En alta git, ${unseen} yeni mesaj` : 'En alta git'}
-            onPress={() => {
-              listRef.current?.scrollToOffset({ offset: 0, animated: true });
-              setUnseen(0);
+        {/* The floating buttons are placed in here, so they stay above the composer as it grows. */}
+        <View style={styles.flex}>
+          <FlatList
+            ref={listRef}
+            data={rows}
+            inverted
+            keyExtractor={(r) => (r.type === 'day' ? r.key : r.message.id)}
+            contentContainerStyle={styles.list}
+            onEndReached={() => void loadOlder()}
+            onEndReachedThreshold={0.3}
+            keyboardDismissMode="interactive"
+            keyboardShouldPersistTaps="handled"
+            // The target is not measured yet: scroll near it, then try again.
+            onScrollToIndexFailed={(info) => {
+              listRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
+              setTimeout(() => listRef.current?.scrollToIndex({ index: info.index, viewPosition: 0.5, animated: true }), 120);
             }}
-            style={[styles.toBottom, { backgroundColor: c.surface, borderColor: c.border }]}
-          >
-            <ChevronDown size={22} color={c.fg} />
-            {unseen ? (
-              <View style={[styles.toBottomBadge, { backgroundColor: c.primarySolid }]}>
-                <Text variant="small" style={styles.toBottomText}>
-                  {unseen > 99 ? '99+' : unseen}
+            // Reading older messages: a new one arriving does not push the screen away.
+            maintainVisibleContentPosition={away ? { minIndexForVisible: 1 } : undefined}
+            scrollEventThrottle={64}
+            onScroll={(e) => {
+              // Inverted list: offset 0 is the newest message.
+              const isAway = e.nativeEvent.contentOffset.y > 320;
+              if (isAway !== awayRef.current) {
+                awayRef.current = isAway;
+                setAway(isAway);
+                if (!isAway) setUnseen(0);
+              }
+            }}
+            ListFooterComponent={loadingOlder ? <ActivityIndicator color={c.primary} style={styles.older} /> : undefined}
+            ListEmptyComponent={
+              <View style={styles.emptyChat}>
+                <Text tone="muted" center>
+                  Sohbete bir mesajla başlayın.
                 </Text>
               </View>
-            ) : null}
-          </Pressable>
-        ) : null}
+            }
+            renderItem={({ item }) =>
+              item.type === 'day' ? (
+                <View style={styles.day}>
+                  <View style={[styles.dayPill, { backgroundColor: c.elevated }]}>
+                    <Text variant="small" tone="muted">
+                      {item.label}
+                    </Text>
+                  </View>
+                </View>
+              ) : (
+                <SwipeToReply
+                  disabled={blocked || item.message.deleted}
+                  onReply={() => {
+                    setReplyTo(item.message);
+                    inputRef.current?.focus();
+                  }}
+                  onInfo={
+                    item.message.sender_id === me && !item.message.deleted
+                      ? () => {
+                          setSelected(item.message);
+                          setSheet('info');
+                        }
+                      : undefined
+                  }
+                >
+                <Bubble
+                  message={item.message}
+                  mine={item.message.sender_id === me}
+                  showReads={data.showReads}
+                  authHeaders={authHeaders}
+                  grouped={item.grouped}
+                  highlighted={highlight === item.message.id}
+                  otherName={conv.other_name}
+                  listingImage={conv.listing_image}
+                  onLongPress={openActions}
+                  onInfo={openInfo}
+                  onRetry={retrySend}
+                  onOpenImage={setViewer}
+                  onQuotePress={quotePress}
+                  onOffer={offerAction}
+                />
+                </SwipeToReply>
+              )
+            }
+          />
 
-        {jumped ? (
-          <Pressable onPress={() => void thread.refetch()} style={[styles.latest, { backgroundColor: c.ink }]}>
-            <Text variant="label" tone="inverse">
-              En yeni mesajlara dön
-            </Text>
-          </Pressable>
-        ) : null}
+          {away && !jumped ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={unseen ? `En alta git, ${unseen} yeni mesaj` : 'En alta git'}
+              onPress={() => {
+                listRef.current?.scrollToOffset({ offset: 0, animated: true });
+                setUnseen(0);
+              }}
+              style={[styles.toBottom, { backgroundColor: c.surface, borderColor: c.border }]}
+            >
+              <ChevronDown size={22} color={c.fg} />
+              {unseen ? (
+                <View style={[styles.toBottomBadge, { backgroundColor: c.primarySolid }]}>
+                  <Text variant="small" style={[styles.toBottomText, { color: c.onPrimary }]}>
+                    {unseen > 99 ? '99+' : unseen}
+                  </Text>
+                </View>
+              ) : null}
+            </Pressable>
+          ) : null}
+
+          {jumped ? (
+            <Pressable onPress={() => void thread.refetch()} style={[styles.latest, { backgroundColor: c.ink }]}>
+              <Text variant="label" tone="inverse">
+                En yeni mesajlara dön
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
 
         {blocked ? (
           <View style={[styles.blocked, { backgroundColor: c.surface, borderTopColor: c.border, paddingBottom: insets.bottom + space.md }]}>
@@ -691,7 +696,7 @@ export default function ChatScreen() {
             ) : null}
           </View>
         ) : (
-          <View style={[styles.composer, { backgroundColor: c.surface, borderTopColor: c.border, paddingBottom: insets.bottom + space.sm }]}>
+          <View style={[styles.composer, { backgroundColor: c.surface, borderTopColor: c.border, paddingBottom: (keyboardUp ? 0 : insets.bottom) + space.sm }]}>
             {uploadNote ? (
               <View style={styles.uploadNote} accessibilityLiveRegion="polite">
                 <ActivityIndicator color={c.primary} size="small" />
@@ -720,10 +725,10 @@ export default function ChatScreen() {
               <View style={[styles.replyBar, { backgroundColor: c.elevated, borderLeftColor: c.primary }]}>
                 <View style={styles.flex}>
                   <Text variant="small" tone="primary">
-                    {replyTo.sender_id === me ? 'Kendinize yanıt' : `${conv.other_name} kişisine yanıt`}
+                    {replyTo.sender_id === me ? 'Kendi mesajınıza yanıt' : `${conv.other_name} kişisine yanıt`}
                   </Text>
                   <Text variant="caption" tone="muted" numberOfLines={1}>
-                    {replyTo.kind === 'image' ? '📷 Fotoğraf' : replyTo.content}
+                    {previewText(replyTo.kind, replyTo.content, false)}
                   </Text>
                 </View>
                 <IconButton icon={X} label="Yanıtı iptal et" size={30} onPress={() => setReplyTo(null)} />
@@ -752,9 +757,13 @@ export default function ChatScreen() {
                 accessibilityLabel="Gönder"
                 disabled={!text.trim() || sending}
                 onPress={() => void send(text)}
-                style={[styles.send, { backgroundColor: text.trim() ? c.primary : c.elevated }]}
+                style={[styles.send, { backgroundColor: text.trim() ? c.primarySolid : c.elevated }]}
               >
-                {sending ? <ActivityIndicator color={text.trim() ? '#fff' : c.primary} size="small" /> : <Send size={18} color={text.trim() ? '#fff' : c.subtle} />}
+                {sending ? (
+                  <ActivityIndicator color={text.trim() ? c.onPrimary : c.primary} size="small" />
+                ) : (
+                  <Send size={18} color={text.trim() ? c.onPrimary : c.subtle} />
+                )}
               </Pressable>
             </View>
           </View>
@@ -808,7 +817,7 @@ export default function ChatScreen() {
         {selected ? (
           <>
             <View style={[styles.infoPreview, { backgroundColor: c.elevated }]}>
-              <Text numberOfLines={4}>{selected.kind === 'image' ? '📷 Fotoğraf' : selected.content}</Text>
+              <Text numberOfLines={4}>{previewText(selected.kind, selected.content, selected.deleted)}</Text>
             </View>
             <RowGroup>
               <ListRow icon={Check} label="Gönderildi" value={`${dayLabel(selected.created_at)} ${formatTime(selected.created_at)}`} />
@@ -842,7 +851,7 @@ export default function ChatScreen() {
             {selected.sender_id === me ? (
               <ListRow icon={CheckCheck} label="Mesaj bilgisi" onPress={() => thenClose(() => setSheet('info'))} />
             ) : null}
-            {selected.kind === 'text' ? (
+            {selected.kind === 'text' && selected.content !== LISTING_PHOTO_MSG ? (
               <ListRow
                 icon={Copy}
                 label="Kopyala"
@@ -1106,7 +1115,7 @@ const styles = StyleSheet.create({
   toBottom: {
     position: 'absolute',
     right: space.md,
-    bottom: 96,
+    bottom: space.md,
     width: 42,
     height: 42,
     borderRadius: 21,
@@ -1115,9 +1124,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   toBottomBadge: { position: 'absolute', top: -6, right: -4, minWidth: 20, height: 20, borderRadius: 10, paddingHorizontal: 5, alignItems: 'center', justifyContent: 'center' },
-  toBottomText: { color: '#fff', fontWeight: '700' },
+  toBottomText: { fontWeight: '700' },
   infoPreview: { padding: space.md, borderRadius: radius.md },
-  latest: { position: 'absolute', alignSelf: 'center', bottom: 90, paddingHorizontal: space.lg, paddingVertical: space.sm, borderRadius: radius.pill },
+  latest: { position: 'absolute', alignSelf: 'center', bottom: space.md, paddingHorizontal: space.lg, paddingVertical: space.sm, borderRadius: radius.pill },
   blocked: { padding: space.lg, gap: space.sm, alignItems: 'center', borderTopWidth: hairline },
   composer: { borderTopWidth: hairline, paddingTop: space.sm, gap: space.sm },
   offerHint: { paddingHorizontal: space.lg },

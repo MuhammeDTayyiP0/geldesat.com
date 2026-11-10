@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 import Constants from 'expo-constants';
+import * as Updates from 'expo-updates';
 import {
   Ban,
   BellRing,
@@ -15,6 +16,7 @@ import {
   Palette,
   Search,
   Shield,
+  Smartphone,
   Store,
   UserRound,
   type LucideIcon,
@@ -41,6 +43,8 @@ export default function SettingsScreen() {
   const theme = useThemePref();
   const [q, setQ] = useState('');
   const signedIn = session.status === 'signedIn';
+  const { isUpdatePending } = Updates.useUpdates();
+  const versionLabel = `GeldeSat ${runningVersionLabel(Constants.expoConfig?.version ?? '')}`;
 
   const sections: { title: string; items: Item[] }[] = [
     {
@@ -78,6 +82,13 @@ export default function SettingsScreen() {
         { label: 'Yardım merkezi', icon: HelpCircle, to: { pathname: '/sayfa/[slug]', params: { slug: 'yardim' } } },
         { label: 'Bize yazın', icon: Mail, value: SUPPORT_EMAIL, onPress: () => void Linking.openURL(`mailto:${SUPPORT_EMAIL}`) },
         { label: 'Yasal bilgiler', detail: 'Sözleşmeler ve politikalar', icon: FileText, to: '/ayarlar/yasal' },
+        {
+          label: 'Uygulama sürümü',
+          detail: isUpdatePending ? 'Yeni sürüm hazır, yeniden başlatın' : 'Güncellemeler',
+          icon: Smartphone,
+          to: '/ayarlar/guncelleme' as Href,
+          value: runningVersionLabel(Constants.expoConfig?.version ?? ''),
+        },
       ],
     },
   ];
@@ -172,9 +183,11 @@ export default function SettingsScreen() {
           )
         ) : null}
 
-        <Text variant="small" tone="subtle" center>
-          GeldeSat {runningVersionLabel(Constants.expoConfig?.version ?? '')}
-        </Text>
+        <Pressable accessibilityRole="button" accessibilityLabel={`${versionLabel}, sürüm ayrıntıları`} onPress={() => router.push('/ayarlar/guncelleme' as Href)} hitSlop={8}>
+          <Text variant="small" tone="subtle" center>
+            {versionLabel}
+          </Text>
+        </Pressable>
       </ScrollView>
     </View>
   );

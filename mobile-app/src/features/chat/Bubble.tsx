@@ -7,7 +7,7 @@ import { API_BASE_URL, mediaUrl } from '@/lib/config';
 import { formatPrice, formatTime } from '@/lib/format';
 import { MapThumb } from '@/features/map/MapThumb';
 import { Button, Text, radius, space, useTheme } from '@/ui';
-import { LISTING_PHOTO_MSG, chatImagePath, linkify, mapsUrl, messageRisk } from './shared';
+import { LISTING_PHOTO_MSG, chatImagePath, linkify, mapsUrl, messageRisk, previewText } from './shared';
 
 type Props = {
   message: ChatMessage;
@@ -174,7 +174,7 @@ export const Bubble = memo(function Bubble({
         onLongPress={longPress}
         delayLongPress={280}
         accessible
-        accessibilityLabel={`${mine ? 'Siz' : otherName}: ${m.kind === 'image' ? 'Fotoğraf' : m.content}, ${formatTime(m.created_at)}${
+        accessibilityLabel={`${mine ? 'Siz' : otherName}: ${previewText(m.kind, m.content, m.deleted)}, ${formatTime(m.created_at)}${
           m.pending === 'sending' ? ', gönderiliyor' : m.pending === 'failed' ? ', gönderilemedi' : mine && showReads && m.read_at ? ', okundu' : ''
         }`}
         accessibilityActions={
@@ -206,7 +206,7 @@ export const Bubble = memo(function Bubble({
               {m.reply.sender_id === m.sender_id ? (mine ? 'Siz' : otherName) : mine ? otherName : 'Siz'}
             </Text>
             <Text variant="caption" numberOfLines={2} style={{ color: sub }}>
-              {m.reply.kind === 'image' ? '📷 Fotoğraf' : m.reply.content}
+              {previewText(m.reply.kind, m.reply.content, false)}
             </Text>
           </Pressable>
         ) : null}

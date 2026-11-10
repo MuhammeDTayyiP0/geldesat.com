@@ -15,21 +15,43 @@ import * as Updates from 'expo-updates';
 
 const CHECK_EVERY_MS = 30 * 60_000;
 
+type GeldesatExtra = { message?: string; critical?: boolean };
+
+/** What our server puts in `extra.geldesat` of every manifest (web/src/lib/server/ota.ts). */
+function geldesatExtra(manifest: unknown): GeldesatExtra | undefined {
+  if (!manifest || typeof manifest !== 'object' || !('extra' in manifest)) return undefined;
+  return (manifest.extra as { geldesat?: GeldesatExtra } | undefined)?.geldesat;
+}
+
+/** The release note given with `npm run ota -- --message`, if any. */
+export function updateMessage(manifest: unknown): string | null {
+  return geldesatExtra(manifest)?.message?.trim() || null;
+}
+
 function isCritical(update: Updates.UseUpdatesReturnType['downloadedUpdate']): boolean {
   if (!update) return false;
   // A rollback to the built-in code is the only kind without a manifest.
   if (!update.manifest) return true;
-  const extra = 'extra' in update.manifest ? (update.manifest.extra as { geldesat?: { critical?: boolean } } | undefined) : undefined;
-  return extra?.geldesat?.critical === true;
+  return geldesatExtra(update.manifest)?.critical === true;
 }
 
 async function checkAndDownload() {
   try {
-    const check = await Updates.checkForUpdateAsync();
-    if (check.isAvailable || check.isRollBackToEmbedded) await Updates.fetchUpdateAsync();
+    await checkNow();
   } catch {
     // Offline or server unreachable: try again next time.
   }
+}
+
+/**
+ * Asks the server now and downloads what it offers; true when new code is
+ * waiting for a restart. Throws when the server cannot be reached.
+ */
+export async function checkNow(): Promise<boolean> {
+  const check = await Updates.checkForUpdateAsync();
+  if (!check.isAvailable && !check.isRollBackToEmbedded) return false;
+  const fetched = await Updates.fetchUpdateAsync();
+  return fetched.isNew || fetched.isRollBackToEmbedded;
 }
 
 /** Mounted once, in the root layout. Does nothing in development builds. */

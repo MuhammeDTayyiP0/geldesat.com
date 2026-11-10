@@ -85,6 +85,9 @@ export default function RootLayout() {
                     <Stack.Screen name="(tabs)" />
                     <Stack.Screen name="ilan-ver" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
                     <Stack.Screen name="giris" options={{ presentation: 'modal' }} />
+                    {/* iOS 26 turns on swipe-back from anywhere on the screen; in chat a drag
+                        to the right is "reply", so going back stays on the screen edge. */}
+                    <Stack.Screen name="mesaj/[id]" options={{ fullScreenGestureEnabled: false }} />
                   </Stack>
                 </UpdateGate>
               ) : null}
