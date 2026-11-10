@@ -17,6 +17,7 @@ import {
   Copy,
   Flag,
   HandCoins,
+  ImageIcon,
   ImagePlus,
   MapPin,
   MoreVertical,
@@ -525,7 +526,7 @@ export default function ChatScreen() {
           style={[styles.listing, { backgroundColor: c.elevated }]}
         >
           <View style={[styles.listingThumb, { backgroundColor: c.border }]}>
-            {listingThumb ? <Image source={listingThumb} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}
+            {listingThumb ? <Image source={listingThumb} style={StyleSheet.absoluteFill} contentFit="cover" /> : <ImageIcon size={18} color={c.subtle} />}
           </View>
           <View style={styles.flex}>
             <Text variant="caption" numberOfLines={1}>
@@ -1106,7 +1107,7 @@ const styles = StyleSheet.create({
   headRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: space.xs },
   person: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.sm },
   listing: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginHorizontal: space.md, padding: space.sm, borderRadius: radius.md },
-  listingThumb: { width: 40, height: 40, borderRadius: 8, overflow: 'hidden' },
+  listingThumb: { width: 40, height: 40, borderRadius: 8, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   list: { paddingVertical: space.md },
   older: { padding: space.md },
   emptyChat: { padding: space.xxl, transform: [{ scaleY: -1 }] },

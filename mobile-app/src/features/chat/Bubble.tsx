@@ -235,7 +235,8 @@ export const Bubble = memo(function Bubble({
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  wrap: { maxWidth: '82%', paddingHorizontal: space.md },
+  // Close to the screen edge on your side, a clear gap on the other (as in WhatsApp).
+  wrap: { maxWidth: '78%', paddingHorizontal: space.sm },
   right: { alignSelf: 'flex-end', alignItems: 'flex-end' },
   left: { alignSelf: 'flex-start', alignItems: 'flex-start' },
   bubble: { borderRadius: 18, paddingHorizontal: space.md, paddingTop: space.sm, paddingBottom: 6, gap: 4, minWidth: 72 },

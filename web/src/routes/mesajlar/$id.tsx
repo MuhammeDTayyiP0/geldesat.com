@@ -886,7 +886,7 @@ function Thread() {
       <div
         ref={scroller}
         onScroll={onScroll}
-        className="min-h-0 flex-1 overflow-auto px-3 py-3 sm:px-5"
+        className="min-h-0 flex-1 overflow-auto px-2 py-3 sm:px-5"
         role="log"
         aria-live="polite"
         aria-relevant="additions"

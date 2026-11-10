@@ -1,7 +1,7 @@
 import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { errorText } from "@/lib/error-text";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Archive, ArchiveRestore, Mail, MailOpen, MessageCircle, MoreHorizontal, Search, Trash2 } from "lucide-react";
+import { Archive, ArchiveRestore, ImageIcon, Mail, MailOpen, MessageCircle, MoreHorizontal, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { archiveConversation, deleteConversation, listConversations, markConversationUnread } from "@/lib/server/chat";
 import { RedirectToSignIn } from "@/lib/auth/gates";
@@ -242,7 +242,25 @@ function MessagesLayout() {
                       on && "bg-primary/6 shadow-[inset_3px_0_0_var(--color-primary)]",
                     )}
                   >
-                    <ChatAvatar src={c.other_avatar} name={c.other_name} online={c.other_online} closed={c.other_closed} className="size-12" />
+                    {/* Same as the app: the listing photo tells chats apart, the person sits on its corner. */}
+                    <span className="relative shrink-0">
+                      {c.listing_image ? (
+                        <img src={photoSrc(c.listing_image, 240)} alt="" className="size-14 rounded-xl object-cover ring-1 ring-border" />
+                      ) : (
+                        <span className="grid size-14 place-items-center rounded-xl bg-elevated text-subtle">
+                          <ImageIcon className="size-5" />
+                        </span>
+                      )}
+                      <ChatAvatar
+                        src={c.other_avatar}
+                        name={c.other_name}
+                        closed={c.other_closed}
+                        className="absolute -bottom-1.5 -right-1.5 size-7 rounded-full ring-2 ring-surface [&>span]:text-[11px]"
+                      />
+                      {c.other_online && !c.other_closed ? (
+                        <span className="absolute -left-0.5 -top-0.5 size-3 rounded-full border-2 border-surface bg-ok-solid" aria-label="Çevrimiçi" />
+                      ) : null}
+                    </span>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-baseline justify-between gap-2">
                         <p className={cn("truncate text-[15px]", flagged ? "font-bold" : "font-medium", c.other_closed && "text-muted")}>{c.other_name}</p>
@@ -268,9 +286,6 @@ function MessagesLayout() {
                         ) : null}
                       </div>
                     </div>
-                    {c.listing_image ? (
-                      <img src={photoSrc(c.listing_image, 240)} alt="" className="hidden size-11 shrink-0 rounded-lg object-cover ring-1 ring-border sm:block" />
-                    ) : null}
                   </Link>
                   <DropdownMenu>
                     <DropdownMenuTrigger

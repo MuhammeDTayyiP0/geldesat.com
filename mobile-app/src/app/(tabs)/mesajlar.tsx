@@ -6,7 +6,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import Swipeable, { type SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
-import { Archive, ArchiveRestore, CheckCheck, MailOpen, MessageCircle, Search, Trash2, type LucideIcon } from 'lucide-react-native';
+import { Archive, ArchiveRestore, CheckCheck, ImageIcon, MailOpen, MessageCircle, Search, Trash2, type LucideIcon } from 'lucide-react-native';
 import { errorMessage } from '@/api/client';
 import { chat } from '@/api/endpoints';
 import { keys, queryClient } from '@/api/queries';
@@ -306,7 +306,7 @@ function InboxRow({
     >
       <View>
         <View style={[styles.thumb, { backgroundColor: c.elevated }]}>
-          {thumb ? <Image source={thumb} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}
+          {thumb ? <Image source={thumb} style={StyleSheet.absoluteFill} contentFit="cover" /> : <ImageIcon size={22} color={c.subtle} />}
         </View>
         <View style={[styles.avatar, { borderColor: c.surface }]}>
           <Avatar name={cv.other_name} uri={cv.other_avatar} size={26} />
@@ -361,7 +361,7 @@ const styles = StyleSheet.create({
   input: { flex: 1, fontSize: font.md, height: 42 },
   emptyWrap: { flexGrow: 1 },
   row: { flexDirection: 'row', gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.md },
-  thumb: { width: 58, height: 58, borderRadius: radius.md, overflow: 'hidden' },
+  thumb: { width: 58, height: 58, borderRadius: radius.md, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   avatar: { position: 'absolute', right: -6, bottom: -6, borderWidth: 2, borderRadius: 15 },
   online: { position: 'absolute', left: -2, top: -2, width: 12, height: 12, borderRadius: 6, borderWidth: 2 },
   body: { flex: 1, gap: 2 },

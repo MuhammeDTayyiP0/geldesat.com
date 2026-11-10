@@ -214,7 +214,7 @@ export function MessageBubble({
           <Reply className="size-4" />
         </span>
       ) : null}
-      <div className={cn("flex max-w-[min(82%,28rem)] flex-col", mine ? "items-end" : "items-start")}>
+      <div className={cn("flex max-w-[min(78%,28rem)] flex-col", mine ? "items-end" : "items-start")}>
         <div
           className={cn(
             "rounded-2xl px-3.5 py-2 text-[15px] shadow-2xs transition-shadow md:text-sm",
