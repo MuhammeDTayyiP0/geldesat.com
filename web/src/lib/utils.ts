@@ -168,6 +168,16 @@ export function pingInbox() {
 }
 
 /**
+ * True when a touch starts in the strip the browser keeps for its own
+ * swipe-back (iOS Safari: left edge; Android gesture navigation: both edges).
+ * Swipe handlers ignore such touches so going back never also acts on the page.
+ */
+export function fromScreenEdge(clientX: number, edge = 24) {
+  if (typeof window === "undefined") return false;
+  return clientX < edge || clientX > window.innerWidth - edge;
+}
+
+/**
  * Extract canonical 11-digit TR phone digits (05XXXXXXXXX).
  */
 export function cleanPhone(raw: string | null | undefined): string {

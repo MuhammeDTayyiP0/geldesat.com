@@ -4,7 +4,7 @@ import { DropdownMenu, DropdownMenuTrigger } from "@/components/ui/dropdown-menu
 import { MenuContent, MenuItem } from "@/components/chat/ChatUi";
 import { chatImageUrl, DELETE_WINDOW_MS, linkify, mapsUrl, messageRisk, previewText, type ChatMessage } from "@/lib/chat-shared";
 import { MapThumb } from "./MapThumb";
-import { cn, formatPrice, LISTING_PHOTO_MSG } from "@/lib/utils";
+import { cn, formatPrice, fromScreenEdge, LISTING_PHOTO_MSG } from "@/lib/utils";
 
 function clock(iso: string) {
   const d = new Date(iso);
@@ -23,7 +23,8 @@ const SWIPE_TRIGGER = 64;
 
 /**
  * Touch "swipe right to reply", like WhatsApp. `touch-action: pan-y` leaves
- * vertical scrolling to the browser; horizontal drags move the bubble.
+ * vertical scrolling to the browser; horizontal drags move the bubble. Drags
+ * from the screen edge are the browser's back gesture, so they are ignored.
  */
 function useSwipeToReply(onReply: () => void, enabled: boolean) {
   const [dx, setDx] = useState(0);
@@ -35,7 +36,7 @@ function useSwipeToReply(onReply: () => void, enabled: boolean) {
       ? {
           onTouchStart: (e: TouchEvent) => {
             const t = e.touches[0];
-            start.current = { x: t.clientX, y: t.clientY, axis: null };
+            start.current = fromScreenEdge(t.clientX) ? null : { x: t.clientX, y: t.clientY, axis: null };
           },
           onTouchMove: (e: TouchEvent) => {
             const s0 = start.current;

@@ -3,6 +3,7 @@ import * as React from "react";
 import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, Maximize2, X, ImageIcon } from "lucide-react";
 import { photoSrc, photoSrcSet } from "@/lib/images";
+import { fromScreenEdge } from "@/lib/utils";
 
 interface ListingImageGalleryProps {
   images: string[];
@@ -97,7 +98,17 @@ export function ListingImageGallery({ images, title, categoryName }: ListingImag
   }, [isFullscreen]);
 
   // Touch swipe handling (both horizontal next/prev and vertical pull-down-to-close)
+  const resetTouch = () => {
+    touchStartX.current = null;
+    touchEndX.current = null;
+    touchStartY.current = null;
+    touchEndY.current = null;
+  };
+
   const handleTouchStart = (e: React.TouchEvent) => {
+    resetTouch();
+    // An edge swipe is the browser's back gesture, not "previous photo".
+    if (fromScreenEdge(e.targetTouches[0].clientX)) return;
     touchStartX.current = e.targetTouches[0].clientX;
     touchStartY.current = e.targetTouches[0].clientY;
   };
@@ -131,10 +142,7 @@ export function ListingImageGallery({ images, title, categoryName }: ListingImag
       }
     }
 
-    touchStartX.current = null;
-    touchEndX.current = null;
-    touchStartY.current = null;
-    touchEndY.current = null;
+    resetTouch();
   };
 
   if (total === 0) {
@@ -158,6 +166,7 @@ export function ListingImageGallery({ images, title, categoryName }: ListingImag
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={() => handleTouchEnd(false)}
+        onTouchCancel={resetTouch}
       >
         {/* Photos keep their own ratio; a blurred copy fills the frame instead of empty bars. */}
         <img
@@ -269,6 +278,7 @@ export function ListingImageGallery({ images, title, categoryName }: ListingImag
               onTouchStart={handleTouchStart}
               onTouchMove={handleTouchMove}
               onTouchEnd={() => handleTouchEnd(true)}
+              onTouchCancel={resetTouch}
             >
               {/* Top Navigation Bar */}
               <div

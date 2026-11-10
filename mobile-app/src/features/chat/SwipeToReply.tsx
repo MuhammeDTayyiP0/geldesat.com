@@ -10,6 +10,12 @@ import { useTheme } from '@/ui';
 /** How far to drag before letting go triggers the action. */
 const TRIGGER = 64;
 const MAX = 96;
+/**
+ * Screen-edge strip left to the system: iOS swipe-back starts at the left
+ * edge, Android gesture navigation at both. A drag starting here is "go back",
+ * never a reply. The rows span the full list width, so this is the screen edge.
+ */
+const EDGE = 30;
 
 function tick() {
   void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -17,7 +23,8 @@ function tick() {
 
 /**
  * WhatsApp-style message gestures: drag right to reply; drag your own message
- * left to see its details. Vertical scrolling wins over small diagonal moves.
+ * left to see its details. Vertical scrolling wins over small diagonal moves,
+ * and drags from the screen edge are left to the back gesture.
  */
 export function SwipeToReply({
   children,
@@ -40,6 +47,7 @@ export function SwipeToReply({
     enabled: !disabled,
     activeOffsetX: allowLeft ? [-14, 14] : 14,
     failOffsetY: [-12, 12],
+    hitSlop: { left: -EDGE, right: -EDGE },
     onUpdate: (e) => {
       'worklet';
       let x = e.translationX;
@@ -55,9 +63,10 @@ export function SwipeToReply({
         if (over !== 0) scheduleOnRN(tick);
       }
     },
-    onDeactivate: () => {
+    onDeactivate: (e) => {
       'worklet';
-      const state = armed.get();
+      // Cancelled means something else (the back gesture, the list) took over.
+      const state = e.canceled ? 0 : armed.get();
       if (state > 0) scheduleOnRN(onReply);
       else if (state < 0 && onInfo) scheduleOnRN(onInfo);
       armed.set(0);
