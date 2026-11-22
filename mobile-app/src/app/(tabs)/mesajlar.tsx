@@ -310,8 +310,8 @@ function InboxRow({
         </View>
         <View style={[styles.avatar, { borderColor: c.surface }]}>
           <Avatar name={cv.other_name} uri={cv.other_avatar} size={26} />
+          {cv.other_online ? <View style={[styles.online, { backgroundColor: c.ok, borderColor: c.surface }]} /> : null}
         </View>
-        {cv.other_online ? <View style={[styles.online, { backgroundColor: c.ok, borderColor: c.surface }]} /> : null}
       </View>
       <View style={styles.body}>
         <View style={styles.line}>
@@ -363,7 +363,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.md },
   thumb: { width: 58, height: 58, borderRadius: radius.md, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   avatar: { position: 'absolute', right: -6, bottom: -6, borderWidth: 2, borderRadius: 15 },
-  online: { position: 'absolute', left: -2, top: -2, width: 12, height: 12, borderRadius: 6, borderWidth: 2 },
+  online: { position: 'absolute', right: -2, bottom: -2, width: 10, height: 10, borderRadius: 5, borderWidth: 1.5 },
   body: { flex: 1, gap: 2 },
   line: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   bold: { fontWeight: '600' },

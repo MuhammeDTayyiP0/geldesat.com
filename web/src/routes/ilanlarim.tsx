@@ -154,7 +154,7 @@ function Mine() {
           {tab === "live" ? (
             <>
               <p className="mt-1 text-sm text-muted">İlan vermek ücretsiz. Birkaç dakikada ilanınızı yayınlayın.</p>
-              <Link to="/ilan-ver" className={buttonVariants({ className: "mt-4 inline-block" })}>
+              <Link to="/ilan-ver" className={buttonVariants({ className: "mt-4" })}>
                   <Plus className="size-4" /> İlan ver
                 </Link>
             </>

@@ -41,15 +41,11 @@ test("only live listings are found", async () => {
   assert.deepEqual(await ids({}), ["a1", "a2", "a3"]);
 });
 
-test("text search matches the phrase, and does not read % as a wildcard", async () => {
+test("text search matches words in any order, and does not read % as a wildcard", async () => {
   assert.deepEqual(await ids({ q: "bisiklet" }), ["a1", "a2"]);
   assert.deepEqual(await ids({ q: "%50" }), ["a2"]);
   assert.deepEqual(await ids({ q: "%" }), ["a2"]);
-  assert.deepEqual(await ids({ q: "bisiklet kırmızı" }), []);
-});
-
-test("word search finds the words in any order", async () => {
-  assert.deepEqual(await ids({ q: "bisiklet kırmızı", wordSearch: true }), ["a1"]);
+  assert.deepEqual(await ids({ q: "bisiklet kırmızı" }), ["a1"]);
 });
 
 test("price range and paging", async () => {

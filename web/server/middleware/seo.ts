@@ -132,14 +132,28 @@ async function buildCategoriesSitemap(): Promise<string> {
     const { getSql } = await import("../../src/lib/db");
     const sql = await getSql();
     const cats = await sql.query<{ slug: string; lastmod: string }>(
-      `WITH cat_dates AS (
-         SELECT category_id, MAX(COALESCE(updated_at, created_at)) as max_date
+      `WITH RECURSIVE cat_direct AS (
+         SELECT category_id, MAX(COALESCE(updated_at, created_at)) AS max_date
          FROM listings
          WHERE status = 'ACTIVE' AND (expires_at IS NULL OR expires_at > now())
          GROUP BY category_id
+       ),
+       cat_ancestors AS (
+         SELECT c.id, c.parent_id, cd.max_date
+         FROM categories c
+         JOIN cat_direct cd ON cd.category_id = c.id
+         UNION ALL
+         SELECT p.id, p.parent_id, ca.max_date
+         FROM categories p
+         JOIN cat_ancestors ca ON ca.parent_id = p.id
+       ),
+       cat_dates AS (
+         SELECT id AS category_id, MAX(max_date) AS max_date
+         FROM cat_ancestors
+         GROUP BY id
        )
        SELECT c.slug,
-              COALESCE(TO_CHAR(cd.max_date, 'YYYY-MM-DD'), $1) as lastmod
+              COALESCE(TO_CHAR(cd.max_date, 'YYYY-MM-DD'), $1) AS lastmod
        FROM categories c
        JOIN cat_dates cd ON cd.category_id = c.id
        ORDER BY c.sort_order, c.name`,

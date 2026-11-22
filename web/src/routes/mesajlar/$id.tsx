@@ -1,4 +1,3 @@
-import { useFlag } from "@/lib/use-flag";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { errorText } from "@/lib/error-text";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -169,9 +168,6 @@ function Thread() {
   // Set after jumping to an old message: the newest messages are not loaded.
   const [detached, setDetached] = useState(false);
   const [newWhileDetached, setNewWhileDetached] = useState(false);
-  const chatV2 = useFlag("sohbet_v2");
-  const readWhenSeen = useRef(chatV2);
-  readWhenSeen.current = chatV2;
   const [newBelow, setNewBelow] = useState(false);
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -294,7 +290,7 @@ function Thread() {
         setOnline(t.conversation.other_online);
         setLastSeen(t.conversation.other_last_seen);
         lastRef.current = t.messages.at(-1)?.created_at ?? new Date().toISOString();
-        const startAtUnread = readWhenSeen.current && t.firstUnreadId && t.firstUnreadId !== t.messages[0]?.id;
+        const startAtUnread = Boolean(t.firstUnreadId && t.firstUnreadId !== t.messages[0]?.id);
         stickRef.current = !startAtUnread;
         setLoading(false);
         if (startAtUnread) {
@@ -328,7 +324,7 @@ function Thread() {
             setTypingUntil(0);
             setOnline(true);
             // Someone reading further up has not seen it: no "Görüldü" until they are down here.
-            if (!readWhenSeen.current || (stickRef.current && !detachedRef.current)) markRead([m.id]);
+            if (stickRef.current && !detachedRef.current) markRead([m.id]);
             else setNewBelow(true);
           }
         }
@@ -364,7 +360,7 @@ function Thread() {
     const onVisible = () => {
       if (!visible()) return;
       void catchUp().then(() => {
-        if (!readWhenSeen.current || stickRef.current) markRead();
+        if (stickRef.current) markRead();
       });
     };
     document.addEventListener("visibilitychange", onVisible);

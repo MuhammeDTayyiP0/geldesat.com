@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { getSql } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth/verify.server";
 import { rateLimit } from "@/lib/server/helpers";
-import { publicErrorMessage } from "@/lib/server/errors";
+import { errorStatus, publicErrorMessage } from "@/lib/server/errors";
 
 /**
  * KVKK data access: everything GeldeSat stores about the signed-in user, as one
@@ -56,7 +56,7 @@ export const Route = createFileRoute("/api/hesap/verilerim")({
             q(`select amount, reason, created_at from credit_ledger where user_id=$1 order by created_at`),
             q(`select listing_id, kind, starts_at, ends_at from boosts where user_id=$1`),
             q(`select listing_id, created_at from phone_reveals where viewer_id=$1 order by created_at`),
-            q(`select platform, created_at, updated_at from mobile_push_tokens where user_id=$1`),
+            q(`select platform, updated_at from mobile_push_tokens where user_id=$1`),
           ]);
           const body = JSON.stringify(
             {
@@ -98,7 +98,7 @@ export const Route = createFileRoute("/api/hesap/verilerim")({
             },
           });
         } catch (err) {
-          return Response.json({ error: publicErrorMessage(err, "Veriler hazırlanamadı") }, { status: 400 });
+          return Response.json({ error: publicErrorMessage(err, "Veriler hazırlanamadı") }, { status: errorStatus(err, 400) });
         }
       },
     },

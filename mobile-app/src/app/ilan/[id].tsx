@@ -428,8 +428,8 @@ export default function ListingScreen() {
         visible={sheet === 'phone'}
         onClose={() => setSheet(null)}
       />
-      {/* Light icons over the photos, the theme's own once the header turns solid. */}
-      <StatusBar style={scrolled ? (dark ? 'light' : 'dark') : 'light'} />
+      {/* Light icons over the photos, the theme's own when there are no photos or once the header turns solid. */}
+      <StatusBar style={scrolled || !listing.images.length ? (dark ? 'light' : 'dark') : 'light'} />
     </View>
   );
 }

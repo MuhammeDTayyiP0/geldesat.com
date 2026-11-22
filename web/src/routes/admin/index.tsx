@@ -66,7 +66,7 @@ function Dashboard() {
   if (k.listings_pending) {
     alerts.push({
       tone: "warn",
-      text: `${n(k.listings_pending)} ilan onay bekliyor${d?.oldestPendingAt ? `; en eskisi ${age(d.oldestPendingAt)}dır bekliyor` : ""}.`,
+      text: `${n(k.listings_pending)} ilan onay bekliyor${d?.oldestPendingAt ? `; en eskisi ${age(d.oldestPendingAt)} süredir bekliyor` : ""}.`,
       to: "/admin/moderasyon",
     });
   }

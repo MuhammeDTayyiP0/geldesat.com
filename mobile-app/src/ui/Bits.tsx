@@ -269,6 +269,7 @@ export function ListRow({
 export function RowGroup({ children, title }: { children: ReactNode; title?: string }) {
   const { c } = useTheme();
   const items = (Array.isArray(children) ? children : [children]).filter(Boolean);
+  if (!items.length) return null;
   return (
     <View style={styles.groupWrap}>
       {title ? (

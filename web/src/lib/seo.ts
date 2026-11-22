@@ -296,8 +296,8 @@ export function buildListingSeo(input: ListingSeoInput): ListingSeoOutput {
 
   // Akıllı Başlık: Kullanıcının girdiği başlık marka/model içermiyorsa kategoriyle destekle
   // Örn: "Acil Satılık | BMW 5 Serisi 520d (2016) İstanbul - 1.850.000 TL | GeldeSat"
-  const titleLower = listing.title.toLowerCase();
-  const catLower = hierarchicalCat.toLowerCase();
+  const titleLower = listing.title.toLocaleLowerCase("tr");
+  const catLower = hierarchicalCat.toLocaleLowerCase("tr");
   const alreadyIncludesCategory = catLower.split(" ").some((w) => w.length > 2 && titleLower.includes(w));
 
   let enrichedContext = "";
@@ -342,15 +342,22 @@ export function buildListingSeo(input: ListingSeoInput): ListingSeoOutput {
   ];
 
   // Schema.org Structured Data: Kategoriye göre Vehicle, RealEstate veya Product
-  const isVehicle = path.some((p) => {
-    const s = p.slug.toLowerCase();
-    const n = p.name.toLowerCase();
-    return s.includes("vasita") || s.includes("otomobil") || s.includes("motosiklet") || n.includes("vasıta") || n.includes("otomobil");
+  const isMotorcycle = path.some((p) => {
+    const s = p.slug.toLocaleLowerCase("tr");
+    const n = p.name.toLocaleLowerCase("tr");
+    return s.includes("motosiklet") || n.includes("motosiklet");
   });
+  const isVehicle =
+    isMotorcycle ||
+    path.some((p) => {
+      const s = p.slug.toLocaleLowerCase("tr");
+      const n = p.name.toLocaleLowerCase("tr");
+      return s.includes("vasita") || s.includes("otomobil") || n.includes("vasıta") || n.includes("otomobil");
+    });
 
   const isRealEstate = path.some((p) => {
-    const s = p.slug.toLowerCase();
-    const n = p.name.toLowerCase();
+    const s = p.slug.toLocaleLowerCase("tr");
+    const n = p.name.toLocaleLowerCase("tr");
     return s.includes("emlak") || n.includes("emlak") || s.includes("konut") || s.includes("arsa");
   });
 
@@ -395,13 +402,13 @@ export function buildListingSeo(input: ListingSeoInput): ListingSeoOutput {
   let structuredData: Record<string, unknown>;
 
   if (isVehicle) {
-    // Brand & Model tespit et
-    const brandItem = path.find((p) => p.slug.startsWith("oto-") || p.slug.includes("-serisi") || !GENERIC_ROOTS.has(p.slug));
+    // Brand & Model tespit et: [Vasıta, Otomobil, BMW, ...] -> path[2]
+    const brandItem = path.length >= 3 ? path[2] : path.find((p) => !GENERIC_ROOTS.has(p.slug));
     const brandName = brandItem?.name || hierarchicalCat.split(" ")[0];
 
     structuredData = {
       "@context": "https://schema.org/",
-      "@type": "Car",
+      "@type": isMotorcycle ? "Motorcycle" : "Car",
       name: listing.title,
       description,
       url: pageUrl,
@@ -426,6 +433,7 @@ export function buildListingSeo(input: ListingSeoInput): ListingSeoOutput {
       ...(dateModified ? { dateModified } : {}),
     };
   } else if (isRealEstate) {
+    const m2Numeric = Number(attrs["m²"] ?? attrs["m² (Net)"]) || 0;
     structuredData = {
       "@context": "https://schema.org/",
       "@type": "RealEstateListing",
@@ -433,7 +441,7 @@ export function buildListingSeo(input: ListingSeoInput): ListingSeoOutput {
       description,
       url: pageUrl,
       image: absoluteImages.length > 0 ? absoluteImages : [coverImage],
-      ...(m2 ? { floorSize: { "@type": "QuantitativeValue", value: Number(attrs["m²"]) || 0, unitCode: "MTK" } } : {}),
+      ...(m2 && m2Numeric > 0 ? { floorSize: { "@type": "QuantitativeValue", value: m2Numeric, unitCode: "MTK" } } : {}),
       ...(rooms ? { numberOfRooms: rooms } : {}),
       offers: baseOffer,
       ...(datePublished ? { datePublished } : {}),

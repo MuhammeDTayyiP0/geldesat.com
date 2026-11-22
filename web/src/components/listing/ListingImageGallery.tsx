@@ -242,7 +242,7 @@ export function ListingImageGallery({ images, title, categoryName }: ListingImag
 
       {/* Thumbnails Row */}
       {total > 1 ? (
-        <div className="flex gap-2.5 overflow-x-auto pb-1 pt-0.5 scrollbar-none">
+        <div className="flex gap-2.5 overflow-x-auto pb-1 pt-0.5 no-scrollbar">
           {validImages.map((img, i) => {
             const isActive = i === currentIdx;
             return (
@@ -354,7 +354,7 @@ export function ListingImageGallery({ images, title, categoryName }: ListingImag
               {/* Bottom Thumbnails Strip in Fullscreen */}
               {total > 1 ? (
                 <div
-                  className="listing-lightbox-thumbnails relative z-50 flex w-full items-center justify-start gap-2 overflow-x-auto sm:justify-center px-4 pt-1 bg-gradient-to-t from-black/90 via-black/60 to-transparent scrollbar-none pointer-events-auto"
+                  className="listing-lightbox-thumbnails relative z-50 flex w-full items-center justify-start gap-2 overflow-x-auto sm:justify-center px-4 pt-1 bg-gradient-to-t from-black/90 via-black/60 to-transparent no-scrollbar pointer-events-auto"
                   onClick={(e) => e.stopPropagation()}
                   onTouchStart={(e) => e.stopPropagation()}
                   onTouchMove={(e) => e.stopPropagation()}

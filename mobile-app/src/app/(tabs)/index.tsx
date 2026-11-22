@@ -165,12 +165,14 @@ export default function DiscoverScreen() {
             loading={near.isLoading}
             onSeeAll={() => router.push({ pathname: '/sonuclar', params: { city: nearby.city ?? '' } })}
           />
-          <Pressable onPress={() => setCityPicker(true)} style={styles.changeCity} hitSlop={6}>
-            <MapPin size={13} color={c.subtle} />
-            <Text variant="small" tone="subtle">
-              Şehri değiştir
-            </Text>
-          </Pressable>
+          {near.isLoading || (near.data?.listings?.length ?? 0) > 0 ? (
+            <Pressable onPress={() => setCityPicker(true)} style={styles.changeCity} hitSlop={6}>
+              <MapPin size={13} color={c.subtle} />
+              <Text variant="small" tone="subtle">
+                Şehri değiştir
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
       ) : (
         <Pressable

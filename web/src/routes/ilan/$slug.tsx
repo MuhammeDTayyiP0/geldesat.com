@@ -333,7 +333,7 @@ function ListingPage() {
         </div>
 
         {/* Title, price, contact and seller: right after the photos on phones, a sticky column on desktop. */}
-        <aside className="min-w-0 space-y-4 lg:sticky lg:top-24 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:self-start">
+        <aside className="min-w-0 space-y-4 lg:sticky lg:top-28 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:self-start">
           <div className="rounded-2xl border border-border bg-surface p-4 shadow-card sm:p-5">
             {featured || listing.status === "SOLD" || listing.boosts?.includes("ACIL") ? (
               <div className="mb-2 flex flex-wrap gap-1.5">
@@ -344,11 +344,11 @@ function ListingPage() {
             ) : null}
             <h1 className="text-lg font-semibold leading-snug break-words sm:text-xl">{listing.title}</h1>
             <p className={cn("mt-3 font-display text-2xl font-bold tabular-nums sm:text-3xl", listing.status === "SOLD" ? "text-muted line-through" : "text-primary")}>
-              {formatPrice(listing.price)}
+              {formatPrice(listing.price, listing.currency)}
             </p>
             {priceDrop > 0 ? (
               <p className="mt-1 text-xs font-medium text-ok">
-                Fiyat {formatPrice(priceDrop)} düştü <span className="text-muted line-through">{formatPrice(firstPrice)}</span>
+                Fiyat {formatPrice(priceDrop, listing.currency)} düştü <span className="text-muted line-through">{formatPrice(firstPrice, listing.currency)}</span>
               </p>
             ) : null}
             <p className="mt-2 text-sm text-muted">{location || "Türkiye"}</p>
@@ -390,7 +390,7 @@ function ListingPage() {
           </div>
 
           {isOwner ? (
-            <div ref={ownerPanelRef} className="scroll-mt-24 rounded-2xl border border-primary/25 bg-surface p-4 shadow-card sm:p-5">
+            <div ref={ownerPanelRef} className="scroll-mt-28 rounded-2xl border border-primary/25 bg-surface p-4 shadow-card sm:p-5">
               <p className="text-xs font-semibold uppercase tracking-wider text-subtle">İlanınız</p>
               <dl className="mt-3 grid grid-cols-3 gap-2 text-center">
                 {[
@@ -405,7 +405,7 @@ function ListingPage() {
                 ))}
               </dl>
               <div className="mt-4 grid gap-2">
-                <Link to="/ilan-ver" search={{ id: listing.id }} className={buttonVariants({ className: "block w-full" })}>
+                <Link to="/ilan-ver" search={{ id: listing.id }} className={buttonVariants({ className: "w-full" })}>
                     <Pencil className="size-4" /> İlanı düzenle
                   </Link>
                 {isLive ? (

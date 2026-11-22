@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Modal, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { KeyboardAvoidingView, useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
+import { useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
 import { GestureDetector, GestureHandlerRootView, usePanGesture } from 'react-native-gesture-handler';
 import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
@@ -95,13 +95,12 @@ export function Sheet({ visible, onClose, title, subtitle, children, footer, tal
     },
   });
 
-  // iOS: lift the sheet with the keyboard (negative height while it is open). The sheet is
-  // absolutely positioned, so the avoiding view's padding cannot move it there; Android
-  // resizes the window instead.
+  // Lift the sheet with the keyboard (negative height while it is open) on both
+  // iOS and Android: the sheet is absolutely positioned, so KeyboardAvoidingView
+  // padding cannot move it inside an edge-to-edge Modal.
   const keyboard = useReanimatedKeyboardAnimation();
-  const lift = Platform.OS === 'ios';
   const sheetStyle = useAnimatedStyle(() => {
-    const kb = lift ? keyboard.height.get() : 0;
+    const kb = keyboard.height.get();
     return {
       transform: [{ translateY: offset.get() + kb }],
       maxHeight: maxHeight + kb,
@@ -115,7 +114,7 @@ export function Sheet({ visible, onClose, title, subtitle, children, footer, tal
   return (
     <Modal visible transparent animationType="none" onRequestClose={onClose} statusBarTranslucent navigationBarTranslucent>
       <GestureHandlerRootView style={styles.flex}>
-        <KeyboardAvoidingView behavior="padding" enabled={!lift} style={styles.flex}>
+        <View style={styles.flex}>
           <Animated.View style={[styles.backdrop, { backgroundColor: c.overlay }, backdropStyle]}>
             <Pressable accessibilityRole="button" accessibilityLabel="Kapat" style={styles.flex} onPress={onClose} />
           </Animated.View>
@@ -162,7 +161,7 @@ export function Sheet({ visible, onClose, title, subtitle, children, footer, tal
               <View style={[styles.footer, { borderTopColor: c.border, paddingBottom: insets.bottom + space.md }]}>{footer}</View>
             ) : null}
           </Animated.View>
-        </KeyboardAvoidingView>
+        </View>
         {/* Errors from inside the sheet would otherwise show behind the modal. */}
         <ToastHost active={visible} />
       </GestureHandlerRootView>

@@ -40,10 +40,15 @@ function shortLabel(p: NominatimPlace): string {
 }
 
 /** Nominatim allows about one request per second for the whole site: cache misses wait in line. */
+const MAX_QUEUE_WAIT_MS = 10_000;
+const inFlight = new Map<string, Promise<unknown>>();
 let nextSlot = 0;
 function nextNominatimSlot(): Promise<void> {
   const now = Date.now();
   const at = Math.max(now, nextSlot);
+  if (at - now > MAX_QUEUE_WAIT_MS) {
+    return Promise.reject(new Error("geo queue full"));
+  }
   nextSlot = at + 1100;
   return at === now ? Promise.resolve() : new Promise((resolve) => setTimeout(resolve, at - now));
 }
@@ -51,16 +56,26 @@ function nextNominatimSlot(): Promise<void> {
 async function nominatim(path: string): Promise<unknown> {
   const hit = cache.get(path);
   if (hit && Date.now() - hit.at < TTL_MS) return hit.body;
-  await nextNominatimSlot();
-  const res = await fetch(`${NOMINATIM}${path}`, {
-    headers: { "User-Agent": USER_AGENT, "Accept-Language": "tr" },
-    signal: AbortSignal.timeout(6000),
-  });
-  if (!res.ok) throw new Error(`nominatim ${res.status}`);
-  const body: unknown = await res.json();
-  if (cache.size > 5000) cache.clear();
-  cache.set(path, { at: Date.now(), body });
-  return body;
+  const existing = inFlight.get(path);
+  if (existing) return existing;
+  const promise = (async () => {
+    await nextNominatimSlot();
+    const res = await fetch(`${NOMINATIM}${path}`, {
+      headers: { "User-Agent": USER_AGENT, "Accept-Language": "tr" },
+      signal: AbortSignal.timeout(6000),
+    });
+    if (!res.ok) throw new Error(`nominatim ${res.status}`);
+    const body: unknown = await res.json();
+    if (cache.size > 5000) cache.clear();
+    cache.set(path, { at: Date.now(), body });
+    return body;
+  })();
+  inFlight.set(path, promise);
+  try {
+    return await promise;
+  } finally {
+    inFlight.delete(path);
+  }
 }
 
 const json = (body: unknown, status = 200) =>

@@ -41,7 +41,7 @@ export default function AppearanceScreen() {
                       {o.hint}
                     </Text>
                   </View>
-                  <View style={[styles.radio, { borderColor: selected ? c.primary : c.borderStrong, backgroundColor: selected ? c.primary : 'transparent' }]}>
+                  <View style={[styles.radio, { borderColor: selected ? c.primarySolid : c.borderStrong, backgroundColor: selected ? c.primarySolid : 'transparent' }]}>
                     {selected ? <Check size={14} color={c.onPrimary} strokeWidth={3} /> : null}
                   </View>
                 </Pressable>

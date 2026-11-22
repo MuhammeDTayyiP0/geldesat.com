@@ -169,7 +169,7 @@ function SecuritySettings() {
                         {d.label}
                         {current ? <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">Bu cihaz</span> : null}
                       </p>
-                      <p className="text-xs text-muted">Son oturum yenileme: {timeAgo(String(s.updatedAt))} önce</p>
+                      <p className="text-xs text-muted">Son oturum yenileme: {timeAgo(String(s.updatedAt))}</p>
                     </div>
                     {current ? null : (
                       <Button size="sm" variant="ghost" onClick={() => void closeSession(s.token)}>

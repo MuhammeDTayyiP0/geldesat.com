@@ -439,15 +439,15 @@ function ListingRow({
             Sitede gör
           </MenuItem>
           <MenuSeparator />
-          {r.status !== "ACTIVE" ? (
-            <MenuItem icon={Check} onSelect={() => void act(ids, "approve", r.title)}>
-              Onayla / yayına al
+          {r.status === "PENDING" || r.status === "REJECTED" || r.status === "INACTIVE" ? (
+            <MenuItem icon={Check} onSelect={() => void act(ids, r.status === "PENDING" ? "approve" : "activate", r.title)}>
+              {r.status === "PENDING" ? "Onayla" : "Yayına al"}
             </MenuItem>
-          ) : (
+          ) : r.status === "ACTIVE" ? (
             <MenuItem icon={Ban} onSelect={() => void act(ids, "deactivate", r.title)}>
               Yayından kaldır
             </MenuItem>
-          )}
+          ) : null}
           {r.status !== "REJECTED" ? (
             <MenuItem icon={X} onSelect={() => void act(ids, "reject", r.title)}>
               Reddet

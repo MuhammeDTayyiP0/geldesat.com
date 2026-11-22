@@ -72,78 +72,80 @@ export function FilterSheet({ visible, onClose, value, onApply }: Props) {
   );
 
   return (
-    <Sheet
-      visible={visible}
-      onClose={onClose}
-      title="Filtrele"
-      tall
-      footer={
-        <>
-          <Button
-            title="Temizle"
-            variant="outline"
-            onPress={() => setDraft({ q: draft.q, sort: draft.sort, attrs: {} })}
-            style={styles.flex}
-          />
-          <Button
-            title="Sonuçları göster"
-            onPress={() => {
-              onApply(draft);
-              onClose();
-            }}
-            style={styles.grow}
-          />
-        </>
-      }
-    >
-      <SelectField
-        label="Kategori"
-        icon={LayoutGrid}
-        placeholder="Tüm kategoriler"
-        value={draft.categoryName ?? info.data?.category?.name ?? (draft.category ? '…' : null)}
-        onPress={() => setPicker('category')}
-      />
-      <View style={styles.range}>
-        <View style={styles.flex}>
-          <SelectField label="İl" icon={MapPin} placeholder="Tüm iller" value={draft.city} onPress={() => setPicker('city')} />
+    <>
+      <Sheet
+        visible={visible && picker === null}
+        onClose={onClose}
+        title="Filtrele"
+        tall
+        footer={
+          <>
+            <Button
+              title="Temizle"
+              variant="outline"
+              onPress={() => setDraft({ q: draft.q, sort: draft.sort, attrs: {} })}
+              style={styles.flex}
+            />
+            <Button
+              title="Sonuçları göster"
+              onPress={() => {
+                onApply(draft);
+                onClose();
+              }}
+              style={styles.grow}
+            />
+          </>
+        }
+      >
+        <SelectField
+          label="Kategori"
+          icon={LayoutGrid}
+          placeholder="Tüm kategoriler"
+          value={draft.categoryName ?? info.data?.category?.name ?? (draft.category ? '…' : null)}
+          onPress={() => setPicker('category')}
+        />
+        <View style={styles.range}>
+          <View style={styles.flex}>
+            <SelectField label="İl" icon={MapPin} placeholder="Tüm iller" value={draft.city} onPress={() => setPicker('city')} />
+          </View>
+          <View style={styles.flex}>
+            <SelectField
+              label="İlçe"
+              placeholder={draft.city ? 'Tüm ilçeler' : 'Önce il'}
+              value={draft.district}
+              disabled={!draft.city}
+              onPress={() => setPicker('district')}
+            />
+          </View>
         </View>
-        <View style={styles.flex}>
-          <SelectField
-            label="İlçe"
-            placeholder={draft.city ? 'Tüm ilçeler' : 'Önce il'}
-            value={draft.district}
-            disabled={!draft.city}
-            onPress={() => setPicker('district')}
-          />
-        </View>
-      </View>
 
-      {range('Fiyat', 'minPrice', 'maxPrice', '₺')}
-      {hasVehicleFilters(attributes) ? (
-        <>
-          {range('Yıl', 'minYear', 'maxYear', undefined, true)}
-          {range('Kilometre', 'minKm', 'maxKm', 'km')}
-        </>
-      ) : null}
-      {hasAreaFilter(attributes) ? range('Metrekare', 'minM2', 'maxM2', 'm²') : null}
+        {range('Fiyat', 'minPrice', 'maxPrice', '₺')}
+        {hasVehicleFilters(attributes) ? (
+          <>
+            {range('Yıl', 'minYear', 'maxYear', undefined, true)}
+            {range('Kilometre', 'minKm', 'maxKm', 'km')}
+          </>
+        ) : null}
+        {hasAreaFilter(attributes) ? range('Metrekare', 'minM2', 'maxM2', 'm²') : null}
 
-      {optionAttributes(attributes).map((a) => (
-        <AttrFilter key={a.id} attr={a} selected={draft.attrs[a.name] ?? []} onToggle={(o) => toggleAttr(a.name, o)} />
-      ))}
+        {optionAttributes(attributes).map((a) => (
+          <AttrFilter key={a.id} attr={a} selected={draft.attrs[a.name] ?? []} onToggle={(o) => toggleAttr(a.name, o)} />
+        ))}
 
-      <RowGroup title="Öne çıkanlar">
-        <ListRow icon={Flame} label="Yalnızca acil ilanlar" switchValue={!!draft.urgent} onSwitch={(v) => set({ urgent: v })} />
-        <ListRow icon={Sparkles} label="Yalnızca vitrin ilanları" switchValue={!!draft.featured} onSwitch={(v) => set({ featured: v })} />
-      </RowGroup>
+        <RowGroup title="Öne çıkanlar">
+          <ListRow icon={Flame} label="Yalnızca acil ilanlar" switchValue={!!draft.urgent} onSwitch={(v) => set({ urgent: v })} />
+          <ListRow icon={Sparkles} label="Yalnızca vitrin ilanları" switchValue={!!draft.featured} onSwitch={(v) => set({ featured: v })} />
+        </RowGroup>
+      </Sheet>
 
       <CategoryPicker
-        visible={picker === 'category'}
+        visible={visible && picker === 'category'}
         onClose={() => setPicker(null)}
         mode="filter"
         onPick={(cat) => setDraft((d) => ({ ...withoutCategory(d), category: cat?.slug, categoryName: cat?.name }))}
       />
       <OptionPicker
-        visible={picker === 'city'}
+        visible={visible && picker === 'city'}
         onClose={() => setPicker(null)}
         title="İl seçin"
         value={draft.city}
@@ -151,7 +153,7 @@ export function FilterSheet({ visible, onClose, value, onApply }: Props) {
         onSelect={(city) => set({ city: city ?? undefined, district: undefined })}
       />
       <OptionPicker
-        visible={picker === 'district'}
+        visible={visible && picker === 'district'}
         onClose={() => setPicker(null)}
         title={`${draft.city ?? ''} ilçeleri`}
         options={districts}
@@ -159,7 +161,7 @@ export function FilterSheet({ visible, onClose, value, onApply }: Props) {
         allLabel="Tüm ilçeler"
         onSelect={(district) => set({ district: district ?? undefined })}
       />
-    </Sheet>
+    </>
   );
 }
 

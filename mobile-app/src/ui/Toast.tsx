@@ -25,7 +25,7 @@ export const toast = {
 
 /** `active`: take new messages. A closing sheet stops, so a toast shown as it closes lands on the screen below. */
 export function ToastHost({ active = true }: { active?: boolean }) {
-  const { c } = useTheme();
+  const { c, dark } = useTheme();
   const insets = useSafeAreaInsets();
   const [item, setItem] = useState<ToastItem | null>(null);
   const [anim] = useState(() => new Animated.Value(0));
@@ -62,7 +62,18 @@ export function ToastHost({ active = true }: { active?: boolean }) {
 
   if (!item) return null;
   const Icon = item.kind === 'success' ? CircleCheck : item.kind === 'error' ? CircleAlert : Info;
-  const color = item.kind === 'success' ? c.ok : item.kind === 'error' ? c.danger : c.primary;
+  const iconColor =
+    item.kind === 'success'
+      ? dark
+        ? '#1f7a4d'
+        : '#47cd89'
+      : item.kind === 'error'
+        ? dark
+          ? '#b42318'
+          : '#f97066'
+        : dark
+          ? '#1a4fd8'
+          : '#8fb0ff';
   return (
     <Animated.View
       pointerEvents="box-none"
@@ -82,7 +93,7 @@ export function ToastHost({ active = true }: { active?: boolean }) {
         onPress={() => setItem(null)}
         style={[styles.toast, { backgroundColor: c.ink }, shadow(2)]}
       >
-        <Icon size={18} color={color === c.primary ? '#8fb0ff' : color} />
+        <Icon size={18} color={iconColor} />
         <Text variant="label" style={[styles.text, { color: c.bg }]}>
           {item.message}
         </Text>

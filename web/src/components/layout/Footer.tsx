@@ -49,7 +49,7 @@ export function Footer() {
       <div className="mx-auto grid max-w-6xl grid-cols-2 gap-8 px-4 py-12 md:grid-cols-4">
         {cols.map((col) => (
           <div key={col.title}>
-            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-subtle">{col.title}</p>
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-primary-fg/65">{col.title}</p>
             <ul className="space-y-2 text-sm text-primary-fg/80">
               {col.links.map((l) => (
                 <li key={l.label}>
@@ -68,7 +68,7 @@ export function Footer() {
           </div>
         ))}
         <div>
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-subtle">İletişim</p>
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-primary-fg/65">İletişim</p>
           <div className="mb-3 flex items-center gap-2">
             <LogoMark className="size-8 text-primary-fg" />
             <span className="text-sm font-medium">{company}</span>
@@ -78,7 +78,7 @@ export function Footer() {
           <p className="text-sm text-primary-fg/80">Adana, Türkiye</p>
         </div>
       </div>
-      <div className="border-t border-primary-fg/10 px-4 py-4 text-center text-xs text-subtle">
+      <div className="border-t border-primary-fg/10 px-4 py-4 text-center text-xs text-primary-fg/65">
         © {new Date().getFullYear()} {company}. İlanlar kullanıcılar tarafından yayınlanır. GeldeSat alım satımın tarafı değildir.
       </div>
     </footer>

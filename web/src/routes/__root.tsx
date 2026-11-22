@@ -107,8 +107,11 @@ export const Route = createRootRoute({
 
 function Shell() {
   useEffect(() => {
-    const message = takeFlash();
-    if (message) toast.success(message);
+    const flash = takeFlash();
+    if (flash) {
+      if (flash.tone === "error") toast.error(flash.message);
+      else toast.success(flash.message);
+    }
   }, []);
   const theme = useThemePref(Route.useLoaderData()?.theme ?? "system");
   useFlagRefresh();
@@ -124,8 +127,11 @@ function Shell() {
   const isListingDetail = useRouterState({
     select: (s) => s.matches.some((m) => m.routeId === "/ilan/$slug"),
   });
-  // BottomNav shows on inbox /mesajlar and general pages, but hides in individual chat thread and listing detail (which has its own contact bar)
-  const hideBottomNav = isChatThread || isListingDetail;
+  const isListingPost = useRouterState({
+    select: (s) => s.matches.some((m) => m.routeId === "/ilan-ver"),
+  });
+  // BottomNav shows on inbox /mesajlar and general pages, but hides in individual chat thread, listing detail, and listing post wizard (which have their own bottom action bars)
+  const hideBottomNav = isChatThread || isListingDetail || isListingPost;
 
   // Hydrated: run the first-load bar to the end; it fades out (Root renders it, so it stays in the DOM).
   useEffect(() => {

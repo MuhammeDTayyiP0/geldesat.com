@@ -1,4 +1,3 @@
-import { useFlag } from "@/lib/use-flag";
 import { ErrorState } from "@/components/common/ErrorState";
 import { createFileRoute, useNavigate, useBlocker } from "@tanstack/react-router";
 import { errorText } from "@/lib/error-text";
@@ -162,7 +161,6 @@ function PostForm() {
   const [attrsError, setAttrsError] = useState(false);
   const [attrAttempt, setAttrAttempt] = useState(0);
   const [profilePhone, setProfilePhone] = useState("");
-  const draftsOn = useFlag("ilan_formu_v2");
   const [offeredDraft, setOfferedDraft] = useState<ListingDraft | null>(null);
   const saved = useRef(false);
   const [loaded, setLoaded] = useState(!editId);
@@ -295,17 +293,17 @@ function PostForm() {
   const editChanged = Boolean(editId) && loadedForm.current !== null && loadedForm.current !== draftJson;
 
   useEffect(() => {
-    if (!draftsOn || editId || !draftKey) return;
+    if (editId || !draftKey) return;
     try {
       const raw = localStorage.getItem(draftKey);
       if (raw) setOfferedDraft(JSON.parse(raw) as ListingDraft);
     } catch {
       // Private mode or a damaged draft: start empty.
     }
-  }, [draftsOn, editId, draftKey]);
+  }, [editId, draftKey]);
 
   useEffect(() => {
-    if (!draftsOn || editId || !draftKey || !hasContent || offeredDraft || saved.current) return;
+    if (editId || !draftKey || !hasContent || offeredDraft || saved.current) return;
     const timer = setTimeout(() => {
       try {
         localStorage.setItem(draftKey, JSON.stringify({ ...JSON.parse(draftJson), savedAt: Date.now() }));
@@ -314,12 +312,12 @@ function PostForm() {
       }
     }, 600);
     return () => clearTimeout(timer);
-  }, [draftsOn, editId, draftKey, hasContent, offeredDraft, draftJson]);
+  }, [editId, draftKey, hasContent, offeredDraft, draftJson]);
 
   useBlocker({
     shouldBlockFn: () => !saved.current && !window.confirm("Kaydedilmemiş değişiklikler kaybolacak. Çıkmak istiyor musunuz?"),
-    disabled: !draftsOn || !editChanged,
-    enableBeforeUnload: draftsOn && editChanged,
+    disabled: !editChanged,
+    enableBeforeUnload: editChanged,
   });
 
   if (isPending || (user && !loaded)) return <BrandSpinner fullPage text="İlan formu hazırlanıyor…" />;
@@ -449,7 +447,7 @@ function PostForm() {
       <Stepper step={step} onPick={(i) => i < step && goTo(i)} locked={uploading || busy} />
 
       <div className="mt-5 lg:mt-8 lg:grid lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start lg:gap-8">
-        <main className="min-w-0 rounded-2xl border border-border bg-surface p-4 shadow-card sm:p-6">
+        <div className="min-w-0 rounded-2xl border border-border bg-surface p-4 shadow-card sm:p-6">
           {step === 0 ? (
             <section aria-labelledby="step-category">
               <SectionHeading id="step-category" title="Kategori seçin" hint="Önce ana kategori, sonra marka / model veya alt tür." />
@@ -846,9 +844,9 @@ function PostForm() {
               </StepActions>
             </section>
           ) : null}
-        </main>
+        </div>
 
-        <aside className="hidden space-y-4 lg:sticky lg:top-24 lg:block">
+        <aside className="hidden space-y-4 lg:sticky lg:top-28 lg:block">
           <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-card">
             <div className="relative aspect-4/3 bg-elevated">
               {images[0] ? (
@@ -1036,8 +1034,8 @@ function EditLink({
 function StepActions({ children, note }: { children: ReactNode; note?: string }) {
   return (
     <div
-      className="fixed inset-x-0 z-30 border-t border-border bg-surface/95 px-4 py-3 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] backdrop-blur-md md:static md:z-auto md:mt-8 md:border-t md:bg-transparent md:px-0 md:pb-0 md:pt-5 md:shadow-none md:backdrop-blur-none"
-      style={{ bottom: "calc(4rem + env(safe-area-inset-bottom, 0px))" }}
+      className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface/95 px-4 pt-3 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] backdrop-blur-md md:static md:z-auto md:mt-8 md:border-t md:bg-transparent md:px-0 md:pb-0 md:pt-5 md:shadow-none md:backdrop-blur-none"
+      style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom, 0px))" }}
     >
       {note ? <p className="mb-2 text-center text-xs text-muted md:mb-3 md:text-right">{note}</p> : null}
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">{children}</div>

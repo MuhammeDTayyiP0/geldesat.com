@@ -59,12 +59,13 @@ export type AttrDef = {
   required: boolean;
 };
 
+const MAX_BUCKETS = 50_000;
 const buckets = new Map<string, { n: number; t: number; w: number }>();
 let lastPrune = 0;
 
 /** Drop expired windows so the map does not grow with every visitor ever seen. */
-function pruneBuckets(now: number) {
-  if (now - lastPrune < 60_000) return;
+function pruneBuckets(now: number, force = false) {
+  if (!force && now - lastPrune < 60_000) return;
   lastPrune = now;
   for (const [key, hit] of buckets) if (now - hit.t > hit.w) buckets.delete(key);
 }
@@ -78,6 +79,13 @@ export function rateLimit(key: string, max: number, windowMs: number) {
   pruneBuckets(now);
   const hit = buckets.get(key);
   if (!hit || now - hit.t > windowMs) {
+    if (!hit && buckets.size >= MAX_BUCKETS) {
+      pruneBuckets(now, true);
+      if (buckets.size >= MAX_BUCKETS) {
+        const oldest = buckets.keys().next().value;
+        if (oldest !== undefined) buckets.delete(oldest);
+      }
+    }
     buckets.set(key, { n: 1, t: now, w: windowMs });
     return;
   }
@@ -433,8 +441,9 @@ export function viewerKey(headers: Headers, userId?: string | null): string {
   // cf-connecting-ip). The first X-Forwarded-For value can be sent by the client.
   const trusted = process.env.TRUSTED_IP_HEADER?.trim();
   const fromEdge = trusted ? headers.get(trusted)?.split(",")[0]?.trim() : undefined;
+  const realIp = headers.get("x-real-ip")?.trim();
   const forwarded = headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  return `ip:${fromEdge || forwarded || headers.get("x-real-ip") || "unknown"}`;
+  return `ip:${fromEdge || realIp || forwarded || "unknown"}`;
 }
 
 /**

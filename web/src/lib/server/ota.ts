@@ -69,7 +69,16 @@ export function publishDenied(state: "off" | "denied"): Response {
 
 /** https://www.geldesat.com behind the proxy, http://localhost:3000 locally. */
 export function publicOrigin(request: Request): string {
+  const configured = process.env.BETTER_AUTH_URL?.trim();
+  if (configured) {
+    try {
+      return new URL(configured).origin;
+    } catch {
+      // Fall through to request URL if BETTER_AUTH_URL is malformed.
+    }
+  }
   const url = new URL(request.url);
+  if (process.env.NODE_ENV === "production") return "https://www.geldesat.com";
   const proto = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim() || url.protocol.replace(":", "");
   const host = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim() || request.headers.get("host") || url.host;
   return `${proto}://${host}`;

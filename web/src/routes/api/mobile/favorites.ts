@@ -36,16 +36,16 @@ export const Route = createFileRoute("/api/mobile/favorites")({
           if (typeof body.listingId !== "string" || !body.listingId) return Response.json({ success: false, error: "İlan bilgisi geçersiz." }, { status: 400 });
           const sql = await getSql();
           await ensureProfile(userId);
-          const listing = await sql.query<{ id: string; user_id: string; title: string; slug: string }>(
-            "select id,user_id,title,slug from listings where id=$1 and status='ACTIVE' and (expires_at is null or expires_at>now())",
-            [body.listingId],
-          );
-          if (!listing[0]) return Response.json({ success: false, error: "İlan bulunamadı." }, { status: 404 });
           const existing = await sql.query<{ listing_id: string }>("select listing_id from favorites where user_id=$1 and listing_id=$2", [userId, body.listingId]);
           if (existing[0]) {
             await sql.query("delete from favorites where user_id=$1 and listing_id=$2", [userId, body.listingId]);
             return Response.json({ success: true, favorite: false });
           }
+          const listing = await sql.query<{ id: string; user_id: string; title: string; slug: string }>(
+            "select id,user_id,title,slug from listings where id=$1 and status='ACTIVE' and (expires_at is null or expires_at>now())",
+            [body.listingId],
+          );
+          if (!listing[0]) return Response.json({ success: false, error: "İlan bulunamadı." }, { status: 404 });
           if (listing[0].user_id === userId) {
             return Response.json({ success: false, error: "Kendi ilanınızı favorilere ekleyemezsiniz." }, { status: 400 });
           }

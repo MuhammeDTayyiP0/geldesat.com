@@ -75,7 +75,7 @@ export function Button({
           backgroundColor: pressed ? p.pressed : p.bg,
           borderColor: p.border,
           borderWidth: variant === 'outline' ? 1 : 0,
-          opacity: inactive && !loading ? 0.5 : 1,
+          opacity: inactive && !loading ? 0.5 : pressed && (variant === 'danger' || variant === 'soft') ? 0.78 : 1,
         },
         block && styles.block,
         style,
@@ -122,6 +122,7 @@ export function IconButton({
   const { c } = useTheme();
   const color = tone === 'primary' ? c.primary : tone === 'danger' ? c.danger : tone === 'onImage' ? '#fff' : c.fg;
   const bg = tone === 'onImage' ? 'rgba(13,17,23,0.45)' : filled ? c.surface : 'transparent';
+  const pressedBg = tone === 'onImage' ? 'rgba(13,17,23,0.72)' : c.elevated;
   return (
     <Pressable
       accessibilityRole="button"
@@ -132,7 +133,7 @@ export function IconButton({
       onPress={onPress}
       style={({ pressed }) => [
         styles.icon,
-        { width: size, height: size, borderRadius: size / 2, backgroundColor: pressed ? c.elevated : bg, opacity: disabled ? 0.4 : 1 },
+        { width: size, height: size, borderRadius: size / 2, backgroundColor: pressed ? pressedBg : bg, opacity: disabled ? 0.4 : 1 },
       ]}
     >
       <Icon size={Math.round(size * 0.5)} color={color} fill={fill ? color : 'transparent'} strokeWidth={2} />

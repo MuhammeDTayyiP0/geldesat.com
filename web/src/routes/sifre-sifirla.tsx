@@ -111,7 +111,7 @@ function NewPasswordForm({ token }: { token: string }) {
       const { error } = await authClient.resetPassword({ newPassword: password, token });
       if (error?.code === "INVALID_TOKEN" || error?.code === "TOKEN_EXPIRED") {
         // The link can expire while the form is open: back to asking for a new one.
-        setFlash(authErrorText(error));
+        setFlash(authErrorText(error), "error");
         window.location.href = "/sifre-sifirla";
         return;
       }

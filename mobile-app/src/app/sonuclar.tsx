@@ -3,7 +3,7 @@ import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { ArrowUpDown, Check, ChevronLeft, LayoutGrid, List, Search, SearchX, SlidersHorizontal, X } from 'lucide-react-native';
+import { ArrowUpDown, ChevronLeft, LayoutGrid, List, Search, SearchX, SlidersHorizontal, X } from 'lucide-react-native';
 import { catalog } from '@/api/endpoints';
 import { keys } from '@/api/queries';
 import type { SortKey } from '@/api/types';
@@ -229,11 +229,11 @@ export default function ResultsScreen() {
             <ListRow
               key={s.value}
               label={s.label}
+              checked={filters.sort === s.value}
               onPress={() => {
                 setFilters((f) => ({ ...f, sort: s.value }));
                 setSheet(null);
               }}
-              right={filters.sort === s.value ? <Check size={18} color={c.primary} /> : undefined}
             />
           ))}
         </RowGroup>

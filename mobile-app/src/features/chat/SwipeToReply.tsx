@@ -16,8 +16,8 @@ const MAX = 96;
  * gesture navigation uses. A drag starting here is never a reply. The rows
  * span the full list width, so these are measured from the screen edges.
  */
-export const BACK_SWIPE_ZONE = 60;
-const RIGHT_EDGE = 30;
+export const BACK_SWIPE_ZONE = 28;
+const RIGHT_EDGE = 28;
 /**
  * iOS decides on swipe-back once the finger has moved ~10pt, so its strip is a
  * little wider than ours: a back swipe that starts at the zone's border still

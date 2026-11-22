@@ -264,7 +264,7 @@ export function MobileNavigationDrawer({
           </Link>
           <Link
             to="/sayfa/$slug"
-            params={{ slug: "yardim" }}
+            params={{ slug: "iletisim" }}
             onClick={onClose}
             className="flex items-center gap-2 p-2 hover:text-fg rounded-lg"
           >

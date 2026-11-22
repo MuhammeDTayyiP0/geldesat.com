@@ -96,8 +96,8 @@ function AccountSidebar() {
             <Shield className="size-4.5" /> Yönetim paneli
           </Link>
         ) : null}
-        <Link to="/sayfa/$slug" params={{ slug: "yardim" }} className="flex h-10 items-center gap-3 rounded-lg px-3 text-sm hover:bg-elevated">
-          <HelpCircle className="size-4.5 text-muted" /> Yardım
+        <Link to="/sayfa/$slug" params={{ slug: "iletisim" }} className="flex h-10 items-center gap-3 rounded-lg px-3 text-sm hover:bg-elevated">
+          <HelpCircle className="size-4.5 text-muted" /> Yardım & İletişim
         </Link>
         <SignOutButton className="flex h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-sm text-danger hover:bg-danger-solid/8" />
       </div>
@@ -150,7 +150,7 @@ export function AccountShell({
     <div className="mx-auto max-w-6xl px-4 pb-24 pt-3 md:pb-12 md:pt-8">
       <div className="md:grid md:grid-cols-[232px_minmax(0,1fr)] md:gap-8 lg:gap-10">
         <aside className="hidden md:block">
-          <div className="sticky top-24">
+          <div className="sticky top-28">
             <AccountSidebar />
           </div>
         </aside>

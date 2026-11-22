@@ -141,7 +141,7 @@
     cursor: pointer;
   }
   ::selection {
-    background: color-mix(in oklab, var(--color-primary) 28%, white);
+    background: color-mix(in oklab, var(--color-primary) 28%, var(--color-surface));
   }
 }
 
@@ -224,7 +224,7 @@ html {
 }
 
 .site-header {
-  z-index: 90;
+  z-index: 40;
 }
 
 @media (max-width: 767px) {

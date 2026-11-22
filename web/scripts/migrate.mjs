@@ -42,7 +42,10 @@ async function main() {
 
   const pool = new pg.Pool({ connectionString: databaseUrl, max: 1 });
   const client = await pool.connect();
+  let locked = false;
   try {
+    await client.query("SELECT pg_advisory_lock(hashtext('geldesat_migrations'))");
+    locked = true;
     await client.query(
       "CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())",
     );
@@ -73,6 +76,9 @@ async function main() {
     }
     console.log(count ? `[migrate] done — ${count} migration(s) applied.` : "[migrate] up to date.");
   } finally {
+    if (locked) {
+      await client.query("SELECT pg_advisory_unlock(hashtext('geldesat_migrations'))").catch(() => undefined);
+    }
     client.release();
     await pool.end();
   }

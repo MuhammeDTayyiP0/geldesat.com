@@ -86,7 +86,7 @@ export default function SignInScreen() {
 
   return (
     <View style={[styles.flex, { backgroundColor: c.surface }]}>
-      <View style={[styles.close, { paddingTop: insets.top > 30 ? space.sm : insets.top + space.sm }]}>
+      <View style={[styles.close, { paddingTop: Platform.OS === 'ios' && insets.top > 30 ? space.sm : insets.top + space.sm }]}>
         <IconButton icon={X} label="Kapat" onPress={close} />
       </View>
       <KeyboardAwareScrollView

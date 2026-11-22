@@ -56,7 +56,7 @@ function ModerationPage() {
         title="Onay kuyruğu"
         description={
           queue.data
-            ? `${n(queue.data.total)} ilan onay bekliyor${rows[0] ? ` · en eskisi ${age(rows[0].created_at)}dır bekliyor` : ""}${handled ? ` · bu oturumda ${handled} karar` : ""}`
+            ? `${n(queue.data.total)} ilan onay bekliyor${rows[0] ? ` · en eskisi ${age(rows[0].created_at)} süredir bekliyor` : ""}${handled ? ` · bu oturumda ${handled} karar` : ""}`
             : "Bekleyen ilanlar yükleniyor…"
         }
         actions={<ShortcutHelp />}

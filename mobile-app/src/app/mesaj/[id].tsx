@@ -34,7 +34,6 @@ import { account, chat, uploads } from '@/api/endpoints';
 import { keys, queryClient } from '@/api/queries';
 import type { ChatMessage } from '@/api/types';
 import { useSession } from '@/auth/session';
-import { useFlag } from '@/lib/flags';
 import { Bubble } from '@/features/chat/Bubble';
 import { SwipeToReply } from '@/features/chat/SwipeToReply';
 import { LocationPicker } from '@/features/chat/LocationPicker';
@@ -119,7 +118,6 @@ export default function ChatScreen() {
   useEffect(() => {
     focusedRef.current = focused;
   }, [focused]);
-  const chatV2 = useFlag('sohbet_v2');
 
   const thread = useQuery({ queryKey: keys.thread(id), queryFn: () => chat.thread(id), staleTime: 0, enabled: !!me, refetchOnReconnect: false });
   const templates = useQuery({ queryKey: keys.templates, queryFn: chat.templates, enabled: !!me, staleTime: 5 * 60_000 });
@@ -266,11 +264,11 @@ export default function ChatScreen() {
       const sameDay = prev && localDay(prev.created_at) === localDay(m.created_at);
       const grouped = !!prev && sameDay && prev.sender_id === m.sender_id && new Date(m.created_at).getTime() - new Date(prev.created_at).getTime() < 5 * 60_000;
       out.push({ type: 'message', message: m, grouped });
-      if (chatV2 && m.id === firstUnreadId) out.push({ type: 'day', key: 'unread', label: 'Okunmamış mesajlar' });
+      if (m.id === firstUnreadId) out.push({ type: 'day', key: 'unread', label: 'Okunmamış mesajlar' });
       if (!sameDay) out.push({ type: 'day', key: `day-${localDay(m.created_at)}`, label: dayLabel(m.created_at) });
     }
     return out;
-  }, [messages, chatV2, firstUnreadId]);
+  }, [messages, firstUnreadId]);
 
   const loadOlder = async () => {
     const oldest = messages.find((m) => !m.pending);
@@ -290,14 +288,13 @@ export default function ChatScreen() {
   const appendOwn = (msg: ChatMessage) => setMessages((list) => sortMessages([...list, msg]));
 
   /**
-   * Send a message. `fromInput`: the text came from the box (cleared now, put back on
-   * failure only if nothing new was typed); a quick reply leaves the box alone.
-   * With sohbet_v2 the message shows at once as "sending…" and a failed one can be
-   * tapped to retry; the same client id makes a retry safe on the server.
+   * Send a message. `fromInput`: the text came from the box; a quick reply leaves
+   * the box alone. The message shows at once as "sending…" and a failed one can
+   * be tapped to retry; the same client id makes a retry safe on the server.
    */
   const send = async (content: string, { fromInput = true, retry }: { fromInput?: boolean; retry?: ChatMessage } = {}) => {
     const value = content.trim();
-    if (!value || (sending && !chatV2)) return;
+    if (!value) return;
     const reply = retry ? (retry.reply ? messagesRef.current.find((m) => m.id === retry.reply?.id) ?? null : null) : replyTo;
     const clientId = retry?.client_id ?? newClientId();
     if (!retry) {
@@ -318,22 +315,14 @@ export default function ChatScreen() {
       read_at: null,
       pending: 'sending',
     };
-    if (chatV2) setMessages((list) => sortMessages([...list.filter((m) => m.id !== local.id), local]));
-    else setSending(true);
+    setMessages((list) => sortMessages([...list.filter((m) => m.id !== local.id), local]));
     try {
       appendOwn(await chat.send(id, value, reply?.id, clientId));
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       void queryClient.invalidateQueries({ queryKey: keys.inbox });
     } catch (e) {
-      if (chatV2) {
-        setMessages((list) => list.map((m) => (m.id === local.id ? { ...m, pending: 'failed' } : m)));
-      } else if (fromInput) {
-        setText((current) => (current.trim() ? current : value));
-        setReplyTo((current) => current ?? reply);
-      }
+      setMessages((list) => list.map((m) => (m.id === local.id ? { ...m, pending: 'failed' } : m)));
       toast.error(errorMessage(e));
-    } finally {
-      if (!chatV2) setSending(false);
     }
   };
 
@@ -412,6 +401,7 @@ export default function ChatScreen() {
     }
   };
 
+  const pendingJumpId = useRef<string | null>(null);
   const jumpTo = async (messageId: string) => {
     if (messages.some((m) => m.id === messageId)) {
       const index = rows.findIndex((r) => r.type === 'message' && r.message.id === messageId);
@@ -419,6 +409,7 @@ export default function ChatScreen() {
     } else {
       try {
         const r = await chat.around(id, messageId);
+        pendingJumpId.current = messageId;
         setMessages(r.messages);
         setHasMore(r.hasMoreBefore);
         setJumped(r.hasMoreAfter);
@@ -430,6 +421,16 @@ export default function ChatScreen() {
     setHighlight(messageId);
     setTimeout(() => setHighlight(null), 2200);
   };
+
+  useEffect(() => {
+    const target = pendingJumpId.current;
+    if (!target) return;
+    const index = rows.findIndex((r) => r.type === 'message' && r.message.id === target);
+    if (index < 0) return;
+    pendingJumpId.current = null;
+    const t = setTimeout(() => listRef.current?.scrollToIndex({ index, viewPosition: 0.5, animated: true }), 120);
+    return () => clearTimeout(t);
+  }, [rows]);
 
   // Stable callbacks for the memoized bubbles: typing in the box must not re-render every message.
   const latest = useRef({ jumpTo, respondOffer, send });
@@ -454,16 +455,16 @@ export default function ChatScreen() {
   const quotePress = useCallback((mid: string) => void latest.current.jumpTo(mid), []);
   const offerAction = useCallback((m: ChatMessage, a: 'accept' | 'reject' | 'counter') => void latest.current.respondOffer(m, a), []);
 
-  // sohbet_v2: open at the first unread message, once per load.
+  // Open at the first unread message, once per load.
   const scrolledToUnread = useRef<number | null>(null);
   useEffect(() => {
-    if (!chatV2 || !firstUnreadId || scrolledToUnread.current === syncedAt) return;
+    if (!firstUnreadId || scrolledToUnread.current === syncedAt) return;
     const index = rows.findIndex((row) => row.type === 'day' && row.key === 'unread');
     if (index < 3) return;
     scrolledToUnread.current = syncedAt;
     const t = setTimeout(() => listRef.current?.scrollToIndex({ index, viewPosition: 0.9, animated: false }), 250);
     return () => clearTimeout(t);
-  }, [chatV2, firstUnreadId, rows, syncedAt]);
+  }, [firstUnreadId, rows, syncedAt]);
 
   if (!me) {
     return (
@@ -607,7 +608,7 @@ export default function ChatScreen() {
               ) : (
                 <SwipeToReply
                   mine={item.message.sender_id === me}
-                  disabled={blocked || item.message.deleted}
+                  disabled={blocked || item.message.deleted || Boolean(item.message.pending)}
                   onReply={() => {
                     setReplyTo(item.message);
                     inputRef.current?.focus();

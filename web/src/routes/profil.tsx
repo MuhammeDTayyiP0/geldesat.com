@@ -103,12 +103,14 @@ function AccountHub() {
       <div className="mt-4 space-y-4">
         <MenuRows items={ACCOUNT_ITEMS.filter((i) => i.to !== "/profil")} counts={counts} />
 
-        <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface">
-          {me?.store ? (
-            <HubRow to="/ayarlar/magaza" icon={<Store className="size-4.5" />} label="Mağazam" hint={me.store.name} />
-          ) : null}
-          {dopingOn ? <HubRow to="/doping" icon={<Rocket className="size-4.5" />} label="Doping" hint="İlanınızı öne çıkarın" /> : null}
-        </ul>
+        {me?.store || dopingOn ? (
+          <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface">
+            {me?.store ? (
+              <HubRow to="/ayarlar/magaza" icon={<Store className="size-4.5" />} label="Mağazam" hint={me.store.name} />
+            ) : null}
+            {dopingOn ? <HubRow to="/doping" icon={<Rocket className="size-4.5" />} label="Doping" hint="İlanınızı öne çıkarın" /> : null}
+          </ul>
+        ) : null}
 
         {/* On phones the account sidebar is hidden, so settings get their own row. */}
         <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface md:hidden">

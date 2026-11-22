@@ -50,9 +50,19 @@ const databaseUrl = env("DATABASE_URL");
 const googleClientId = env("GOOGLE_CLIENT_ID");
 const googleClientSecret = env("GOOGLE_CLIENT_SECRET");
 export const googleAuthConfigured = Boolean(googleClientId && googleClientSecret);
-const database = databaseUrl
-  ? new Pool({ connectionString: databaseUrl, connectionTimeoutMillis: 10_000 })
-  : { dialect: pgliteDialect(() => getPglite()), type: "postgres" as const };
+const authPool = databaseUrl
+  ? new Pool({
+      connectionString: databaseUrl,
+      max: 10,
+      idleTimeoutMillis: 30_000,
+      connectionTimeoutMillis: 10_000,
+      statement_timeout: 15_000,
+    })
+  : null;
+authPool?.on("error", (err) => {
+  console.error("[auth] pg pool error:", err.message);
+});
+const database = authPool ?? { dialect: pgliteDialect(() => getPglite()), type: "postgres" as const };
 
 export const SESSION_TOKEN_COOKIE = "__Host-geldesat-auth.session_token";
 

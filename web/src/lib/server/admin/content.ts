@@ -8,6 +8,7 @@ import { DEFAULT_FLAGS, getAppConfig, setAppConfig } from "../config";
 import { FLAG_NAME_PATTERN, FLAG_PLATFORMS, VERSION_PATTERN, normalizeFlags } from "@/lib/flags";
 import { clearSiteSettingsCache, loadSiteSettings } from "../catalog";
 import { mailConfigured } from "../mail";
+import { safeRedirect } from "@/lib/auth/sign-in-gate";
 import { adminMiddleware, audit, likeTerm, paged, paging, PageInput, ts, Where } from "./common";
 import { mapAudit } from "./dashboard";
 
@@ -68,6 +69,9 @@ export const adminDeletePage = createServerFn({ method: "POST" })
   .middleware([adminMiddleware])
   .validator(z.object({ slug: z.string().max(80) }))
   .handler(async ({ context, data }) => {
+    if (LINKED_PAGES.has(data.slug)) {
+      throw new Error("Bu sayfaya site içinden bağlantı veriliyor; silinemez.");
+    }
     const sql = await getSql();
     const rows = await sql.query<{ title: string }>("delete from legal_pages where slug = $1 returning title", [data.slug]);
     if (!rows[0]) throw new Error("Sayfa bulunamadı.");
@@ -143,7 +147,7 @@ export const adminBroadcast = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     const sql = await getSql();
-    const link = data.link && data.link.startsWith("/") ? data.link : "/bildirimler";
+    const link = data.link ? safeRedirect(data.link) : "/bildirimler";
     // A second press, or a retry after a timeout, must not notify everyone twice.
     if (!firstInWindow(`broadcast:${data.audience}:${data.title}:${data.body}`, 10 * 60_000)) {
       throw new Error("Bu duyuru az önce gönderildi.");

@@ -1,7 +1,6 @@
 import { redirect } from "@tanstack/react-router";
 import { liveSql } from "@/lib/listing-status";
 import { foldTr, inferSearchCategoryId } from "@/lib/search-params";
-import { resolveFlags } from "./config";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { getSql } from "@/lib/db";
@@ -60,28 +59,12 @@ const Filters = z.object({
  * visitors only ever see ACTIVE listings.
  */
 export type SearchFilters = z.infer<typeof Filters> & {
-  /** Word matching instead of a single phrase (arama_v2). Set by the caller, not by the client. */
-  wordSearch?: boolean;
   status?: string;
   /** Skip the COUNT query when the caller ignores `total`/`pages`. */
   skipCount?: boolean;
 };
 
 const escapeLike = (text: string) => text.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
-
-/** Whether this visitor searches with word matching (arama_v2). Without a flag the old search runs. */
-async function searchV2Enabled(): Promise<boolean> {
-  const user = await getSessionUser().catch(() => null);
-  let anonId: string | null = null;
-  try {
-    const { getCookie } = await import("@tanstack/react-start/server");
-    anonId = getCookie("gs-uid") ?? null;
-  } catch {
-    // Not inside a request with cookies.
-  }
-  const flags = await resolveFlags({ userId: user?.id ?? null, anonId, platform: "web" });
-  return Boolean(flags.arama_v2);
-}
 
 export async function searchListings(f: SearchFilters): Promise<{
   listings: ListingCard[];
@@ -105,7 +88,7 @@ export async function searchListings(f: SearchFilters): Promise<{
     conds.push("(l.expires_at is null or l.expires_at > now())");
   }
 
-  if (f.q?.trim() && f.wordSearch) {
+  if (f.q?.trim()) {
     // Every word must appear somewhere: in the text, or as the listing's category.
     const term = f.q.trim();
     const words = foldTr(term).split(/\s+/).filter(Boolean).slice(0, 8);
@@ -123,26 +106,6 @@ export async function searchListings(f: SearchFilters): Promise<{
     }
     params.push(`%${escapeLike(foldTr(term))}%`);
     const ors = [`(${ands.join(" and ")})`, `l.store_id = any(array(select st.id from stores st where tr_fold(st.name) like $${params.length}))`];
-    const listingNo = /^#?\d{1,15}$/.test(term) ? term.replace("#", "") : null;
-    if (listingNo) {
-      params.push(listingNo);
-      ors.push(`l.listing_no = $${params.length}::bigint`);
-    }
-    conds.push(`(${ors.join(" or ")})`);
-  } else if (f.q?.trim()) {
-    // Escape LIKE wildcards so user-typed % and _ are literal characters
-    const term = f.q.trim();
-    const escaped = escapeLike(term);
-    params.push(`%${escaped}%`);
-    const i = params.length;
-    // Each branch can use its own index (title/description trigram, store_id),
-    // so Postgres can combine them instead of scanning every listing.
-    const ors = [
-      `l.title ilike $${i}`,
-      `l.description ilike $${i}`,
-      `l.store_id = any(array(select st.id from stores st where st.name ilike $${i}))`,
-    ];
-    // "#1000005" or "1000005": the listing number.
     const listingNo = /^#?\d{1,15}$/.test(term) ? term.replace("#", "") : null;
     if (listingNo) {
       params.push(listingNo);
@@ -190,15 +153,17 @@ export async function searchListings(f: SearchFilters): Promise<{
   if (f.maxM2 != null) jsonNum(["m²", "m² (Net)"], "<=", f.maxM2);
 
   if (f.attrs) {
-    for (const [key, val] of Object.entries(f.attrs)) {
+    for (const [key, val] of Object.entries(f.attrs).slice(0, 20)) {
       if (val == null || val === "" || (Array.isArray(val) && val.length === 0)) continue;
-      const values = Array.isArray(val) ? val.map(String) : [String(val)];
+      const values = (Array.isArray(val) ? val.map(String) : [String(val)]).slice(0, 20);
       params.push(key);
       const k = params.length;
       const ors = values.map((v) => {
         params.push(v);
-        const p = `$${params.length}`;
-        return `(l.attrs->>$${k} = ${p} or l.attrs->>$${k} like ${p} || ', %' or l.attrs->>$${k} like '%, ' || ${p} or l.attrs->>$${k} like '%, ' || ${p} || ', %')`;
+        const exact = `$${params.length}`;
+        params.push(escapeLike(v));
+        const esc = `$${params.length}`;
+        return `(l.attrs->>$${k} = ${exact} or l.attrs->>$${k} like ${esc} || ', %' or l.attrs->>$${k} like '%, ' || ${esc} or l.attrs->>$${k} like '%, ' || ${esc} || ', %')`;
       });
       conds.push(`(${ors.join(" or ")})`);
     }
@@ -309,7 +274,7 @@ export const getCategory = createServerFn({ method: "POST" })
 
 export const searchCatalog = createServerFn({ method: "POST" })
   .validator(Filters)
-  .handler(async ({ data }) => searchListings({ ...data, wordSearch: Boolean(data.q?.trim()) && (await searchV2Enabled()) }));
+  .handler(async ({ data }) => searchListings(data));
 
 /**
  * Search results plus, for a text search without a category, the category the
@@ -318,7 +283,7 @@ export const searchCatalog = createServerFn({ method: "POST" })
 export const searchCatalogWithContext = createServerFn({ method: "POST" })
   .validator(Filters)
   .handler(async ({ data }) => {
-    const result = await searchListings({ ...data, wordSearch: Boolean(data.q?.trim()) && (await searchV2Enabled()) });
+    const result = await searchListings(data);
     let inferredCategorySlug: string | null = null;
     if (!data.category && data.q?.trim()) {
       const tree = await getCategoryTree();
