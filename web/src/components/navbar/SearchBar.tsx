@@ -146,7 +146,9 @@ export function AutocompleteSearchBar({
           <input
             ref={inputRef}
             id={inputId}
-            type="search"
+            type="text"
+            role="searchbox"
+            enterKeyHint="search"
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
@@ -254,28 +256,23 @@ export function AutocompleteSearchBar({
                 {recentSearches.map((term) => (
                   <div
                     key={term}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => {
-                      setQuery(term);
-                      executeSearch(term);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key !== "Enter" && e.key !== " ") return;
-                      e.preventDefault();
-                      setQuery(term);
-                      executeSearch(term);
-                    }}
-                    className="flex items-center justify-between px-3 py-2 text-sm text-fg hover:bg-elevated rounded-lg cursor-pointer transition-colors group"
+                    className="flex items-center justify-between gap-1 px-1.5 py-0.5 text-sm text-fg hover:bg-elevated rounded-lg transition-colors group"
                   >
-                    <div className="flex items-center gap-2.5 truncate">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setQuery(term);
+                        executeSearch(term);
+                      }}
+                      className="flex min-w-0 flex-1 items-center gap-2.5 truncate px-1.5 py-1.5 text-left"
+                    >
                       <History className="size-3.5 text-subtle shrink-0 group-hover:text-primary" />
                       <span className="truncate">{term}</span>
-                    </div>
+                    </button>
                     <button
                       type="button"
                       onClick={(e) => removeRecentSearch(term, e)}
-                      className="p-1 text-subtle hover:text-danger rounded-md opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity"
+                      className="p-1.5 text-subtle hover:text-danger rounded-md opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity"
                       aria-label={`${term} aramasını sil`}
                     >
                       <X className="size-3" />

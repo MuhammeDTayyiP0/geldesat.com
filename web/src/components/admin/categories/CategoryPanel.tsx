@@ -125,7 +125,7 @@ export function CategoryPanel({ id, index, onSelect, onRequestDelete }: { id: st
       />
 
       <div className="min-h-0 flex-1 overflow-y-auto p-5">
-        {q.error ? (
+        {q.error && !q.data ? (
           <ErrorState error={q.error} onRetry={() => void q.refetch()} />
         ) : !q.data ? (
           <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted">

@@ -1,7 +1,12 @@
-import { Link } from "@tanstack/react-router";
+import { getRouteApi, Link } from "@tanstack/react-router";
+import { Monitor, Moon, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getSiteSettings } from "@/lib/server/catalog";
 import { LogoMark } from "@/components/brand/LogoMark";
+import { setThemePref, useThemePref, type ThemePref } from "@/lib/theme";
+import type { RootLoaderData } from "@/lib/use-flag";
+
+const root = getRouteApi("__root__");
 
 const cols = [
   {
@@ -31,10 +36,17 @@ const cols = [
   },
 ] as const;
 
+const THEME_OPTIONS: Array<{ value: ThemePref; label: string; icon: typeof Sun }> = [
+  { value: "light", label: "Açık tema", icon: Sun },
+  { value: "system", label: "Sistem teması", icon: Monitor },
+  { value: "dark", label: "Koyu tema", icon: Moon },
+];
+
 export function Footer() {
   const [email, setEmail] = useState("destek@geldesat.com");
   const [phone, setPhone] = useState("");
   const [company, setCompany] = useState("GeldeSat");
+  const theme = useThemePref((root.useLoaderData() as RootLoaderData | undefined)?.theme ?? "system");
   useEffect(() => {
     void getSiteSettings()
       .then((s) => {
@@ -45,7 +57,7 @@ export function Footer() {
       .catch(() => undefined);
   }, []);
   return (
-    <footer className="mt-auto border-t border-border bg-ink text-white">
+    <footer className="mt-auto border-t border-border bg-ink text-white mobile-content-space">
       <div className="mx-auto grid max-w-6xl grid-cols-2 gap-8 px-4 py-12 md:grid-cols-4">
         {cols.map((col) => (
           <div key={col.title}>
@@ -78,8 +90,33 @@ export function Footer() {
           <p className="text-sm text-primary-fg/80">Adana, Türkiye</p>
         </div>
       </div>
-      <div className="border-t border-primary-fg/10 px-4 py-4 text-center text-xs text-primary-fg/65">
-        © {new Date().getFullYear()} {company}. İlanlar kullanıcılar tarafından yayınlanır. GeldeSat alım satımın tarafı değildir.
+      <div className="border-t border-primary-fg/10 px-4 py-4">
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 text-xs text-primary-fg/65 sm:flex-row">
+          <p className="text-center sm:text-left">
+            © {new Date().getFullYear()} {company}. İlanlar kullanıcılar tarafından yayınlanır. GeldeSat alım satımın tarafı değildir.
+          </p>
+          <div className="inline-flex items-center gap-0.5 rounded-lg border border-primary-fg/15 bg-white/5 p-0.5" role="group" aria-label="Tema seçimi">
+            {THEME_OPTIONS.map((opt) => {
+              const Icon = opt.icon;
+              const active = theme === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setThemePref(opt.value)}
+                  aria-label={opt.label}
+                  aria-pressed={active}
+                  title={opt.label}
+                  className={`inline-flex size-7 items-center justify-center rounded-md transition-colors ${
+                    active ? "bg-white/20 text-white" : "text-primary-fg/65 hover:text-white"
+                  }`}
+                >
+                  <Icon className="size-3.5" />
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
     </footer>
   );

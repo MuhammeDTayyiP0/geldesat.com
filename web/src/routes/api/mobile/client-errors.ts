@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { getSql } from "@/lib/db";
 import { errorStatus, publicErrorMessage } from "@/lib/server/errors";
-import { rateLimit, viewerKey } from "@/lib/server/helpers";
+import { firstInWindow, rateLimit, viewerKey } from "@/lib/server/helpers";
 import { readJson } from "@/lib/server/request-body";
 
 const text = (max: number) => z.string().transform((value) => value.slice(0, max));
@@ -28,10 +28,13 @@ export const Route = createFileRoute("/api/mobile/client-errors")({
       POST: async ({ request }) => {
         try {
           rateLimit(`client-errors:${viewerKey(request.headers)}`, 30, 60 * 60_000);
+          rateLimit("client-errors:global", 600, 60 * 60_000);
           const parsed = z.object({ errors: z.array(Report).min(1).max(10) }).safeParse(await readJson(request, 64 * 1024));
           if (!parsed.success) return Response.json({ success: false, error: "Rapor okunamadı." }, { status: 400 });
           const sql = await getSql();
           for (const e of parsed.data.errors) {
+            const dedupKey = `client-err:${e.updateId ?? ""}:${e.platform}:${e.screen ?? ""}:${e.message.slice(0, 160)}`;
+            if (!firstInWindow(dedupKey, 10 * 60_000)) continue;
             await sql.query(
               `insert into client_errors (platform, app_version, update_id, device_id, fatal, message, stack, screen)
                values ($1,$2,$3,$4,$5,$6,$7,$8)`,

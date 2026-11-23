@@ -137,9 +137,10 @@ export const checkReviewEligibility = createServerFn({ method: "POST" })
     }
     const existing = await sql.query<{ rating: number; comment: string | null }>(
       `select rating, comment from reviews
-       where seller_id=$1 and reviewer_id=$2 and listing_id is not distinct from $3
+       where seller_id=$1 and reviewer_id=$2
+       order by created_at desc
        limit 1`,
-      [data.sellerId, context.userId, data.listingId || null],
+      [data.sellerId, context.userId],
     );
     return {
       eligible: true,

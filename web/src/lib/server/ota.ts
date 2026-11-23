@@ -1,5 +1,7 @@
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, createSign, timingSafeEqual } from "node:crypto";
 import { flagBucket } from "../flags";
+import { rateLimit, viewerKey } from "./helpers";
+import { RateLimitError } from "./errors";
 
 /**
  * Self-hosted Expo Updates server (protocol v1, the one expo-updates speaks):
@@ -48,16 +50,36 @@ export function sha256Base64Url(data: Uint8Array): string {
 }
 
 /** Publishing needs `Authorization: Bearer <OTA_PUBLISH_TOKEN>`; unset token = publishing off. */
-export function publishAuth(request: Request): "ok" | "off" | "denied" {
+export function publishAuth(request: Request): "ok" | "off" | "denied" | "rate_limited" {
+  const ip = viewerKey(request.headers);
+  try {
+    rateLimit(`ota-publish-req:${ip}`, 120, 10 * 60_000);
+  } catch (err) {
+    if (err instanceof RateLimitError) return "rate_limited";
+    throw err;
+  }
   const token = process.env.OTA_PUBLISH_TOKEN?.trim();
   if (!token || token.length < 24) return "off";
   const given = (request.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
   const a = Buffer.from(given);
   const b = Buffer.from(token);
-  return a.length === b.length && timingSafeEqual(a, b) ? "ok" : "denied";
+  if (a.length === b.length && timingSafeEqual(a, b)) return "ok";
+  try {
+    rateLimit(`ota-publish-fail:${ip}`, 10, 15 * 60_000);
+  } catch (err) {
+    if (err instanceof RateLimitError) return "rate_limited";
+    throw err;
+  }
+  return "denied";
 }
 
-export function publishDenied(state: "off" | "denied"): Response {
+export function publishDenied(state: "off" | "denied" | "rate_limited"): Response {
+  if (state === "rate_limited") {
+    return Response.json(
+      { success: false, error: "Çok fazla deneme yapıldı. Birkaç dakika sonra tekrar deneyin." },
+      { status: 429 },
+    );
+  }
   return Response.json(
     {
       success: false,
@@ -130,15 +152,45 @@ export function rollbackDirective(row: OtaUpdateRow): Directive {
   return { type: "rollBackToEmbedded", parameters: { commitTime: iso(row.created_at) } };
 }
 
+/**
+ * Optional Expo Updates code signing (RSA-SHA256). When `OTA_CODE_SIGNING_PRIVATE_KEY`
+ * is configured (PEM, newlines may be `\n`), manifest/directive parts include an
+ * `expo-signature` header matching the Expo Updates v1 code-signing spec.
+ */
+function signOtaPart(payload: string): string | null {
+  const rawKey = process.env.OTA_CODE_SIGNING_PRIVATE_KEY?.trim();
+  if (!rawKey) return null;
+  const pem = rawKey.includes("\\n") ? rawKey.replace(/\\n/g, "\n") : rawKey;
+  const keyId = (process.env.OTA_CODE_SIGNING_KEY_ID?.trim() || "main").replace(/[^A-Za-z0-9._-]/g, "");
+  try {
+    const sig = createSign("RSA-SHA256").update(payload, "utf8").sign(pem, "base64");
+    return `sig="${sig}", keyid="${keyId}", alg="rsa-v1_5-sha256"`;
+  } catch (err) {
+    console.error("[ota] invalid signing key", err);
+    return null;
+  }
+}
+
 /** multipart/mixed body with the given JSON parts, as the protocol expects. */
-export function multipartResponse(parts: Array<{ name: "manifest" | "extensions" | "directive"; body: unknown }>, protocolVersion: number): Response {
+export function multipartResponse(
+  parts: Array<{ name: "manifest" | "extensions" | "directive"; body: unknown }>,
+  protocolVersion: number,
+  options?: { sign?: boolean },
+): Response {
   const boundary = `geldesat-${crypto.randomUUID()}`;
+  const shouldSign = options?.sign ?? Boolean(process.env.OTA_CODE_SIGNING_PRIVATE_KEY?.trim());
   let body = "";
   for (const part of parts) {
+    const json = JSON.stringify(part.body);
     body += `--${boundary}\r\n`;
     body += `content-disposition: form-data; name="${part.name}"\r\n`;
-    body += "content-type: application/json; charset=utf-8\r\n\r\n";
-    body += `${JSON.stringify(part.body)}\r\n`;
+    body += "content-type: application/json; charset=utf-8\r\n";
+    if (shouldSign && (part.name === "manifest" || part.name === "directive")) {
+      const signature = signOtaPart(json);
+      if (signature) body += `expo-signature: ${signature}\r\n`;
+    }
+    body += "\r\n";
+    body += `${json}\r\n`;
   }
   body += `--${boundary}--\r\n`;
   return new Response(body, {

@@ -369,6 +369,15 @@ export function Navbar({ className }: NavbarProps) {
                   <Link
                     to="/category/$slug"
                     params={{ slug: cat.slug }}
+                    aria-expanded={isHovered}
+                    onKeyDown={(e) => {
+                      if (e.key === "ArrowDown") {
+                        e.preventDefault();
+                        handleCategoryMouseEnter(cat);
+                      } else if (e.key === "Escape") {
+                        handleCategoryMouseLeave();
+                      }
+                    }}
                     className={cn(
                       "flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium whitespace-nowrap transition-colors",
                       isHovered ? "bg-elevated text-primary font-semibold shadow-2xs" : "text-muted hover:text-fg hover:bg-elevated/70",

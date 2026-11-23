@@ -102,7 +102,7 @@ function AttributesPage() {
           />
           <span className="ml-auto text-xs text-muted">{n(rows.length)} özellik</span>
         </div>
-        {query.error ? (
+        {query.error && !query.data ? (
           <ErrorState error={query.error} onRetry={() => void query.refetch()} />
         ) : query.isLoading ? (
           <SkeletonRows rows={8} />
@@ -294,7 +294,7 @@ function UsageModal({ attr, onClose }: { attr: AdminAttribute; onClose: () => vo
   const q = useQuery({ queryKey: ["admin", "attribute-usage", attr.id], queryFn: () => adminAttributeUsage({ data: { id: attr.id } }) });
   return (
     <Modal open onOpenChange={(o) => !o && onClose()} title={`"${attr.name}" kullanımı`} description={q.data ? `${n(q.data.listingsWithValue)} ilanda bu özelliğe değer girilmiş.` : undefined} size="lg">
-      {q.error ? (
+      {q.error && !q.data ? (
         <ErrorState error={q.error} onRetry={() => void q.refetch()} />
       ) : q.isLoading ? (
         <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted">

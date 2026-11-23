@@ -225,7 +225,7 @@ export default function ListingScreen() {
               <View style={[styles.drop, { backgroundColor: c.okSoft }]}>
                 <TrendingDown size={14} color={c.ok} />
                 <Text variant="caption" tone="ok">
-                  {formatPrice(priceDrop)} düştü · ilk fiyat {formatPrice(data.history[0].price)}
+                  {formatPrice(priceDrop, listing.currency)} düştü · ilk fiyat {formatPrice(data.history[0].price, listing.currency)}
                 </Text>
               </View>
             ) : null}
@@ -494,7 +494,7 @@ function SellerCard({ listing, rating, onPress }: { listing: Listing; rating: { 
   return (
     <Card onPress={onPress}>
       <View style={styles.row}>
-        <Avatar name={name} size={48} />
+        <Avatar name={name} uri={listing.seller_avatar} size={48} />
         <View style={styles.flex}>
           <View style={styles.row}>
             <Text variant="bodyStrong" numberOfLines={1} style={styles.shrink}>

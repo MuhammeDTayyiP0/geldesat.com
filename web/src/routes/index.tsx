@@ -175,7 +175,7 @@ function CategoryStrip({
     <nav aria-label="Kategoriler" className="-mx-4 overflow-x-auto px-4 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       <ul className="flex gap-1 sm:gap-2 lg:grid lg:grid-cols-[repeat(auto-fill,minmax(104px,1fr))]">
         {roots.map((c) => {
-          const { icon: Icon, tint } = categoryVisual(c.icon);
+          const { icon: Icon, tint, darkTint } = categoryVisual(c.icon);
           return (
             <li key={c.id} className="shrink-0">
               <Link
@@ -184,8 +184,8 @@ function CategoryStrip({
                 className="group flex w-[76px] flex-col items-center gap-1.5 rounded-xl p-1 text-center lg:w-full"
               >
                 <span
-                  className="grid size-14 place-items-center rounded-[18px] transition-transform group-hover:-translate-y-0.5"
-                  style={{ backgroundColor: `${tint}1a`, color: tint }}
+                  className="category-chip-icon grid size-14 place-items-center rounded-[18px] transition-transform group-hover:-translate-y-0.5"
+                  style={{ "--cat-tint": tint, "--cat-tint-dark": darkTint } as React.CSSProperties}
                 >
                   <Icon className="size-[26px]" strokeWidth={1.9} />
                 </span>

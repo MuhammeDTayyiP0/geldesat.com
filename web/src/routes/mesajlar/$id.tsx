@@ -276,6 +276,12 @@ function Thread() {
     setDetached(false);
     setNewWhileDetached(false);
     setHasMore(false);
+    setText("");
+    setReplyTo(null);
+    setStaged((prev) => {
+      for (const p of prev) URL.revokeObjectURL(p.url);
+      return [];
+    });
     lastRef.current = undefined;
 
     getThread({ data: { conversationId: id } })
@@ -852,7 +858,7 @@ function Thread() {
             <p className="text-xs">
               {info.listing_price != null ? (
                 <span className="font-semibold tabular-nums text-primary">
-                  {formatPrice(info.listing_price)}
+                  {formatPrice(info.listing_price, info.listing_currency)}
                 </span>
               ) : null}
               <span className="text-muted">
@@ -969,6 +975,7 @@ function Thread() {
                 <MessageBubble
                   m={m}
                   mine={mine}
+                  currency={info?.listing_currency}
                   pending={m.localState === "pending"}
                   failed={m.localState === "failed"}
                   highlighted={highlightId === m.id}
@@ -1247,6 +1254,7 @@ function Thread() {
           counter={typeof dialog === "object" && dialog !== null && "counterTo" in dialog}
           onOpenChange={(o) => !o && setDialog(null)}
           listingPrice={info.listing_price}
+          listingCurrency={info.listing_currency}
           onSend={async (amount) => {
             const counterTo =
               typeof dialog === "object" && dialog && "counterTo" in dialog
@@ -1361,22 +1369,46 @@ function Thread() {
   );
 }
 
+function roundOfferAmount(raw: number): number {
+  if (raw >= 1000) return Math.round(raw / 100) * 100;
+  if (raw >= 100) return Math.round(raw / 10) * 10;
+  return Math.round(raw);
+}
+
+function suggestedOfferChips(listingPrice: number | null): Array<{ percent: number; amount: number }> {
+  if (!listingPrice) return [];
+  const seen = new Set<number>();
+  const chips: Array<{ percent: number; amount: number }> = [];
+  for (const percent of [5, 10, 15]) {
+    const amount = roundOfferAmount((listingPrice * (100 - percent)) / 100);
+    if (amount > 0 && amount < listingPrice && !seen.has(amount)) {
+      seen.add(amount);
+      chips.push({ percent, amount });
+    }
+  }
+  return chips;
+}
+
 function OfferDialog({
   open,
   counter,
   onOpenChange,
   listingPrice,
+  listingCurrency,
   onSend,
 }: {
   open: boolean;
   counter?: boolean;
   onOpenChange: (o: boolean) => void;
   listingPrice: number | null;
+  listingCurrency?: string;
   onSend: (amount: number) => Promise<void>;
 }) {
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
   const amount = Number(value) || 0;
+  const currencyLabel = listingCurrency === "USD" ? "$" : listingCurrency === "EUR" ? "€" : "TL";
+  const offerChips = suggestedOfferChips(listingPrice);
   useEffect(() => {
     if (open) setValue("");
   }, [open]);
@@ -1402,7 +1434,7 @@ function OfferDialog({
           <DialogHeader>
             <DialogTitle>{counter ? "Karşı teklif ver" : "Fiyat teklifi ver"}</DialogTitle>
             <DialogDescription>
-              {listingPrice ? <>İlan fiyatı {formatPrice(listingPrice)}. </> : null}
+              {listingPrice ? <>İlan fiyatı {formatPrice(listingPrice, listingCurrency)}. </> : null}
               {counter
                 ? "Gelen teklif yerine kendi fiyatınızı önerin; karşı taraf kabul edebilir, reddedebilir veya yeniden teklif verebilir."
                 : "Karşı taraf teklifinizi kabul edebilir, reddedebilir veya karşı teklif verebilir; yeni teklif öncekinin yerine geçer."}
@@ -1423,24 +1455,21 @@ function OfferDialog({
                 className="pr-12 text-lg font-semibold tabular-nums"
               />
               <span className="pointer-events-none absolute inset-y-0 right-3 grid place-items-center text-sm font-semibold text-muted">
-                TL
+                {currencyLabel}
               </span>
             </div>
-            {listingPrice ? (
+            {offerChips.length ? (
               <div className="mt-2 flex flex-wrap gap-1.5">
-                {[5, 10, 15].map((p) => {
-                  const suggested = Math.round((listingPrice * (100 - p)) / 100 / 100) * 100;
-                  return (
-                    <button
-                      key={p}
-                      type="button"
-                      onClick={() => setValue(String(suggested))}
-                      className="rounded-full border border-border px-2.5 py-1 text-xs hover:bg-elevated"
-                    >
-                      %{p} indirim · {formatPrice(suggested)}
-                    </button>
-                  );
-                })}
+                {offerChips.map(({ percent, amount: suggested }) => (
+                  <button
+                    key={suggested}
+                    type="button"
+                    onClick={() => setValue(String(suggested))}
+                    className="rounded-full border border-border px-2.5 py-1 text-xs hover:bg-elevated"
+                  >
+                    %{percent} indirim · {formatPrice(suggested, listingCurrency)}
+                  </button>
+                ))}
               </div>
             ) : null}
           </div>

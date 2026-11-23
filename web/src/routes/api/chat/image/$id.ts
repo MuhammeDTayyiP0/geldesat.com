@@ -13,7 +13,16 @@ export const Route = createFileRoute("/api/chat/image/$id")({
         const rows = await sql.query<{ mime_type: string; data: Buffer }>(
           `select i.mime_type, i.data from chat_images i join conversations cv on cv.id = i.conversation_id
            where i.id = $1 and (
-             cv.buyer_id = $2 or cv.seller_id = $2
+             (
+               (cv.buyer_id = $2 or cv.seller_id = $2)
+               and exists (
+                 select 1 from messages m
+                 where m.conversation_id = i.conversation_id
+                   and m.kind = 'image'
+                   and m.deleted_at is null
+                   and m.meta->>'image_id' = i.id
+               )
+             )
              or exists (select 1 from profiles p where p.user_id = $2 and p.role = 'ADMIN')
            )`,
           [params.id, user.id],

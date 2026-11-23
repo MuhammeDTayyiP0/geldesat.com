@@ -1,4 +1,4 @@
-import { useCallback, useState, type ReactNode } from 'react';
+import { memo, useCallback, useState, type ReactNode } from 'react';
 import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
@@ -34,7 +34,7 @@ function tick() {
  * left to see its details. Vertical scrolling wins over small diagonal moves,
  * and drags from the screen edge are left to the back gesture.
  */
-export function SwipeToReply({
+export const SwipeToReply = memo(function SwipeToReply({
   children,
   onReply,
   onInfo,
@@ -121,7 +121,7 @@ export function SwipeToReply({
       </GestureDetector>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   icon: {

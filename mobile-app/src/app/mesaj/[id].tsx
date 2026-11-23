@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, FlatList, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { useIsFocused, useLocalSearchParams, useRouter } from 'expo-router';
 import * as Crypto from 'expo-crypto';
@@ -168,18 +168,80 @@ export default function ChatScreen() {
 
   const data = thread.data;
   const conv = data?.conversation;
+  const currency =
+    (conv as (NonNullable<typeof conv> & { listing_currency?: string; currency?: string }) | undefined)?.listing_currency ??
+    (conv as (NonNullable<typeof conv> & { listing_currency?: string; currency?: string }) | undefined)?.currency ??
+    'TRY';
   // sohbet_v2: the first unread message from when the chat opened gets a divider, and the list starts there.
   const firstUnreadId = data?.firstUnreadId ?? null;
 
-  // Take the server's page whenever the thread (re)loads; live events add to it afterwards.
+  // Take the server's page on first load; subsequent background refetches merge
+  // so failed optimistic messages and already-loaded older pages are never wiped.
   const [syncedAt, setSyncedAt] = useState(0);
-  if (data && thread.dataUpdatedAt !== syncedAt) {
-    setSyncedAt(thread.dataUpdatedAt);
-    setMessages(data.messages);
-    setHasMore(data.hasMore);
+  const [syncedId, setSyncedId] = useState(id);
+  const [resetOnSync, setResetOnSync] = useState(false);
+  const jumpedRef = useRef(jumped);
+  useEffect(() => {
+    jumpedRef.current = jumped;
+  }, [jumped]);
+  // Where the last catch-up started (phone clock, with a margin for clock drift).
+  const syncedFrom = useRef<string | null>(null);
+  // Open at the first unread message, once per load.
+  const scrolledToUnread = useRef<number | null>(null);
+  useEffect(() => {
+    awayRef.current = false;
+    jumpedRef.current = false;
+    syncedFrom.current = null;
+    scrolledToUnread.current = null;
+  }, [id]);
+  if (id !== syncedId) {
+    setSyncedId(id);
+    setSyncedAt(0);
+    setMessages([]);
+    setHasMore(false);
     setJumped(false);
+    setResetOnSync(false);
+    setText('');
+    setReplyTo(null);
+    setCounterTo(null);
+    setSheet(null);
+    setSelected(null);
+    setAway(false);
+    setUnseen(0);
+    setTyping(false);
+  } else if (data && thread.dataUpdatedAt !== syncedAt) {
+    const firstSync = syncedAt === 0;
+    setSyncedAt(thread.dataUpdatedAt);
+    if (firstSync || resetOnSync) {
+      setMessages(data.messages);
+      setHasMore(data.hasMore);
+      setJumped(false);
+      setResetOnSync(false);
+    } else if (!jumped) {
+      setMessages((prev) => mergeMessages(prev, data.messages));
+    }
     setPresence({ online: data.conversation.other_online, lastSeen: data.conversation.other_last_seen });
   }
+
+  const backToLatest = useCallback(async () => {
+    setResetOnSync(true);
+    try {
+      const res = await thread.refetch();
+      if (res.data) {
+        setMessages(res.data.messages);
+        setHasMore(res.data.hasMore);
+        setJumped(false);
+        jumpedRef.current = false;
+        setSyncedAt(res.dataUpdatedAt);
+        setPresence({ online: res.data.conversation.other_online, lastSeen: res.data.conversation.other_last_seen });
+        setUnseen(0);
+      } else if (res.error) {
+        toast.error(errorMessage(res.error));
+      }
+    } finally {
+      setResetOnSync(false);
+    }
+  }, [thread]);
 
   const markRead = useCallback(() => {
     void chat
@@ -195,13 +257,12 @@ export default function ChatScreen() {
     if (data && focused) markRead();
   }, [data, focused, markRead]);
 
-  // Where the last catch-up started (phone clock, with a margin for clock drift).
-  const syncedFrom = useRef<string | null>(null);
   useEffect(() => {
     // A fresh page from the server: changes after it (an offer answered, a message deleted) come with the next catch-up.
     if (syncedAt) syncedFrom.current = new Date(syncedAt - 2 * 60_000).toISOString();
   }, [syncedAt]);
   const catchUp = useCallback(() => {
+    if (jumpedRef.current) return;
     const newest = [...messagesRef.current].reverse().find((m) => !m.pending);
     const after = syncedFrom.current ?? newest?.created_at;
     if (!after) return;
@@ -209,6 +270,7 @@ export default function ChatScreen() {
     void chat
       .poll(id, after)
       .then((r) => {
+        if (jumpedRef.current) return;
         syncedFrom.current = startedAt;
         const reads = new Map(r.reads.map((x) => [x.id, x.read_at]));
         setMessages((cur) => mergeMessages(cur, r.messages).map((m) => (reads.has(m.id) ? { ...m, read_at: reads.get(m.id) ?? m.read_at } : m)));
@@ -226,7 +288,17 @@ export default function ChatScreen() {
       if (event.conversationId !== id) return;
       if (event.type === 'message' || event.type === 'message_update') {
         const msg = event.message as ChatMessage;
-        setMessages((list) => mergeMessages(list, [{ ...msg, kind: msg.kind ?? 'text', meta: msg.meta ?? null, deleted: !!msg.deleted, reply: msg.reply ?? null }]));
+        const normalized: ChatMessage = { ...msg, kind: msg.kind ?? 'text', meta: msg.meta ?? null, deleted: !!msg.deleted, reply: msg.reply ?? null };
+        if (jumpedRef.current) {
+          if (event.type === 'message_update') {
+            setMessages((list) => list.map((m) => (m.id === normalized.id ? normalized : m)));
+          } else if (msg.sender_id !== me) {
+            setUnseen((n) => n + 1);
+            setTyping(false);
+          }
+          return;
+        }
+        setMessages((list) => mergeMessages(list, [normalized]));
         if (event.type === 'message' && msg.sender_id !== me && awayRef.current) setUnseen((n) => n + 1);
         if (event.type === 'message' && msg.sender_id !== me) {
           setTyping(false);
@@ -387,7 +459,7 @@ export default function ChatScreen() {
     }
     const ok = await confirm({
       title: action === 'accept' ? 'Teklif kabul edilsin mi?' : 'Teklif reddedilsin mi?',
-      message: `${formatPrice(m.meta?.amount ?? 0)} teklif`,
+      message: `${formatPrice(m.meta?.amount ?? 0, currency)} teklif`,
       confirmText: action === 'accept' ? 'Kabul et' : 'Reddet',
       destructive: action === 'reject',
     });
@@ -413,6 +485,7 @@ export default function ChatScreen() {
         setMessages(r.messages);
         setHasMore(r.hasMoreBefore);
         setJumped(r.hasMoreAfter);
+        jumpedRef.current = r.hasMoreAfter;
       } catch (e) {
         toast.error(errorMessage(e));
         return;
@@ -455,8 +528,60 @@ export default function ChatScreen() {
   const quotePress = useCallback((mid: string) => void latest.current.jumpTo(mid), []);
   const offerAction = useCallback((m: ChatMessage, a: 'accept' | 'reject' | 'counter') => void latest.current.respondOffer(m, a), []);
 
-  // Open at the first unread message, once per load.
-  const scrolledToUnread = useRef<number | null>(null);
+  const handleSwipeReply = useCallback((m: ChatMessage) => {
+    setReplyTo(m);
+    inputRef.current?.focus();
+  }, []);
+  const blockedNow = Boolean(data?.blockedByMe || data?.blockedByOther || conv?.other_closed);
+  const renderRow = useCallback(
+    ({ item }: { item: Row }) =>
+      item.type === 'day' ? (
+        <View style={styles.day}>
+          <View style={[styles.dayPill, { backgroundColor: c.elevated }]}>
+            <Text variant="small" tone="muted">
+              {item.label}
+            </Text>
+          </View>
+        </View>
+      ) : (
+        <MessageRow
+          message={item.message}
+          grouped={item.grouped}
+          mine={item.message.sender_id === me}
+          blocked={blockedNow}
+          showReads={Boolean(data?.showReads)}
+          authHeaders={authHeaders}
+          highlighted={highlight === item.message.id}
+          otherName={conv?.other_name ?? ''}
+          listingImage={conv?.listing_image ?? null}
+          onSwipeReply={handleSwipeReply}
+          onSwipeInfo={openInfo}
+          onLongPress={openActions}
+          onInfo={openInfo}
+          onRetry={retrySend}
+          onOpenImage={setViewer}
+          onQuotePress={quotePress}
+          onOffer={offerAction}
+        />
+      ),
+    [
+      authHeaders,
+      blockedNow,
+      c.elevated,
+      conv?.listing_image,
+      conv?.other_name,
+      data?.showReads,
+      handleSwipeReply,
+      highlight,
+      me,
+      offerAction,
+      openActions,
+      openInfo,
+      quotePress,
+      retrySend,
+    ],
+  );
+
   useEffect(() => {
     if (!firstUnreadId || scrolledToUnread.current === syncedAt) return;
     const index = rows.findIndex((row) => row.type === 'day' && row.key === 'unread');
@@ -534,7 +659,7 @@ export default function ChatScreen() {
               {conv.listing_title}
             </Text>
             <Text variant="label" tone="primary">
-              {conv.listing_price ? formatPrice(conv.listing_price) : ''}
+              {conv.listing_price ? formatPrice(conv.listing_price, currency) : ''}
               {conv.listing_status !== 'ACTIVE' ? (
                 <Text variant="small" tone="warn">
                   {'  '}
@@ -596,54 +721,7 @@ export default function ChatScreen() {
                 </Text>
               </View>
             }
-            renderItem={({ item }) =>
-              item.type === 'day' ? (
-                <View style={styles.day}>
-                  <View style={[styles.dayPill, { backgroundColor: c.elevated }]}>
-                    <Text variant="small" tone="muted">
-                      {item.label}
-                    </Text>
-                  </View>
-                </View>
-              ) : (
-                <SwipeToReply
-                  mine={item.message.sender_id === me}
-                  disabled={blocked || item.message.deleted || Boolean(item.message.pending)}
-                  onReply={() => {
-                    setReplyTo(item.message);
-                    inputRef.current?.focus();
-                  }}
-                  onInfo={
-                    item.message.sender_id === me && !item.message.deleted
-                      ? () => {
-                          setSelected(item.message);
-                          setSheet('info');
-                        }
-                      : undefined
-                  }
-                >
-                  {(onBubbleLayout) => (
-                    <Bubble
-                      message={item.message}
-                      mine={item.message.sender_id === me}
-                      showReads={data.showReads}
-                      authHeaders={authHeaders}
-                      grouped={item.grouped}
-                      highlighted={highlight === item.message.id}
-                      otherName={conv.other_name}
-                      listingImage={conv.listing_image}
-                      onLongPress={openActions}
-                      onInfo={openInfo}
-                      onRetry={retrySend}
-                      onOpenImage={setViewer}
-                      onQuotePress={quotePress}
-                      onOffer={offerAction}
-                      onLayout={onBubbleLayout}
-                    />
-                  )}
-                </SwipeToReply>
-              )
-            }
+            renderItem={renderRow}
           />
 
           {away && !jumped ? (
@@ -668,7 +746,7 @@ export default function ChatScreen() {
           ) : null}
 
           {jumped ? (
-            <Pressable onPress={() => void thread.refetch()} style={[styles.latest, { backgroundColor: c.ink }]}>
+            <Pressable onPress={() => void backToLatest()} style={[styles.latest, { backgroundColor: c.ink }]}>
               <Text variant="label" tone="inverse">
                 En yeni mesajlara dön
               </Text>
@@ -713,7 +791,7 @@ export default function ChatScreen() {
             ) : null}
             {pendingOfferFromOther && !quick && !replyTo ? (
               <Text variant="small" tone="primary" style={styles.offerHint}>
-                {conv.other_name} {formatPrice(pendingOfferFromOther.meta?.amount ?? 0)} teklif verdi. Yukarıdan yanıtlayabilirsiniz.
+                {conv.other_name} {formatPrice(pendingOfferFromOther.meta?.amount ?? 0, currency)} teklif verdi. Yukarıdan yanıtlayabilirsiniz.
               </Text>
             ) : null}
             {quick ? (
@@ -803,6 +881,7 @@ export default function ChatScreen() {
         visible={sheet === 'offer'}
         onClose={() => setSheet(null)}
         listingPrice={conv.listing_price}
+        currency={currency}
         counterTo={counterTo}
         onSend={async (amount) => {
           const msg = await chat.offer(id, amount, counterTo?.id);
@@ -849,10 +928,12 @@ export default function ChatScreen() {
             <ListRow
               icon={Reply}
               label="Yanıtla"
-              onPress={() => {
-                setReplyTo(selected);
-                setSheet(null);
-              }}
+              onPress={() =>
+                thenClose(() => {
+                  setReplyTo(selected);
+                  inputRef.current?.focus();
+                })
+              }
             />
             {selected.sender_id === me ? (
               <ListRow icon={CheckCheck} label="Mesaj bilgisi" onPress={() => thenClose(() => setSheet('info'))} />
@@ -977,29 +1058,111 @@ export default function ChatScreen() {
   );
 }
 
+const MessageRow = memo(function MessageRow({
+  message,
+  grouped,
+  mine,
+  blocked,
+  showReads,
+  authHeaders,
+  highlighted,
+  otherName,
+  listingImage,
+  onSwipeReply,
+  onSwipeInfo,
+  onLongPress,
+  onInfo,
+  onRetry,
+  onOpenImage,
+  onQuotePress,
+  onOffer,
+}: {
+  message: ChatMessage;
+  grouped: boolean;
+  mine: boolean;
+  blocked: boolean;
+  showReads: boolean;
+  authHeaders: Record<string, string>;
+  highlighted: boolean;
+  otherName: string;
+  listingImage: string | null;
+  onSwipeReply: (m: ChatMessage) => void;
+  onSwipeInfo: (m: ChatMessage) => void;
+  onLongPress: (m: ChatMessage) => void;
+  onInfo: (m: ChatMessage) => void;
+  onRetry: (m: ChatMessage) => void;
+  onOpenImage: (uri: string) => void;
+  onQuotePress: (id: string) => void;
+  onOffer: (m: ChatMessage, a: 'accept' | 'reject' | 'counter') => void;
+}) {
+  const handleReply = useCallback(() => onSwipeReply(message), [onSwipeReply, message]);
+  const handleInfo = useCallback(() => onSwipeInfo(message), [onSwipeInfo, message]);
+  return (
+    <SwipeToReply
+      mine={mine}
+      disabled={blocked || message.deleted || Boolean(message.pending)}
+      onReply={handleReply}
+      onInfo={mine && !message.deleted ? handleInfo : undefined}
+    >
+      {(onBubbleLayout) => (
+        <Bubble
+          message={message}
+          mine={mine}
+          showReads={showReads}
+          authHeaders={authHeaders}
+          grouped={grouped}
+          highlighted={highlighted}
+          otherName={otherName}
+          listingImage={listingImage}
+          onLongPress={onLongPress}
+          onInfo={onInfo}
+          onRetry={onRetry}
+          onOpenImage={onOpenImage}
+          onQuotePress={onQuotePress}
+          onOffer={onOffer}
+          onLayout={onBubbleLayout}
+        />
+      )}
+    </SwipeToReply>
+  );
+});
+
 function OfferComposer({
   visible,
   onClose,
   listingPrice,
+  currency = 'TRY',
   counterTo,
   onSend,
 }: {
   visible: boolean;
   onClose: () => void;
   listingPrice: number | null;
+  currency?: string;
   counterTo: ChatMessage | null;
   onSend: (amount: number) => Promise<void>;
 }) {
   const [amount, setAmount] = useState('');
   const [busy, setBusy] = useState(false);
   const value = parseMasked(amount) ?? 0;
+  const currencySymbol = currency === 'TRY' ? '₺' : currency === 'USD' ? '$' : currency === 'EUR' ? '€' : currency;
+  const step = listingPrice && listingPrice >= 1000 ? 100 : listingPrice && listingPrice >= 100 ? 10 : 1;
+  const suggestions =
+    !counterTo && listingPrice && listingPrice > 0
+      ? [...new Set([0.9, 0.85, 0.8].map((r) => Math.round((listingPrice * r) / step) * step).filter((n) => n > 0 && n < listingPrice))]
+      : [];
   return (
     <Sheet
       visible={visible}
       onClose={onClose}
+      onDismissed={() => setAmount('')}
       title={counterTo ? 'Karşı teklif' : 'Teklif ver'}
       subtitle={
-        counterTo ? `Gelen teklif: ${formatPrice(counterTo.meta?.amount ?? 0)}` : listingPrice ? `İlan fiyatı ${formatPrice(listingPrice)}` : undefined
+        counterTo
+          ? `Gelen teklif: ${formatPrice(counterTo.meta?.amount ?? 0, currency)}`
+          : listingPrice
+            ? `İlan fiyatı ${formatPrice(listingPrice, currency)}`
+            : undefined
       }
       footer={
         <Button
@@ -1022,7 +1185,14 @@ function OfferComposer({
         />
       }
     >
-      <Input label="Tutar" keyboardType="number-pad" value={amount} onChangeText={(t) => setAmount(maskThousands(t))} suffix="₺" autoFocus placeholder="0" />
+      <Input label="Tutar" keyboardType="number-pad" value={amount} onChangeText={(t) => setAmount(maskThousands(t))} suffix={currencySymbol} autoFocus placeholder="0" />
+      {suggestions.length ? (
+        <View style={styles.chips}>
+          {suggestions.map((n) => (
+            <Chip key={n} label={formatPrice(n, currency)} selected={value === n} onPress={() => setAmount(maskThousands(String(n)))} />
+          ))}
+        </View>
+      ) : null}
       <Text variant="caption" tone="subtle">
         Yeni bir teklif, açıktaki önceki teklifi geri çeker. Teklif bağlayıcı değildir.
       </Text>
@@ -1038,6 +1208,10 @@ function ReportComposer({ visible, onClose, onSend }: { visible: boolean; onClos
     <Sheet
       visible={visible}
       onClose={onClose}
+      onDismissed={() => {
+        setReason(null);
+        setDetails('');
+      }}
       title="Bildir"
       footer={
         <Button
@@ -1078,7 +1252,16 @@ function SearchSheet({ visible, onClose, conversationId, onPick }: { visible: bo
   const [term, setTerm] = useState('');
   const results = useQuery({ queryKey: ['chatSearch', conversationId, term], queryFn: () => chat.search(conversationId, term), enabled: term.length >= 2 });
   return (
-    <Sheet visible={visible} onClose={onClose} title="Sohbette ara" tall>
+    <Sheet
+      visible={visible}
+      onClose={onClose}
+      onDismissed={() => {
+        setQ('');
+        setTerm('');
+      }}
+      title="Sohbette ara"
+      tall
+    >
       <Input
         icon={Search}
         placeholder="En az 2 harf"

@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import { BackHandler, FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronRight, LayoutGrid } from 'lucide-react-native';
@@ -16,6 +17,7 @@ import { Chip, Divider, ErrorState, Header, Loading, Text, hairline, radius, spa
  */
 export default function CategoriesScreen() {
   const { c, dark } = useTheme();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { root } = useLocalSearchParams<{ root?: string }>();
   const [path, setPath] = useState<string[]>(root ? [root] : []);
@@ -80,7 +82,7 @@ export default function CategoriesScreen() {
         <FlatList
           data={children}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + space.xxxl }]}
           style={switching ? styles.switching : undefined}
           ListHeaderComponent={
             current ? (

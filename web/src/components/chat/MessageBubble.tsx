@@ -76,6 +76,7 @@ function useSwipeToReply(onReply: () => void, enabled: boolean) {
 export function MessageBubble({
   m,
   mine,
+  currency,
   pending,
   failed,
   highlighted,
@@ -92,6 +93,7 @@ export function MessageBubble({
 }: {
   m: ChatMessage;
   mine: boolean;
+  currency?: string;
   pending?: boolean;
   failed?: boolean;
   highlighted?: boolean;
@@ -150,7 +152,7 @@ export function MessageBubble({
       <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide opacity-80">
         <HandCoins className="size-4" /> {offer.counter ? "Karşı teklif" : "Fiyat teklifi"}
       </p>
-      <p className="mt-1 font-display text-2xl font-bold tabular-nums">{formatPrice(offer.amount ?? 0)}</p>
+      <p className="mt-1 font-display text-2xl font-bold tabular-nums">{formatPrice(offer.amount ?? 0, currency)}</p>
       <p className={cn("mt-1 text-xs font-semibold", mine ? "text-primary-fg/90" : OFFER_STATE[offer.status ?? "pending"]?.tone)}>
         {OFFER_STATE[offer.status ?? "pending"]?.label}
       </p>

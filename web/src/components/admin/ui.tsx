@@ -473,7 +473,7 @@ export function Checkbox({ checked, indeterminate, onChange, label }: { checked:
 export function BulkBar({ count, onClear, children }: { count: number; onClear: () => void; children: ReactNode }) {
   if (!count) return null;
   return (
-    <div className="sticky bottom-4 z-30 mx-auto mt-4 flex w-fit max-w-full flex-wrap items-center gap-2 rounded-2xl border border-ink/10 bg-ink px-3 py-2 text-sm text-white shadow-2xl">
+    <div className="sticky bottom-4 z-30 mx-auto mt-4 flex w-fit max-w-full flex-wrap items-center gap-2 rounded-2xl border border-white/15 bg-[#1a2232] px-3 py-2 text-sm text-white shadow-2xl ring-1 ring-black/20">
       <span className="px-1 font-semibold tabular-nums">{n(count)} seçili</span>
       <span className="h-5 w-px bg-white/20" />
       <div className="flex flex-wrap items-center gap-1">{children}</div>

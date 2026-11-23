@@ -327,7 +327,7 @@ function SearchPage() {
         onRemove: () => {
           const next = { ...parsedAttrs };
           delete next[k];
-          apply({ attrs: attrsToSearch(next) });
+          removeFromSearch({ attrs: attrsToSearch(next) });
         },
       });
     }
@@ -613,7 +613,7 @@ function SearchPage() {
       </div>
 
       {/* 6. Mobil Kayan / Yapışkan Eylem Çubuğu (Floating Sticky Bar) */}
-      <div className="fixed bottom-20 left-1/2 z-30 flex -translate-x-1/2 items-center gap-1 rounded-full border border-border bg-surface/95 p-1.5 shadow-2xl backdrop-blur-md lg:hidden">
+      <div className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] left-1/2 z-30 flex -translate-x-1/2 items-center gap-1 rounded-full border border-border bg-surface/95 p-1.5 shadow-2xl backdrop-blur-md lg:hidden">
         <button
           type="button"
           onClick={openFilterDrawer}

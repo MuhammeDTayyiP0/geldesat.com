@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { readJson } from "@/lib/server/request-body";
 import { getSql } from "@/lib/db";
-import { getMobileUserId } from "@/lib/server/mobile-auth";
+import { assertMobileJsonWrite, getMobileUserId } from "@/lib/server/mobile-auth";
 import { ensureProfile, firstInWindow, listingSelect, mapListing, notify } from "@/lib/server/helpers";
 import { errorStatus, publicErrorMessage } from "@/lib/server/errors";
 
@@ -30,6 +30,8 @@ export const Route = createFileRoute("/api/mobile/favorites")({
       },
       POST: async ({ request }) => {
         try {
+          const csrfError = assertMobileJsonWrite(request);
+          if (csrfError) return csrfError;
           const userId = await getMobileUserId(request);
           if (!userId) return Response.json({ success: false, error: "Favorilere eklemek için giriş yapın." }, { status: 401 });
           const body = (await readJson(request)) as { listingId?: unknown };

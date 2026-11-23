@@ -1,4 +1,5 @@
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { Check, Monitor, Moon, Sun, type LucideIcon } from 'lucide-react-native';
 import { setThemePref, useThemePref, type ThemePref } from '@/lib/themePref';
@@ -12,11 +13,12 @@ const OPTIONS: { value: ThemePref; label: string; hint: string; icon: LucideIcon
 
 export default function AppearanceScreen() {
   const { c } = useTheme();
+  const insets = useSafeAreaInsets();
   const pref = useThemePref();
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
       <Header title="Görünüm" />
-      <ScrollView contentContainerStyle={styles.body}>
+      <ScrollView contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + space.xxxl }]}>
         <View accessibilityRole="radiogroup" style={[styles.group, { backgroundColor: c.surface, borderColor: c.border }]}>
           {OPTIONS.map((o, i) => {
             const selected = pref === o.value;

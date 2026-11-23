@@ -262,27 +262,38 @@ export const adminUpdateCategory = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     const sql = await getSql();
-    const rows = await sql.query<{ name: string; slug: string; icon: string | null }>("select name, slug, icon from categories where id = $1", [data.id]);
-    const cur = rows[0];
-    if (!cur) throw new Error("Kategori bulunamadı.");
     const slug = slugify(data.slug);
     if (!slug) throw new Error("Geçerli bir adres (slug) girin.");
-    if (data.name.trim() !== cur.name) {
-      const twin = await sql.query("select 1 from categories c join categories me on me.id = $1 where c.id <> me.id and c.parent_id is not distinct from me.parent_id and lower(c.name) = lower($2) limit 1", [data.id, data.name.trim()]);
-      if (twin[0]) throw new Error("Bu üst kategoride aynı adda bir kategori var.");
-    }
-    if (slug !== cur.slug) {
-      // Links to the old address keep working.
-      await sql.query("insert into category_old_slugs (slug, category_id) values ($1, $2) on conflict (slug) do update set category_id = excluded.category_id", [cur.slug, data.id]);
-      await sql.query("delete from category_old_slugs where slug = $1", [slug]);
-      const taken = await sql.query<{ id: string }>("select id from categories where slug = $1 and id <> $2", [slug, data.id]);
-      if (taken[0]) throw new Error("Bu adres başka bir kategoride kullanılıyor.");
-    }
-    await sql.query("update categories set name = $2, slug = $3, icon = $4 where id = $1", [data.id, data.name, slug, data.icon || null]);
     const changes: string[] = [];
-    if (cur.name !== data.name) changes.push(`ad "${cur.name}" → "${data.name}"`);
-    if (cur.slug !== slug) changes.push(`adres ${cur.slug} → ${slug}`);
-    if ((cur.icon ?? null) !== (data.icon || null)) changes.push("ikon");
+    await sql.transaction(async (tx) => {
+      const rows = await tx.query<{ name: string; slug: string; icon: string | null }>(
+        "select name, slug, icon from categories where id = $1 for update",
+        [data.id],
+      );
+      const cur = rows[0];
+      if (!cur) throw new Error("Kategori bulunamadı.");
+      if (data.name.trim() !== cur.name) {
+        const twin = await tx.query(
+          "select 1 from categories c join categories me on me.id = $1 where c.id <> me.id and c.parent_id is not distinct from me.parent_id and lower(c.name) = lower($2) limit 1",
+          [data.id, data.name.trim()],
+        );
+        if (twin[0]) throw new Error("Bu üst kategoride aynı adda bir kategori var.");
+      }
+      if (slug !== cur.slug) {
+        const taken = await tx.query<{ id: string }>("select id from categories where slug = $1 and id <> $2", [slug, data.id]);
+        if (taken[0]) throw new Error("Bu adres başka bir kategoride kullanılıyor.");
+        // Links to the old address keep working.
+        await tx.query(
+          "insert into category_old_slugs (slug, category_id) values ($1, $2) on conflict (slug) do update set category_id = excluded.category_id",
+          [cur.slug, data.id],
+        );
+        await tx.query("delete from category_old_slugs where slug = $1", [slug]);
+      }
+      await tx.query("update categories set name = $2, slug = $3, icon = $4 where id = $1", [data.id, data.name, slug, data.icon || null]);
+      if (cur.name !== data.name) changes.push(`ad "${cur.name}" → "${data.name}"`);
+      if (cur.slug !== slug) changes.push(`adres ${cur.slug} → ${slug}`);
+      if ((cur.icon ?? null) !== (data.icon || null)) changes.push("ikon");
+    });
     if (changes.length) {
       await audit(sql, context.adminId, "category.edit", "category", data.id, `${data.name}: ${changes.join(", ")}`);
     }

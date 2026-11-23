@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { UnauthorizedError } from "@/lib/auth/verify.server";
 import { errorStatus, publicErrorMessage } from "@/lib/server/errors";
+import { assertMobileJsonWrite } from "@/lib/server/mobile-auth";
 import { BodyTooLargeError, readLimited } from "@/lib/server/request-body";
 import {
   archiveConversation,
@@ -115,6 +116,8 @@ export const Route = createFileRoute("/api/mobile/rpc/$fn")({
     handlers: {
       /** Body: `{ "data": … }` (omit for functions without input). Replies `{ success, result }` or `{ success: false, error }`. */
       POST: async ({ request, params }) => {
+        const csrfError = assertMobileJsonWrite(request);
+        if (csrfError) return csrfError;
         const fn = Object.hasOwn(FUNCTIONS, params.fn) ? FUNCTIONS[params.fn] : undefined;
         if (!fn) return Response.json({ success: false, error: "İşlem bulunamadı." }, { status: 404 });
         let body: { data?: unknown } = {};

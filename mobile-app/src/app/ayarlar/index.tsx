@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, type Href } from 'expo-router';
 import Constants from 'expo-constants';
 import * as Updates from 'expo-updates';
@@ -37,6 +38,7 @@ const THEME_LABEL = { system: 'Cihaz ayarı', light: 'Açık', dark: 'Koyu' } as
 /** Settings list, grouped like a phone's settings app; each row opens its own screen. */
 export default function SettingsScreen() {
   const { c } = useTheme();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const session = useSession();
   const me = useMe();
@@ -119,7 +121,7 @@ export default function SettingsScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
       <Header title="Ayarlar" />
-      <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+      <ScrollView contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + space.xxxl }]} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
         <View style={[styles.search, { backgroundColor: c.elevated }]}>
           <Search size={18} color={c.subtle} />
           <TextInput

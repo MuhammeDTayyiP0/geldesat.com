@@ -35,27 +35,47 @@ export function Pagination({
   slug?: string;
 }) {
   if (pages <= 1) return null;
-  const link = (target: number) =>
-    slug
-      ? ({ to: "/category/$slug", params: { slug }, search: { ...search, page: String(target) } } as const)
-      : ({ to: "/search", search: { ...search, page: String(target) } } as const);
+  const link = (target: number) => {
+    const nextSearch: CatalogSearch = { ...search, page: target <= 1 ? undefined : String(target) };
+    return slug
+      ? ({ to: "/category/$slug", params: { slug }, search: nextSearch } as const)
+      : ({ to: "/search", search: nextSearch } as const);
+  };
   return (
     <nav aria-label="Sayfalar" className="mt-8">
       <div className="flex items-center justify-between gap-2 sm:hidden">
-        <Link {...link(page - 1)} aria-disabled={page <= 1} tabIndex={page <= 1 ? -1 : undefined} className={cn(STEP, page <= 1 && OFF)}>
-          ← Önceki
-        </Link>
+        {page <= 1 ? (
+          <span aria-disabled="true" className={cn(STEP, OFF)}>
+            ← Önceki
+          </span>
+        ) : (
+          <Link {...link(page - 1)} className={STEP}>
+            ← Önceki
+          </Link>
+        )}
         <span className="text-xs font-bold text-fg">
           Sayfa {page} / {pages}
         </span>
-        <Link {...link(page + 1)} aria-disabled={page >= pages} tabIndex={page >= pages ? -1 : undefined} className={cn(STEP, page >= pages && OFF)}>
-          Sonraki →
-        </Link>
+        {page >= pages ? (
+          <span aria-disabled="true" className={cn(STEP, OFF)}>
+            Sonraki →
+          </span>
+        ) : (
+          <Link {...link(page + 1)} className={STEP}>
+            Sonraki →
+          </Link>
+        )}
       </div>
       <div className="hidden flex-wrap items-center justify-center gap-1 sm:flex">
-        <Link {...link(page - 1)} aria-disabled={page <= 1} tabIndex={page <= 1 ? -1 : undefined} className={cn(STEP, page <= 1 && OFF)}>
-          ← Önceki
-        </Link>
+        {page <= 1 ? (
+          <span aria-disabled="true" className={cn(STEP, OFF)}>
+            ← Önceki
+          </span>
+        ) : (
+          <Link {...link(page - 1)} className={STEP}>
+            ← Önceki
+          </Link>
+        )}
         {buildPageRange(page, pages).map((p, i) =>
           p === "..." ? (
             <span key={`e${i}`} className="grid size-10 select-none place-items-center text-muted">
@@ -75,9 +95,15 @@ export function Pagination({
             </Link>
           ),
         )}
-        <Link {...link(page + 1)} aria-disabled={page >= pages} tabIndex={page >= pages ? -1 : undefined} className={cn(STEP, page >= pages && OFF)}>
-          Sonraki →
-        </Link>
+        {page >= pages ? (
+          <span aria-disabled="true" className={cn(STEP, OFF)}>
+            Sonraki →
+          </span>
+        ) : (
+          <Link {...link(page + 1)} className={STEP}>
+            Sonraki →
+          </Link>
+        )}
       </div>
     </nav>
   );

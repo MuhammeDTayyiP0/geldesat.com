@@ -65,7 +65,7 @@ export function UserSheetBody({ id, canGoBack }: { id: string; canGoBack: boolea
       </>
     );
   }
-  if (query.error || !query.data) {
+  if (query.error && !query.data) {
     return (
       <>
         <SheetHeader onClose={close}>
@@ -75,6 +75,7 @@ export function UserSheetBody({ id, canGoBack }: { id: string; canGoBack: boolea
       </>
     );
   }
+  if (!query.data) return null;
 
   const d = query.data;
   const u = d.user;

@@ -1,4 +1,5 @@
 import { ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Flame, Plus, Rocket, Sparkles, Type, type LucideIcon } from 'lucide-react-native';
 import { Button, Card, Header, Text, radius, space, useTheme } from '@/ui';
@@ -12,11 +13,12 @@ const PACKAGES: { name: string; blurb: string; icon: LucideIcon }[] = [
 
 export default function DopingScreen() {
   const { c } = useTheme();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
       <Header title="Doping" />
-      <ScrollView contentContainerStyle={styles.body}>
+      <ScrollView contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + space.xxxl }]}>
         <View style={[styles.hero, { backgroundColor: c.primarySoft }]}>
           <Rocket size={32} color={c.primary} />
           <Text variant="heading" center>

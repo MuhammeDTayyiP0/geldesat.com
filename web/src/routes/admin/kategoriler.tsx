@@ -180,7 +180,7 @@ function CategoriesPage() {
         </Card>
       ) : null}
 
-      {error ? (
+      {error && !index ? (
         <Card>
           <ErrorState error={error} onRetry={() => void refetch()} />
         </Card>

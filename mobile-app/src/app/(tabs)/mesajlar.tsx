@@ -324,7 +324,7 @@ function InboxRow({
         </View>
         <Text variant="caption" tone="muted" numberOfLines={1}>
           {cv.listing_title}
-          {cv.price ? ` · ${formatPrice(cv.price)}` : ''}
+          {cv.price ? ` · ${formatPrice(cv.price, (cv as { currency?: string }).currency)}` : ''}
         </Text>
         <View style={styles.line}>
           <Text variant="caption" tone={unread ? 'default' : 'subtle'} numberOfLines={1} style={[styles.flex, unread && styles.bold]}>

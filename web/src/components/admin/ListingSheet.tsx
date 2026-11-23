@@ -54,7 +54,7 @@ export function ListingSheetBody({ id, canGoBack }: { id: string; canGoBack: boo
       </>
     );
   }
-  if (query.error || !query.data) {
+  if (query.error && !query.data) {
     return (
       <>
         <SheetHeader onClose={close}>
@@ -64,6 +64,7 @@ export function ListingSheetBody({ id, canGoBack }: { id: string; canGoBack: boo
       </>
     );
   }
+  if (!query.data) return null;
 
   const d = query.data;
   const l = d.listing;

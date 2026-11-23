@@ -30,6 +30,7 @@ export type Listing = {
   category_name?: string;
   category_slug?: string;
   seller_name?: string;
+  seller_avatar?: string | null;
   store_name?: string;
   store_slug?: string;
   boosts?: string[];

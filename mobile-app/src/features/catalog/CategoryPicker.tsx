@@ -12,6 +12,7 @@ import { categoryIcon } from './categoryIcon';
 type Props = {
   visible: boolean;
   onClose: () => void;
+  onDismissed?: () => void;
   /** 'filter' may pick any level (and "Tüm kategoriler"); 'post' must reach a leaf. */
   mode: 'filter' | 'post';
   initialPath?: string[];
@@ -19,7 +20,7 @@ type Props = {
 };
 
 /** Drill-down category chooser in a sheet, loading one level at a time. */
-export function CategoryPicker({ visible, onClose, mode, initialPath = [], onPick }: Props) {
+export function CategoryPicker({ visible, onClose, onDismissed, mode, initialPath = [], onPick }: Props) {
   const { c, dark } = useTheme();
   const [path, setPath] = useState<string[]>(initialPath);
   const [wasVisible, setWasVisible] = useState(visible);
@@ -42,6 +43,7 @@ export function CategoryPicker({ visible, onClose, mode, initialPath = [], onPic
     <Sheet
       visible={visible}
       onClose={onClose}
+      onDismissed={onDismissed}
       title={current?.name ?? (mode === 'post' ? 'Kategori seçin' : 'Kategori')}
       subtitle={pathRows.length > 1 ? pathRows.slice(0, -1).map((r) => r.name).join(' › ') : undefined}
       tall

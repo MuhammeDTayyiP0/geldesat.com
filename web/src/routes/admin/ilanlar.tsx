@@ -159,7 +159,7 @@ function ListingsPage() {
             <Button size="sm" variant="outline" onClick={exportCsv} disabled={!rows.length}>
               <Download className="size-4" /> CSV (bu sayfa)
             </Button>
-            <Link to="/admin/moderasyon" className="inline-flex h-9 items-center gap-2 rounded-md bg-ink px-3 text-sm font-medium text-white hover:bg-ink/90">
+            <Link to="/admin/moderasyon" className="inline-flex h-9 items-center gap-2 rounded-md bg-primary-solid px-3 text-sm font-medium text-primary-fg hover:bg-primary-solid/90">
               <ListChecks className="size-4" /> Onay kuyruğu {counts?.PENDING ? `(${n(counts.PENDING)})` : ""}
             </Link>
           </>
@@ -248,7 +248,7 @@ function ListingsPage() {
           </div>
         ) : null}
 
-        {query.error ? (
+        {query.error && !query.data ? (
           <ErrorState error={query.error} onRetry={() => void query.refetch()} />
         ) : query.isLoading ? (
           <SkeletonRows rows={8} />
@@ -377,7 +377,18 @@ function ListingRow({
   const featured = r.featured_until && new Date(r.featured_until) > new Date();
   const ids = [r.id];
   return (
-    <tr onClick={onOpen} className={selected ? "cursor-pointer bg-primary/5" : "cursor-pointer hover:bg-elevated/50"}>
+    <tr
+      onClick={onOpen}
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.target !== e.currentTarget) return;
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
+      className={selected ? "cursor-pointer bg-primary/5 focus-visible:outline-2 focus-visible:outline-primary" : "cursor-pointer hover:bg-elevated/50 focus-visible:outline-2 focus-visible:outline-primary"}
+    >
       <Td>
         <Checkbox label="Seç" checked={selected} onChange={onSelect} />
       </Td>

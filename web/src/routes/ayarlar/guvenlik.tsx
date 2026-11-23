@@ -10,6 +10,7 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { timeAgo } from "@/lib/utils";
 import { BrandSpinner } from "@/components/brand/BrandSpinner";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input, Label } from "@/components/ui/input";
 import { AccountShell } from "@/components/account/AccountShell";
 
@@ -34,6 +35,9 @@ function SecuritySettings() {
   const [hasPassword, setHasPassword] = useState<boolean | null>(null);
   const [sessions, setSessions] = useState<SessionRow[] | null>(null);
   const [verifyBusy, setVerifyBusy] = useState(false);
+  const [emailOpen, setEmailOpen] = useState(false);
+  const [newEmail, setNewEmail] = useState("");
+  const [emailBusy, setEmailBusy] = useState(false);
   const [sessionsFailed, setSessionsFailed] = useState(false);
 
   async function loadSessions() {
@@ -72,12 +76,20 @@ function SecuritySettings() {
     }
   }
 
-  async function changeEmail() {
-    const next = window.prompt("Yeni e-posta adresiniz");
-    if (!next?.trim()) return;
-    const { error } = await authClient.changeEmail({ newEmail: next.trim(), callbackURL: "/ayarlar/guvenlik" });
-    if (error) return toast.error(authErrorText(error, "E-posta değiştirilemedi"));
-    toast.success("Onay bağlantısı gönderildi. Değişiklik onaylanınca geçerli olur.");
+  async function submitEmailChange(e: FormEvent) {
+    e.preventDefault();
+    const next = newEmail.trim();
+    if (!next) return;
+    setEmailBusy(true);
+    try {
+      const { error } = await authClient.changeEmail({ newEmail: next, callbackURL: "/ayarlar/guvenlik" });
+      if (error) return toast.error(authErrorText(error, "E-posta değiştirilemedi"));
+      toast.success("Onay bağlantısı gönderildi. Değişiklik onaylanınca geçerli olur.");
+      setEmailOpen(false);
+      setNewEmail("");
+    } finally {
+      setEmailBusy(false);
+    }
   }
 
   async function closeSession(token: string) {
@@ -103,7 +115,14 @@ function SecuritySettings() {
             <p className="flex min-w-0 items-center gap-2 text-sm">
               <Mail className="size-4 shrink-0 text-muted" />
               <span className="truncate font-medium">{user.primaryEmail}</span>
-              <button type="button" onClick={() => void changeEmail()} className="shrink-0 text-xs font-medium text-primary hover:underline">
+              <button
+                type="button"
+                onClick={() => {
+                  setNewEmail("");
+                  setEmailOpen(true);
+                }}
+                className="shrink-0 text-xs font-medium text-primary hover:underline"
+              >
                 Değiştir
               </button>
             </p>
@@ -183,6 +202,37 @@ function SecuritySettings() {
           )}
         </section>
       </div>
+
+      <Dialog open={emailOpen} onOpenChange={setEmailOpen}>
+        <DialogContent>
+          <form onSubmit={(e) => void submitEmailChange(e)} className="space-y-4">
+            <DialogHeader>
+              <DialogTitle>E-posta adresini değiştir</DialogTitle>
+              <DialogDescription>Yeni adresinize onay bağlantısı gönderilir. Onayladığınızda yeni adresiniz geçerli olur.</DialogDescription>
+            </DialogHeader>
+            <div>
+              <Label htmlFor="new-email-input">Yeni e-posta adresi</Label>
+              <Input
+                id="new-email-input"
+                type="email"
+                autoComplete="email"
+                placeholder="ornek@eposta.com"
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+                required
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setEmailOpen(false)}>
+                Vazgeç
+              </Button>
+              <Button type="submit" disabled={emailBusy || !newEmail.trim()}>
+                {emailBusy ? "Gönderiliyor…" : "Onay bağlantısı gönder"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </AccountShell>
   );
 }

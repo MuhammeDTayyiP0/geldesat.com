@@ -1,8 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getSql } from "@/lib/db";
+import { errorStatus } from "@/lib/server/errors";
 import { HASH_PATTERN, publishAuth, publishDenied, sha256Base64Url } from "@/lib/server/ota";
+import { BodyTooLargeError, limitedFormData, readJson } from "@/lib/server/request-body";
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
+const MAX_FORM_BYTES = 120 * 1024 * 1024;
 
 /**
  * Upload step of `mobile-app/scripts/ota-publish.mjs`.
@@ -18,7 +21,12 @@ export const Route = createFileRoute("/api/ota/publish/assets")({
         const sql = await getSql();
 
         if ((request.headers.get("content-type") ?? "").includes("application/json")) {
-          const body = (await request.json().catch(() => null)) as { hashes?: unknown } | null;
+          let body: { hashes?: unknown } | null = null;
+          try {
+            body = (await readJson(request, 512 * 1024)) as { hashes?: unknown };
+          } catch (err) {
+            return Response.json({ success: false, error: err instanceof BodyTooLargeError ? err.message : "İstek okunamadı." }, { status: errorStatus(err, 400) });
+          }
           const hashes = Array.isArray(body?.hashes) ? body.hashes.filter((h): h is string => typeof h === "string" && HASH_PATTERN.test(h)) : [];
           if (!hashes.length) return Response.json({ success: true, missing: [] });
           const rows = await sql.query<{ hash: string }>("select hash from ota_assets where hash = any($1::text[])", [hashes]);
@@ -28,9 +36,12 @@ export const Route = createFileRoute("/api/ota/publish/assets")({
 
         let form: FormData;
         try {
-          form = await request.formData();
-        } catch {
-          return Response.json({ success: false, error: "Dosyalar okunamadı." }, { status: 400 });
+          form = await limitedFormData(request, MAX_FORM_BYTES, "OTA yükleme paketi çok büyük.");
+        } catch (err) {
+          return Response.json(
+            { success: false, error: err instanceof BodyTooLargeError ? err.message : "Dosyalar okunamadı." },
+            { status: errorStatus(err, 400) },
+          );
         }
         let stored = 0;
         for (const [hash, value] of form.entries()) {

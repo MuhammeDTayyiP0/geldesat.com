@@ -2,7 +2,7 @@ import { isExpired, ownerActions } from "@/lib/listing-status";
 import { createFileRoute } from "@tanstack/react-router";
 import { getSql } from "@/lib/db";
 import { readJson } from "@/lib/server/request-body";
-import { getMobileUserId } from "@/lib/server/mobile-auth";
+import { assertMobileJsonWrite, getMobileUserId } from "@/lib/server/mobile-auth";
 import { listingSelect, mapListing } from "@/lib/server/helpers";
 import { ListingInput, saveListingRecord } from "@/lib/server/listing-write";
 import { errorStatus, publicErrorMessage } from "@/lib/server/errors";
@@ -34,6 +34,8 @@ export const Route = createFileRoute("/api/mobile/my-listings")({
       },
       POST: async ({ request }) => {
         try {
+          const csrfError = assertMobileJsonWrite(request);
+          if (csrfError) return csrfError;
           const userId = await getMobileUserId(request);
           if (!userId) return Response.json({ success: false, error: "İlan vermek için giriş yapın." }, { status: 401 });
           const parsed = ListingInput.safeParse(await readJson(request));

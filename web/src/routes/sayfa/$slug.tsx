@@ -123,7 +123,7 @@ function LegalPage() {
         <span className="text-fg">{page.title}</span>
       </nav>
       <div className="grid gap-8 lg:grid-cols-[220px_1fr]">
-        <aside className="order-2 lg:order-1 lg:sticky lg:top-24 lg:self-start">
+        <aside className="order-2 lg:order-1 lg:sticky lg:top-28 lg:self-start">
           <p className="text-xs font-semibold uppercase tracking-wide text-subtle">Kurumsal</p>
           <ul className="mt-3 flex flex-wrap gap-1 lg:flex-col lg:gap-0.5">
             {LEGAL_NAV.map((item) => (

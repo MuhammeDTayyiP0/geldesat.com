@@ -62,7 +62,7 @@ function ModerationPage() {
         actions={<ShortcutHelp />}
       />
 
-      {queue.error ? (
+      {queue.error && !queue.data ? (
         <Card>
           <ErrorState error={queue.error} onRetry={() => void queue.refetch()} />
         </Card>
@@ -187,13 +187,14 @@ function Reviewer({ id, position, total, onStep, onDecided }: { id: string; posi
       </Card>
     );
   }
-  if (q.error || !q.data) {
+  if (q.error && !q.data) {
     return (
       <Card>
         <ErrorState error={q.error} onRetry={() => void q.refetch()} />
       </Card>
     );
   }
+  if (!q.data) return null;
 
   const d = q.data;
   const l = d.listing;

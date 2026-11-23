@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
 import * as Updates from 'expo-updates';
 import { CalendarClock, CircleAlert, CircleCheck, Clock3, Download, FileText, Package, Radio, RefreshCw, RotateCw, Smartphone } from 'lucide-react-native';
@@ -18,8 +19,10 @@ function when(d: Date | undefined) {
  */
 export default function UpdateScreen() {
   const { c } = useTheme();
+  const insets = useSafeAreaInsets();
   const u = Updates.useUpdates();
   const [checking, setChecking] = useState(false);
+  const [reloading, setReloading] = useState(false);
   const running = u.currentlyRunning;
   const enabled = Updates.isEnabled && !__DEV__;
   const fromUpdate = !running.isEmbeddedLaunch && Boolean(running.updateId);
@@ -56,7 +59,7 @@ export default function UpdateScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
       <Header title="Uygulama sürümü" />
-      <ScrollView contentContainerStyle={styles.body}>
+      <ScrollView contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + space.xxxl }]}>
         <View style={[styles.status, { backgroundColor: c.surface, borderColor: c.border }]}>
           <status.icon size={26} color={status.color} />
           <View style={styles.flex}>
@@ -69,7 +72,21 @@ export default function UpdateScreen() {
 
         {enabled ? (
           u.isUpdatePending ? (
-            <Button title="Şimdi yeniden başlat" icon={RotateCw} onPress={() => void Updates.reloadAsync().catch(() => toast.error('Yeniden başlatılamadı. Uygulamayı kapatıp açın.'))} />
+            <Button
+              title="Şimdi yeniden başlat"
+              icon={RotateCw}
+              loading={reloading}
+              disabled={reloading}
+              onPress={async () => {
+                setReloading(true);
+                try {
+                  await Updates.reloadAsync();
+                } catch {
+                  setReloading(false);
+                  toast.error('Yeniden başlatılamadı. Uygulamayı kapatıp açın.');
+                }
+              }}
+            />
           ) : (
             <Button title="Güncellemeleri denetle" variant="outline" icon={RefreshCw} loading={busy} onPress={() => void check()} />
           )

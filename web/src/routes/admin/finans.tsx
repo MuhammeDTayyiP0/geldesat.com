@@ -130,7 +130,7 @@ function Orders({
         />
         <SearchInput value={search.q ?? ""} onChange={(q) => set({ q: q || undefined })} placeholder="Üye, e-posta, paket veya talep no" className="ml-auto w-full sm:w-72" />
       </div>
-      {query.error ? (
+      {query.error && !query.data ? (
         <ErrorState error={query.error} onRetry={() => void query.refetch()} />
       ) : query.isLoading ? (
         <SkeletonRows rows={5} />
@@ -209,7 +209,7 @@ function Ledger({ page, onPage }: { page: number; onPage: (p: number) => void })
   const q = useQuery({ queryKey: ["admin", "ledger", page], queryFn: () => adminCreditLedger({ data: { page, pageSize: 30 } }), placeholderData: keepPreviousData });
   const { openUser } = useSheets();
   const rows = q.data?.rows ?? [];
-  if (q.error) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;
+  if (q.error && !q.data) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;
   if (q.isLoading) return <SkeletonRows rows={6} />;
   if (!rows.length) return <EmptyState icon={Coins} title="Kredi hareketi yok" />;
   return (

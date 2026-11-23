@@ -1,5 +1,6 @@
 import { API_BASE_URL } from '@/lib/config';
 import { clearSession, getToken } from '@/auth/session';
+import { clearLocalPushRegistration } from '@/lib/push';
 
 export class ApiError extends Error {
   readonly status: number;
@@ -81,7 +82,10 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
 
   if (response.status === 401 && token) {
     // Only if this was the current session: a late answer must not end a newer one.
-    if (getToken() === token) void clearSession();
+    if (getToken() === token) {
+      void clearSession();
+      void clearLocalPushRegistration();
+    }
     throw new ApiError(data?.error || 'Oturumunuz sona erdi. Lütfen tekrar giriş yapın.', 401);
   }
   if (!response.ok || data?.success === false) {

@@ -45,7 +45,7 @@ function AuditPage() {
             options={[{ value: "", label: "Tüm yöneticiler" }, ...(q.data?.admins ?? []).map((a) => ({ value: a.user_id, label: a.display_name }))]}
           />
         </div>
-        {q.error ? (
+        {q.error && !q.data ? (
           <ErrorState error={q.error} onRetry={() => void q.refetch()} />
         ) : q.isLoading ? (
           <SkeletonRows rows={10} />
@@ -67,7 +67,22 @@ function AuditPage() {
                 const expanded = open === e.id;
                 return (
                   <Fragment key={e.id}>
-                    <tr className={e.meta ? "cursor-pointer hover:bg-elevated/50" : undefined} onClick={e.meta ? () => setOpen(expanded ? null : e.id) : undefined}>
+                    <tr
+                      className={e.meta ? "cursor-pointer hover:bg-elevated/50 focus-visible:outline-2 focus-visible:outline-primary" : undefined}
+                      tabIndex={e.meta ? 0 : undefined}
+                      onClick={e.meta ? () => setOpen(expanded ? null : e.id) : undefined}
+                      onKeyDown={
+                        e.meta
+                          ? (ev) => {
+                              if (ev.target !== ev.currentTarget) return;
+                              if (ev.key === "Enter" || ev.key === " ") {
+                                ev.preventDefault();
+                                setOpen(expanded ? null : e.id);
+                              }
+                            }
+                          : undefined
+                      }
+                    >
                       <Td>
                         {e.meta ? (
                           <button

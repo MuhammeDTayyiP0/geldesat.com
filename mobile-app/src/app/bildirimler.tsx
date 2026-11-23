@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Bell, CheckCheck, Clock, Heart, LayoutGrid, MessageCircle, type LucideIcon } from 'lucide-react-native';
@@ -17,6 +18,7 @@ const ICONS: Record<string, LucideIcon> = { message: MessageCircle, favorite: He
 
 export default function NotificationsScreen() {
   const { c } = useTheme();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const session = useSession();
   const query = useQuery({ queryKey: keys.notifications, queryFn: account.notifications, enabled: session.status === 'signedIn' });
@@ -76,7 +78,7 @@ export default function NotificationsScreen() {
             />
           }
           ItemSeparatorComponent={() => <Divider inset={72} />}
-          contentContainerStyle={query.data?.notifications.length ? undefined : styles.flexGrow}
+          contentContainerStyle={query.data?.notifications.length ? { paddingBottom: insets.bottom + space.xxl } : styles.flexGrow}
           ListEmptyComponent={
             <EmptyState icon={Bell} title="Bildirim yok" message="Mesaj, favori ve ilan durumu bildirimleriniz burada görünür." />
           }

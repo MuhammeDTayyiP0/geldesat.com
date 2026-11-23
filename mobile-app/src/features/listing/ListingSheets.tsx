@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Linking, StyleSheet, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useRouter } from 'expo-router';
@@ -16,13 +16,14 @@ import { Button, Chip, Input, ListRow, RowGroup, Sheet, Stars, Text, space, toas
 export function MessageSheet({ listing, visible, onClose }: { listing: Listing; visible: boolean; onClose: () => void }) {
   const router = useRouter();
   const [text, setText] = useState('');
+  const pendingConv = useRef<string | null>(null);
   const send = useMutation({
     mutationFn: (content: string) => chat.start(listing.id, { content }),
     onSuccess: ({ conversationId }) => {
       setText('');
-      onClose();
+      pendingConv.current = conversationId;
       void queryClient.invalidateQueries({ queryKey: keys.inbox });
-      router.push({ pathname: '/mesaj/[id]', params: { id: conversationId } });
+      onClose();
     },
     onError: (e) => toast.error(errorMessage(e)),
   });
@@ -30,6 +31,11 @@ export function MessageSheet({ listing, visible, onClose }: { listing: Listing; 
     <Sheet
       visible={visible}
       onClose={onClose}
+      onDismissed={() => {
+        const cid = pendingConv.current;
+        pendingConv.current = null;
+        if (cid) router.push({ pathname: '/mesaj/[id]', params: { id: cid } });
+      }}
       title="Satıcıya mesaj"
       subtitle={listing.title}
       footer={
@@ -57,21 +63,38 @@ export function MessageSheet({ listing, visible, onClose }: { listing: Listing; 
   );
 }
 
+function roundOfferSuggestion(raw: number): number {
+  if (raw >= 1000) return Math.round(raw / 100) * 100;
+  if (raw >= 100) return Math.round(raw / 10) * 10;
+  return Math.round(raw);
+}
+
+function suggestedOffers(price: number): number[] {
+  const unique = new Set<number>();
+  for (const ratio of [0.9, 0.85, 0.8]) {
+    const n = roundOfferSuggestion(price * ratio);
+    if (n > 0 && n < price) unique.add(n);
+  }
+  return [...unique];
+}
+
 /** Opening price offer: starts the chat (if needed) and sends an offer card. */
 export function OfferSheet({ listing, visible, onClose }: { listing: Listing; visible: boolean; onClose: () => void }) {
   const router = useRouter();
   const [amount, setAmount] = useState('');
+  const pendingConv = useRef<string | null>(null);
   const value = parseMasked(amount) ?? 0;
-  const suggestions = [0.9, 0.85, 0.8].map((r) => Math.round((listing.price * r) / 100) * 100).filter((n) => n > 0);
+  const suggestions = suggestedOffers(listing.price);
+  const currencySuffix = listing.currency === 'USD' ? '$' : listing.currency === 'EUR' ? '€' : '₺';
   const send = useMutation({
     // One call: the offer card opens the chat, so no filler message, and a retry cannot send two.
     mutationFn: async () => (await chat.start(listing.id, { offer: value })).conversationId,
     onSuccess: (conversationId) => {
       setAmount('');
-      onClose();
+      pendingConv.current = conversationId;
       toast.success('Teklifiniz gönderildi');
       void queryClient.invalidateQueries({ queryKey: keys.inbox });
-      router.push({ pathname: '/mesaj/[id]', params: { id: conversationId } });
+      onClose();
     },
     onError: (e) => toast.error(errorMessage(e)),
   });
@@ -79,6 +102,11 @@ export function OfferSheet({ listing, visible, onClose }: { listing: Listing; vi
     <Sheet
       visible={visible}
       onClose={onClose}
+      onDismissed={() => {
+        const cid = pendingConv.current;
+        pendingConv.current = null;
+        if (cid) router.push({ pathname: '/mesaj/[id]', params: { id: cid } });
+      }}
       title="Teklif ver"
       subtitle={`İlan fiyatı ${formatPrice(listing.price, listing.currency)}`}
       footer={<Button title="Teklifi gönder" block style={styles.flex} loading={send.isPending} disabled={value < 1} onPress={() => send.mutate()} />}
@@ -89,13 +117,13 @@ export function OfferSheet({ listing, visible, onClose }: { listing: Listing; vi
         placeholder="0"
         value={amount}
         onChangeText={(t) => setAmount(maskThousands(t))}
-        suffix="₺"
+        suffix={currencySuffix}
         autoFocus
         style={styles.amount}
       />
       <View style={styles.chips}>
         {suggestions.map((n) => (
-          <Chip key={n} label={formatPrice(n)} selected={value === n} onPress={() => setAmount(maskThousands(String(n)))} />
+          <Chip key={n} label={formatPrice(n, listing.currency)} selected={value === n} onPress={() => setAmount(maskThousands(String(n)))} />
         ))}
       </View>
       <Text variant="caption" tone="subtle">

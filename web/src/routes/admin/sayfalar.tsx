@@ -49,7 +49,7 @@ function PagesPage() {
           </Button>
         }
       />
-      {q.error ? (
+      {q.error && !q.data ? (
         <Card>
           <ErrorState error={q.error} onRetry={() => void q.refetch()} />
         </Card>

@@ -54,7 +54,7 @@ function Dashboard() {
     [q.data],
   );
 
-  if (q.error) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;
+  if (q.error && !q.data) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;
   const d = q.data;
   const k = d?.kpi ?? {};
   const seriesTotal = chart.reduce((sum, r) => sum + r[series], 0);

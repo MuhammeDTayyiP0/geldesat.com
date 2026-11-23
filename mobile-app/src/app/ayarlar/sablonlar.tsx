@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useQuery } from '@tanstack/react-query';
 import { MessageSquareText, Plus, Trash2 } from 'lucide-react-native';
 import { errorMessage } from '@/api/client';
@@ -55,7 +56,11 @@ function TemplatesScreen() {
       ) : !known ? (
         <ErrorState error={query.error} onRetry={() => void query.refetch()} />
       ) : (
-        <ScrollView contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + space.xxxl }]} keyboardShouldPersistTaps="handled">
+        <KeyboardAwareScrollView
+          bottomOffset={24}
+          contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + space.xxxl }]}
+          keyboardShouldPersistTaps="handled"
+        >
           <Text tone="muted">Sık yazdığınız mesajları kaydedin; sohbette ⚡ simgesiyle tek dokunuşla gönderin.</Text>
           <Input
             multiline
@@ -96,7 +101,7 @@ function TemplatesScreen() {
           ) : (
             <EmptyState compact icon={MessageSquareText} title="Henüz hazır mesajınız yok" />
           )}
-        </ScrollView>
+        </KeyboardAwareScrollView>
       )}
     </View>
   );

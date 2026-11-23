@@ -157,7 +157,7 @@ function Shell() {
       <TopProgressBar />
       <Header className={isChatThread ? "hidden md:block" : undefined} />
       {isChatThread ? null : <DeletionBanner />}
-      <main id="icerik" tabIndex={-1} className={isChat ? "flex min-h-0 flex-1 flex-col overflow-hidden" : "flex-1 mobile-content-space md:pb-12"}>
+      <main id="icerik" tabIndex={-1} className={isChat ? "flex min-h-0 flex-1 flex-col overflow-hidden" : "flex-1 md:pb-12"}>
         <Outlet />
       </main>
       {isChat ? null : <Footer />}

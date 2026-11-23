@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { Flame, LayoutGrid, MapPin, Sparkles } from 'lucide-react-native';
@@ -19,15 +19,45 @@ type Props = {
   onApply: (next: FilterState) => void;
 };
 
+type ActiveSheet = 'main' | 'category' | 'city' | 'district' | null;
+
 export function FilterSheet({ visible, onClose, value, onApply }: Props) {
   const [draft, setDraft] = useState<FilterState>(value);
-  const [picker, setPicker] = useState<'category' | 'city' | 'district' | null>(null);
+  const [activeSheet, setActiveSheet] = useState<ActiveSheet>(visible ? 'main' : null);
+  const pendingSheet = useRef<ActiveSheet>(null);
   // Start from the applied filters each time the sheet opens.
   const [wasVisible, setWasVisible] = useState(visible);
   if (visible !== wasVisible) {
     setWasVisible(visible);
-    if (visible) setDraft(value);
+    if (visible) {
+      setDraft(value);
+      setActiveSheet('main');
+    } else {
+      setActiveSheet(null);
+    }
   }
+  useEffect(() => {
+    if (!visible) pendingSheet.current = null;
+  }, [visible]);
+
+  const openSubSheet = (next: 'category' | 'city' | 'district') => {
+    pendingSheet.current = next;
+    setActiveSheet(null);
+  };
+  const closeSubSheet = () => {
+    if (visible) pendingSheet.current = 'main';
+    setActiveSheet(null);
+  };
+  const onMainDismissed = () => {
+    const next = pendingSheet.current;
+    pendingSheet.current = null;
+    if (visible && next) setActiveSheet(next);
+  };
+  const onSubDismissed = () => {
+    const next = pendingSheet.current;
+    pendingSheet.current = null;
+    if (visible && next === 'main') setActiveSheet('main');
+  };
 
   const info = useQuery({
     queryKey: keys.category(draft.category ?? ''),
@@ -74,8 +104,9 @@ export function FilterSheet({ visible, onClose, value, onApply }: Props) {
   return (
     <>
       <Sheet
-        visible={visible && picker === null}
+        visible={visible && activeSheet === 'main'}
         onClose={onClose}
+        onDismissed={onMainDismissed}
         title="Filtrele"
         tall
         footer={
@@ -102,11 +133,11 @@ export function FilterSheet({ visible, onClose, value, onApply }: Props) {
           icon={LayoutGrid}
           placeholder="Tüm kategoriler"
           value={draft.categoryName ?? info.data?.category?.name ?? (draft.category ? '…' : null)}
-          onPress={() => setPicker('category')}
+          onPress={() => openSubSheet('category')}
         />
         <View style={styles.range}>
           <View style={styles.flex}>
-            <SelectField label="İl" icon={MapPin} placeholder="Tüm iller" value={draft.city} onPress={() => setPicker('city')} />
+            <SelectField label="İl" icon={MapPin} placeholder="Tüm iller" value={draft.city} onPress={() => openSubSheet('city')} />
           </View>
           <View style={styles.flex}>
             <SelectField
@@ -114,7 +145,7 @@ export function FilterSheet({ visible, onClose, value, onApply }: Props) {
               placeholder={draft.city ? 'Tüm ilçeler' : 'Önce il'}
               value={draft.district}
               disabled={!draft.city}
-              onPress={() => setPicker('district')}
+              onPress={() => openSubSheet('district')}
             />
           </View>
         </View>
@@ -139,22 +170,25 @@ export function FilterSheet({ visible, onClose, value, onApply }: Props) {
       </Sheet>
 
       <CategoryPicker
-        visible={visible && picker === 'category'}
-        onClose={() => setPicker(null)}
+        visible={visible && activeSheet === 'category'}
+        onClose={closeSubSheet}
+        onDismissed={onSubDismissed}
         mode="filter"
         onPick={(cat) => setDraft((d) => ({ ...withoutCategory(d), category: cat?.slug, categoryName: cat?.name }))}
       />
       <OptionPicker
-        visible={visible && picker === 'city'}
-        onClose={() => setPicker(null)}
+        visible={visible && activeSheet === 'city'}
+        onClose={closeSubSheet}
+        onDismissed={onSubDismissed}
         title="İl seçin"
         value={draft.city}
         allLabel="Tüm iller"
         onSelect={(city) => set({ city: city ?? undefined, district: undefined })}
       />
       <OptionPicker
-        visible={visible && picker === 'district'}
-        onClose={() => setPicker(null)}
+        visible={visible && activeSheet === 'district'}
+        onClose={closeSubSheet}
+        onDismissed={onSubDismissed}
         title={`${draft.city ?? ''} ilçeleri`}
         options={districts}
         value={draft.district}

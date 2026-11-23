@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { auth } from "@/lib/auth/server";
 import { getSql } from "@/lib/db";
-import { getMobileUserId } from "@/lib/server/mobile-auth";
+import { assertMobileJsonWrite, getMobileUserId } from "@/lib/server/mobile-auth";
 import { errorStatus, publicErrorMessage } from "@/lib/server/errors";
+import { readLimited } from "@/lib/server/request-body";
 
 export const Route = createFileRoute("/api/mobile/notifications")({
   server: {
@@ -25,10 +26,21 @@ export const Route = createFileRoute("/api/mobile/notifications")({
       },
       POST: async ({ request }) => {
         try {
+          const csrfError = assertMobileJsonWrite(request);
+          if (csrfError) return csrfError;
           const userId = await getMobileUserId(request);
           if (!userId) return Response.json({ success: false, error: "Giriş yapmanız gerekiyor." }, { status: 401 });
           const sql = await getSql();
-          const body = await request.json().catch(() => ({})) as { action?: unknown; token?: unknown; platform?: unknown };
+          const rawText = new TextDecoder().decode(await readLimited(request, 32 * 1024));
+          let body: { action?: unknown; token?: unknown; platform?: unknown } = {};
+          if (rawText.trim()) {
+            try {
+              const parsed = JSON.parse(rawText);
+              if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) body = parsed;
+            } catch {
+              return Response.json({ success: false, error: "İstek okunamadı." }, { status: 400 });
+            }
+          }
           if (body.action === "register-push") {
             if (typeof body.token !== "string" || body.token.length > 512 || !/^Expo(nent)?PushToken\[[^\]]+\]$/.test(body.token)) {
               return Response.json({ success: false, error: "Push token geçersiz." }, { status: 400 });

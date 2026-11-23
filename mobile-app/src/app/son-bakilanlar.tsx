@@ -1,4 +1,5 @@
 import { FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useMutation, useQuery } from '@tanstack/react-query';
@@ -15,6 +16,7 @@ import { Badge, Button, Divider, EmptyState, ErrorState, Header, IconButton, Loa
 /** The account's last 50 viewed listings (same list as the website); each can be removed, or all cleared. */
 export default function RecentScreen() {
   const { c } = useTheme();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const session = useSession();
   const query = useQuery({ queryKey: keys.recent, queryFn: listings.recent, enabled: session.status === 'signedIn' });
@@ -65,7 +67,7 @@ export default function RecentScreen() {
           keyExtractor={(l) => l.id}
           refreshControl={<RefreshControl refreshing={query.isRefetching} onRefresh={() => void query.refetch()} tintColor={c.primary} />}
           ItemSeparatorComponent={() => <Divider inset={space.lg + 84 + space.md} />}
-          contentContainerStyle={rows.length ? styles.list : styles.flexGrow}
+          contentContainerStyle={rows.length ? [styles.list, { paddingBottom: insets.bottom + space.xxl }] : styles.flexGrow}
           ListHeaderComponent={
             rows.length ? (
               <Text variant="small" tone="subtle" style={styles.note}>

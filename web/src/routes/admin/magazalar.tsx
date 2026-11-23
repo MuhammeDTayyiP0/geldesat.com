@@ -77,7 +77,7 @@ function StoresPage() {
             options={[{ value: "", label: "Tüm paketler" }, ...STORE_PLANS.map((p) => ({ value: p, label: PLAN_LABEL[p] }))]}
           />
         </div>
-        {query.error ? (
+        {query.error && !query.data ? (
           <ErrorState error={query.error} onRetry={() => void query.refetch()} />
         ) : query.isLoading ? (
           <SkeletonRows rows={5} />

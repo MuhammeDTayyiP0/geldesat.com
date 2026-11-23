@@ -9,6 +9,7 @@ import { NEIGHBORHOODS } from "@/lib/data/geo";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import { PhoneInput } from "@/components/ui/phone-input";
 import {
@@ -314,8 +315,9 @@ function PostForm() {
     return () => clearTimeout(timer);
   }, [editId, draftKey, hasContent, offeredDraft, draftJson]);
 
-  useBlocker({
-    shouldBlockFn: () => !saved.current && !window.confirm("Kaydedilmemiş değişiklikler kaybolacak. Çıkmak istiyor musunuz?"),
+  const blocker = useBlocker({
+    shouldBlockFn: () => !saved.current,
+    withResolver: true,
     disabled: !editChanged,
     enableBeforeUnload: editChanged,
   });
@@ -892,6 +894,28 @@ function PostForm() {
           </div>
         </aside>
       </div>
+
+      <Dialog
+        open={blocker.status === "blocked"}
+        onOpenChange={(open) => {
+          if (!open) blocker.reset?.();
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Kaydedilmemiş değişiklikler var</DialogTitle>
+            <DialogDescription>Bu sayfadan ayrılırsanız yaptığınız değişiklikler kaybolacak. Çıkmak istiyor musunuz?</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => blocker.reset?.()}>
+              Düzenlemeye devam et
+            </Button>
+            <Button type="button" variant="danger" onClick={() => blocker.proceed?.()}>
+              Değişiklikleri sil ve çık
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

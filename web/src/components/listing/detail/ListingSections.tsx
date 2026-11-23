@@ -245,7 +245,7 @@ export function DescriptionSection({ text }: { text: string }) {
 }
 
 /** Price changes, newest first, each with its difference from the previous price. */
-export function PriceHistorySection({ history }: { history: Array<{ price: number; at: string }> }) {
+export function PriceHistorySection({ history, currency }: { history: Array<{ price: number; at: string }>; currency?: string }) {
   if (history.length < 2) return null;
   const first = history[0].price;
   const last = history[history.length - 1].price;
@@ -264,7 +264,7 @@ export function PriceHistorySection({ history }: { history: Array<{ price: numbe
           >
             {total < 0 ? <TrendingDown className="size-3.5" /> : <TrendingUp className="size-3.5" />}
             {total < 0 ? "" : "+"}
-            {formatPrice(total)}
+            {formatPrice(total, currency)}
           </span>
         ) : null
       }
@@ -279,10 +279,10 @@ export function PriceHistorySection({ history }: { history: Array<{ price: numbe
             <span className="flex items-center gap-2">
               {h.diff ? (
                 <span className={cn("text-xs font-medium", h.diff < 0 ? "text-ok" : "text-warn")}>
-                  {h.diff < 0 ? "↓" : "↑"} {formatPrice(Math.abs(h.diff))}
+                  {h.diff < 0 ? "↓" : "↑"} {formatPrice(Math.abs(h.diff), currency)}
                 </span>
               ) : null}
-              <span className={cn("tabular-nums", i === 0 && "font-semibold")}>{formatPrice(h.price)}</span>
+              <span className={cn("tabular-nums", i === 0 && "font-semibold")}>{formatPrice(h.price, currency)}</span>
             </span>
           </li>
         ))}

@@ -3,7 +3,7 @@ import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import { API_BASE_URL, SITE_URL } from '@/lib/config';
 import { ApiError, request, timedFetch } from '@/api/client';
-import { registerForPush, takePushToken, unregisterPushToken } from '@/lib/push';
+import { clearLocalPushRegistration, registerForPush, takePushToken, unregisterPushToken } from '@/lib/push';
 import { clearDraft, clearSearches } from '@/lib/storage';
 import { clearSession, getSession, getToken, loadStoredSession, saveSession, setSignedIn, setSignedOut, type SessionUser } from './session';
 
@@ -177,6 +177,7 @@ async function confirmStoredSession(stored: { user: SessionUser; token: string }
     if (getToken() !== stored.token) return;
     if (response.status === 401) {
       await clearSession();
+      await clearLocalPushRegistration();
       return;
     }
     if (!response.ok) return;
@@ -188,6 +189,7 @@ async function confirmStoredSession(stored: { user: SessionUser; token: string }
     }
     if (data === null) {
       await clearSession();
+      await clearLocalPushRegistration();
       return;
     }
     if (data.user?.id) await saveSession(toUser(data.user, stored.user.name), stored.token);

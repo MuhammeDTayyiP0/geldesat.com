@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
+import { generateKeyPairSync, verify } from "node:crypto";
 import test from "node:test";
-import { buildManifest, pickUpdate, sha256Base64Url, type OtaUpdateRow } from "./ota";
+import { buildManifest, multipartResponse, pickUpdate, sha256Base64Url, type OtaUpdateRow } from "./ota";
 
 const asset = { hash: "a".repeat(43), key: "0".repeat(32), contentType: "application/javascript" };
 const row = (group: string, minutesAgo: number, patch: Partial<OtaUpdateRow> = {}): OtaUpdateRow => ({
@@ -49,4 +50,38 @@ test("the manifest follows the Expo Updates protocol shape", () => {
 
 test("hashes are base64url SHA-256", () => {
   assert.equal(sha256Base64Url(new TextEncoder().encode("abc")), "ungWv48Bz-pBQUDeXa4iI7ADYaOWF3qctBD_YfIAFa0");
+});
+
+test("multipartResponse signs manifest parts in Expo Updates v1 SFV format", async () => {
+  const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const prevKey = process.env.OTA_CODE_SIGNING_PRIVATE_KEY;
+  const prevKeyId = process.env.OTA_CODE_SIGNING_KEY_ID;
+  try {
+    process.env.OTA_CODE_SIGNING_PRIVATE_KEY = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
+    delete process.env.OTA_CODE_SIGNING_KEY_ID;
+    const res = multipartResponse([{ name: "manifest", body: { id: "u1", ok: true } }], 1, { sign: true });
+    const text = await res.text();
+    const [headersSection, bodySection] = text.split("\r\n\r\n");
+    const sigLine = headersSection.split("\r\n").find((l) => l.startsWith("expo-signature: "));
+    assert.ok(sigLine, "expected expo-signature header");
+    const sigHeader = sigLine.slice("expo-signature: ".length);
+    assert.match(sigHeader, /^sig="[A-Za-z0-9+/=]+", keyid="[^"]+", alg="rsa-v1_5-sha256"$/);
+    const sigMatch = sigHeader.match(/^sig="([^"]+)"/);
+    assert.ok(sigMatch);
+    const partBody = bodySection.split("\r\n--")[0];
+    assert.equal(
+      verify("RSA-SHA256", Buffer.from(partBody, "utf8"), publicKey, Buffer.from(sigMatch[1], "base64")),
+      true,
+    );
+
+    process.env.OTA_CODE_SIGNING_PRIVATE_KEY = "malformed-pem-key";
+    const badRes = multipartResponse([{ name: "manifest", body: { id: "u1" } }], 1, { sign: true });
+    const badText = await badRes.text();
+    assert.equal(badText.includes("expo-signature:"), false);
+  } finally {
+    if (prevKey === undefined) delete process.env.OTA_CODE_SIGNING_PRIVATE_KEY;
+    else process.env.OTA_CODE_SIGNING_PRIVATE_KEY = prevKey;
+    if (prevKeyId === undefined) delete process.env.OTA_CODE_SIGNING_KEY_ID;
+    else process.env.OTA_CODE_SIGNING_KEY_ID = prevKeyId;
+  }
 });

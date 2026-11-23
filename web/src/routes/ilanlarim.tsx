@@ -145,7 +145,7 @@ function Mine() {
         })}
       </div>
 
-      {isPending || !rows ? (
+      {loadFailed ? null : isPending || !rows ? (
         <CardListSkeleton count={4} />
       ) : list.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border bg-surface p-12 text-center">

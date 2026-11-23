@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { readJson } from "@/lib/server/request-body";
 import { getSql } from "@/lib/db";
-import { getMobileUserId } from "@/lib/server/mobile-auth";
+import { assertMobileJsonWrite, getMobileUserId } from "@/lib/server/mobile-auth";
 import { assertOwnerStatus, assertRenewable, isExpired } from "@/lib/listing-status";
 import { deleteUnusedListingImages } from "@/lib/server/upload.server";
 import { assertNotClosing } from "@/lib/server/listing-write";
@@ -12,6 +12,8 @@ export const Route = createFileRoute("/api/mobile/my-listings/$id")({
     handlers: {
       POST: async ({ request, params }) => {
         try {
+          const csrfError = assertMobileJsonWrite(request);
+          if (csrfError) return csrfError;
           const userId = await getMobileUserId(request);
           if (!userId) return Response.json({ success: false, error: "Giriş yapmanız gerekiyor." }, { status: 401 });
           const body = (await readJson(request)) as { action?: unknown; status?: unknown };

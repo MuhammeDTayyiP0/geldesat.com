@@ -10,6 +10,7 @@ import {
   inheritedAttributes,
   listingSelect,
   mapListing,
+  rateLimit,
   subtreeIds,
   firstInWindow,
   viewerKey,
@@ -464,13 +465,14 @@ export const incrementView = createServerFn({ method: "POST" })
     // One view per visitor and listing every 30 minutes, so reloads or a script
     // cannot inflate the "most viewed" ordering.
     const request = getRequest();
+    const viewer = request ? viewerKey(request.headers) : "unknown";
+    rateLimit(`view-req:${viewer}`, 120, 60_000);
     const user = await getSessionUser().catch(() => null);
     // Signed-in visitors get the listing on their "Son baktıklarım" list every time.
     if (user) await recordListingView(user.id, data.id);
-    const viewer = request ? viewerKey(request.headers) : "unknown";
     if (!firstInWindow(`view:${data.id}:${viewer}`, 30 * 60_000)) return { ok: true };
     const sql = await getSql();
-    await sql.query("update listings set view_count = view_count + 1 where id = $1", [data.id]);
+    await sql.query("update listings set view_count = view_count + 1 where id = $1 and status in ('ACTIVE', 'SOLD')", [data.id]);
     return { ok: true };
   });
 

@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Image } from 'expo-image';
@@ -51,6 +52,7 @@ function actionsFor(l: Listing): Set<OwnerAction> {
 
 export default function MyListingsScreen() {
   const { c } = useTheme();
+  const insets = useSafeAreaInsets();
   // Doping sales are closed while this is off: no entry points to an empty shop (K11).
   const dopingOn = useFlag('doping_enabled');
   const router = useRouter();
@@ -158,7 +160,7 @@ export default function MyListingsScreen() {
         <FlatList
           data={list}
           keyExtractor={(l) => l.id}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + space.xxxl }]}
           refreshControl={<RefreshControl refreshing={query.isRefetching} onRefresh={() => void query.refetch()} tintColor={c.primary} />}
           ListEmptyComponent={
             <EmptyState

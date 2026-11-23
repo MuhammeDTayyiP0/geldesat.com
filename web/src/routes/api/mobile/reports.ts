@@ -1,21 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { readJson } from "@/lib/server/request-body";
-import { auth } from "@/lib/auth/server";
 import { getSql } from "@/lib/db";
+import { assertMobileJsonWrite, getMobileUserId } from "@/lib/server/mobile-auth";
 import { ensureProfile, hasOpenReport, insertListingReport, rateLimit } from "@/lib/server/helpers";
 import { errorStatus, publicErrorMessage } from "@/lib/server/errors";
-
-async function sessionUserId(request: Request) {
-  const session = await auth.api.getSession({ headers: request.headers });
-  return session?.user?.id ?? null;
-}
 
 export const Route = createFileRoute("/api/mobile/reports")({
   server: {
     handlers: {
       POST: async ({ request }) => {
         try {
-          const userId = await sessionUserId(request);
+          const csrfError = assertMobileJsonWrite(request);
+          if (csrfError) return csrfError;
+          const userId = await getMobileUserId(request);
           if (!userId) return Response.json({ success: false, error: "İlanı bildirmek için giriş yapın." }, { status: 401 });
           rateLimit(`mobile-report:${userId}`, 10, 60_000);
           const body = (await readJson(request)) as { listingId?: unknown; reason?: unknown; details?: unknown };

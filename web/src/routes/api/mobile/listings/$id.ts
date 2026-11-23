@@ -4,6 +4,7 @@ import { getSql } from "@/lib/db";
 import { auth } from "@/lib/auth/server";
 import { canReviewSeller, firstInWindow, mapListing, rateLimit, revealListingPhone, viewerKey } from "@/lib/server/helpers";
 import { errorStatus, publicErrorMessage } from "@/lib/server/errors";
+import { assertMobileJsonWrite } from "@/lib/server/mobile-auth";
 import { recordListingView } from "@/lib/server/recently-viewed";
 
 async function sessionUserId(request: Request) {
@@ -20,7 +21,7 @@ export const Route = createFileRoute("/api/mobile/listings/$id")({
           const listingNo = listingNoFromSlug(params.id);
           const rows = await sql.query<Record<string, unknown>>(
             `select l.*, c.name as category_name, c.slug as category_slug,
-                    p.display_name as seller_name, s.name as store_name, s.slug as store_slug,
+                    p.display_name as seller_name, p.avatar_url as seller_avatar, s.name as store_name, s.slug as store_slug,
                     coalesce(p.phone_visibility, 'members') as phone_visibility, coalesce(p.show_whatsapp, true) as show_whatsapp,
                     (coalesce(nullif(trim(l.phone_override), ''), nullif(trim(p.phone), '')) is not null) as has_phone,
                     coalesce((select json_agg(b.kind) from boosts b where b.listing_id=l.id and b.ends_at>now()), '[]'::json) as boosts
@@ -75,30 +76,39 @@ export const Route = createFileRoute("/api/mobile/listings/$id")({
           const metric = stats[0];
           // One view per visitor and listing every 30 minutes; owners do not count.
           const countView = userId !== listing.user_id && firstInWindow(`view:${listing.id}:${viewerKey(request.headers, userId)}`, 30 * 60_000);
-          const enrichedListing = { ...listing, view_count: Number(listing.view_count || 0) + (countView ? 1 : 0) };
+          const enrichedListing = {
+            ...listing,
+            seller_avatar: rows[0].seller_avatar ? String(rows[0].seller_avatar) : null,
+            view_count: Number(listing.view_count || 0) + (countView ? 1 : 0),
+          };
           if (countView) await sql.query("update listings set view_count=view_count+1 where id=$1", [listing.id]);
-          return Response.json({
-            success: true,
-            listing: enrichedListing,
-            isFavorite: favoriteRows.length > 0,
-            isOwner: userId === listing.user_id,
-            hasPhone: Boolean(rows[0].has_phone) && rows[0].phone_visibility !== "hidden",
-            phoneVisibility: String(rows[0].phone_visibility),
-            showWhatsapp: Boolean(rows[0].show_whatsapp),
-            history: history.map((row) => ({ price: Number(row.price), at: asIso(row.recorded_at) })),
-            similar: similarRows.map(mapListing),
-            reviews: reviews.map((row) => ({ id: String(row.id), rating: Number(row.rating), comment: String(row.comment ?? ''), reviewer: String(row.reviewer ?? 'Üye'), at: asIso(row.created_at) })),
-            sellerStats: { rating_avg: Number(metric?.rating_avg || 0), rating_count: Number(metric?.rating_count || 0) },
-            favoriteCount: Number(metric?.favorite_count || 0),
-            phoneRevealCount: Number(metric?.phone_reveal_count || 0),
-            reviewEligibility: { eligible: sellerReviewEligible, existing: existingReview[0] ? { rating: Number(existingReview[0].rating), comment: existingReview[0].comment } : null },
-          });
+          return Response.json(
+            {
+              success: true,
+              listing: enrichedListing,
+              isFavorite: favoriteRows.length > 0,
+              isOwner: userId === listing.user_id,
+              hasPhone: Boolean(rows[0].has_phone) && rows[0].phone_visibility !== "hidden",
+              phoneVisibility: String(rows[0].phone_visibility),
+              showWhatsapp: Boolean(rows[0].show_whatsapp),
+              history: history.map((row) => ({ price: Number(row.price), at: asIso(row.recorded_at) })),
+              similar: similarRows.map(mapListing),
+              reviews: reviews.map((row) => ({ id: String(row.id), rating: Number(row.rating), comment: String(row.comment ?? ''), reviewer: String(row.reviewer ?? 'Üye'), at: asIso(row.created_at) })),
+              sellerStats: { rating_avg: Number(metric?.rating_avg || 0), rating_count: Number(metric?.rating_count || 0) },
+              favoriteCount: Number(metric?.favorite_count || 0),
+              phoneRevealCount: Number(metric?.phone_reveal_count || 0),
+              reviewEligibility: { eligible: sellerReviewEligible, existing: existingReview[0] ? { rating: Number(existingReview[0].rating), comment: existingReview[0].comment } : null },
+            },
+            { headers: { "Cache-Control": "private, no-store" } },
+          );
         } catch (error) {
           const message = publicErrorMessage(error, "İlan yüklenemedi.");
           return Response.json({ success: false, error: message }, { status: errorStatus(error, 500) });
         }
       },
       POST: async ({ request, params }) => {
+        const denied = assertMobileJsonWrite(request);
+        if (denied) return denied;
         try {
           const userId = await sessionUserId(request);
           rateLimit(`mobile-phone:${viewerKey(request.headers, userId)}`, 30, 60_000);
@@ -107,8 +117,8 @@ export const Route = createFileRoute("/api/mobile/listings/$id")({
           try {
             phone = await revealListingPhone(params.id, userId ?? null);
           } catch (err) {
-            const message = err instanceof Error ? err.message : "Telefon numarası alınamadı.";
-            const status = /giriş yapın/.test(message) ? 401 : 404;
+            const message = publicErrorMessage(err, "Telefon numarası alınamadı.");
+            const status = errorStatus(err, /giriş yapın/.test(message) ? 401 : 404);
             return Response.json({ success: false, error: message }, { status });
           }
           return Response.json({ success: true, phone });

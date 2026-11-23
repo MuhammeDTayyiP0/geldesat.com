@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { FlatList, Modal, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { GestureDetector, GestureHandlerRootView, usePanGesture, usePinchGesture, useSimultaneousGestures, useTapGesture } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { scheduleOnRN } from 'react-native-worklets';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ImageOff, X } from 'lucide-react-native';
 import { mediaUrl } from '@/lib/config';
@@ -123,22 +124,27 @@ function ZoomableImage({
   const savedTy = useSharedValue(0);
   const [zoomed, setZoomed] = useState(false);
 
-  const setZoom = (next: boolean) => {
-    setZoomed(next);
-    onZoomChange(next);
-  };
+  const notifyZoom = useCallback(
+    (next: boolean) => {
+      setZoomed(next);
+      onZoomChange(next);
+    },
+    [onZoomChange],
+  );
 
   const reset = () => {
+    'worklet';
     scale.value = withTiming(1);
     savedScale.value = 1;
     tx.value = withTiming(0);
     ty.value = withTiming(0);
     savedTx.value = 0;
     savedTy.value = 0;
-    setZoom(false);
+    scheduleOnRN(notifyZoom, false);
   };
 
   const clampTranslate = (s: number) => {
+    'worklet';
     const maxX = ((s - 1) * width) / 2;
     const maxY = ((s - 1) * height) / 2;
     tx.value = Math.min(maxX, Math.max(-maxX, tx.value));
@@ -146,30 +152,32 @@ function ZoomableImage({
   };
 
   const pinch = usePinchGesture({
-    runOnJS: true,
     onUpdate: (e) => {
+      'worklet';
       scale.value = Math.min(4, Math.max(1, savedScale.value * e.scale));
     },
     onDeactivate: () => {
+      'worklet';
       savedScale.value = scale.value;
       if (scale.value < 1.05) reset();
       else {
         clampTranslate(scale.value);
         savedTx.value = tx.value;
         savedTy.value = ty.value;
-        setZoom(true);
+        scheduleOnRN(notifyZoom, true);
       }
     },
   });
 
   const pan = usePanGesture({
-    runOnJS: true,
     enabled: zoomed,
     onUpdate: (e) => {
+      'worklet';
       tx.value = savedTx.value + e.translationX;
       ty.value = savedTy.value + e.translationY;
     },
     onDeactivate: () => {
+      'worklet';
       clampTranslate(scale.value);
       savedTx.value = tx.value;
       savedTy.value = ty.value;
@@ -177,14 +185,14 @@ function ZoomableImage({
   });
 
   const doubleTap = useTapGesture({
-    runOnJS: true,
     numberOfTaps: 2,
     onActivate: () => {
+      'worklet';
       if (savedScale.value > 1) reset();
       else {
         scale.value = withTiming(2.5);
         savedScale.value = 2.5;
-        setZoom(true);
+        scheduleOnRN(notifyZoom, true);
       }
     },
   });

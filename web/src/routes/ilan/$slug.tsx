@@ -235,7 +235,7 @@ function ListingPage() {
     const url = `${window.location.origin}/ilan/${listing.slug}`;
     if (navigator.share) {
       try {
-        await navigator.share({ title: listing.title, text: `${listing.title} – ${formatPrice(listing.price)}`, url });
+        await navigator.share({ title: listing.title, text: `${listing.title} – ${formatPrice(listing.price, listing.currency)}`, url });
         return;
       } catch (err) {
         if (err instanceof DOMException && err.name === "AbortError") return;
@@ -514,7 +514,7 @@ function ListingPage() {
           <KeyFacts attrs={listing.attrs} />
           <SpecsSection attrs={listing.attrs} units={listing.attr_units} />
           <DescriptionSection text={listing.description} />
-          <PriceHistorySection history={history} />
+          <PriceHistorySection history={history} currency={listing.currency} />
           <LocationSection city={listing.city} district={listing.district} neighborhood={listing.neighborhood} />
           <div className="space-y-3 lg:hidden">
             <SafetyNote />

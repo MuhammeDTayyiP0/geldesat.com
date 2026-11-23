@@ -1,7 +1,32 @@
+import { useEffect, useRef } from "react";
 import { Link } from "@tanstack/react-router";
 import { ChevronRight, LayoutGrid } from "lucide-react";
 import { MAIN_NAV_CATEGORIES } from "./nav-data";
 import type { MegaCategory } from "./nav-data";
+
+function useDismissOverlay(onClose: () => void) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    const onPointerDown = (e: PointerEvent) => {
+      const target = e.target as Node | null;
+      if (!target || !ref.current) return;
+      if (ref.current.contains(target)) return;
+      // Ignore clicks inside the parent category nav bar so toggle buttons work cleanly.
+      if (ref.current.closest("nav")?.contains(target)) return;
+      onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, [onClose]);
+  return ref;
+}
 
 export function MegaMenuOverlay({
   activeCategory,
@@ -10,8 +35,12 @@ export function MegaMenuOverlay({
   activeCategory: MegaCategory;
   onClose: () => void;
 }) {
+  const ref = useDismissOverlay(onClose);
   return (
     <div
+      ref={ref}
+      role="region"
+      aria-label={`${activeCategory.name} alt kategorileri`}
       onMouseLeave={onClose}
       className="absolute left-0 right-0 top-full z-40 bg-surface/98 backdrop-blur-xl border-b border-border shadow-lift py-6 px-4 transition-all duration-200 animate-in fade-in-0 slide-in-from-top-1"
     >
@@ -76,8 +105,12 @@ export function MegaMenuOverlay({
 
 // "Tüm Kategoriler" Özel Mega Menüsü
 export function AllCategoriesMegaMenu({ onClose }: { onClose: () => void }) {
+  const ref = useDismissOverlay(onClose);
   return (
     <div
+      ref={ref}
+      role="region"
+      aria-label="Tüm kategoriler"
       onMouseLeave={onClose}
       className="absolute left-0 right-0 top-full z-40 bg-surface/98 backdrop-blur-xl border-b border-border shadow-lift py-6 px-4 transition-all duration-200 animate-in fade-in-0 slide-in-from-top-1"
     >

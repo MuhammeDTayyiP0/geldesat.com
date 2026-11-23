@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { isValidElement, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Switch, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
 import { ChevronRight, Star, type LucideIcon } from 'lucide-react-native';
@@ -278,12 +278,15 @@ export function RowGroup({ children, title }: { children: ReactNode; title?: str
         </Text>
       ) : null}
       <View style={[styles.group, { backgroundColor: c.surface, borderColor: c.border }]}>
-        {items.map((child, i) => (
-          <View key={i}>
-            {i > 0 ? <Divider inset={56} /> : null}
-            {child}
-          </View>
-        ))}
+        {items.map((child, i) => {
+          const hasIcon = isValidElement<{ icon?: unknown }>(child) && Boolean(child.props.icon);
+          return (
+            <View key={i}>
+              {i > 0 ? <Divider inset={hasIcon ? 56 : space.lg} /> : null}
+              {child}
+            </View>
+          );
+        })}
       </View>
     </View>
   );

@@ -7,6 +7,7 @@ import { Input, Sheet, Text, hairline, space, useTheme } from '@/ui';
 type Props = {
   visible: boolean;
   onClose: () => void;
+  onDismissed?: () => void;
   title: string;
   /** Options; defaults to all 81 provinces. */
   options?: string[];
@@ -19,7 +20,7 @@ type Props = {
 const ALL_CITIES = TURKEY_CITIES.map((c) => c.name).sort((a, b) => a.localeCompare(b, 'tr'));
 
 /** Searchable single-choice list in a sheet (provinces, districts, neighborhoods, attribute options). */
-export function OptionPicker({ visible, onClose, title, options = ALL_CITIES, value, onSelect, allLabel }: Props) {
+export function OptionPicker({ visible, onClose, onDismissed, title, options = ALL_CITIES, value, onSelect, allLabel }: Props) {
   const { c } = useTheme();
   const [q, setQ] = useState('');
   const [wasVisible, setWasVisible] = useState(visible);
@@ -34,7 +35,7 @@ export function OptionPicker({ visible, onClose, title, options = ALL_CITIES, va
   const rows = allLabel && !q ? [null, ...filtered] : filtered;
 
   return (
-    <Sheet visible={visible} onClose={onClose} title={title} tall scroll={false}>
+    <Sheet visible={visible} onClose={onClose} onDismissed={onDismissed} title={title} tall scroll={false}>
       {options.length > 12 ? (
         <View style={styles.search}>
           <Input icon={Search} placeholder="Ara" value={q} onChangeText={setQ} autoCorrect={false} returnKeyType="search" />

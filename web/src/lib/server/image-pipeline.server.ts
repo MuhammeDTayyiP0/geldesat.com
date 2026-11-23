@@ -120,6 +120,77 @@ export function isHeif(bytes: Uint8Array): boolean {
 }
 
 const MAX_INPUT_PIXELS = 80_000_000;
+const MAX_HEIF_PIXELS = 40_000_000;
+const MAX_HEIF_DIMENSION = 16_384;
+const MAX_HEIF_BYTES = 12 * 1024 * 1024;
+
+/**
+ * Scan ISO-BMFF boxes (`meta` → `iprp` → `ipco` → `ispe`) to read declared HEIC
+ * pixel dimensions BEFORE handing the buffer to the WASM decoder, preventing a
+ * tiny crafted HEIC bomb from allocating hundreds of megabytes on the event loop.
+ */
+export function inspectHeifMaxPixels(bytes: Uint8Array): { maxPixels: number; maxEdge: number; foundIspe: boolean; truncated: boolean } {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let maxPixels = 0;
+  let maxEdge = 0;
+  let foundIspe = false;
+  let truncated = false;
+  let visited = 0;
+  const MAX_BOXES = 512;
+
+  const readFourCC = (off: number) =>
+    String.fromCharCode(bytes[off]!, bytes[off + 1]!, bytes[off + 2]!, bytes[off + 3]!);
+
+  const walk = (start: number, end: number, depth: number) => {
+    if (depth > 6) {
+      truncated = true;
+      return;
+    }
+    let pos = start;
+    while (pos + 8 <= end) {
+      if (visited >= MAX_BOXES) {
+        truncated = true;
+        break;
+      }
+      visited += 1;
+      let size = view.getUint32(pos, false);
+      const type = readFourCC(pos + 4);
+      let header = 8;
+      if (size === 1) {
+        if (pos + 16 > end) break;
+        const hi = view.getUint32(pos + 8, false);
+        const lo = view.getUint32(pos + 12, false);
+        size = hi * 0x1_0000_0000 + lo;
+        header = 16;
+      } else if (size === 0) {
+        size = end - pos;
+      }
+      if (size < header || pos + size > end) break;
+      const bodyStart = pos + header;
+      const boxEnd = pos + size;
+
+      if (type === "ispe" && bodyStart + 12 <= boxEnd) {
+        // FullBox: 4 bytes version+flags, 4 bytes width, 4 bytes height
+        foundIspe = true;
+        const w = view.getUint32(bodyStart + 4, false);
+        const h = view.getUint32(bodyStart + 8, false);
+        const pixels = w * h;
+        if (pixels > maxPixels) maxPixels = pixels;
+        const edge = Math.max(w, h);
+        if (edge > maxEdge) maxEdge = edge;
+      } else if (type === "meta" && bodyStart + 4 <= boxEnd) {
+        // `meta` is a FullBox (4 bytes version+flags before child boxes)
+        walk(bodyStart + 4, boxEnd, depth + 1);
+      } else if (type === "iprp" || type === "ipco") {
+        walk(bodyStart, boxEnd, depth + 1);
+      }
+      pos = boxEnd;
+    }
+  };
+
+  walk(0, bytes.byteLength, 0);
+  return { maxPixels, maxEdge, foundIspe, truncated };
+}
 
 /**
  * sharp's prebuilt libvips cannot decode HEVC-coded HEIC (patent-encumbered),
@@ -127,6 +198,11 @@ const MAX_INPUT_PIXELS = 80_000_000;
  * as raw pixels. libheif applies the stored rotation, so no EXIF step is needed.
  */
 async function openHeif(input: Uint8Array): Promise<{ image: sharp.Sharp; width: number; height: number }> {
+  if (input.byteLength > MAX_HEIF_BYTES) throw new Error("Fotoğraf en fazla 12 MB olabilir.");
+  const { maxPixels, maxEdge, foundIspe, truncated } = inspectHeifMaxPixels(input);
+  if (!foundIspe || truncated || maxPixels <= 0 || maxPixels > MAX_HEIF_PIXELS || maxEdge > MAX_HEIF_DIMENSION) {
+    throw new Error("Fotoğraf çözünürlüğü çok yüksek.");
+  }
   const { default: decode } = await import("heic-decode");
   let decoded: Awaited<ReturnType<typeof decode>>;
   try {
@@ -136,7 +212,9 @@ async function openHeif(input: Uint8Array): Promise<{ image: sharp.Sharp; width:
     throw new Error("Fotoğraf okunamadı. HEIC dosyası bozuk olabilir; JPEG olarak deneyin.");
   }
   const { width, height, data } = decoded;
-  if (width * height > MAX_INPUT_PIXELS) throw new Error("Fotoğraf çözünürlüğü çok yüksek.");
+  if (width * height > MAX_HEIF_PIXELS || Math.max(width, height) > MAX_HEIF_DIMENSION) {
+    throw new Error("Fotoğraf çözünürlüğü çok yüksek.");
+  }
   const image = sharp(Buffer.from(data.buffer, data.byteOffset, data.byteLength), { raw: { width, height, channels: 4 } });
   return { image, width, height };
 }

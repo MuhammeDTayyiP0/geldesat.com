@@ -12,7 +12,7 @@ export async function recordListingView(userId: string, listingId: string): Prom
   const sql = await getSql();
   await sql.query(
     `insert into listing_views (user_id, listing_id, viewed_at)
-     select $1, l.id, now() from listings l where l.id = $2 and l.user_id <> $1
+     select $1, l.id, now() from listings l where l.id = $2 and l.user_id <> $1 and l.status in ('ACTIVE', 'SOLD')
      on conflict (user_id, listing_id) do update set viewed_at = now()`,
     [userId, listingId],
   );
@@ -45,7 +45,28 @@ export async function recentListings(userId: string, limit = RECENT_LIMIT): Prom
     // A rejected or hidden listing must not keep showing through someone's history.
     const hidden = listing.status === "REJECTED" || listing.status === "INACTIVE" || listing.status === "PENDING";
     return {
-      ...(hidden ? { ...listing, title: "Bu ilan yayında değil", images: [], price: 0, description: "" } : listing),
+      ...(hidden
+        ? {
+            ...listing,
+            slug: "",
+            title: "Bu ilan yayında değil",
+            images: [],
+            price: 0,
+            description: "",
+            city: null,
+            district: null,
+            neighborhood: null,
+            lat: null,
+            lng: null,
+            attrs: {},
+            category_name: "",
+            category_slug: "",
+            seller_name: undefined,
+            store_name: undefined,
+            store_slug: undefined,
+            boosts: [],
+          }
+        : listing),
       viewed_at: asIso(row.viewed_at),
       live: Boolean(row.live),
     };

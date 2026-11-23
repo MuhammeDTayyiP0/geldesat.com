@@ -27,6 +27,7 @@ type Props = {
   onOffer: (m: ChatMessage, action: 'accept' | 'reject' | 'counter') => void;
   otherName: string;
   listingImage: string | null;
+  listingCurrency?: string;
   /** Where the bubble sits in its row (for the swipe-to-reply icon). */
   onLayout?: (e: LayoutChangeEvent) => void;
 };
@@ -54,6 +55,7 @@ export const Bubble = memo(function Bubble({
   onOffer,
   otherName,
   listingImage,
+  listingCurrency,
   onLayout,
 }: Props) {
   const { c } = useTheme();
@@ -112,7 +114,7 @@ export const Bubble = memo(function Bubble({
           </Text>
         </View>
         <Text variant="title" style={{ color: fg }}>
-          {formatPrice(m.meta.amount)}
+          {formatPrice(m.meta.amount, (m.meta as { currency?: string }).currency ?? listingCurrency)}
         </Text>
         {/* On your own (blue) bubble green and red were unreadable: white there. */}
         <Text variant="small" style={{ color: mine ? '#ffffff' : status.tone === 'ok' ? c.ok : status.tone === 'danger' ? c.danger : sub, fontWeight: '700' }}>

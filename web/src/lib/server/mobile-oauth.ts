@@ -25,9 +25,22 @@ export function isChallenge(value: string | null): value is string {
 
 const CHALLENGE_COOKIE = "gs-oauth-challenge";
 
+/** Detects HTTPS even behind a TLS-terminating reverse proxy. */
+export function isSecureRequest(request: Request): boolean {
+  const xfProto = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim().toLowerCase();
+  if (xfProto === "https") return true;
+  if (new URL(request.url).protocol === "https:") return true;
+  return process.env.NODE_ENV === "production";
+}
+
 /** Ties /done to the browser that went through /start. */
 export function challengeCookie(challenge: string, secure: boolean): string {
   return `${CHALLENGE_COOKIE}=${challenge}; Path=/api/mobile/oauth; Max-Age=600; HttpOnly; SameSite=Lax${secure ? "; Secure" : ""}`;
+}
+
+/** Clears the challenge cookie once /done finishes. */
+export function clearChallengeCookie(secure: boolean): string {
+  return `${CHALLENGE_COOKIE}=; Path=/api/mobile/oauth; Max-Age=0; HttpOnly; SameSite=Lax${secure ? "; Secure" : ""}`;
 }
 
 export function readChallengeCookie(header: string | null): string | null {

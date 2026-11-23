@@ -153,7 +153,7 @@ function UsersPage() {
           />
         </div>
 
-        {query.error ? (
+        {query.error && !query.data ? (
           <ErrorState error={query.error} onRetry={() => void query.refetch()} />
         ) : query.isLoading ? (
           <SkeletonRows rows={8} />
@@ -175,7 +175,19 @@ function UsersPage() {
             </thead>
             <tbody>
               {rows.map((u) => (
-                <tr key={u.user_id} onClick={() => openUser(u.user_id)} className="cursor-pointer hover:bg-elevated/50">
+                <tr
+                  key={u.user_id}
+                  onClick={() => openUser(u.user_id)}
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.target !== e.currentTarget) return;
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      openUser(u.user_id);
+                    }
+                  }}
+                  className="cursor-pointer hover:bg-elevated/50 focus-visible:outline-2 focus-visible:outline-primary"
+                >
                   <Td>
                     <div className="flex min-w-0 items-center gap-3">
                       <Avatar name={u.display_name} src={u.avatar_url} size={36} />

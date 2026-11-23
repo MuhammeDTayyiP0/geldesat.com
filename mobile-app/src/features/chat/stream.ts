@@ -25,6 +25,8 @@ const reconnectListeners = new Set<() => void>();
 let hadConnection = false;
 /** The server sends a heartbeat every 20 s; this long without any byte means a dead connection. */
 const SILENCE_MS = 50_000;
+/** Rotate the XHR stream after 512 KB to cap accumulated `responseText` memory. */
+const MAX_BUFFER_BYTES = 512 * 1024;
 let watchdog: ReturnType<typeof setTimeout> | null = null;
 
 function notifyReconnect() {
@@ -97,7 +99,7 @@ function scheduleRetry() {
   retryDelay = Math.min(retryDelay * 2, 30_000);
 }
 
-function sync(force = false) {
+function sync(force = false, skipNotify = false) {
   const url = wantedUrl();
   if (!force && xhr && currentUrl === url) return;
   close();
@@ -115,12 +117,13 @@ function sync(force = false) {
   if (token) request.setRequestHeader('Authorization', `Bearer ${token}`);
   request.onprogress = () => {
     if (xhr !== request) return;
+    if (request.status && (request.status < 200 || request.status >= 300)) return;
     retryDelay = 2000;
     feedWatchdog(request);
     if (!opened) {
       opened = true;
       // A reconnect, a switch to another chat or a return from the background: catch up.
-      if (hadConnection) notifyReconnect();
+      if (hadConnection && !skipNotify) notifyReconnect();
       hadConnection = true;
     }
     const text = request.responseText;
@@ -129,6 +132,9 @@ function sync(force = false) {
     const blocks = buffer.split('\n\n');
     buffer = blocks.pop() ?? '';
     for (const block of blocks) dispatch(block);
+    if (seen >= MAX_BUFFER_BYTES) {
+      sync(true, true);
+    }
   };
   request.onreadystatechange = () => {
     if (xhr !== request || request.readyState !== XMLHttpRequest.DONE) return;

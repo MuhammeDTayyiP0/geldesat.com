@@ -2,7 +2,9 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { getSql } from "@/lib/db";
 import { newId } from "@/lib/utils";
+import { errorStatus } from "@/lib/server/errors";
 import { CHANNEL_PATTERN, HASH_PATTERN, RUNTIME_PATTERN, publishAuth, publishDenied } from "@/lib/server/ota";
+import { BodyTooLargeError, readJson } from "@/lib/server/request-body";
 
 const Asset = z.object({
   hash: z.string().regex(HASH_PATTERN),
@@ -32,7 +34,16 @@ export const Route = createFileRoute("/api/ota/publish/update")({
       POST: async ({ request }) => {
         const auth = publishAuth(request);
         if (auth !== "ok") return publishDenied(auth);
-        const parsed = Input.safeParse(await request.json().catch(() => null));
+        let rawBody: unknown;
+        try {
+          rawBody = await readJson(request, 2 * 1024 * 1024);
+        } catch (err) {
+          return Response.json(
+            { success: false, error: err instanceof BodyTooLargeError ? err.message : "İstek okunamadı." },
+            { status: errorStatus(err, 400) },
+          );
+        }
+        const parsed = Input.safeParse(rawBody);
         if (!parsed.success) return Response.json({ success: false, error: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") }, { status: 400 });
         const data = parsed.data;
 

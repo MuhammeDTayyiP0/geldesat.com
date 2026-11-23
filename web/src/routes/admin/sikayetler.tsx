@@ -80,7 +80,7 @@ function ReportsPage() {
       </div>
 
       <div className="mt-3 space-y-3">
-        {query.error ? (
+        {query.error && !query.data ? (
           <Card>
             <ErrorState error={query.error} onRetry={() => void query.refetch()} />
           </Card>

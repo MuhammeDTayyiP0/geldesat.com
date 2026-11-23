@@ -1,7 +1,7 @@
 import { Pagination } from "@/components/listing/Pagination";
 import { useModalPanel } from "@/lib/use-modal-panel";
 import { createFileRoute, Link, useNavigate, notFound } from "@tanstack/react-router";
-import { ChevronRight, LayoutGrid, List as ListIcon, X } from "lucide-react";
+import { ArrowUpDown, Check, ChevronRight, LayoutGrid, List as ListIcon, SlidersHorizontal, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useViewPreference } from "@/lib/use-view-pref";
 import { getCategory, searchCatalog } from "@/lib/server/catalog";
@@ -14,6 +14,13 @@ import { SubcategoryGrid } from "@/components/listing/CategoryPicker";
 import { ListingGridSkeleton } from "@/components/listing/ListingGridSkeleton";
 import { Button } from "@/components/ui/button";
 import { NotFound } from "@/components/common/NotFound";
+
+const SORT_OPTIONS = [
+  { value: "date_desc", label: "En yeni ilanlar" },
+  { value: "price_asc", label: "Fiyat: Düşükten yükseğe" },
+  { value: "price_desc", label: "Fiyat: Yüksekten düşüğe" },
+  { value: "date_asc", label: "En eski ilanlar" },
+] as const;
 
 export const Route = createFileRoute("/category/$slug")({
   validateSearch: (s: Record<string, unknown>) => parseSearch(s),
@@ -134,14 +141,16 @@ function CategoryPage() {
   const [mobileVisible, setMobileVisible] = useState(false);
 
   const panel = useModalPanel(mobile, () => closeMobile());
+  const [sortOpen, setSortOpen] = useState(false);
+  const sortPanel = useModalPanel(sortOpen, () => setSortOpen(false));
 
-  // Lock body scroll when mobile filter is open
+  // Lock body scroll when mobile filter or sort drawer is open
   useEffect(() => {
     const root = document.documentElement;
-    if (mobile) root.classList.add("mobile-nav-lock");
+    if (mobile || sortOpen) root.classList.add("mobile-nav-lock");
     else root.classList.remove("mobile-nav-lock");
     return () => root.classList.remove("mobile-nav-lock");
-  }, [mobile]);
+  }, [mobile, sortOpen]);
 
   function openMobile() {
     setMobile(true);
@@ -213,6 +222,67 @@ function CategoryPage() {
   const locationPrefix = [search.district, search.city].filter(Boolean).join(" ");
   const pageHeading = listingsHeading([locationPrefix, hierarchicalName].filter(Boolean).join(" "));
 
+  function removeFromSearch(patch: Record<string, string | undefined>) {
+    void nav({ to: "/category/$slug", params: { slug }, search: { ...search, ...patch, page: "1" } });
+  }
+
+  const activeChips: Array<{ id: string; label: string; onRemove: () => void }> = [];
+  if (search.city) {
+    activeChips.push({
+      id: "city",
+      label: search.district ? `${search.city} / ${search.district}` : search.city,
+      onRemove: () => removeFromSearch({ city: undefined, district: undefined, neighborhood: undefined }),
+    });
+  }
+  if (search.minPrice || search.maxPrice) {
+    const label =
+      search.minPrice && search.maxPrice
+        ? `${Number(search.minPrice).toLocaleString("tr-TR")} – ${Number(search.maxPrice).toLocaleString("tr-TR")} ₺`
+        : search.minPrice
+          ? `En az ${Number(search.minPrice).toLocaleString("tr-TR")} ₺`
+          : `En fazla ${Number(search.maxPrice).toLocaleString("tr-TR")} ₺`;
+    activeChips.push({ id: "price", label, onRemove: () => removeFromSearch({ minPrice: undefined, maxPrice: undefined }) });
+  }
+  if (search.minYear || search.maxYear) {
+    activeChips.push({
+      id: "year",
+      label: `Yıl: ${search.minYear ?? "…"} – ${search.maxYear ?? "…"}`,
+      onRemove: () => removeFromSearch({ minYear: undefined, maxYear: undefined }),
+    });
+  }
+  if (search.minKm || search.maxKm) {
+    activeChips.push({
+      id: "km",
+      label: `KM: ${search.minKm ?? "…"} – ${search.maxKm ?? "…"}`,
+      onRemove: () => removeFromSearch({ minKm: undefined, maxKm: undefined }),
+    });
+  }
+  if (search.minM2 || search.maxM2) {
+    activeChips.push({
+      id: "m2",
+      label: `m²: ${search.minM2 ?? "…"} – ${search.maxM2 ?? "…"}`,
+      onRemove: () => removeFromSearch({ minM2: undefined, maxM2: undefined }),
+    });
+  }
+  if (search.sort && search.sort !== "date_desc") {
+    const opt = SORT_OPTIONS.find((s) => s.value === search.sort);
+    if (opt) activeChips.push({ id: "sort", label: opt.label, onRemove: () => removeFromSearch({ sort: "date_desc" }) });
+  }
+  const parsedAttrs = parseAttrs(search.attrs) ?? {};
+  for (const [k, vals] of Object.entries(parsedAttrs)) {
+    if (vals && vals.length) {
+      activeChips.push({
+        id: `attr_${k}`,
+        label: `${k}: ${vals.join(", ")}`,
+        onRemove: () => {
+          const next = { ...parsedAttrs };
+          delete next[k];
+          removeFromSearch({ attrs: attrsToSearch(next) });
+        },
+      });
+    }
+  }
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
       <nav className="mb-4 flex flex-wrap items-center gap-1 text-sm text-muted">
@@ -232,10 +302,19 @@ function CategoryPage() {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            className="flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-sm lg:hidden"
+            className="flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-2 text-sm font-medium lg:hidden"
             onClick={openMobile}
           >
-            Filtre
+            <SlidersHorizontal className="size-3.5 text-muted" />
+            <span>Filtre{activeChips.length ? ` (${activeChips.length})` : ""}</span>
+          </button>
+          <button
+            type="button"
+            className="flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-2 text-sm font-medium lg:hidden"
+            onClick={() => setSortOpen(true)}
+          >
+            <ArrowUpDown className="size-3.5 text-muted" />
+            <span>Sırala</span>
           </button>
           <div className="flex rounded-md border border-border">
             <button
@@ -258,7 +337,34 @@ function CategoryPage() {
         </div>
       </div>
       <SubcategoryGrid items={cat.children} />
-      <div className="mt-8 grid gap-6 lg:grid-cols-[280px_1fr]">
+      {activeChips.length > 0 ? (
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          {activeChips.map((chip) => (
+            <span
+              key={chip.id}
+              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1 text-xs font-medium text-fg shadow-2xs"
+            >
+              <span>{chip.label}</span>
+              <button
+                type="button"
+                onClick={chip.onRemove}
+                aria-label={`${chip.label} filtresini kaldır`}
+                className="rounded-full p-0.5 text-muted hover:bg-elevated hover:text-fg"
+              >
+                <X className="size-3" />
+              </button>
+            </span>
+          ))}
+          <button
+            type="button"
+            onClick={resetFilters}
+            className="text-xs font-semibold text-primary hover:underline px-1"
+          >
+            Tümünü temizle
+          </button>
+        </div>
+      ) : null}
+      <div className="mt-6 grid gap-6 lg:grid-cols-[280px_1fr]">
         <div className="hidden lg:block">
           <Filters value={filters} onChange={setFilters} onApply={(applied) => apply(undefined, applied)} attributes={cat.attributes} />
         </div>
@@ -353,6 +459,56 @@ function CategoryPage() {
               <Button className="h-11 w-full text-sm font-semibold rounded-xl" onClick={() => apply()}>
                 Filtreleri Uygula ({result.total} İlan)
               </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {sortOpen ? (
+        <div
+          className="fixed inset-0 z-50 bg-ink/50 backdrop-blur-xs lg:hidden"
+          onClick={() => setSortOpen(false)}
+        >
+          <div
+            ref={sortPanel}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Sıralama"
+            tabIndex={-1}
+            onClick={(e) => e.stopPropagation()}
+            className="absolute inset-x-0 bottom-0 rounded-t-2xl border-t border-border bg-surface p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl"
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-base font-bold text-fg">Sırala</h2>
+              <button
+                type="button"
+                onClick={() => setSortOpen(false)}
+                className="grid size-8 place-items-center rounded-lg text-muted hover:bg-elevated hover:text-fg"
+                aria-label="Kapat"
+              >
+                <X className="size-5" />
+              </button>
+            </div>
+            <div className="space-y-1">
+              {SORT_OPTIONS.map((opt) => {
+                const active = (search.sort || "date_desc") === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => {
+                      removeFromSearch({ sort: opt.value });
+                      setSortOpen(false);
+                    }}
+                    className={`flex w-full items-center justify-between rounded-xl px-3.5 py-3 text-left text-sm font-medium transition-colors ${
+                      active ? "bg-primary/10 text-primary" : "text-fg hover:bg-elevated"
+                    }`}
+                  >
+                    <span>{opt.label}</span>
+                    {active ? <Check className="size-4" /> : null}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>

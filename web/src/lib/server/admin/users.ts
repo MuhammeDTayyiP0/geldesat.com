@@ -240,20 +240,30 @@ async function targetProfile(sql: Awaited<ReturnType<typeof getSql>>, userId: st
   return rows[0];
 }
 
+const GOOGLE_REAUTH_MAX_AGE_MS = 30 * 60_000;
+
 /**
  * Changing who is an admin asks for the acting admin's password again, so a
  * stolen session alone cannot take over the panel. Google-only accounts have no
- * password to ask for.
+ * password, so we require a freshly authenticated session (last 30 minutes).
  */
 async function assertAdminPassword(sql: Awaited<ReturnType<typeof getSql>>, adminId: string, password: string | undefined) {
   const credential = await sql.query('select 1 from "account" where "userId" = $1 and "providerId" = \'credential\' limit 1', [adminId]);
-  if (!credential[0]) return;
-  if (!password) throw new Error("Bu işlem için şifrenizi girin.");
-  rateLimit(`admin-password:${adminId}`, 5, 15 * 60_000);
   const { auth } = await import("@/lib/auth/server");
   const { getRequest } = await import("@tanstack/react-start/server");
+  const headers = getRequest()?.headers ?? new Headers();
+  if (!credential[0]) {
+    const session = await auth.api.getSession({ headers }).catch(() => null);
+    const createdAt = session?.session?.createdAt ? new Date(session.session.createdAt).getTime() : 0;
+    if (!createdAt || Date.now() - createdAt > GOOGLE_REAUTH_MAX_AGE_MS) {
+      throw new Error("Güvenlik nedeniyle rol değiştirmek için son 30 dakika içinde Google ile yeniden giriş yapmış olmanız gerekir.");
+    }
+    return;
+  }
+  if (!password) throw new Error("Bu işlem için şifrenizi girin.");
+  rateLimit(`admin-password:${adminId}`, 5, 15 * 60_000);
   try {
-    await auth.api.verifyPassword({ body: { password }, headers: getRequest()?.headers ?? new Headers() });
+    await auth.api.verifyPassword({ body: { password }, headers });
   } catch {
     throw new Error("Şifre hatalı.");
   }
@@ -424,7 +434,6 @@ export const adminDeleteUser = createServerFn({ method: "POST" })
     if (data.userId === context.adminId) throw new Error("Kendi hesabınızı silemezsiniz.");
     const sql = await getSql();
     const t = await targetProfile(sql, data.userId);
-    if (t.role === "ADMIN") throw new Error("Önce yönetici yetkisini kaldırın.");
     if (t.role === "ADMIN") throw new Error("Yönetici hesabı silinemez. Önce rolünü üyeye çevirin.");
     await purgeUserData(sql, data.userId, { deleteListings: data.deleteListings });
     await audit(sql, context.adminId, "user.delete", "user", data.userId, `${t.display_name} hesabı kalıcı olarak silindi`, {
@@ -447,20 +456,26 @@ export const adminGrantCredits = createServerFn({ method: "POST" })
     const sql = await getSql();
     if (data.userId === context.adminId) throw new Error("Kendi hesabınıza kredi tanımlayamazsınız.");
     const t = await targetProfile(sql, data.userId);
-    if (data.amount < 0 && (await creditBalance(data.userId)) + data.amount < 0) throw new Error("Üyenin bakiyesi bu kadar kredi düşmeye yetmiyor.");
-    await sql.query("insert into credit_ledger (id, user_id, amount, reason) values ($1,$2,$3,$4)", [
-      newId("crd"),
-      data.userId,
-      data.amount,
-      `admin:${data.reason}`,
-    ]);
+    const balance = await sql.transaction(async (tx) => {
+      // Lock the user's profile row so concurrent credit debits cannot race below zero.
+      await tx.query("select user_id from profiles where user_id = $1 for update", [data.userId]);
+      const cur = (await tx.query<{ b: number }>("select coalesce(sum(amount), 0)::int as b from credit_ledger where user_id = $1", [data.userId]))[0]?.b ?? 0;
+      if (data.amount < 0 && cur + data.amount < 0) throw new Error("Üyenin bakiyesi bu kadar kredi düşmeye yetmiyor.");
+      await tx.query("insert into credit_ledger (id, user_id, amount, reason) values ($1,$2,$3,$4)", [
+        newId("crd"),
+        data.userId,
+        data.amount,
+        `admin:${data.reason}`,
+      ]);
+      return cur + data.amount;
+    });
     if (data.amount > 0) {
       await notify(data.userId, "credit", "Hesabınıza kredi eklendi", `${data.amount} doping kredisi hesabınıza tanımlandı.`, "/doping");
     } else {
       await notify(data.userId, "credit", "Hesabınızdan kredi düşüldü", `${-data.amount} doping kredisi düşüldü. Gerekçe: ${data.reason}`, "/doping");
     }
     await audit(sql, context.adminId, "user.credits", "user", data.userId, `${t.display_name}: ${data.amount > 0 ? "+" : ""}${data.amount} kredi — ${data.reason}`);
-    return { ok: true as const, balance: await creditBalance(data.userId) };
+    return { ok: true as const, balance };
   });
 
 export const adminNotifyUser = createServerFn({ method: "POST" })

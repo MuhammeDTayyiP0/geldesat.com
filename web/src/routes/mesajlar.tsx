@@ -273,7 +273,7 @@ function MessagesLayout() {
                           {c.role === "selling" ? "Satış" : "Alış"}
                         </span>
                         <span className="truncate">{c.listing_title}</span>
-                        {listingState ? <span className="shrink-0 text-warn">· {listingState}</span> : c.price ? <span className="shrink-0 tabular-nums">· {formatPrice(c.price)}</span> : null}
+                        {listingState ? <span className="shrink-0 text-warn">· {listingState}</span> : c.price ? <span className="shrink-0 tabular-nums">· {formatPrice(c.price, c.currency)}</span> : null}
                       </p>
                       <div className="mt-0.5 flex items-center justify-between gap-2">
                         <p className={cn("truncate text-[13px]", flagged ? "font-semibold text-fg" : "text-muted", c.last_deleted && "italic")}>{preview}</p>

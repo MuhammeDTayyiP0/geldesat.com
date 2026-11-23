@@ -65,6 +65,7 @@ const otherOf = (conv: Conv, userId: string) => (conv.buyer_id === userId ? conv
 const sideOf = (conv: Conv, userId: string) => (conv.buyer_id === userId ? "buyer" : "seller");
 
 async function assertCanMessage(sql: Sql, from: string, to: string) {
+  if (await isClosedAccount(sql, from)) throw new Error("Hesabınız kapatılma sürecinde olduğu için mesaj gönderemezsiniz.");
   if (await blockedBetween(sql, from, to)) throw new Error("Bu kullanıcıyla mesajlaşamazsınız.");
   if (await isClosedAccount(sql, to)) throw new Error("Bu kullanıcı hesabını kapattı. Mesaj gönderilemez.");
 }
@@ -73,6 +74,67 @@ async function assertCanMessage(sql: Sql, from: string, to: string) {
 async function readsVisible(sql: Sql, other: string): Promise<boolean> {
   const rows = await sql.query<{ read_receipts: boolean }>("select read_receipts from profiles where user_id=$1", [other]);
   return rows[0]?.read_receipts ?? true;
+}
+
+/**
+ * Inserts a message row and reopens/unarchives the conversation inside `tx`.
+ * Returns `{ msg, duplicated }` so callers only broadcast/notify after commit
+ * and never re-notify on idempotent `clientId` retries.
+ */
+async function persistMessage(
+  tx: Sql,
+  conv: Conv,
+  senderId: string,
+  message: { content: string; kind?: ChatMessage["kind"]; meta?: ChatMessage["meta"]; replyTo?: string; clientId?: string },
+): Promise<{ msg: ChatMessage; duplicated: boolean }> {
+  const sentBefore = async () =>
+    message.clientId
+      ? (await tx.query<Record<string, unknown>>(
+          `select ${MSG_COLUMNS} from messages where conversation_id=$1 and sender_id=$2 and client_id=$3`,
+          [conv.id, senderId, message.clientId],
+        ))[0]
+      : undefined;
+  // A retry of a message that already went out: answer with it, deliver nothing new.
+  const earlier = await sentBefore();
+  if (earlier) return { msg: mapMsg(earlier), duplicated: true };
+  const id = newId("msg");
+  // A reply may only quote a message from the same chat.
+  const replyTo = message.replyTo
+    ? ((await tx.query<{ id: string }>("select id from messages where id=$1 and conversation_id=$2", [message.replyTo, conv.id]))[0]?.id ?? null)
+    : null;
+  const rows = message.clientId
+    ? await tx.query<Record<string, unknown>>(
+        `insert into messages (id, conversation_id, sender_id, content, kind, meta, reply_to, client_id)
+         values ($1,$2,$3,$4,$5,$6::jsonb,$7,$8)
+         on conflict (conversation_id, sender_id, client_id) where client_id is not null do nothing
+         returning ${MSG_COLUMNS}`,
+        [id, conv.id, senderId, message.content, message.kind ?? "text", message.meta ? JSON.stringify(message.meta) : null, replyTo, message.clientId],
+      )
+    : await tx.query<Record<string, unknown>>(
+        `insert into messages (id, conversation_id, sender_id, content, kind, meta, reply_to, client_id)
+         values ($1,$2,$3,$4,$5,$6::jsonb,$7,$8) returning ${MSG_COLUMNS}`,
+        [id, conv.id, senderId, message.content, message.kind ?? "text", message.meta ? JSON.stringify(message.meta) : null, replyTo, null],
+      );
+  if (rows.length === 0) {
+    const winner = await sentBefore();
+    if (winner) return { msg: mapMsg(winner), duplicated: true };
+    throw new Error("Mesaj kaydedilemedi.");
+  }
+  const receiver = otherOf(conv, senderId);
+  await tx.query(`update conversations set updated_at=now(), ${sideOf(conv, receiver)}_archived_at=null where id=$1`, [conv.id]);
+  await reopenConversation(tx, conv.id);
+  return { msg: mapMsg(rows[0]), duplicated: false };
+}
+
+async function emitDelivered(sql: Sql, conv: Conv, senderId: string, msg: ChatMessage, contentPreview: string) {
+  const receiver = otherOf(conv, senderId);
+  broadcastChatMessage(conv.id, msg);
+  broadcastUserInbox(receiver, { type: "new_message", conversationId: conv.id, message: msg });
+  broadcastUserInbox(senderId, { type: "inbox_ping", conversationId: conv.id });
+  if (!isViewingConversation(receiver, conv.id) && firstInWindow(`msgnotify:${receiver}:${conv.id}`, 2 * 60_000)) {
+    const sender = (await sql.query<{ display_name: string | null }>("select display_name from profiles where user_id=$1", [senderId]))[0];
+    await notify(receiver, "message", sender?.display_name ? `${sender.display_name} size yazdı` : "Yeni mesaj", contentPreview.slice(0, 80), `/mesajlar/${conv.id}`);
+  }
 }
 
 /**
@@ -85,47 +147,8 @@ async function deliver(
   senderId: string,
   message: { content: string; kind?: ChatMessage["kind"]; meta?: ChatMessage["meta"]; replyTo?: string; clientId?: string },
 ): Promise<ChatMessage> {
-  const sentBefore = async () =>
-    message.clientId
-      ? (await sql.query<Record<string, unknown>>(
-          `select ${MSG_COLUMNS} from messages where conversation_id=$1 and sender_id=$2 and client_id=$3`,
-          [conv.id, senderId, message.clientId],
-        ))[0]
-      : undefined;
-  // A retry of a message that already went out: answer with it, deliver nothing new.
-  const earlier = await sentBefore();
-  if (earlier) return mapMsg(earlier);
-  const id = newId("msg");
-  // A reply may only quote a message from the same chat.
-  const replyTo = message.replyTo
-    ? ((await sql.query<{ id: string }>("select id from messages where id=$1 and conversation_id=$2", [message.replyTo, conv.id]))[0]?.id ?? null)
-    : null;
-  let rows: Record<string, unknown>[];
-  try {
-    rows = await sql.query<Record<string, unknown>>(
-      `insert into messages (id, conversation_id, sender_id, content, kind, meta, reply_to, client_id)
-       values ($1,$2,$3,$4,$5,$6::jsonb,$7,$8) returning ${MSG_COLUMNS}`,
-      [id, conv.id, senderId, message.content, message.kind ?? "text", message.meta ? JSON.stringify(message.meta) : null, replyTo, message.clientId ?? null],
-    );
-  } catch (error) {
-    // The same retry arrived twice at once and the other one won.
-    const winner = (error as { code?: string }).code === "23505" ? await sentBefore() : undefined;
-    if (winner) return mapMsg(winner);
-    throw error;
-  }
-  await sql.query("update conversations set updated_at=now() where id=$1", [conv.id]);
-  await reopenConversation(sql, conv.id);
-  const msg = mapMsg(rows[0]);
-  const receiver = otherOf(conv, senderId);
-  // A new message brings an archived chat back for the person it is meant for.
-  await sql.query(`update conversations set ${sideOf(conv, receiver)}_archived_at=null where id=$1`, [conv.id]);
-  broadcastChatMessage(conv.id, msg);
-  broadcastUserInbox(receiver, { type: "new_message", conversationId: conv.id, message: msg });
-  broadcastUserInbox(senderId, { type: "inbox_ping", conversationId: conv.id });
-  if (!isViewingConversation(receiver, conv.id) && firstInWindow(`msgnotify:${receiver}:${conv.id}`, 2 * 60_000)) {
-    const sender = (await sql.query<{ display_name: string | null }>("select display_name from profiles where user_id=$1", [senderId]))[0];
-    await notify(receiver, "message", sender?.display_name ? `${sender.display_name} size yazdı` : "Yeni mesaj", message.content.slice(0, 80), `/mesajlar/${conv.id}`);
-  }
+  const { msg, duplicated } = await sql.transaction((tx) => persistMessage(tx, conv, senderId, message));
+  if (!duplicated) await emitDelivered(sql, conv, senderId, msg, message.content);
   return msg;
 }
 
@@ -146,8 +169,8 @@ export const startConversation = createServerFn({ method: "POST" })
     if (data.offer !== undefined) rateLimit(`offer:${context.userId}`, 10, 60_000);
     const sql = await getSql();
     await ensureProfile(context.userId);
-    const listing = await sql.query<{ id: string; user_id: string; status: string }>(
-      "select id, user_id, status from listings where id=$1 and (expires_at is null or expires_at > now())",
+    const listing = await sql.query<{ id: string; user_id: string; status: string; currency: string | null }>(
+      "select id, user_id, status, currency from listings where id=$1 and (expires_at is null or expires_at > now())",
       [data.listingId],
     );
     if (!listing[0] || listing[0].status !== "ACTIVE") throw new Error("İlan bulunamadı");
@@ -163,7 +186,7 @@ export const startConversation = createServerFn({ method: "POST" })
       [data.listingId, context.userId],
     ))[0];
     if (data.content) await deliver(sql, conv, context.userId, { content: data.content });
-    if (data.offer !== undefined) await deliverOffer(sql, conv, context.userId, data.offer);
+    if (data.offer !== undefined) await deliverOffer(sql, conv, context.userId, data.offer, undefined, listing[0].currency ?? "TRY");
     return { conversationId: conv.id };
   });
 
@@ -217,19 +240,36 @@ export const sendLocation = createServerFn({ method: "POST" })
  * at a time: a new one withdraws (or, for the answered one, counters) the rest.
  */
 /** A new offer card; earlier pending offers in the chat close (the countered one as "countered"). */
-async function deliverOffer(sql: Sql, conv: Conv, userId: string, amount: number, counterTo?: string) {
-  const closed = await sql.query<Record<string, unknown>>(
-    `update messages set meta = jsonb_set(meta, '{status}', to_jsonb(case when id = $2 then 'countered' else 'withdrawn' end))
-     where conversation_id=$1 and kind='offer' and deleted_at is null and meta->>'status'='pending'
-     returning ${MSG_COLUMNS}`,
-    [conv.id, counterTo ?? ""],
-  );
-  for (const m of closed) broadcastChatUpdate(conv.id, mapMsg(m));
-  return deliver(sql, conv, userId, {
-    content: `${counterTo ? "Karşı teklif" : "Teklif"}: ${formatPrice(amount)}`,
-    kind: "offer",
-    meta: { amount, status: "pending", counter: Boolean(counterTo) },
+async function deliverOffer(sql: Sql, conv: Conv, userId: string, amount: number, counterTo?: string, currency = "TRY") {
+  const content = `${counterTo ? "Karşı teklif" : "Teklif"}: ${formatPrice(amount, currency)}`;
+  const { closed, msg, duplicated } = await sql.transaction(async (tx) => {
+    // Lock the conversation row so parallel offers cannot leave two offers pending.
+    await tx.query("select id from conversations where id=$1 for update", [conv.id]);
+    if (counterTo) {
+      const target = await tx.query<{ sender_id: string; meta: unknown }>(
+        "select sender_id, meta from messages where id=$1 and conversation_id=$2 and kind='offer' and deleted_at is null for update",
+        [counterTo, conv.id],
+      );
+      if (!target[0] || target[0].sender_id === userId || asJson<{ status?: string }>(target[0].meta, {}).status !== "pending") {
+        throw new Error("Bu teklif artık geçerli değil.");
+      }
+    }
+    const closedRows = await tx.query<Record<string, unknown>>(
+      `update messages set meta = jsonb_set(meta, '{status}', to_jsonb(case when id = $2 then 'countered' else 'withdrawn' end))
+       where conversation_id=$1 and kind='offer' and deleted_at is null and meta->>'status'='pending'
+       returning ${MSG_COLUMNS}`,
+      [conv.id, counterTo ?? ""],
+    );
+    const saved = await persistMessage(tx, conv, userId, {
+      content,
+      kind: "offer",
+      meta: { amount, status: "pending", counter: Boolean(counterTo) },
+    });
+    return { closed: closedRows.map((m) => mapMsg(m)), ...saved };
   });
+  for (const m of closed) broadcastChatUpdate(conv.id, m);
+  if (!duplicated) await emitDelivered(sql, conv, userId, msg, content);
+  return msg;
 }
 
 export const sendOffer = createServerFn({ method: "POST" })
@@ -246,22 +286,17 @@ export const sendOffer = createServerFn({ method: "POST" })
     const sql = await getSql();
     const conv = await myConversation(sql, data.conversationId, context.userId);
     const listing = conv.listing_id
-      ? (await sql.query<{ status: string }>("select status from listings where id=$1", [conv.listing_id]))[0]
+      ? (await sql.query<{ status: string; currency: string | null }>(
+          "select status, currency from listings where id=$1 and (expires_at is null or expires_at > now())",
+          [conv.listing_id],
+        ))[0]
       : undefined;
     if (!listing || listing.status !== "ACTIVE") throw new Error("İlan yayında değil; teklif verilemez.");
     await assertCanMessage(sql, context.userId, otherOf(conv, context.userId));
-    if (data.counterTo) {
-      const target = await sql.query<{ sender_id: string; meta: unknown }>(
-        "select sender_id, meta from messages where id=$1 and conversation_id=$2 and kind='offer' and deleted_at is null",
-        [data.counterTo, conv.id],
-      );
-      if (!target[0] || target[0].sender_id === context.userId || asJson<{ status?: string }>(target[0].meta, {}).status !== "pending") {
-        throw new Error("Bu teklif artık geçerli değil.");
-      }
-    } else if (conv.buyer_id !== context.userId) {
+    if (!data.counterTo && conv.buyer_id !== context.userId) {
       throw new Error("Satıcı yalnızca gelen bir teklife karşı teklif verebilir.");
     }
-    return deliverOffer(sql, conv, context.userId, data.amount, data.counterTo);
+    return deliverOffer(sql, conv, context.userId, data.amount, data.counterTo, listing.currency ?? "TRY");
   });
 
 /** The person who received a pending offer accepts or declines it. */
@@ -270,8 +305,12 @@ export const respondOffer = createServerFn({ method: "POST" })
   .validator(z.object({ messageId: z.string(), accept: z.boolean() }))
   .handler(async ({ context, data }) => {
     const sql = await getSql();
-    const rows = await sql.query<{ conversation_id: string; sender_id: string; meta: unknown }>(
-      "select conversation_id, sender_id, meta from messages where id=$1 and kind='offer' and deleted_at is null",
+    const rows = await sql.query<{ conversation_id: string; sender_id: string; meta: unknown; currency: string | null }>(
+      `select m.conversation_id, m.sender_id, m.meta, l.currency
+       from messages m
+       join conversations cv on cv.id = m.conversation_id
+       left join listings l on l.id = cv.listing_id
+       where m.id=$1 and m.kind='offer' and m.deleted_at is null`,
       [data.messageId],
     );
     if (!rows[0]) throw new Error("Teklif bulunamadı");
@@ -298,11 +337,12 @@ export const respondOffer = createServerFn({ method: "POST" })
     const msg = mapMsg(updated[0]);
     broadcastChatUpdate(conv.id, msg);
     broadcastUserInbox(offerer, { type: "inbox_ping", conversationId: conv.id });
+    const currency = rows[0].currency ?? "TRY";
     await notify(
       offerer,
       "message",
       data.accept ? "Teklifiniz kabul edildi" : "Teklifiniz reddedildi",
-      `${formatPrice(meta.amount ?? 0)} teklifiniz ${data.accept ? "kabul edildi. Buluşmayı mesajlaşarak ayarlayabilirsiniz." : "reddedildi."}`,
+      `${formatPrice(meta.amount ?? 0, currency)} teklifiniz ${data.accept ? "kabul edildi. Buluşmayı mesajlaşarak ayarlayabilirsiniz." : "reddedildi."}`,
       `/mesajlar/${conv.id}`,
     );
     return msg;
@@ -353,7 +393,7 @@ export const listConversations = createServerFn({ method: "GET" })
     const sql = await getSql();
     const rows = await sql.query<Record<string, unknown>>(
       `select cv.id, cv.listing_id, cv.buyer_id, cv.seller_id, cv.updated_at,
-              l.title as listing_title, l.slug as listing_slug, l.images, l.price, l.status as listing_status,
+              l.title as listing_title, l.slug as listing_slug, l.images, l.price, l.currency, l.status as listing_status,
               op.display_name as other_name, op.avatar_url as other_avatar, coalesce(op.deletion_requested_at, op.banned_at) as other_closing,
               case when cv.buyer_id = $1 then cv.seller_id else cv.buyer_id end as other_id,
               case when cv.buyer_id = $1 then cv.buyer_archived_at else cv.seller_archived_at end as archived_at,
@@ -385,6 +425,7 @@ export const listConversations = createServerFn({ method: "GET" })
       listing_image: r.images ? (asJson<string[]>(r.images, [])[0] ?? null) : null,
       listing_status: r.listing_status ? String(r.listing_status) : "REMOVED",
       price: r.price ? num(r.price) : 0,
+      currency: r.currency ? String(r.currency) : "TRY",
       other_id: String(r.other_id),
       other_name: r.other_name == null ? DELETED_USER_NAME : String(r.other_name),
       other_avatar: r.other_avatar ? String(r.other_avatar) : null,
@@ -410,7 +451,7 @@ export const getThread = createServerFn({ method: "POST" })
     const conv = await myConversation(sql, data.conversationId, context.userId);
     const otherId = otherOf(conv, context.userId);
     const head = await sql.query<Record<string, unknown>>(
-      `select l.title, l.slug, l.images, l.price, l.status as listing_status,
+      `select l.title, l.slug, l.images, l.price, l.currency, l.status as listing_status,
               op.display_name as other_name, op.avatar_url as other_avatar, op.last_seen_at as other_last_seen,
               coalesce(op.deletion_requested_at, op.banned_at) as other_closing, coalesce(op.read_receipts, true) as other_receipts,
               coalesce(mp.read_receipts, true) as my_receipts
@@ -446,6 +487,7 @@ export const getThread = createServerFn({ method: "POST" })
         listing_slug: h.slug ? String(h.slug) : "",
         listing_image: h.images ? (asJson<string[]>(h.images, [])[0] ?? null) : null,
         listing_price: h.price ? num(h.price) : null,
+        listing_currency: h.currency ? String(h.currency) : "TRY",
         listing_status: h.listing_status ? String(h.listing_status) : "REMOVED",
         other_id: otherId,
         other_name: h.other_name == null ? DELETED_USER_NAME : String(h.other_name),
@@ -703,11 +745,16 @@ export const listBlockedUsers = createServerFn({ method: "GET" })
 export async function sendChatPhoto(sql: Sql, userId: string, conversationId: string, imageId: string, data: Buffer): Promise<ChatMessage> {
   const conv = await myConversation(sql, conversationId, userId);
   await assertCanMessage(sql, userId, otherOf(conv, userId));
-  await sql.query(
-    "insert into chat_images (id, conversation_id, uploader_id, mime_type, data) values ($1,$2,$3,'image/webp',$4)",
-    [imageId, conv.id, userId, data],
-  );
-  return deliver(sql, conv, userId, { content: "📷 Fotoğraf", kind: "image", meta: { image_id: imageId } });
+  const content = "📷 Fotoğraf";
+  const { msg, duplicated } = await sql.transaction(async (tx) => {
+    await tx.query(
+      "insert into chat_images (id, conversation_id, uploader_id, mime_type, data) values ($1,$2,$3,'image/webp',$4)",
+      [imageId, conv.id, userId, data],
+    );
+    return persistMessage(tx, conv, userId, { content, kind: "image", meta: { image_id: imageId } });
+  });
+  if (!duplicated) await emitDelivered(sql, conv, userId, msg, content);
+  return msg;
 }
 
 /** Find messages in one chat containing `q` (newest first). */

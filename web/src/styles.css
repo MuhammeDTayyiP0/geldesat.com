@@ -223,6 +223,58 @@ html {
   }
 }
 
+/* Category strip icon chips: light vs dark theme contrast */
+.category-chip-icon {
+  color: var(--cat-tint);
+  background-color: color-mix(in srgb, var(--cat-tint) 11%, transparent);
+}
+
+:root[data-theme="dark"] .category-chip-icon {
+  color: var(--cat-tint-dark);
+  background-color: color-mix(in srgb, var(--cat-tint-dark) 18%, transparent);
+}
+
+:root[data-theme="dark"] .field-select,
+:root[data-theme="dark"] .admin-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23a3abb8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+
+:root[data-theme="dark"] .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.92);
+}
+:root[data-theme="dark"] .leaflet-container {
+  background: var(--color-surface);
+}
+:root[data-theme="dark"] .leaflet-control-attribution,
+:root[data-theme="dark"] .leaflet-bar a {
+  background: var(--color-surface);
+  color: var(--color-fg);
+  border-color: var(--color-border);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .category-chip-icon {
+    color: var(--cat-tint-dark);
+    background-color: color-mix(in srgb, var(--cat-tint-dark) 18%, transparent);
+  }
+  :root:not([data-theme="light"]) .field-select,
+  :root:not([data-theme="light"]) .admin-select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23a3abb8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  }
+  :root:not([data-theme="light"]) .leaflet-tile-pane {
+    filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.92);
+  }
+  :root:not([data-theme="light"]) .leaflet-container {
+    background: var(--color-surface);
+  }
+  :root:not([data-theme="light"]) .leaflet-control-attribution,
+  :root:not([data-theme="light"]) .leaflet-bar a {
+    background: var(--color-surface);
+    color: var(--color-fg);
+    border-color: var(--color-border);
+  }
+}
+
 .site-header {
   z-index: 40;
 }

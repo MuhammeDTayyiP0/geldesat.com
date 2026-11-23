@@ -107,7 +107,7 @@ function StoreSettings() {
             sayfanızda toplayabilirsiniz. Mağazalar, işletme bilgileri kontrol edildikten sonra
             GeldeSat ekibi tarafından açılır.
           </p>
-          <Link to="/sayfa/$slug" params={{ slug: "iletisim" }} className={buttonVariants({ className: "mt-5 inline-block" })}>Mağaza başvurusu için iletişime geçin</Link>
+          <Link to="/sayfa/$slug" params={{ slug: "iletisim" }} className={buttonVariants({ className: "mt-5" })}>Mağaza başvurusu için iletişime geçin</Link>
         </div>
       ) : (
         <form

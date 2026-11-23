@@ -112,7 +112,7 @@ function OtaPage() {
 
       <Card>
         <CardHead title="Yayınlanan güncellemeler" description="En yenisi üstte. Her telefon, kendi sürümü ve kanalı için alabileceği en yeni güncellemeyi kullanır." />
-        {q.error ? (
+        {q.error && !q.data ? (
           <ErrorState error={q.error} onRetry={() => void q.refetch()} />
         ) : !q.data ? (
           <SkeletonRows rows={4} />

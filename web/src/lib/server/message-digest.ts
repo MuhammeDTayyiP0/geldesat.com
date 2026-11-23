@@ -20,6 +20,7 @@ const PENDING = (user: string) => `
   and m.created_at > coalesce(p.last_message_email_at, '-infinity'::timestamptz)`;
 
 let lastRun = 0;
+let running = false;
 
 /**
  * Mail a summary of unread chat messages to users who have been away. Needs
@@ -28,60 +29,85 @@ let lastRun = 0;
  * every 10 minutes, piggybacking on regular traffic like the other sweeps.
  */
 export async function sweepMessageDigests(force = false): Promise<number> {
-  if (!mailConfigured || (!force && Date.now() - lastRun < 10 * 60_000)) return 0;
+  if (!mailConfigured || running || (!force && Date.now() - lastRun < 10 * 60_000)) return 0;
+  running = true;
   let sent = 0;
   lastRun = Date.now();
-  const sql = await getSql();
-  const due = await sql.query<{ user_id: string; email: string; name: string }>(
-    `select p.user_id, u.email, coalesce(nullif(p.display_name, ''), u.name) as name
-     from profiles p join "user" u on u.id = p.user_id
-     where p.message_email and u."emailVerified" and p.deletion_requested_at is null and p.banned_at is null
-       and (p.last_message_email_at is null or p.last_message_email_at < now() - make_interval(hours => $1))
-       and exists (
-         select 1 from messages m join conversations cv on cv.id = m.conversation_id
-         where ${PENDING("p.user_id")} and m.created_at < now() - make_interval(mins => $2)
-       )
-     limit 50`,
-    [MIN_HOURS_BETWEEN, WAIT_MINUTES],
-  );
-
-  for (const user of due) {
-    if (isOnline(user.user_id)) continue;
-    const chats = await sql.query<{ other_name: string | null; title: string | null; n: number; content: string; kind: string }>(
-      `select op.display_name as other_name, l.title, count(*)::int as n,
-              (array_agg(m.content order by m.created_at desc))[1] as content,
-              (array_agg(m.kind order by m.created_at desc))[1] as kind
-       from messages m
-       join conversations cv on cv.id = m.conversation_id
-       join profiles p on p.user_id = $1
-       left join listings l on l.id = cv.listing_id
-       left join profiles op on op.user_id = m.sender_id
-       where ${PENDING("$1")}
-       group by cv.id, op.display_name, l.title
-       order by max(m.created_at) desc`,
-      [user.user_id],
+  try {
+    const sql = await getSql();
+    const due = await sql.query<{ user_id: string; email: string; name: string }>(
+      `select p.user_id, u.email, coalesce(nullif(p.display_name, ''), u.name) as name
+       from profiles p join "user" u on u.id = p.user_id
+       where p.message_email and u."emailVerified" and p.deletion_requested_at is null and p.banned_at is null
+         and (p.last_message_email_at is null or p.last_message_email_at < now() - make_interval(hours => $1))
+         and exists (
+           select 1 from messages m join conversations cv on cv.id = m.conversation_id
+           where ${PENDING("p.user_id")} and m.created_at < now() - make_interval(mins => $2)
+         )
+       limit 50`,
+      [MIN_HOURS_BETWEEN, WAIT_MINUTES],
     );
-    if (!chats.length) continue;
-    // Stamp first: a failing mail server must not make us resend on every sweep.
-    await sql.query("update profiles set last_message_email_at = now() where user_id = $1", [user.user_id]);
-    try {
-      await sendMessageDigestMail({
-        to: user.email,
-        name: user.name || "Merhaba",
-        total: chats.reduce((sum, c) => sum + c.n, 0),
-        items: chats.slice(0, MAX_ITEMS).map((c) => ({
-          from: c.other_name ?? DELETED_USER_NAME,
-          listing: c.title ?? "İlan kaldırıldı",
-          preview: previewText(c.kind, c.content, false).slice(0, 140),
-          count: c.n,
-        })),
-        inboxUrl: `${BASE_URL}/mesajlar`,
-        settingsUrl: `${BASE_URL}/ayarlar/bildirimler`,
+
+    for (const user of due) {
+      if (isOnline(user.user_id)) continue;
+      // Phase 1: lock, verify freshness, read pending chats, and claim the timestamp before releasing the DB connection.
+      const claim = await sql.transaction(async (tx) => {
+        const lock = await tx.query<{ ok: boolean }>("select pg_try_advisory_xact_lock(hashtext('digest:' || $1)) as ok", [user.user_id]);
+        if (!lock[0]?.ok) return null;
+        // Re-check inside the lock in case another worker just stamped this user.
+        const fresh = await tx.query<{ last_message_email_at: string | Date | null; ok: boolean }>(
+          `select last_message_email_at, (last_message_email_at is null or last_message_email_at < now() - make_interval(hours => $2)) as ok
+           from profiles where user_id = $1`,
+          [user.user_id, MIN_HOURS_BETWEEN],
+        );
+        if (!fresh[0]?.ok) return null;
+        const chats = await tx.query<{ other_name: string | null; title: string | null; n: number; content: string; kind: string }>(
+          `select op.display_name as other_name, l.title, count(*)::int as n,
+                  (array_agg(m.content order by m.created_at desc))[1] as content,
+                  (array_agg(m.kind order by m.created_at desc))[1] as kind
+           from messages m
+           join conversations cv on cv.id = m.conversation_id
+           join profiles p on p.user_id = $1
+           left join listings l on l.id = cv.listing_id
+           left join profiles op on op.user_id = m.sender_id
+           where ${PENDING("$1")}
+           group by cv.id, op.display_name, l.title
+           order by max(m.created_at) desc`,
+          [user.user_id],
+        );
+        if (!chats.length) return null;
+        const claimedAt = new Date();
+        await tx.query("update profiles set last_message_email_at = $2 where user_id = $1", [user.user_id, claimedAt]);
+        return { chats, prevSentAt: fresh[0].last_message_email_at ?? null, claimedAt };
       });
-      sent += 1;
-    } catch (err) {
-      console.error("[digest] mail failed", user.user_id, err);
+      if (!claim) continue;
+      // Phase 2: perform SMTP I/O outside any DB transaction; restore the previous stamp if sending fails.
+      try {
+        await sendMessageDigestMail({
+          to: user.email,
+          name: user.name || "Merhaba",
+          total: claim.chats.reduce((sum, c) => sum + c.n, 0),
+          items: claim.chats.slice(0, MAX_ITEMS).map((c) => ({
+            from: c.other_name ?? DELETED_USER_NAME,
+            listing: c.title ?? "İlan kaldırıldı",
+            preview: previewText(c.kind, c.content, false).slice(0, 140),
+            count: c.n,
+          })),
+          inboxUrl: `${BASE_URL}/mesajlar`,
+          settingsUrl: `${BASE_URL}/ayarlar/bildirimler`,
+        });
+        sent += 1;
+      } catch (err) {
+        console.error("[digest] mail failed", user.user_id, err);
+        await sql.query("update profiles set last_message_email_at = $2 where user_id = $1 and last_message_email_at = $3", [
+          user.user_id,
+          claim.prevSentAt,
+          claim.claimedAt,
+        ]);
+      }
     }
+    return sent;
+  } finally {
+    running = false;
   }
-  return sent;
 }

@@ -4,8 +4,24 @@ import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { account } from '@/api/endpoints';
+import { getSession } from '@/auth/session';
 
 const PUSH_KEY = 'geldesat.pushToken.v1';
+
+type StoredPush = { token: string; userId: string | null };
+
+function parseStoredPush(raw: string | null): StoredPush | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as { token?: unknown; userId?: unknown };
+    if (typeof parsed?.token === 'string' && parsed.token) {
+      return { token: parsed.token, userId: typeof parsed.userId === 'string' ? parsed.userId : null };
+    }
+  } catch {
+    return { token: raw, userId: null };
+  }
+  return null;
+}
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -22,6 +38,8 @@ Notifications.setNotificationHandler({
  */
 export async function registerForPush({ ask = true }: { ask?: boolean } = {}): Promise<void> {
   if (!Device.isDevice || Platform.OS === 'web') return;
+  const session = getSession();
+  if (session.status !== 'signedIn') return;
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('default', {
       name: 'Bildirimler',
@@ -37,26 +55,38 @@ export async function registerForPush({ ask = true }: { ask?: boolean } = {}): P
   const projectId = (Constants.expoConfig?.extra as { eas?: { projectId?: string } } | undefined)?.eas?.projectId;
   const { data: token } = await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined);
   await account.registerPush(token);
-  await AsyncStorage.setItem(PUSH_KEY, token);
+  await AsyncStorage.setItem(PUSH_KEY, JSON.stringify({ token, userId: session.user.id }));
 }
 
 /**
  * Permission given later in the phone's settings: register then, without asking.
- * Called when the app returns to the foreground; does nothing once registered.
+ * Called when the app returns to the foreground; does nothing once registered for the current user.
  */
 export async function ensurePushRegistered(): Promise<void> {
   if (!Device.isDevice || Platform.OS === 'web') return;
-  if (await AsyncStorage.getItem(PUSH_KEY)) return;
+  const session = getSession();
+  if (session.status !== 'signedIn') return;
+  const stored = parseStoredPush(await AsyncStorage.getItem(PUSH_KEY));
+  if (stored && stored.userId === session.user.id) return;
   if (!(await Notifications.getPermissionsAsync()).granted) return;
   await registerForPush({ ask: false });
+}
+
+/** Forget local push registration (e.g. after 401 or session expiry so re-login re-registers). */
+export async function clearLocalPushRegistration(): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(PUSH_KEY);
+  } catch {
+    // Ignore storage errors when clearing stale push state.
+  }
 }
 
 /** This device's push token, forgotten locally (sign-out). The caller removes it from the account. */
 export async function takePushToken(): Promise<string | null> {
   try {
-    const token = await AsyncStorage.getItem(PUSH_KEY);
+    const raw = await AsyncStorage.getItem(PUSH_KEY);
     await AsyncStorage.removeItem(PUSH_KEY);
-    return token;
+    return parseStoredPush(raw)?.token ?? null;
   } catch {
     return null;
   }

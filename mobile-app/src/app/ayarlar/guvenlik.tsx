@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -165,7 +165,6 @@ function SecuritySettings() {
         visible={deleteOpen}
         onClose={() => setDeleteOpen(false)}
         onDeleted={async () => {
-          setDeleteOpen(false);
           await signOut();
           toast.info('Hesabınız 30 gün sonra silinecek. Vazgeçerseniz giriş yapıp Ayarlar → Şifre ve güvenlik bölümünden geri alın.');
           router.navigate('/');
@@ -178,10 +177,16 @@ function SecuritySettings() {
 function DeleteAccountSheet({ visible, onClose, onDeleted }: { visible: boolean; onClose: () => void; onDeleted: () => Promise<void> }) {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
+  const deletedRef = useRef(false);
   return (
     <Sheet
       visible={visible}
       onClose={onClose}
+      onDismissed={() => {
+        if (!deletedRef.current) return;
+        deletedRef.current = false;
+        void onDeleted();
+      }}
       title="Hesabımı sil"
       footer={
         <Button
@@ -202,7 +207,8 @@ function DeleteAccountSheet({ visible, onClose, onDeleted }: { visible: boolean;
             try {
               await account.requestDeletion(password || undefined);
               setPassword('');
-              await onDeleted();
+              deletedRef.current = true;
+              onClose();
             } catch (e) {
               toast.error(errorMessage(e));
             } finally {

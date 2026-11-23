@@ -1,5 +1,5 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { BadgeCheck, CalendarDays, Eye, LayoutGrid, MapPin, Pencil, Share2, Star, Store as StoreIcon } from "lucide-react";
 import { toast } from "sonner";
 import { ProfilePageSkeleton } from "@/components/listing/ListingGridSkeleton";
@@ -117,6 +117,12 @@ function SellerPage() {
   const [reviews, setReviews] = useState(seller.reviews);
   const [page, setPage] = useState(1);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setListings(firstListings);
+    setReviews(seller.reviews);
+    setPage(1);
+  }, [seller.id, firstListings, seller.reviews]);
 
   async function moreListings() {
     setBusy(true);

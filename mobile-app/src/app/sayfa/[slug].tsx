@@ -1,4 +1,5 @@
 import { ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { FileText } from 'lucide-react-native';
@@ -28,6 +29,7 @@ function toBlocks(body: string): { heading: boolean; text: string }[] {
 export default function LegalPage() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const { c } = useTheme();
+  const insets = useSafeAreaInsets();
   const query = useQuery({ queryKey: keys.legal(slug), queryFn: () => catalog.legal(slug), staleTime: 60 * 60_000 });
   const page = query.data;
   return (
@@ -40,7 +42,7 @@ export default function LegalPage() {
       ) : !page ? (
         <EmptyState icon={FileText} title="Sayfa bulunamadı" />
       ) : (
-        <ScrollView contentContainerStyle={styles.body}>
+        <ScrollView contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + space.xxxl }]}>
           <Text variant="title">{page.title}</Text>
           {toBlocks(page.body).map((p, i) => (
             <Text key={i} variant={p.heading ? 'subheading' : 'body'} selectable style={p.heading ? styles.heading : styles.paragraph}>

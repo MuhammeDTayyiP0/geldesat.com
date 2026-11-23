@@ -63,11 +63,22 @@ const MAX_BUCKETS = 50_000;
 const buckets = new Map<string, { n: number; t: number; w: number }>();
 let lastPrune = 0;
 
+const MAX_DEDUP_BUCKETS = 50_000;
+const dedupBuckets = new Map<string, number>();
+let lastDedupPrune = 0;
+
 /** Drop expired windows so the map does not grow with every visitor ever seen. */
 function pruneBuckets(now: number, force = false) {
   if (!force && now - lastPrune < 60_000) return;
   lastPrune = now;
   for (const [key, hit] of buckets) if (now - hit.t > hit.w) buckets.delete(key);
+}
+
+/** Drop expired dedup entries separately so view/error floods never evict security rate-limit buckets. */
+function pruneDedupBuckets(now: number, force = false) {
+  if (!force && now - lastDedupPrune < 60_000) return;
+  lastDedupPrune = now;
+  for (const [key, expiresAt] of dedupBuckets) if (now >= expiresAt) dedupBuckets.delete(key);
 }
 
 /**
@@ -364,19 +375,26 @@ export function listingSelect(extra = "", onlyCover = false) {
   `;
 }
 
-/** True the first time `key` is seen within `windowMs` (in-process, like `rateLimit`). */
+/** True the first time `key` is seen within `windowMs` (in-process, isolated from `rateLimit`). */
 export function firstInWindow(key: string, windowMs: number): boolean {
-  try {
-    rateLimit(key, 1, windowMs);
-    return true;
-  } catch {
-    return false;
+  const now = Date.now();
+  pruneDedupBuckets(now);
+  const expiresAt = dedupBuckets.get(key);
+  if (expiresAt !== undefined && now < expiresAt) return false;
+  if (expiresAt === undefined && dedupBuckets.size >= MAX_DEDUP_BUCKETS) {
+    pruneDedupBuckets(now, true);
+    if (dedupBuckets.size >= MAX_DEDUP_BUCKETS) {
+      const oldest = dedupBuckets.keys().next().value;
+      if (oldest !== undefined) dedupBuckets.delete(oldest);
+    }
   }
+  dedupBuckets.set(key, now + windowMs);
+  return true;
 }
 
 /** Start the window over, so the next `firstInWindow(key)` is true again. */
 export function resetWindow(key: string): void {
-  buckets.delete(key);
+  dedupBuckets.delete(key);
 }
 
 type QuerySql = { query<T = Record<string, unknown>>(text: string, params?: unknown[]): Promise<T[]> };
@@ -434,15 +452,21 @@ export async function insertListingReport(sql: QuerySql, listingId: string, repo
   );
 }
 
-/** Best-effort visitor identity for de-duplicating counters (behind Coolify's proxy). */
+/** Best-effort visitor identity for de-duplicating counters and rate limiting (behind Coolify's proxy). */
 export function viewerKey(headers: Headers, userId?: string | null): string {
   if (userId) return `u:${userId}`;
   // TRUSTED_IP_HEADER names the header the edge overwrites itself (Cloudflare:
-  // cf-connecting-ip). The first X-Forwarded-For value can be sent by the client.
+  // cf-connecting-ip). Otherwise prefer x-real-ip, or the rightmost entry of
+  // X-Forwarded-For (appended by our own reverse proxy; leftmost is client-spoofable).
   const trusted = process.env.TRUSTED_IP_HEADER?.trim();
   const fromEdge = trusted ? headers.get(trusted)?.split(",")[0]?.trim() : undefined;
   const realIp = headers.get("x-real-ip")?.trim();
-  const forwarded = headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  const xffParts = (headers.get("x-forwarded-for") ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const hops = Math.max(1, Number(process.env.TRUSTED_PROXY_HOPS) || 1);
+  const forwarded = xffParts.length ? xffParts[Math.max(0, xffParts.length - hops)] : undefined;
   return `ip:${fromEdge || realIp || forwarded || "unknown"}`;
 }
 
