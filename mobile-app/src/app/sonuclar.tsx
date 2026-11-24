@@ -1,18 +1,29 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { ArrowUpDown, ChevronLeft, LayoutGrid, List, Search, SearchX, SlidersHorizontal, X } from 'lucide-react-native';
-import { catalog } from '@/api/endpoints';
-import { keys } from '@/api/queries';
-import type { SortKey } from '@/api/types';
+import { useInfiniteQuery, useMutation, useQuery } from '@tanstack/react-query';
+import { ArrowUpDown, Bell, Bookmark, ChevronLeft, LayoutGrid, List, Search, SearchX, SlidersHorizontal, X } from 'lucide-react-native';
+import { errorMessage } from '@/api/client';
+import { catalog, savedSearches } from '@/api/endpoints';
+import { keys, queryClient } from '@/api/queries';
+import type { SavedSearchFilters, SortKey } from '@/api/types';
+import { useRequireAuth } from '@/auth/useRequireAuth';
 import { ListingGrid } from '@/features/listing/ListingGrid';
 import { FilterSheet } from '@/features/search/FilterSheet';
-import { SORTS, activeFilterCount, toSearchFilters, withoutCategory, type FilterState } from '@/features/search/filters';
+import {
+  POSTED_WITHIN_OPTIONS,
+  SELLER_TYPE_OPTIONS,
+  SORTS,
+  activeFilterCount,
+  toSearchFilters,
+  withoutCategory,
+  type FilterState,
+} from '@/features/search/filters';
+import { useFlag } from '@/lib/flags';
 import { formatNumber, uniqueById } from '@/lib/format';
 import { rememberSearch } from '@/lib/storage';
-import { Button, Chip, EmptyState, ErrorState, IconButton, ListRow, RowGroup, Sheet, Text, font, hairline, radius, space, useTheme } from '@/ui';
+import { Button, Chip, EmptyState, ErrorState, IconButton, Input, ListRow, RowGroup, Sheet, Text, font, hairline, radius, space, toast, useTheme } from '@/ui';
 
 const LIMIT = 24;
 
@@ -21,30 +32,100 @@ type Params = {
   category?: string;
   city?: string;
   district?: string;
+  neighborhood?: string;
+  minPrice?: string;
+  maxPrice?: string;
   urgent?: string;
   featured?: string;
+  postedWithin?: string;
+  withPhotos?: string;
+  sellerType?: string;
+  priceDropped?: string;
   title?: string;
   sort?: string;
 };
+
+function filtersFromParams(params: Params): FilterState {
+  const postedWithin = POSTED_WITHIN_OPTIONS.some((o) => o.value === params.postedWithin)
+    ? (params.postedWithin as FilterState['postedWithin'])
+    : undefined;
+  const sellerType = SELLER_TYPE_OPTIONS.some((o) => o.value === params.sellerType)
+    ? (params.sellerType as FilterState['sellerType'])
+    : undefined;
+  return {
+    q: params.q,
+    category: params.category,
+    city: params.city,
+    district: params.district,
+    neighborhood: params.neighborhood,
+    minPrice: params.minPrice?.replace(/\D/g, '') || undefined,
+    maxPrice: params.maxPrice?.replace(/\D/g, '') || undefined,
+    urgent: params.urgent === '1',
+    featured: params.featured === '1',
+    postedWithin,
+    withPhotos: params.withPhotos === '1',
+    sellerType,
+    priceDropped: params.priceDropped === '1',
+    sort: (SORTS.some((s) => s.value === params.sort) ? params.sort : 'date_desc') as SortKey,
+    attrs: {},
+  };
+}
 
 export default function ResultsScreen() {
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const requireAuth = useRequireAuth();
+  const kayitliAramalar = useFlag('kayitli_aramalar');
   const params = useLocalSearchParams<Params>();
-  const [filters, setFilters] = useState<FilterState>(() => ({
-    q: params.q,
-    category: params.category,
-    city: params.city,
-    district: params.district,
-    urgent: params.urgent === '1',
-    featured: params.featured === '1',
-    sort: (SORTS.some((s) => s.value === params.sort) ? params.sort : 'date_desc') as SortKey,
-    attrs: {},
-  }));
+  const [filters, setFilters] = useState<FilterState>(() => filtersFromParams(params));
   const [layout, setLayout] = useState<'grid' | 'list'>('grid');
-  const [sheet, setSheet] = useState<'filters' | 'sort' | null>(null);
+  const [sheet, setSheet] = useState<'filters' | 'sort' | 'save' | null>(null);
   const [query, setQuery] = useState(params.q ?? '');
+  const [saveName, setSaveName] = useState('');
+  const [saveNotify, setSaveNotify] = useState(true);
+  const didMount = useRef(false);
+
+  useEffect(() => {
+    if (!didMount.current) {
+      didMount.current = true;
+      return;
+    }
+    setFilters(
+      filtersFromParams({
+        q: params.q,
+        category: params.category,
+        city: params.city,
+        district: params.district,
+        neighborhood: params.neighborhood,
+        minPrice: params.minPrice,
+        maxPrice: params.maxPrice,
+        urgent: params.urgent,
+        featured: params.featured,
+        postedWithin: params.postedWithin,
+        withPhotos: params.withPhotos,
+        sellerType: params.sellerType,
+        priceDropped: params.priceDropped,
+        sort: params.sort,
+      }),
+    );
+    setQuery(params.q ?? '');
+  }, [
+    params.q,
+    params.category,
+    params.city,
+    params.district,
+    params.neighborhood,
+    params.minPrice,
+    params.maxPrice,
+    params.urgent,
+    params.featured,
+    params.postedWithin,
+    params.withPhotos,
+    params.sellerType,
+    params.priceDropped,
+    params.sort,
+  ]);
 
   const info = useQuery({
     queryKey: keys.category(filters.category ?? ''),
@@ -80,6 +161,52 @@ export default function ResultsScreen() {
     const q = query.trim();
     if (q) void rememberSearch(q);
     setFilters((f) => ({ ...f, q: q || undefined }));
+  };
+
+  const saveMutation = useMutation({
+    mutationFn: () => {
+      const extraFilters: SavedSearchFilters = {};
+      if (searchKey.neighborhood) extraFilters.neighborhood = searchKey.neighborhood;
+      if (searchKey.minYear != null) extraFilters.minYear = searchKey.minYear;
+      if (searchKey.maxYear != null) extraFilters.maxYear = searchKey.maxYear;
+      if (searchKey.minKm != null) extraFilters.minKm = searchKey.minKm;
+      if (searchKey.maxKm != null) extraFilters.maxKm = searchKey.maxKm;
+      if (searchKey.minM2 != null) extraFilters.minM2 = searchKey.minM2;
+      if (searchKey.maxM2 != null) extraFilters.maxM2 = searchKey.maxM2;
+      if (searchKey.sort && searchKey.sort !== 'date_desc') extraFilters.sort = searchKey.sort;
+      if (searchKey.urgent) extraFilters.urgent = true;
+      if (searchKey.featured) extraFilters.featured = true;
+      if (searchKey.postedWithin) extraFilters.postedWithin = searchKey.postedWithin;
+      if (searchKey.withPhotos) extraFilters.withPhotos = true;
+      if (searchKey.sellerType) extraFilters.sellerType = searchKey.sellerType;
+      if (searchKey.priceDropped) extraFilters.priceDropped = true;
+
+      return savedSearches.create({
+        name: saveName.trim(),
+        category_slug: searchKey.category ?? null,
+        city: searchKey.city ?? null,
+        district: searchKey.district ?? null,
+        q: searchKey.q ?? null,
+        min_price: searchKey.minPrice ?? null,
+        max_price: searchKey.maxPrice ?? null,
+        filters: Object.keys(extraFilters).length ? extraFilters : undefined,
+        notify: saveNotify,
+      });
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: keys.savedSearches });
+      toast.success('Arama kaydedildi');
+      setSheet(null);
+    },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+
+  const openSaveSheet = () => {
+    if (!requireAuth('Aramayı kaydetmek için giriş yapın.')) return;
+    const baseName = filters.q || params.title || categoryName || filters.city || 'Kayıtlı arama';
+    setSaveName(baseName.trim().slice(0, 80) || 'Kayıtlı arama');
+    setSaveNotify(true);
+    setSheet('save');
   };
 
   const header = (
@@ -165,6 +292,7 @@ export default function ResultsScreen() {
             label={SORTS.find((s) => s.value === filters.sort)?.label ?? 'Sırala'}
             onPress={() => setSheet('sort')}
           />
+          {kayitliAramalar ? <Chip icon={Bookmark} label="Aramayı kaydet" onPress={openSaveSheet} /> : null}
           {filters.category ? (
             <Chip
               label={categoryName ?? 'Kategori'}
@@ -176,11 +304,30 @@ export default function ResultsScreen() {
             <Chip
               label={filters.district ? `${filters.district}, ${filters.city}` : filters.city}
               selected
-              onRemove={() => setFilters((f) => ({ ...f, city: undefined, district: undefined }))}
+              onRemove={() => setFilters((f) => ({ ...f, city: undefined, district: undefined, neighborhood: undefined }))}
+            />
+          ) : null}
+          {filters.neighborhood ? (
+            <Chip label={filters.neighborhood} selected onRemove={() => setFilters((f) => ({ ...f, neighborhood: undefined }))} />
+          ) : null}
+          {filters.postedWithin ? (
+            <Chip
+              label={POSTED_WITHIN_OPTIONS.find((o) => o.value === filters.postedWithin)?.label ?? filters.postedWithin}
+              selected
+              onRemove={() => setFilters((f) => ({ ...f, postedWithin: undefined }))}
+            />
+          ) : null}
+          {filters.sellerType ? (
+            <Chip
+              label={SELLER_TYPE_OPTIONS.find((o) => o.value === filters.sellerType)?.label ?? filters.sellerType}
+              selected
+              onRemove={() => setFilters((f) => ({ ...f, sellerType: undefined }))}
             />
           ) : null}
           {filters.urgent ? <Chip label="Acil" selected onRemove={() => setFilters((f) => ({ ...f, urgent: false }))} /> : null}
           {filters.featured ? <Chip label="Vitrin" selected onRemove={() => setFilters((f) => ({ ...f, featured: false }))} /> : null}
+          {filters.withPhotos ? <Chip label="Fotoğraflı" selected onRemove={() => setFilters((f) => ({ ...f, withPhotos: false }))} /> : null}
+          {filters.priceDropped ? <Chip label="Fiyatı düşen" selected onRemove={() => setFilters((f) => ({ ...f, priceDropped: false }))} /> : null}
         </ScrollView>
       </View>
 
@@ -237,6 +384,39 @@ export default function ResultsScreen() {
             />
           ))}
         </RowGroup>
+      </Sheet>
+      <Sheet
+        visible={sheet === 'save'}
+        onClose={() => setSheet(null)}
+        title="Aramayı kaydet"
+        subtitle="Bu kriterlere uyan yeni ilanlar için bildirim alın"
+      >
+        <Input
+          label="Arama adı"
+          value={saveName}
+          onChangeText={setSaveName}
+          placeholder="Örn. İstanbul iPhone 15"
+          maxLength={80}
+          returnKeyType="done"
+          onSubmitEditing={() => saveName.trim() && !saveMutation.isPending && saveMutation.mutate()}
+        />
+        <RowGroup>
+          <ListRow
+            icon={Bell}
+            label="Yeni ilan bildirimi"
+            detail="Eşleşen yeni ilanlar yayınlandığında bildir"
+            switchValue={saveNotify}
+            onSwitch={setSaveNotify}
+          />
+        </RowGroup>
+        <Button
+          title="Kaydet"
+          icon={Bookmark}
+          loading={saveMutation.isPending}
+          disabled={!saveName.trim()}
+          onPress={() => saveMutation.mutate()}
+          block
+        />
       </Sheet>
     </View>
   );

@@ -21,6 +21,7 @@ import {
 import { getRequest } from "@tanstack/react-start/server";
 import { assertOwnerStatus, assertRenewable, isExpired } from "@/lib/listing-status";
 import { audit } from "./admin/common";
+import { getSellerResponseStats } from "./chat";
 import { assertNotClosing, ListingInput, saveListingRecord } from "./listing-write";
 
 /** True only for a signed-in ADMIN; never throws, so routes can gate on it (e.g. 404 for everyone else). */
@@ -92,7 +93,7 @@ export const updateProfile = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(
     z.object({
-      display_name: z.string().min(2).max(60),
+      display_name: z.string().trim().min(2).max(60),
       phone: z.string().max(20).optional(),
       bio: z.string().max(400).optional(),
       city: z.string().max(40).optional(),
@@ -112,11 +113,23 @@ export const updateProfile = createServerFn({ method: "POST" })
       if (taken[0]) throw new Error(PHONE_UNAVAILABLE);
     }
     // Both clients send the whole form, and an omitted field means "cleared".
-    await sql.query(
-      `update profiles set display_name=$2, phone=$3, bio=$4, city=$5, district=$6
-       where user_id=$1`,
-      [context.userId, data.display_name, phone, data.bio || null, data.city || null, data.district || null],
-    );
+    try {
+      await sql.query(
+        `update profiles set display_name=$2, phone=$3, bio=$4, city=$5, district=$6
+         where user_id=$1`,
+        [context.userId, data.display_name, phone, data.bio || null, data.city || null, data.district || null],
+      );
+    } catch (err) {
+      const pgErr = err as { code?: string; constraint?: string };
+      if (
+        pgErr.code === "23505" &&
+        (pgErr.constraint === "profiles_phone_unique" ||
+          (err instanceof Error && err.message.includes("profiles_phone_unique")))
+      ) {
+        throw new Error("Bu telefon numarası başka bir hesapta kayıtlı.");
+      }
+      throw err;
+    }
     return { ok: true };
   });
 
@@ -206,6 +219,9 @@ export const myListings = createServerFn({ method: "GET" })
     const sql = await getSql();
     const rows = await sql.query<Record<string, unknown>>(
       `select ${listingSelect("", true)}, (l.approved_at is not null) as approved,
+              (select count(*)::int from favorites f where f.listing_id = l.id) as fav_count,
+              (select count(*)::int from conversations cv where cv.listing_id = l.id) as message_count,
+              (select count(*)::int from phone_reveals pr where pr.listing_id = l.id) as phone_reveal_count,
               coalesce((select json_agg(b.kind) from boosts b where b.listing_id = l.id and b.ends_at > now()), '[]'::json) as boosts
        from listings l
        join categories c on c.id = l.category_id
@@ -214,7 +230,13 @@ export const myListings = createServerFn({ method: "GET" })
        where l.user_id = $1 order by l.created_at desc limit 500`,
       [context.userId],
     );
-    return rows.map((row) => ({ ...mapListing(row), approved: Boolean(row.approved) }));
+    return rows.map((row) => ({
+      ...mapListing(row),
+      approved: Boolean(row.approved),
+      fav_count: num(row.fav_count),
+      message_count: num(row.message_count),
+      phone_reveal_count: num(row.phone_reveal_count),
+    }));
   });
 
 export const getListingForEdit = createServerFn({ method: "POST" })
@@ -257,8 +279,8 @@ export const upsertStore = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(
     z.object({
-      name: z.string().min(3).max(60),
-      description: z.string().max(400).optional(),
+      name: z.string().trim().min(3).max(60),
+      description: z.string().trim().max(400).optional(),
       city: z.string().max(40).optional(),
       phone: z.string().optional(),
     }),
@@ -381,13 +403,16 @@ export const getSeller = createServerFn({ method: "POST" })
       [data.id],
     );
     if (!p[0]) return null;
-    const reviews = await sql.query<Record<string, unknown>>(
-      `select r.*, pr.display_name as reviewer_name
-       from reviews r left join profiles pr on pr.user_id = r.reviewer_id
-       where r.seller_id=$1 order by r.created_at desc limit 20`,
-      [data.id],
-    );
-    const store = await sql.query<Record<string, unknown>>("select * from stores where user_id=$1 limit 1", [data.id]);
+    const [reviews, store, responseStats] = await Promise.all([
+      sql.query<Record<string, unknown>>(
+        `select r.*, pr.display_name as reviewer_name
+         from reviews r left join profiles pr on pr.user_id = r.reviewer_id
+         where r.seller_id=$1 order by r.created_at desc limit 20`,
+        [data.id],
+      ),
+      sql.query<Record<string, unknown>>("select * from stores where user_id=$1 limit 1", [data.id]),
+      getSellerResponseStats(sql, data.id),
+    ]);
     return {
       id: String(p[0].user_id),
       name: String(p[0].display_name ?? "Satıcı"),
@@ -398,6 +423,7 @@ export const getSeller = createServerFn({ method: "POST" })
       listing_count: num(p[0].listing_count),
       rating_avg: num(p[0].rating_avg),
       rating_count: num(p[0].rating_count),
+      responseStats,
       store: store[0]
         ? {
             name: String(store[0].name),

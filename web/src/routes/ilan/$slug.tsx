@@ -13,6 +13,7 @@ import {
   Share2,
   ShieldAlert,
   Star,
+  Tag,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -27,7 +28,7 @@ import { cleanPhone, cn, formatDate, formatNumber, formatPhone, formatPrice } fr
 import { REPORT_REASONS } from "@/lib/data/geo";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Select, Textarea } from "@/components/ui/input";
+import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ListingCard } from "@/components/listing/ListingCard";
 import { ListingDetailSkeleton } from "@/components/listing/ListingDetailSkeleton";
@@ -44,6 +45,7 @@ import {
   StatusBanner,
 } from "@/components/listing/detail/ListingSections";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { useFlag } from "@/lib/use-flag";
 
 export const Route = createFileRoute("/ilan/$slug")({
   loader: async ({ params }) => {
@@ -131,8 +133,29 @@ function WhatsAppIcon({ className }: { className?: string }) {
   );
 }
 
+function roundOfferAmount(raw: number): number {
+  if (raw >= 1000) return Math.round(raw / 100) * 100;
+  if (raw >= 100) return Math.round(raw / 10) * 10;
+  return Math.round(raw);
+}
+
+function suggestedOfferChips(listingPrice: number): Array<{ percent: number; amount: number }> {
+  if (!listingPrice || listingPrice <= 0) return [];
+  const seen = new Set<number>();
+  const chips: Array<{ percent: number; amount: number }> = [];
+  for (const percent of [5, 10, 15]) {
+    const amount = roundOfferAmount((listingPrice * (100 - percent)) / 100);
+    if (amount > 0 && amount < listingPrice && !seen.has(amount)) {
+      seen.add(amount);
+      chips.push({ percent, amount });
+    }
+  }
+  return chips;
+}
+
 function ListingPage() {
   const data = Route.useLoaderData();
+  const teklifAcik = useFlag("ilan_teklif_ver");
   const nav = useNavigate();
   const router = useRouter();
   const { user, isPending } = useCurrentUserState();
@@ -145,6 +168,9 @@ function ListingPage() {
   const [msg, setMsg] = useState(QUICK_QUESTIONS[0]);
   const [msgBusy, setMsgBusy] = useState(false);
   const [messageOpen, setMessageOpen] = useState(false);
+  const [offerOpen, setOfferOpen] = useState(false);
+  const [offerValue, setOfferValue] = useState("");
+  const [offerBusy, setOfferBusy] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -161,6 +187,9 @@ function ListingPage() {
   const firstPrice = history[0]?.price ?? listing.price;
   const priceDrop = history.length > 1 && listing.price < firstPrice ? firstPrice - listing.price : 0;
   const whatsapp = phone && show_whatsapp ? whatsappLink(phone, listing.title) : null;
+  const offerChips = suggestedOfferChips(listing.price);
+  const offerAmount = Number(offerValue) || 0;
+  const currencyLabel = listing.currency === "USD" ? "$" : listing.currency === "EUR" ? "€" : "TL";
 
   // Count a view once per page visit, after we know the visitor is not the owner.
   useEffect(() => {
@@ -257,6 +286,27 @@ function ListingPage() {
       toast.error(errorText(err, "Mesaj gönderilemedi"));
     } finally {
       setMsgBusy(false);
+    }
+  }
+
+  function openOfferDialog() {
+    setOfferValue("");
+    setOfferOpen(true);
+  }
+
+  async function onSendOffer(e: FormEvent) {
+    e.preventDefault();
+    if (!requireUser()) return;
+    if (!Number.isInteger(offerAmount) || offerAmount < 1 || offerAmount > 1_000_000_000 || offerBusy) return;
+    setOfferBusy(true);
+    try {
+      const res = await startConversation({ data: { listingId: listing.id, offer: offerAmount } });
+      setOfferOpen(false);
+      void nav({ to: "/mesajlar/$id", params: { id: res.conversationId } });
+    } catch (err) {
+      toast.error(errorText(err, "Teklif gönderilemedi"));
+    } finally {
+      setOfferBusy(false);
     }
   }
 
@@ -475,6 +525,11 @@ function ListingPage() {
                   ) : (
                     <p className="rounded-lg bg-elevated/70 p-3 text-center text-xs text-muted">Satıcı telefon paylaşmıyor; mesajla ulaşabilirsiniz.</p>
                   )}
+                  {teklifAcik && !isOwner && isLive ? (
+                    <Button type="button" variant="outline" className="w-full" onClick={openOfferDialog}>
+                      <Tag className="size-4" /> Teklif ver
+                    </Button>
+                  ) : null}
                   <div>
                     <p className="mb-2 text-sm font-semibold">Satıcıya sor</p>
                     {messageForm}
@@ -489,11 +544,21 @@ function ListingPage() {
           )}
 
           {seller ? (
-            <SellerCard
-              seller={seller}
-              store={store}
-              onReview={review?.eligible ? () => setReviewOpen(true) : undefined}
-            />
+            <div className="space-y-2">
+              <SellerCard
+                seller={seller}
+                store={store}
+                onReview={review?.eligible ? () => setReviewOpen(true) : undefined}
+              />
+              {seller.responseStats ? (
+                <p className="flex items-center gap-1.5 rounded-xl border border-border bg-surface px-4 py-2.5 text-xs font-medium text-ok shadow-card">
+                  <MessageCircle className="size-3.5 shrink-0" aria-hidden="true" />
+                  <span>
+                    Yanıt oranı %{seller.responseStats.responseRate} · Ort. {seller.responseStats.avgReplyMinutes} dk
+                  </span>
+                </p>
+              ) : null}
+            </div>
           ) : null}
 
           <div className="hidden lg:block">
@@ -595,6 +660,11 @@ function ListingPage() {
                   <WhatsAppIcon className="size-5" />
                 </a>
               ) : null}
+              {teklifAcik && !isOwner && isLive ? (
+                <Button type="button" variant="outline" className="shrink-0 whitespace-nowrap px-3" onClick={openOfferDialog}>
+                  <Tag className="size-4" /> Teklif ver
+                </Button>
+              ) : null}
               <Button className="flex-1" onClick={() => requireUser() && setMessageOpen(true)}>
                 <MessageCircle className="size-4" /> Mesaj
               </Button>
@@ -612,6 +682,61 @@ function ListingPage() {
             <DialogDescription className="line-clamp-1">{listing.title}</DialogDescription>
           </DialogHeader>
           {messageForm}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={offerOpen} onOpenChange={(o) => !offerBusy && setOfferOpen(o)}>
+        <DialogContent className="border-border bg-surface sm:max-w-md">
+          <form onSubmit={(e) => void onSendOffer(e)} className="space-y-4">
+            <DialogHeader>
+              <DialogTitle>Teklif ver</DialogTitle>
+              <DialogDescription>
+                {listing.price > 0 ? <>İlan fiyatı {formatPrice(listing.price, listing.currency)}. </> : null}
+                Satıcı teklifinizi kabul edebilir, reddedebilir veya karşı teklif gönderebilir.
+              </DialogDescription>
+            </DialogHeader>
+            <div>
+              <Label htmlFor="listing-offer-amount">Teklifiniz</Label>
+              <div className="relative">
+                <Input
+                  id="listing-offer-amount"
+                  inputMode="numeric"
+                  autoFocus
+                  value={offerValue ? formatNumber(offerValue) : ""}
+                  onChange={(e) =>
+                    setOfferValue(e.target.value.replace(/\D/g, "").replace(/^0+/, "").slice(0, 10))
+                  }
+                  placeholder="0"
+                  className="pr-12 text-lg font-semibold tabular-nums"
+                />
+                <span className="pointer-events-none absolute inset-y-0 right-3 grid place-items-center text-sm font-semibold text-muted">
+                  {currencyLabel}
+                </span>
+              </div>
+              {offerChips.length ? (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {offerChips.map(({ percent, amount }) => (
+                    <button
+                      key={amount}
+                      type="button"
+                      onClick={() => setOfferValue(String(amount))}
+                      className="rounded-full border border-border px-2.5 py-1 text-xs hover:bg-elevated"
+                    >
+                      %{percent} indirim · {formatPrice(amount, listing.currency)}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+            <DialogFooter className="gap-2">
+              <Button type="button" variant="ghost" disabled={offerBusy} onClick={() => setOfferOpen(false)}>
+                Vazgeç
+              </Button>
+              <Button type="submit" disabled={offerBusy || offerAmount < 1 || offerAmount > 1_000_000_000}>
+                {offerBusy ? "Gönderiliyor…" : "Teklifi gönder"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 

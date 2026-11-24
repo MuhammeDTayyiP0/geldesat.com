@@ -27,6 +27,34 @@ const PENDING_KEY = 'geldesat.pendingErrors.v1';
 const MAX_PENDING = 10;
 const sent = new Set<string>();
 let screen: string | undefined;
+let cachedDeviceId: string | undefined;
+let deviceIdInFlight: Promise<string> | null = null;
+let persistQueue: Promise<void> = Promise.resolve();
+
+function getDeviceId(): Promise<string> {
+  if (cachedDeviceId !== undefined) return Promise.resolve(cachedDeviceId);
+  if (!deviceIdInFlight) {
+    deviceIdInFlight = deviceId().then((id) => {
+      cachedDeviceId = id;
+      deviceIdInFlight = null;
+      return id;
+    });
+  }
+  return deviceIdInFlight;
+}
+
+function enqueuePersist(task: () => Promise<void>): Promise<void> {
+  const next = persistQueue.then(task, task);
+  persistQueue = next;
+  return next;
+}
+
+function appendPending(report: Report): Promise<void> {
+  return enqueuePersist(async () => {
+    const pending = await readPending();
+    await AsyncStorage.setItem(PENDING_KEY, JSON.stringify([...pending, report].slice(-MAX_PENDING))).catch(() => undefined);
+  });
+}
 
 /** The route on screen, attached to reports (set from the root layout). */
 export function setErrorScreen(path: string) {
@@ -76,30 +104,30 @@ export async function reportError(error: unknown, options: { fatal?: boolean; sc
     platform: Platform.OS === 'ios' ? 'ios' : 'android',
     appVersion: Constants.expoConfig?.version,
     updateId: Updates.isEmbeddedLaunch ? null : (Updates.updateId ?? null),
-    deviceId: await deviceId(),
+    deviceId: await getDeviceId(),
     fatal: Boolean(options.fatal),
     message,
     stack: err.stack?.slice(0, 4000),
     screen: options.screen ?? screen,
   };
   if (options.fatal) {
-    const pending = await readPending();
-    await AsyncStorage.setItem(PENDING_KEY, JSON.stringify([...pending, report].slice(-MAX_PENDING))).catch(() => undefined);
+    await appendPending(report);
     await flushErrorReports();
     return;
   }
   if (!(await send([report]))) {
-    const pending = await readPending();
-    await AsyncStorage.setItem(PENDING_KEY, JSON.stringify([...pending, report].slice(-MAX_PENDING))).catch(() => undefined);
+    await appendPending(report);
   }
 }
 
 /** Send reports saved by an earlier launch. Called once at startup. */
 export async function flushErrorReports(): Promise<void> {
   if (!enabled()) return;
-  const pending = await readPending();
-  if (!pending.length) return;
-  if (await send(pending)) await AsyncStorage.removeItem(PENDING_KEY).catch(() => undefined);
+  await enqueuePersist(async () => {
+    const pending = await readPending();
+    if (!pending.length) return;
+    if (await send(pending)) await AsyncStorage.removeItem(PENDING_KEY).catch(() => undefined);
+  });
 }
 
 type GlobalHandler = (error: unknown, isFatal?: boolean) => void;

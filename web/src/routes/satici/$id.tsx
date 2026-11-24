@@ -1,6 +1,6 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { BadgeCheck, CalendarDays, Eye, LayoutGrid, MapPin, Pencil, Share2, Star, Store as StoreIcon } from "lucide-react";
+import { BadgeCheck, CalendarDays, Eye, LayoutGrid, MapPin, MessageCircle, Pencil, Share2, Star, Store as StoreIcon } from "lucide-react";
 import { toast } from "sonner";
 import { ProfilePageSkeleton } from "@/components/listing/ListingGridSkeleton";
 import { getSeller, getSellerReviews } from "@/lib/server/account";
@@ -48,7 +48,7 @@ export const Route = createFileRoute("/satici/$id")({
       meta: [
         { title },
         { name: "description", content: desc },
-        { name: "robots", content: "index,follow" },
+        { name: "robots", content: seller.listing_count > 0 || seller.rating_count > 0 ? "index,follow" : "noindex,nofollow" },
         { property: "og:site_name", content: "GeldeSat" },
         { property: "og:locale", content: "tr_TR" },
         { property: "og:type", content: "profile" },
@@ -110,29 +110,41 @@ export const Route = createFileRoute("/satici/$id")({
   component: SellerPage,
 });
 
+const LISTINGS_PAGE_SIZE = 24;
+const REVIEWS_PAGE_SIZE = 20;
+
 /** The one public profile: what everyone sees, with an owner bar when it is your own. */
 function SellerPage() {
   const { seller, listings: firstListings } = Route.useLoaderData();
   const [listings, setListings] = useState(firstListings);
   const [reviews, setReviews] = useState(seller.reviews);
   const [page, setPage] = useState(1);
+  const [hasMoreListings, setHasMoreListings] = useState(
+    firstListings.length >= LISTINGS_PAGE_SIZE && firstListings.length < seller.listing_count,
+  );
+  const [hasMoreReviews, setHasMoreReviews] = useState(
+    seller.reviews.length >= REVIEWS_PAGE_SIZE && seller.reviews.length < seller.rating_count,
+  );
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     setListings(firstListings);
     setReviews(seller.reviews);
     setPage(1);
-  }, [seller.id, firstListings, seller.reviews]);
+    setHasMoreListings(firstListings.length >= LISTINGS_PAGE_SIZE && firstListings.length < seller.listing_count);
+    setHasMoreReviews(seller.reviews.length >= REVIEWS_PAGE_SIZE && seller.reviews.length < seller.rating_count);
+  }, [seller.id, firstListings, seller.reviews, seller.listing_count, seller.rating_count]);
 
   async function moreListings() {
     setBusy(true);
     try {
-      const next = await searchCatalog({ data: { userId: seller.id, limit: 24, page: page + 1 } });
+      const next = await searchCatalog({ data: { userId: seller.id, limit: LISTINGS_PAGE_SIZE, page: page + 1 } });
       setListings((prev) => {
         const seen = new Set(prev.map((l) => l.id));
         return [...prev, ...next.listings.filter((l) => !seen.has(l.id))];
       });
       setPage(page + 1);
+      if (next.listings.length < LISTINGS_PAGE_SIZE) setHasMoreListings(false);
     } catch (err) {
       toast.error(errorText(err, "İlanlar yüklenemedi"));
     } finally {
@@ -145,6 +157,7 @@ function SellerPage() {
     try {
       const next = await getSellerReviews({ data: { id: seller.id, offset: reviews.length } });
       setReviews((prev) => [...prev, ...next]);
+      if (next.length < REVIEWS_PAGE_SIZE) setHasMoreReviews(false);
     } catch (err) {
       toast.error(errorText(err, "Değerlendirmeler yüklenemedi"));
     } finally {
@@ -156,6 +169,7 @@ function SellerPage() {
   const isOwner = user?.id === seller.id;
   const [tab, setTab] = useState<"listings" | "reviews">("listings");
   const store = seller.store;
+  const responseStats = seller.responseStats;
 
   async function share() {
     const url = `${window.location.origin}/satici/${seller.id}`;
@@ -248,6 +262,14 @@ function SellerPage() {
           <li className="inline-flex items-center gap-1.5">
             <LayoutGrid className="size-4 text-subtle" /> {seller.listing_count} yayında ilan
           </li>
+          {responseStats ? (
+            <li className="inline-flex items-center gap-1.5 text-ok">
+              <MessageCircle className="size-4 shrink-0" />
+              <span>
+                Yanıt oranı %{Math.round(responseStats.responseRate)} · Ort. {Math.round(responseStats.avgReplyMinutes)} dk
+              </span>
+            </li>
+          ) : null}
         </ul>
         {store?.description ? <p className="mt-3 max-w-3xl whitespace-pre-wrap text-sm leading-relaxed">{store.description}</p> : null}
         {seller.bio ? <p className="mt-3 max-w-3xl whitespace-pre-wrap text-sm leading-relaxed">{seller.bio}</p> : null}
@@ -281,7 +303,7 @@ function SellerPage() {
             {listings.map((l) => (
               <ListingCard key={l.id} listing={l} />
             ))}
-            {listings.length < seller.listing_count ? (
+            {hasMoreListings && listings.length < seller.listing_count ? (
               <div className="col-span-full flex justify-center pt-2">
                 <Button variant="outline" disabled={busy} onClick={() => void moreListings()}>
                   {busy ? "Yükleniyor…" : "Daha fazla ilan göster"}
@@ -316,7 +338,7 @@ function SellerPage() {
               {r.comment ? <p className="mt-1.5 text-sm text-muted">{r.comment}</p> : null}
             </li>
           ))}
-          {reviews.length < seller.rating_count ? (
+          {hasMoreReviews && reviews.length < seller.rating_count ? (
             <li className="flex justify-center pt-1">
               <Button variant="outline" disabled={busy} onClick={() => void moreReviews()}>
                 {busy ? "Yükleniyor…" : "Daha fazla değerlendirme göster"}

@@ -512,6 +512,7 @@ export const loadOlderMessages = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ conversationId: z.string(), before: z.string() }))
   .handler(async ({ context, data }) => {
+    if (!Number.isFinite(Date.parse(data.before))) return { messages: [], hasMore: false };
     const sql = await getSql();
     const conv = await myConversation(sql, data.conversationId, context.userId);
     const showReads = (await readsVisible(sql, otherOf(conv, context.userId))) && (await readsVisible(sql, context.userId));
@@ -826,3 +827,53 @@ export const saveChatTemplates = createServerFn({ method: "POST" })
     await sql.query("update profiles set chat_templates=$2::jsonb where user_id=$1", [context.userId, JSON.stringify(data.templates)]);
     return data.templates;
   });
+
+type QuerySql = { query<T = Record<string, unknown>>(text: string, params?: unknown[]): Promise<T[]> };
+
+/**
+ * Seller responsiveness over the last 90 days for conversations where the buyer
+ * sent at least one message. Returns null when fewer than 3 conversations qualify.
+ */
+export async function getSellerResponseStats(
+  sql: QuerySql,
+  sellerId: string,
+): Promise<{ responseRate: number; avgReplyMinutes: number } | null> {
+  const rows = await sql.query<{ total: number; replied: number; avg_minutes: number }>(
+    `with conv_incoming as (
+       select c.id, min(m.created_at) as first_in
+       from conversations c
+       join messages m on m.conversation_id = c.id
+       where c.seller_id = $1
+         and m.sender_id <> $1
+         and m.deleted_at is null
+         and m.created_at >= now() - interval '90 days'
+       group by c.id
+     ),
+     conv_replies as (
+       select ci.id,
+              ci.first_in,
+              min(r.created_at) as first_reply
+       from conv_incoming ci
+       left join messages r
+         on r.conversation_id = ci.id
+        and r.sender_id = $1
+        and r.deleted_at is null
+        and r.created_at >= ci.first_in
+       group by ci.id, ci.first_in
+     )
+     select count(*)::int as total,
+            count(first_reply)::int as replied,
+            coalesce(
+              avg(extract(epoch from (first_reply - first_in)) / 60.0) filter (where first_reply is not null),
+              0
+            )::float8 as avg_minutes
+     from conv_replies`,
+    [sellerId],
+  );
+  const row = rows[0];
+  if (!row || row.total < 3) return null;
+  return {
+    responseRate: Math.round((row.replied / row.total) * 100),
+    avgReplyMinutes: Math.max(0, Math.round(row.avg_minutes)),
+  };
+}

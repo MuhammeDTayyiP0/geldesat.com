@@ -13,16 +13,26 @@ import { HASH_PATTERN } from "@/lib/server/ota";
 
 type Cached = { type: string; raw: Buffer; gz: Buffer | null };
 const cache = new Map<string, Cached>();
+const inFlight = new Map<string, Promise<Cached | null>>();
 const CACHE_LIMIT_BYTES = 96 * 1024 * 1024;
 let cacheBytes = 0;
 
+function entryBytes(entry: Cached): number {
+  return entry.raw.byteLength + (entry.gz?.byteLength ?? 0);
+}
+
 function remember(hash: string, entry: Cached) {
+  const prev = cache.get(hash);
+  if (prev) {
+    cache.delete(hash);
+    cacheBytes -= entryBytes(prev);
+  }
   cache.set(hash, entry);
-  cacheBytes += entry.raw.byteLength + (entry.gz?.byteLength ?? 0);
+  cacheBytes += entryBytes(entry);
   for (const [k, v] of cache) {
     if (cacheBytes <= CACHE_LIMIT_BYTES) break;
     cache.delete(k);
-    cacheBytes -= v.raw.byteLength + (v.gz?.byteLength ?? 0);
+    cacheBytes -= entryBytes(v);
   }
 }
 
@@ -36,13 +46,31 @@ export const Route = createFileRoute("/api/ota/assets/$hash")({
         let entry = cache.get(params.hash);
         if (!entry) {
           try {
-            const sql = await getSql();
-            const rows = await sql.query<{ content_type: string; data: Uint8Array }>("select content_type, data from ota_assets where hash = $1", [params.hash]);
-            if (!rows[0]) return new Response(null, { status: 404 });
-            const raw = Buffer.from(rows[0].data);
-            const type = rows[0].content_type;
-            entry = { type, raw, gz: COMPRESSIBLE.test(type) && raw.byteLength > 1024 ? await gzipAsync(raw, { level: 9 }) : null };
-            remember(params.hash, entry);
+            let pending = inFlight.get(params.hash);
+            if (!pending) {
+              pending = (async () => {
+                const sql = await getSql();
+                const rows = await sql.query<{ content_type: string; data: Uint8Array }>(
+                  "select content_type, data from ota_assets where hash = $1",
+                  [params.hash],
+                );
+                if (!rows[0]) return null;
+                const raw = Buffer.from(rows[0].data);
+                const type = rows[0].content_type;
+                const next: Cached = {
+                  type,
+                  raw,
+                  gz: COMPRESSIBLE.test(type) && raw.byteLength > 1024 ? await gzipAsync(raw, { level: 9 }) : null,
+                };
+                remember(params.hash, next);
+                return next;
+              })().finally(() => {
+                inFlight.delete(params.hash);
+              });
+              inFlight.set(params.hash, pending);
+            }
+            entry = (await pending) ?? undefined;
+            if (!entry) return new Response(null, { status: 404 });
           } catch (err) {
             console.error("[ota] asset failed:", err);
             return new Response(null, { status: 500 });

@@ -4,15 +4,80 @@ import { StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useQuery } from '@tanstack/react-query';
-import { KeyRound, LogOut, Mail, UserX } from 'lucide-react-native';
-import { errorMessage } from '@/api/client';
+import { KeyRound, Laptop, LogOut, Mail, Pencil, Smartphone, UserX } from 'lucide-react-native';
+import { ApiError, errorMessage, timedFetch } from '@/api/client';
 import { account } from '@/api/endpoints';
 import { keys, queryClient } from '@/api/queries';
 import { changePassword, requestPasswordReset, sendVerificationEmail, signOut, signOutOtherDevices } from '@/auth/auth';
-import { useSession } from '@/auth/session';
-import { formatDate } from '@/lib/format';
-import { Button, Card, Header, Input, ListRow, RowGroup, Sheet, Text, confirm, space, toast, useTheme } from '@/ui';
+import { getToken, useSession } from '@/auth/session';
+import { API_BASE_URL, SITE_URL } from '@/lib/config';
+import { formatDate, timeAgo } from '@/lib/format';
+import { Badge, Button, Card, Header, Input, ListRow, RowGroup, Sheet, Text, confirm, space, toast, useTheme } from '@/ui';
 import { RequireSignIn } from '@/auth/RequireSignIn';
+
+type AuthSessionPayload = {
+  session?: { id?: string; token?: string };
+  user?: { id?: string; email?: string; emailVerified?: boolean };
+} | null;
+
+type AuthAccount = { id: string; providerId: string };
+
+type AuthSessionRow = {
+  id: string;
+  token: string;
+  userAgent?: string | null;
+  ipAddress?: string | null;
+  updatedAt: string;
+  createdAt: string;
+};
+
+const AUTH_ORIGIN_HEADERS = { Origin: SITE_URL, Referer: `${SITE_URL}/` };
+
+async function authFetch<T>(path: string, body?: unknown): Promise<T> {
+  const token = getToken();
+  const response = await timedFetch(`${API_BASE_URL}/api/auth${path}`, {
+    method: body === undefined ? 'GET' : 'POST',
+    headers: {
+      Accept: 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(body === undefined ? {} : { 'Content-Type': 'application/json', ...AUTH_ORIGIN_HEADERS }),
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  const data = (await response.json().catch(() => null)) as ({ message?: string; error?: string } & T) | null;
+  if (!response.ok) {
+    throw new ApiError(data?.message || data?.error || 'İşlem tamamlanamadı.', response.status);
+  }
+  return (data ?? null) as T;
+}
+
+function deviceLabel(ua: string | null | undefined): { label: string; mobile: boolean } {
+  if (!ua) return { label: 'Bilinmeyen cihaz', mobile: false };
+  const mobile = /Mobile|Android|iPhone|iPad/i.test(ua);
+  const os = /iPhone|iPad/.test(ua)
+    ? 'iOS'
+    : /Android/.test(ua)
+      ? 'Android'
+      : /Windows/.test(ua)
+        ? 'Windows'
+        : /Mac OS/.test(ua)
+          ? 'macOS'
+          : /Linux/.test(ua)
+            ? 'Linux'
+            : '';
+  const browser = /Edg\//.test(ua)
+    ? 'Edge'
+    : /OPR\//.test(ua)
+      ? 'Opera'
+      : /Chrome\//.test(ua)
+        ? 'Chrome'
+        : /Firefox\//.test(ua)
+          ? 'Firefox'
+          : /Safari\//.test(ua)
+            ? 'Safari'
+            : 'Tarayıcı';
+  return { label: [browser, os].filter(Boolean).join(' · '), mobile };
+}
 
 export default function SecuritySettingsScreen() {
   return (
@@ -31,9 +96,27 @@ function SecuritySettings() {
   const [next, setNext] = useState('');
   const [repeat, setRepeat] = useState('');
   const [busy, setBusy] = useState(false);
+  const [revokingToken, setRevokingToken] = useState<string | null>(null);
+  const [emailSheetOpen, setEmailSheetOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const deletion = useQuery({ queryKey: keys.deletion, queryFn: account.deletionStatus });
-  const email = session.status === 'signedIn' ? session.user.email : '';
+  const authSession = useQuery({
+    queryKey: ['auth', 'session'],
+    queryFn: () => authFetch<AuthSessionPayload>('/get-session'),
+  });
+  const accounts = useQuery({
+    queryKey: ['auth', 'accounts'],
+    queryFn: () => authFetch<AuthAccount[]>('/list-accounts'),
+  });
+  const sessions = useQuery({
+    queryKey: ['auth', 'sessions'],
+    queryFn: () => authFetch<AuthSessionRow[]>('/list-sessions'),
+  });
+
+  const email = authSession.data?.user?.email || (session.status === 'signedIn' ? session.user.email : '');
+  const emailVerified = authSession.data?.user?.emailVerified;
+  const hasPassword = accounts.data ? accounts.data.some((a) => a.providerId === 'credential') : true;
+  const currentToken = authSession.data?.session?.token ?? getToken();
 
   const submit = async () => {
     if (next.length < 8) return toast.error('Yeni şifre en az 8 karakter olmalı.');
@@ -44,11 +127,25 @@ function SecuritySettings() {
       setCurrent('');
       setNext('');
       setRepeat('');
+      void queryClient.invalidateQueries({ queryKey: ['auth', 'sessions'] });
       toast.success('Şifreniz değiştirildi. Diğer cihazlardaki oturumlar kapatıldı.');
     } catch (e) {
       toast.error(errorMessage(e));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const revokeSession = async (token: string) => {
+    setRevokingToken(token);
+    try {
+      await authFetch('/revoke-session', { token });
+      toast.success('Oturum kapatıldı');
+      void queryClient.invalidateQueries({ queryKey: ['auth', 'sessions'] });
+    } catch (e) {
+      toast.error(errorMessage(e));
+    } finally {
+      setRevokingToken(null);
     }
   };
 
@@ -85,32 +182,103 @@ function SecuritySettings() {
           </Card>
         ) : null}
 
-        <View style={styles.gap}>
-          <Text variant="subheading">Şifre değiştir</Text>
-          <Input label="Mevcut şifre" secureTextEntry value={current} onChangeText={setCurrent} autoComplete="current-password" textContentType="password" />
-          <Input
-            label="Yeni şifre"
-            secureTextEntry
-            value={next}
-            onChangeText={setNext}
-            autoComplete="new-password"
-            textContentType="newPassword"
-            hint="En az 8 karakter"
+        <RowGroup title="E-posta">
+          <ListRow
+            icon={Mail}
+            label={email || 'E-posta'}
+            right={
+              emailVerified === true ? (
+                <Badge label="Doğrulandı" tone="ok" />
+              ) : emailVerified === false ? (
+                <Badge label="Doğrulanmadı" tone="warn" />
+              ) : undefined
+            }
           />
-          <Input
-            label="Yeni şifre (tekrar)"
-            secureTextEntry
-            value={repeat}
-            onChangeText={setRepeat}
-            autoComplete="new-password"
-            textContentType="newPassword"
-            error={repeat && next !== repeat ? 'Şifreler aynı değil' : null}
-          />
-          <Button title="Şifreyi değiştir" loading={busy} disabled={!current || !next || !repeat} onPress={() => void submit()} />
-          <Text variant="caption" tone="subtle">
-            Google ile giriş yaptıysanız şifreniz yoktur; aşağıdan e-postanıza şifre belirleme bağlantısı isteyebilirsiniz.
-          </Text>
-        </View>
+          <ListRow icon={Pencil} label="E-posta adresini değiştir" onPress={() => setEmailSheetOpen(true)} />
+          {emailVerified === false ? (
+            <ListRow
+              icon={Mail}
+              label="Doğrulama e-postasını tekrar gönder"
+              onPress={async () => {
+                try {
+                  await sendVerificationEmail(email);
+                  toast.success('Doğrulama e-postası gönderildi');
+                } catch (e) {
+                  toast.error(errorMessage(e));
+                }
+              }}
+            />
+          ) : null}
+        </RowGroup>
+
+        {hasPassword ? (
+          <View style={styles.gap}>
+            <Text variant="subheading">Şifre değiştir</Text>
+            <Input label="Mevcut şifre" secureTextEntry value={current} onChangeText={setCurrent} autoComplete="current-password" textContentType="password" />
+            <Input
+              label="Yeni şifre"
+              secureTextEntry
+              value={next}
+              onChangeText={setNext}
+              autoComplete="new-password"
+              textContentType="newPassword"
+              hint="En az 8 karakter"
+            />
+            <Input
+              label="Yeni şifre (tekrar)"
+              secureTextEntry
+              value={repeat}
+              onChangeText={setRepeat}
+              autoComplete="new-password"
+              textContentType="newPassword"
+              error={repeat && next !== repeat ? 'Şifreler aynı değil' : null}
+            />
+            <Button title="Şifreyi değiştir" loading={busy} disabled={!current || !next || !repeat} onPress={() => void submit()} />
+          </View>
+        ) : (
+          <Card style={styles.gap}>
+            <Text variant="subheading">Şifre</Text>
+            <Text variant="caption" tone="muted">
+              Google ile giriş yapıyorsunuz, hesabınızın henüz bir şifresi yok. Aşağıdan e-postanıza şifre belirleme bağlantısı gönderebilirsiniz.
+            </Text>
+          </Card>
+        )}
+
+        <RowGroup title="Açık oturumlar">
+          {sessions.isLoading ? (
+            <ListRow label="Oturumlar yükleniyor…" />
+          ) : sessions.isError ? (
+            <ListRow label="Oturumlar yüklenemedi" detail="Tekrar denemek için dokunun" onPress={() => void sessions.refetch()} />
+          ) : (sessions.data ?? []).length ? (
+            (sessions.data ?? []).map((s) => {
+              const d = deviceLabel(s.userAgent);
+              const isCurrent = !!currentToken && s.token === currentToken;
+              return (
+                <ListRow
+                  key={s.id}
+                  icon={d.mobile ? Smartphone : Laptop}
+                  label={d.label}
+                  detail={`Son yenileme: ${timeAgo(s.updatedAt)}`}
+                  right={
+                    isCurrent ? (
+                      <Badge label="Bu cihaz" tone="primary" />
+                    ) : (
+                      <Button
+                        title="Kapat"
+                        size="sm"
+                        variant="ghost"
+                        loading={revokingToken === s.token}
+                        onPress={() => void revokeSession(s.token)}
+                      />
+                    )
+                  }
+                />
+              );
+            })
+          ) : (
+            <ListRow label="Aktif oturum bulunamadı" />
+          )}
+        </RowGroup>
 
         <RowGroup title="Hesap">
           <ListRow
@@ -121,18 +289,6 @@ function SecuritySettings() {
               try {
                 await requestPasswordReset(email);
                 toast.success('Bağlantı e-postanıza gönderildi');
-              } catch (e) {
-                toast.error(errorMessage(e));
-              }
-            }}
-          />
-          <ListRow
-            icon={Mail}
-            label="Doğrulama e-postasını tekrar gönder"
-            onPress={async () => {
-              try {
-                await sendVerificationEmail(email);
-                toast.success('Doğrulama e-postası gönderildi');
               } catch (e) {
                 toast.error(errorMessage(e));
               }
@@ -151,6 +307,7 @@ function SecuritySettings() {
               if (!ok) return;
               try {
                 await signOutOtherDevices();
+                void queryClient.invalidateQueries({ queryKey: ['auth', 'sessions'] });
                 toast.success('Diğer cihazlardaki oturumlar kapatıldı.');
               } catch (e) {
                 toast.error(errorMessage(e));
@@ -160,6 +317,8 @@ function SecuritySettings() {
           {!purgeAt ? <ListRow icon={UserX} label="Hesabımı sil" danger onPress={() => setDeleteOpen(true)} /> : null}
         </RowGroup>
       </KeyboardAwareScrollView>
+
+      <ChangeEmailSheet visible={emailSheetOpen} onClose={() => setEmailSheetOpen(false)} />
 
       <DeleteAccountSheet
         visible={deleteOpen}
@@ -171,6 +330,56 @@ function SecuritySettings() {
         }}
       />
     </View>
+  );
+}
+
+function ChangeEmailSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const [newEmail, setNewEmail] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    const trimmed = newEmail.trim().toLowerCase();
+    if (!trimmed || !trimmed.includes('@')) return toast.error('Geçerli bir e-posta adresi girin.');
+    setBusy(true);
+    try {
+      await authFetch('/change-email', { newEmail: trimmed, callbackURL: `${SITE_URL}/ayarlar/guvenlik` });
+      toast.success('Onay bağlantısı gönderildi. Değişiklik onaylanınca geçerli olur.');
+      setNewEmail('');
+      onClose();
+    } catch (e) {
+      toast.error(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Sheet
+      visible={visible}
+      onClose={onClose}
+      title="E-posta adresini değiştir"
+      subtitle="Yeni adresinize onay bağlantısı gönderilir."
+      footer={
+        <Button
+          title="Onay bağlantısı gönder"
+          block
+          style={styles.flex}
+          loading={busy}
+          disabled={!newEmail.trim()}
+          onPress={() => void submit()}
+        />
+      }
+    >
+      <Input
+        label="Yeni e-posta adresi"
+        placeholder="ornek@eposta.com"
+        keyboardType="email-address"
+        autoCapitalize="none"
+        autoComplete="email"
+        value={newEmail}
+        onChangeText={setNewEmail}
+      />
+    </Sheet>
   );
 }
 

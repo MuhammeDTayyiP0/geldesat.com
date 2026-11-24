@@ -10,7 +10,7 @@ import { keys, queryClient, useMe } from '@/api/queries';
 import { OptionPicker } from '@/features/location/OptionPicker';
 import { SUPPORT_EMAIL } from '@/lib/config';
 import { cleanPhone, maskPhoneInput } from '@/lib/format';
-import { Button, EmptyState, Header, Input, Loading, SelectField, space, toast, useTheme } from '@/ui';
+import { Button, EmptyState, ErrorState, Header, Input, Loading, SelectField, space, toast, useTheme } from '@/ui';
 import { RequireSignIn } from '@/auth/RequireSignIn';
 
 /** Edit the account's store. Stores are opened by the GeldeSat team, not in the app. */
@@ -50,6 +50,15 @@ function StoreSettings() {
       <View style={{ flex: 1, backgroundColor: c.bg }}>
         <Header title="Mağazam" />
         <Loading />
+      </View>
+    );
+  }
+
+  if (me.isError && !me.data) {
+    return (
+      <View style={{ flex: 1, backgroundColor: c.bg }}>
+        <Header title="Mağazam" />
+        <ErrorState error={me.error} onRetry={() => void me.refetch()} />
       </View>
     );
   }

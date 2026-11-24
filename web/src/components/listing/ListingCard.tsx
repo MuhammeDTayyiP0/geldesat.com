@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { Heart, ImageIcon, MapPin } from "lucide-react";
+import { Heart, ImageIcon, MapPin, Store } from "lucide-react";
 import { useState } from "react";
 import { cn, formatPrice, listingAge, listingHighlights } from "@/lib/utils";
 import type { ListingCard as Listing } from "@/lib/server/helpers";
@@ -107,6 +107,7 @@ export function ListingCard({
         type="button"
         onClick={handleFav}
         disabled={favLoading}
+        aria-pressed={fav}
         aria-label={fav ? "Favorilerden çıkar" : "Favoriye ekle"}
         className="absolute right-0 top-0 z-10 grid size-11 place-items-center transition-transform hover:scale-110 active:scale-95"
       >
@@ -115,6 +116,12 @@ export function ListingCard({
           strokeWidth={2.2}
         />
       </button>
+      {listing.images.length > 1 ? (
+        <span className="pointer-events-none absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full bg-ink/75 px-2 py-0.5 text-[10px] font-semibold text-white tabular-nums backdrop-blur-xs">
+          <ImageIcon className="size-3" />
+          1/{listing.images.length}
+        </span>
+      ) : null}
     </div>
   );
 
@@ -132,6 +139,12 @@ export function ListingCard({
         {listing.title}
       </h3>
       {extra.length ? <p className="truncate text-xs text-muted">{extra.join(" · ")}</p> : null}
+      {listing.store_name ? (
+        <p className="inline-flex min-w-0 items-center gap-1 text-[11px] font-medium text-primary">
+          <Store className="size-3 shrink-0" />
+          <span className="truncate">{listing.store_name}</span>
+        </p>
+      ) : null}
       <div className="mt-auto flex items-center gap-1 pt-1 text-[11px] text-subtle sm:text-xs">
         {place ? <MapPin className="size-3 shrink-0" /> : null}
         <span className="min-w-0 flex-1 truncate">{place || listing.category_name || ""}</span>

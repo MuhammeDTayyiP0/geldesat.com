@@ -18,6 +18,7 @@ import {
   type ListingCard,
 } from "./helpers";
 import { CITY_COORDS } from "@/lib/data/geo";
+import { TURKEY_CITIES } from "@/lib/data/locations";
 import {
   categoryPath,
   getCategoryCounts,
@@ -28,6 +29,7 @@ import {
 } from "./category-cache";
 import { getSessionUser } from "@/lib/auth/verify.server";
 import { getRequest } from "@tanstack/react-start/server";
+import { getSellerResponseStats } from "./chat";
 import { recordListingView } from "./recently-viewed";
 
 const Filters = z.object({
@@ -51,6 +53,10 @@ const Filters = z.object({
   maxM2: z.number().optional(),
   featured: z.boolean().optional(),
   urgent: z.boolean().optional(),
+  postedWithin: z.union([z.enum(["1", "3", "7", "30"]), z.number().int().min(1).max(30)]).optional(),
+  withPhotos: z.boolean().optional(),
+  sellerType: z.enum(["owner", "store"]).optional(),
+  priceDropped: z.boolean().optional(),
   userId: z.string().optional(),
   storeId: z.string().optional(),
 });
@@ -74,7 +80,7 @@ export async function searchListings(f: SearchFilters): Promise<{
   pages: number;
 }> {
   const sql = await getSql();
-  const page = f.page ?? 1;
+  const page = Math.min(Math.max(1, f.page ?? 1), 500);
   const limit = f.limit ?? 20;
   const offset = (page - 1) * limit;
   const conds: string[] = [];
@@ -89,9 +95,10 @@ export async function searchListings(f: SearchFilters): Promise<{
     conds.push("(l.expires_at is null or l.expires_at > now())");
   }
 
-  if (f.q?.trim()) {
+  const qTrimmed = f.q?.trim().slice(0, 200);
+  if (qTrimmed) {
     // Every word must appear somewhere: in the text, or as the listing's category.
-    const term = f.q.trim();
+    const term = qTrimmed;
     const words = foldTr(term).split(/\s+/).filter(Boolean).slice(0, 8);
     const tree = await getCategoryTree();
     const ands: string[] = [];
@@ -136,6 +143,19 @@ export async function searchListings(f: SearchFilters): Promise<{
     conds.push(
       "exists (select 1 from boosts b where b.listing_id = l.id and b.kind = 'ACIL' and b.ends_at > now())",
     );
+  }
+  if (f.postedWithin) {
+    const days = Number(f.postedWithin);
+    if (days > 0) {
+      params.push(days);
+      conds.push(`l.created_at >= now() - make_interval(days => $${params.length})`);
+    }
+  }
+  if (f.withPhotos) conds.push("jsonb_array_length(l.images) > 0");
+  if (f.sellerType === "store") conds.push("l.store_id is not null");
+  else if (f.sellerType === "owner") conds.push("l.store_id is null");
+  if (f.priceDropped) {
+    conds.push("exists (select 1 from price_history ph where ph.listing_id = l.id and ph.price > l.price)");
   }
 
   const jsonNum = (keys: string | string[], op: string, value: number) => {
@@ -315,15 +335,91 @@ function cached<T>(ttlMs: number, load: () => Promise<T>): () => Promise<T> {
 // staleness saves several queries per visit.
 /** Home page rails, the same ones the app shows: urgent, showcase and the newest listings. */
 const homeRails = cached(20_000, async () => {
-  const [urgent, featured, latest] = await Promise.all([
+  const sql = await getSql();
+  const [urgent, featured, latest, priceDroppedRows] = await Promise.all([
     searchListings({ limit: 12, page: 1, sort: "date_desc", urgent: true, skipCount: true }),
     searchListings({ limit: 12, page: 1, sort: "date_desc", featured: true, skipCount: true }),
     searchListings({ limit: 24, page: 1, sort: "newest" }),
+    sql.query<Record<string, unknown>>(
+      `select ${listingSelect("", true)},
+         coalesce((
+           select json_agg(b.kind) from boosts b
+           where b.listing_id = l.id and b.ends_at > now()
+         ), '[]'::json) as boosts
+       from listings l
+       join categories c on c.id = l.category_id
+       left join profiles p on p.user_id = l.user_id
+       left join stores s on s.id = l.store_id
+       where ${liveSql()}
+         and exists (select 1 from price_history ph where ph.listing_id = l.id and ph.price > l.price)
+       order by coalesce(
+         (select max(ph.recorded_at) from price_history ph where ph.listing_id = l.id),
+         l.created_at
+       ) desc, l.created_at desc
+       limit 8`,
+    ),
   ]);
-  return { urgent: urgent.listings, featured: featured.listings, latest: latest.listings, latestPages: latest.pages };
+  return {
+    urgent: urgent.listings,
+    featured: featured.listings,
+    latest: latest.listings,
+    latestPages: latest.pages,
+    priceDropped: priceDroppedRows.map(mapListing),
+  };
 });
 
 export const homeListings = createServerFn({ method: "GET" }).handler(() => homeRails());
+
+/** Lightweight search suggestions: matching categories, cities and exact listing number lookup. */
+export const autocompleteSuggestions = createServerFn({ method: "POST" })
+  .validator(z.object({ q: z.string().trim().max(80) }))
+  .handler(async ({ data }) => {
+    const term = data.q;
+    if (!term) return { categories: [], cities: [], listing: null };
+    const folded = foldTr(term);
+    const tree = await getCategoryTree();
+
+    const categories = tree.rows
+      .filter((c) => foldTr(c.name).includes(folded))
+      .sort((a, b) => {
+        const aStarts = foldTr(a.name).startsWith(folded) ? 0 : 1;
+        const bStarts = foldTr(b.name).startsWith(folded) ? 0 : 1;
+        return aStarts - bStarts || a.name.localeCompare(b.name, "tr");
+      })
+      .slice(0, 6)
+      .map((c) => ({ name: c.name, slug: c.slug }));
+
+    const cities = TURKEY_CITIES
+      .filter((c) => foldTr(c.name).includes(folded))
+      .sort((a, b) => {
+        const aStarts = foldTr(a.name).startsWith(folded) ? 0 : 1;
+        const bStarts = foldTr(b.name).startsWith(folded) ? 0 : 1;
+        return aStarts - bStarts || a.name.localeCompare(b.name, "tr");
+      })
+      .slice(0, 5)
+      .map((c) => c.name);
+
+    let listing: { listing_no: number; title: string; slug: string } | null = null;
+    const listingNo = /^#?\d{1,15}$/.test(term) ? term.replace("#", "") : null;
+    if (listingNo) {
+      const sql = await getSql();
+      const rows = await sql.query<{ listing_no: number; title: string; slug: string }>(
+        `select listing_no, title, slug from listings l
+         where l.listing_no = $1::bigint and ${liveSql()}
+         limit 1`,
+        [listingNo],
+      );
+      if (rows[0]) {
+        listing = {
+          listing_no: num(rows[0].listing_no),
+          title: String(rows[0].title),
+          slug: String(rows[0].slug),
+        };
+      }
+    }
+
+    return { categories, cities, listing };
+  });
 
 /** Live listings per city, for the map and the city list. */
 export const mapCityCounts = createServerFn({ method: "GET" }).handler(async () => {
@@ -393,7 +489,7 @@ export const getListing = createServerFn({ method: "POST" })
         page: 1,
         skipCount: true,
       }).then((r) => r.listings.filter((x) => x.id !== listing.id));
-    const [tree, history, similarNarrow, seller] = await Promise.all([
+    const [tree, history, similarNarrow, seller, responseStats] = await Promise.all([
       getCategoryTree(),
       sql.query<{ price: string | number; recorded_at: string }>(
         "select price, recorded_at from price_history where listing_id = $1 order by recorded_at asc",
@@ -408,6 +504,7 @@ export const getListing = createServerFn({ method: "POST" })
          from profiles p where p.user_id = $1`,
         [listing.user_id],
       ),
+      getSellerResponseStats(sql, listing.user_id),
     ]);
     const path = categoryPath(tree, listing.category_id) as CategoryRow[];
     const filteredSimilar = similarNarrow.length > 0 || listing.price <= 0 ? similarNarrow : await similarOf(false);
@@ -440,6 +537,7 @@ export const getListing = createServerFn({ method: "POST" })
             listing_count: num(seller[0].listing_count),
             rating_avg: num(seller[0].rating_avg),
             rating_count: num(seller[0].rating_count),
+            responseStats,
           }
         : null,
       store: rows[0].store_name

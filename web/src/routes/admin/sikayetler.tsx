@@ -79,6 +79,29 @@ function ReportsPage() {
         <SearchInput value={search.q ?? ""} onChange={(q) => set({ q: q || undefined })} placeholder="Gerekçe, açıklama, ilan veya üye" className="ml-auto w-full sm:w-72" />
       </div>
 
+      {rows.length ? (
+        <div className="mt-3 flex items-center gap-2 px-1">
+          <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-medium text-muted hover:text-fg">
+            <Checkbox
+              label="Tümünü seç"
+              checked={rows.every((r) => selected.has(r.id))}
+              indeterminate={rows.some((r) => selected.has(r.id)) && !rows.every((r) => selected.has(r.id))}
+              onChange={(v) =>
+                setSelected((prev) => {
+                  const next = new Set(prev);
+                  for (const r of rows) {
+                    if (v) next.add(r.id);
+                    else next.delete(r.id);
+                  }
+                  return next;
+                })
+              }
+            />
+            <span>Tümünü seç ({rows.length})</span>
+          </label>
+        </div>
+      ) : null}
+
       <div className="mt-3 space-y-3">
         {query.error && !query.data ? (
           <Card>

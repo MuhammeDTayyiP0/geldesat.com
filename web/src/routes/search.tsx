@@ -17,11 +17,12 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { useViewPreference } from "@/lib/use-view-pref";
 import { getCategory, listCategoryRoots, searchCatalogWithContext } from "@/lib/server/catalog";
-import { attrsToSearch, parseAttrs, parseSearch, toFilters, type CatalogSearch } from "@/lib/search-params";
+import { attrsToSearch, normalizeFilterRanges, parseAttrs, parseSearch, toFilters, type CatalogSearch } from "@/lib/search-params";
 
 import { ListingCard } from "@/components/listing/ListingCard";
 import { Filters, type FilterState } from "@/components/listing/Filters";
 import { ListingGridSkeleton } from "@/components/listing/ListingGridSkeleton";
+import { SaveSearchButton } from "@/components/search/SaveSearchButton";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn, formatNumber } from "@/lib/utils";
@@ -53,7 +54,7 @@ export const Route = createFileRoute("/search")({
     const [requestedCategory, categoryData, { result, inferredCategorySlug }] = await Promise.all([
       deps.category ? getCategory({ data: { slug: deps.category } }) : null,
       listCategoryRoots(),
-      searchCatalogWithContext({ data: toFilters({ ...deps, neighborhood: undefined }) }),
+      searchCatalogWithContext({ data: toFilters(deps) }),
     ]);
     const categoryContext = requestedCategory?.category
       ? requestedCategory
@@ -126,6 +127,7 @@ function SearchPage() {
       category: search.category,
       city: search.city,
       district: search.district,
+      neighborhood: search.neighborhood,
       minPrice: search.minPrice,
       maxPrice: search.maxPrice,
       sort: search.sort ?? "date_desc",
@@ -135,6 +137,10 @@ function SearchPage() {
       maxKm: search.maxKm,
       minM2: search.minM2,
       maxM2: search.maxM2,
+      postedWithin: search.postedWithin,
+      withPhotos: search.withPhotos,
+      sellerType: search.sellerType,
+      priceDropped: search.priceDropped,
       attrs,
     };
   }, [search]);
@@ -183,7 +189,7 @@ function SearchPage() {
       category: filters.category,
       city: filters.city,
       district: filters.district,
-      neighborhood: undefined,
+      neighborhood: filters.neighborhood,
       minPrice: filters.minPrice,
       maxPrice: filters.maxPrice,
       sort: filters.sort,
@@ -193,6 +199,10 @@ function SearchPage() {
       maxKm: filters.maxKm,
       minM2: filters.minM2,
       maxM2: filters.maxM2,
+      postedWithin: filters.postedWithin,
+      withPhotos: filters.withPhotos,
+      sellerType: filters.sellerType,
+      priceDropped: filters.priceDropped,
       attrs: attrsToSearch(filters.attrs),
       page: "1",
       ...extra,
@@ -253,7 +263,7 @@ function SearchPage() {
     activeChips.push({
       id: "city",
       label: `İl: ${search.city}`,
-      onRemove: () => removeFromSearch({ city: undefined, district: undefined }),
+      onRemove: () => removeFromSearch({ city: undefined, district: undefined, neighborhood: undefined }),
     });
   }
 
@@ -261,7 +271,15 @@ function SearchPage() {
     activeChips.push({
       id: "district",
       label: `İlçe: ${search.district}`,
-      onRemove: () => removeFromSearch({ district: undefined }),
+      onRemove: () => removeFromSearch({ district: undefined, neighborhood: undefined }),
+    });
+  }
+
+  if (search.neighborhood) {
+    activeChips.push({
+      id: "neighborhood",
+      label: `Mahalle: ${search.neighborhood}`,
+      onRemove: () => removeFromSearch({ neighborhood: undefined }),
     });
   }
 
@@ -305,6 +323,31 @@ function SearchPage() {
 
   if (search.featured) {
     activeChips.push({ id: "featured", label: "Vitrin ilanları", onRemove: () => removeFromSearch({ featured: undefined }) });
+  }
+
+  if (search.postedWithin) {
+    const labels: Record<string, string> = { "1": "Son 24 saat", "3": "Son 3 gün", "7": "Son 7 gün", "30": "Son 30 gün" };
+    activeChips.push({
+      id: "postedWithin",
+      label: labels[search.postedWithin] ?? `Son ${search.postedWithin} gün`,
+      onRemove: () => removeFromSearch({ postedWithin: undefined }),
+    });
+  }
+
+  if (search.sellerType) {
+    activeChips.push({
+      id: "sellerType",
+      label: search.sellerType === "store" ? "Mağazadan" : "Sahibinden",
+      onRemove: () => removeFromSearch({ sellerType: undefined }),
+    });
+  }
+
+  if (search.withPhotos) {
+    activeChips.push({ id: "withPhotos", label: "Sadece fotoğraflı", onRemove: () => removeFromSearch({ withPhotos: undefined }) });
+  }
+
+  if (search.priceDropped) {
+    activeChips.push({ id: "priceDropped", label: "Fiyatı düşenler", onRemove: () => removeFromSearch({ priceDropped: undefined }) });
   }
 
   if (search.sort && search.sort !== "date_desc") {
@@ -442,6 +485,12 @@ function SearchPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          <SaveSearchButton
+            search={search}
+            categoryName={currentCategory && !categoryInferred ? currentCategory.name : undefined}
+            className="rounded-lg text-xs font-semibold"
+          />
+
           {/* Masaüstü Filtre Temizle */}
           {activeFilterCount > 0 ? (
             <button
@@ -613,7 +662,7 @@ function SearchPage() {
       </div>
 
       {/* 6. Mobil Kayan / Yapışkan Eylem Çubuğu (Floating Sticky Bar) */}
-      <div className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] left-1/2 z-30 flex -translate-x-1/2 items-center gap-1 rounded-full border border-border bg-surface/95 p-1.5 shadow-2xl backdrop-blur-md lg:hidden">
+      <div className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] md:bottom-4 left-1/2 z-30 flex -translate-x-1/2 items-center gap-1 rounded-full border border-border bg-surface/95 p-1.5 shadow-2xl backdrop-blur-md lg:hidden">
         <button
           type="button"
           onClick={openFilterDrawer}
@@ -708,7 +757,14 @@ function SearchPage() {
 
             {/* Yapışkan Alt Eylem */}
             <div className="border-t border-border bg-surface p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-lift">
-              <Button className="h-11 w-full text-sm font-semibold rounded-xl" onClick={() => apply()}>
+              <Button
+                className="h-11 w-full text-sm font-semibold rounded-xl"
+                onClick={() => {
+                  const checked = normalizeFilterRanges(filters);
+                  setFilters(checked);
+                  apply(undefined, checked);
+                }}
+              >
                 Filtreleri Uygula
               </Button>
             </div>

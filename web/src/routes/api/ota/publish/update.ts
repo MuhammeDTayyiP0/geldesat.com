@@ -68,6 +68,31 @@ export const Route = createFileRoute("/api/ota/publish/update")({
             );
           }
         });
+        try {
+          const summary = `Uygulama güncellemesi yayınlandı (${data.runtimeVersion}, ${data.channel}, %${data.rollout})${data.message ? ` — ${data.message}` : ""}`.slice(0, 500);
+          await sql.query(
+            `insert into admin_audit_log (id, admin_id, action, target_type, target_id, summary, meta)
+             values ($1, $2, $3, $4, $5, $6, $7::jsonb)`,
+            [
+              newId("aud"),
+              "script",
+              "ota.publish",
+              "system",
+              groupId,
+              summary,
+              JSON.stringify({
+                runtimeVersion: data.runtimeVersion,
+                channel: data.channel,
+                platforms: bundles.map(([p]) => p),
+                rollout: data.rollout,
+                critical: data.critical,
+                message: data.message || undefined,
+              }),
+            ],
+          );
+        } catch (err) {
+          console.error("[ota] audit write failed", err);
+        }
         return Response.json({ success: true, groupId, ids });
       },
     },

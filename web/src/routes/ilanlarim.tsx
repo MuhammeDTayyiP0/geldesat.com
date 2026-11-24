@@ -4,7 +4,7 @@ import { useFlag } from "@/lib/use-flag";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { errorText } from "@/lib/error-text";
 import { useEffect, useMemo, useState } from "react";
-import { CircleCheck, Eye, EyeOff, ImageIcon, LayoutGrid, MoreVertical, Pencil, Plus, RefreshCw, Rocket, Trash2 } from "lucide-react";
+import { CircleCheck, Eye, EyeOff, Heart, ImageIcon, LayoutGrid, MessageCircle, MoreVertical, Pencil, Phone, Plus, RefreshCw, Rocket, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { deleteListing, myListings, renewListing, setListingStatus } from "@/lib/server/account";
 import { RedirectToSignIn } from "@/lib/auth/gates";
@@ -23,7 +23,8 @@ import {
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { photoSrc } from "@/lib/images";
 import { cn, formatDate, formatNumber, formatPrice, isListingExpired, listingStatusLabel } from "@/lib/utils";
-import type { ListingCard as Listing } from "@/lib/server/helpers";
+
+type MyListing = Awaited<ReturnType<typeof myListings>>[number];
 
 export const Route = createFileRoute("/ilanlarim")({
   head: () => ({
@@ -46,7 +47,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "rejected", label: "Reddedilen" },
 ];
 
-function tabOf(l: Listing): Tab {
+function tabOf(l: MyListing): Tab {
   if (l.status === "PENDING") return "pending";
   if (l.status === "SOLD") return "sold";
   if (l.status === "REJECTED") return "rejected";
@@ -60,11 +61,12 @@ function daysLeft(iso: string | null): number | null {
 }
 
 function Mine() {
+  const istatistikler = useFlag("satici_istatistikleri");
   const { user, isPending } = useCurrentUserState();
-  const [rows, setRows] = useState<Listing[] | null>(null);
+  const [rows, setRows] = useState<MyListing[] | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const [tab, setTab] = useState<Tab>("live");
-  const [toDelete, setToDelete] = useState<Listing | null>(null);
+  const [toDelete, setToDelete] = useState<MyListing | null>(null);
   const [busy, setBusy] = useState(false);
 
   function reload() {
@@ -85,9 +87,20 @@ function Mine() {
   }, [user]);
 
   const groups = useMemo(() => {
-    const map: Record<Tab, Listing[]> = { live: [], pending: [], off: [], sold: [], rejected: [] };
+    const map: Record<Tab, MyListing[]> = { live: [], pending: [], off: [], sold: [], rejected: [] };
     for (const l of rows ?? []) map[tabOf(l)].push(l);
     return map;
+  }, [rows]);
+
+  const totals = useMemo(() => {
+    const acc = { views: 0, favs: 0, messages: 0, phones: 0 };
+    for (const l of rows ?? []) {
+      acc.views += l.view_count;
+      acc.favs += l.fav_count;
+      acc.messages += l.message_count;
+      acc.phones += l.phone_reveal_count;
+    }
+    return acc;
   }, [rows]);
 
   if (!isPending && !user) return <RedirectToSignIn />;
@@ -119,6 +132,32 @@ function Mine() {
       }
     >
       {loadFailed ? <ErrorState message="İlanlarınız yüklenemedi." onRetry={reload} /> : null}
+      {istatistikler && !loadFailed && rows && rows.length > 0 ? (
+        <dl
+          aria-label="Toplam ilan istatistikleri"
+          className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4"
+        >
+          {[
+            { label: "Toplam Görüntülenme", value: totals.views, icon: Eye },
+            { label: "Favori", value: totals.favs, icon: Heart },
+            { label: "Mesaj", value: totals.messages, icon: MessageCircle },
+            { label: "Telefon", value: totals.phones, icon: Phone },
+          ].map(({ label, value, icon: Icon }) => (
+            <div
+              key={label}
+              className="flex items-center gap-2.5 rounded-xl border border-border bg-surface px-3 py-2.5"
+            >
+              <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+                <Icon className="size-4" aria-hidden="true" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <dt className="truncate text-[11px] text-muted">{label}</dt>
+                <dd className="text-sm font-semibold tabular-nums text-fg">{formatNumber(value)}</dd>
+              </div>
+            </div>
+          ))}
+        </dl>
+      ) : null}
       <div aria-label="İlan durumu" className={cn(loadFailed && "hidden", "-mx-1 mb-3 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden")}>
         {TABS.map((t) => {
           const n = groups[t.key].length;
@@ -167,6 +206,7 @@ function Mine() {
               key={l.id}
               listing={l}
               busy={busy}
+              showStats={istatistikler}
               onStatus={(status, done) => void act(() => setListingStatus({ data: { id: l.id, status } }), done)}
               onRenew={() => void act(() => renewListing({ data: { id: l.id } }), "İlan süresi 30 gün uzatıldı")}
               onDelete={() => setToDelete(l)}
@@ -208,12 +248,14 @@ function Mine() {
 function MyListingRow({
   listing: l,
   busy,
+  showStats,
   onStatus,
   onRenew,
   onDelete,
 }: {
-  listing: Listing;
+  listing: MyListing;
   busy: boolean;
+  showStats: boolean;
   onStatus: (status: "ACTIVE" | "INACTIVE" | "SOLD", done: string) => void;
   onRenew: () => void;
   onDelete: () => void;
@@ -242,13 +284,35 @@ function MyListingRow({
         <p className="font-semibold text-primary tabular-nums">{formatPrice(l.price, l.currency)}</p>
         <div className="flex flex-wrap items-center gap-2">
           <Badge tone={tone}>{listingStatusLabel(l.status, expired)}</Badge>
-          <span className="text-xs text-subtle">{formatNumber(l.view_count)} görüntülenme</span>
+          {!showStats ? (
+            <span className="text-xs text-subtle">{formatNumber(l.view_count)} görüntülenme</span>
+          ) : null}
           {l.expires_at && l.status === "ACTIVE" ? (
             <span className={cn("text-xs", expired ? "text-warn" : "text-subtle")}>
               {expired ? "Bitti" : "Bitiş"}: {formatDate(l.expires_at)}
             </span>
           ) : null}
         </div>
+        {showStats ? (
+          <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+            {[
+              { label: "Görüntülenme", value: l.view_count, icon: Eye },
+              { label: "Favori", value: l.fav_count, icon: Heart },
+              { label: "Mesaj", value: l.message_count, icon: MessageCircle },
+              { label: "Telefon", value: l.phone_reveal_count, icon: Phone },
+            ].map(({ label, value, icon: Icon }) => (
+              <span
+                key={label}
+                title={label}
+                aria-label={`${label}: ${formatNumber(value)}`}
+                className="inline-flex items-center gap-1 rounded-md bg-elevated px-2 py-0.5 text-xs tabular-nums text-muted"
+              >
+                <Icon className="size-3 text-subtle" aria-hidden="true" />
+                {formatNumber(value)}
+              </span>
+            ))}
+          </div>
+        ) : null}
         {l.status === "PENDING" ? <p className="text-xs text-warn">İnceleme bitince yayına alınır.</p> : null}
         {live && left != null && left > 0 && left <= 7 ? <p className="text-xs text-warn">{left} gün içinde süresi doluyor</p> : null}
         {expired && l.status === "ACTIVE" ? (

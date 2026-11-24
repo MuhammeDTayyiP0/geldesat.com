@@ -2,14 +2,20 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import {
   ChevronDown,
   ChevronRight,
+  Hash,
   History,
+  LayoutGrid,
+  MapPin,
   Search,
   TrendingUp,
   X,
 } from "lucide-react";
 import React, { useEffect, useId, useRef, useState } from "react";
+import { autocompleteSuggestions } from "@/lib/server/catalog";
 import { cn } from "@/lib/utils";
 import { MAIN_NAV_CATEGORIES, POPULAR_SEARCH_TERMS, RECENT_SEARCHES_KEY } from "./nav-data";
+
+type AutocompleteData = Awaited<ReturnType<typeof autocompleteSuggestions>>;
 
 export function AutocompleteSearchBar({
   onSearchSubmit,
@@ -29,9 +35,34 @@ export function AutocompleteSearchBar({
   const [isOpen, setIsOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const [suggestions, setSuggestions] = useState<AutocompleteData | null>(null);
 
   // Shows the search being looked at, like /search?q=araba.
   useEffect(() => setQuery(initialQuery), [initialQuery]);
+
+  const trimmedQuery = query.trim();
+
+  // Debounced live autocomplete suggestions (categories, cities, #İlan No)
+  useEffect(() => {
+    if (!isOpen || trimmedQuery.length === 0) {
+      setSuggestions(null);
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void autocompleteSuggestions({ data: { q: trimmedQuery } })
+        .then((res) => {
+          if (!cancelled) setSuggestions((res as AutocompleteData | null) ?? null);
+        })
+        .catch(() => {
+          if (!cancelled) setSuggestions(null);
+        });
+    }, 200);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [trimmedQuery, isOpen]);
 
   // localStorage'dan geçmiş aramaları yükle
   useEffect(() => {
@@ -112,11 +143,14 @@ export function AutocompleteSearchBar({
     executeSearch(query);
   }
 
-  // Dinamik öneriler: Kullanıcı yazarken eşleşen popüler kelimeler ve kategoriler
-  const trimmedQ = query.trim().toLocaleLowerCase("tr");
+  // Dinamik öneriler: Kullanıcı yazarken eşleşen popüler kelimeler ve sunucu önerileri
+  const trimmedQ = trimmedQuery.toLocaleLowerCase("tr");
   const filteredPopular = trimmedQ
     ? POPULAR_SEARCH_TERMS.filter((t) => t.toLocaleLowerCase("tr").includes(trimmedQ))
     : POPULAR_SEARCH_TERMS.slice(0, 6);
+  const suggestedCategories = trimmedQ ? (suggestions?.categories ?? []).slice(0, 5) : [];
+  const suggestedCities = trimmedQ ? (suggestions?.cities ?? []).slice(0, 4) : [];
+  const directListing = trimmedQ ? (suggestions?.listing ?? null) : null;
 
   return (
     <div ref={containerRef} className={cn("relative w-full", className)}>
@@ -130,12 +164,11 @@ export function AutocompleteSearchBar({
             aria-label="Kategori filtresi"
           >
             <option value="all">Tüm Kategoriler</option>
-            <option value="emlak">Emlak</option>
-            <option value="vasita">Vasıta</option>
-            <option value="alisveris">İkinci El Alışveriş</option>
-            <option value="yedek-parca">Yedek Parça</option>
-            <option value="hizmetler">Hizmetler</option>
-            <option value="is-ilanlari">İş İlanları</option>
+            {MAIN_NAV_CATEGORIES.map((cat) => (
+              <option key={cat.id} value={cat.slug}>
+                {cat.name}
+              </option>
+            ))}
           </select>
           <ChevronDown className="pointer-events-none absolute right-2 size-3 text-muted" />
         </div>
@@ -198,8 +231,29 @@ export function AutocompleteSearchBar({
           className="absolute left-0 right-0 top-full mt-1.5 z-50 max-h-[70dvh] overflow-y-auto bg-surface rounded-xl border border-border shadow-lift overflow-hidden divide-y divide-border/60 animate-in fade-in-50 zoom-in-95 duration-100"
         >
           {/* 1. Canlı Arama Hedefleri (Kullanıcı bir şey yazıyorsa) */}
-          {query.trim().length > 0 && (
-            <div className="p-2 bg-elevated/40">
+          {trimmedQuery.length > 0 && (
+            <div className="p-2 bg-elevated/40 space-y-1">
+              {directListing ? (
+                <Link
+                  to="/ilan/$slug"
+                  params={{ slug: directListing.slug }}
+                  onClick={() => {
+                    setIsOpen(false);
+                    onSearchSubmit?.();
+                  }}
+                  className="flex items-center justify-between gap-2 px-3 py-2 text-sm text-left bg-primary/8 hover:bg-primary/14 rounded-lg transition-colors group"
+                >
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <Hash className="size-4 shrink-0 text-primary" />
+                    <span className="shrink-0 rounded bg-primary-solid px-1.5 py-0.5 text-[11px] font-bold text-primary-fg tabular-nums">
+                      #{directListing.listing_no}
+                    </span>
+                    <span className="truncate font-medium text-fg">{directListing.title}</span>
+                  </div>
+                  <ChevronRight className="size-4 shrink-0 text-muted group-hover:translate-x-0.5 transition-transform" />
+                </Link>
+              ) : null}
+
               <button
                 type="button"
                 onClick={() => executeSearch(query)}
@@ -215,7 +269,7 @@ export function AutocompleteSearchBar({
               </button>
 
               {/* Kategori Bazlı Hızlı Arama Butonları */}
-              <div className="mt-1 flex flex-wrap gap-1.5 px-3">
+              <div className="flex flex-wrap gap-1.5 px-3 pt-0.5">
                 <span className="text-[11px] text-muted font-medium self-center mr-1">Kategoride:</span>
                 {["emlak", "vasita", "alisveris"].map((cSlug) => {
                   const cat = MAIN_NAV_CATEGORIES.find((c) => c.slug === cSlug);
@@ -233,6 +287,66 @@ export function AutocompleteSearchBar({
                   );
                 })}
               </div>
+            </div>
+          )}
+
+          {/* Eşleşen Kategoriler & İller (Sunucu Autocomplete) */}
+          {(suggestedCategories.length > 0 || suggestedCities.length > 0) && (
+            <div className="p-2 space-y-2">
+              {suggestedCategories.length > 0 ? (
+                <div>
+                  <p className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted">Kategoriler</p>
+                  <div className="space-y-0.5">
+                    {suggestedCategories.map((cat) => (
+                      <Link
+                        key={cat.slug}
+                        to="/category/$slug"
+                        params={{ slug: cat.slug }}
+                        onClick={() => {
+                          setIsOpen(false);
+                          onSearchSubmit?.();
+                        }}
+                        className="flex items-center justify-between gap-2 px-3 py-1.5 text-sm text-fg hover:bg-elevated rounded-lg transition-colors"
+                      >
+                        <span className="flex min-w-0 items-center gap-2.5">
+                          <LayoutGrid className="size-3.5 shrink-0 text-primary" />
+                          <span className="truncate">{cat.name}</span>
+                        </span>
+                        <span className="shrink-0 text-[11px] text-muted">Kategori</span>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {suggestedCities.length > 0 ? (
+                <div>
+                  <p className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted">Konumlar</p>
+                  <div className="space-y-0.5">
+                    {suggestedCities.map((city) => (
+                      <Link
+                        key={city}
+                        to="/search"
+                        search={{
+                          city,
+                          ...(selectedCategory !== "all" ? { category: selectedCategory } : {}),
+                        }}
+                        onClick={() => {
+                          setIsOpen(false);
+                          onSearchSubmit?.();
+                        }}
+                        className="flex items-center justify-between gap-2 px-3 py-1.5 text-sm text-fg hover:bg-elevated rounded-lg transition-colors"
+                      >
+                        <span className="flex min-w-0 items-center gap-2.5">
+                          <MapPin className="size-3.5 shrink-0 text-primary" />
+                          <span className="truncate">{city}</span>
+                        </span>
+                        <span className="shrink-0 text-[11px] text-muted">Şehir</span>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
           )}
 

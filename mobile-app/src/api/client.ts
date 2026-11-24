@@ -59,7 +59,12 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 20_000);
-  options.signal?.addEventListener('abort', () => controller.abort());
+  const onAbort = () => controller.abort();
+  if (options.signal?.aborted) {
+    controller.abort();
+  } else {
+    options.signal?.addEventListener('abort', onAbort);
+  }
 
   let response: Response;
   try {
@@ -74,6 +79,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     throw new ApiError(NETWORK_ERROR, 0);
   } finally {
     clearTimeout(timeout);
+    options.signal?.removeEventListener('abort', onAbort);
   }
 
   const data = (await response.json().catch(() => null)) as

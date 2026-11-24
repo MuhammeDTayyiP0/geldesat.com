@@ -1,4 +1,3 @@
-import { useMemo } from 'react';
 import { Platform, StyleSheet, useColorScheme } from 'react-native';
 import { useThemePref } from '@/lib/themePref';
 
@@ -94,15 +93,6 @@ export function useTheme(): Theme {
   const pref = useThemePref();
   const isDark = pref === 'system' ? scheme === 'dark' : pref === 'dark';
   return isDark ? { dark: true, c: dark } : { dark: false, c: light };
-}
-
-/**
- * Theme-aware StyleSheet: `const s = useStyles(makeStyles)` with
- * `const makeStyles = (c: Colors) => StyleSheet.create({...})` at module level.
- */
-export function useStyles<T>(factory: (c: Colors, isDark: boolean) => T): T {
-  const { c, dark: isDark } = useTheme();
-  return useMemo(() => factory(c, isDark), [factory, c, isDark]);
 }
 
 export function shadow(level: 1 | 2 = 1) {

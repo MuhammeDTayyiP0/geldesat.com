@@ -3,17 +3,18 @@ import { getSql } from "@/lib/db";
 import { CITY_COORDS } from "@/lib/data/geo";
 import { cleanAttrs, type AttrValues } from "@/lib/listing-attrs";
 import { needsReReview, sameAttrs } from "@/lib/listing-status";
-import { asJson, listingSlug, newId, num } from "@/lib/utils";
+import { asJson, formatPrice, listingSlug, newId, num } from "@/lib/utils";
 import { inheritedAttributes, ensureProfile, rateLimit, assertImages, notify, normalizeTrPhone } from "./helpers";
 import { deleteUnusedListingImages } from "./upload.server";
 import { getAppConfig } from "./config";
 import { audit } from "./admin/common";
+import { notifyMatchingSavedSearches } from "./saved-searches";
 
 export const ListingInput = z.object({
   id: z.string().optional(),
   categoryId: z.string(),
-  title: z.string().min(5).max(100),
-  description: z.string().min(10).max(5000),
+  title: z.string().trim().min(5).max(100),
+  description: z.string().trim().min(10).max(5000),
   price: z.number().min(1).max(1_000_000_000),
   city: z.string().min(1).max(60),
   district: z.string().min(1).max(60),
@@ -77,9 +78,10 @@ export async function saveListingRecord(userId: string, data: ListingInputData) 
   const ids = added.flatMap((image) => image.match(/^\/api\/mobile\/images\/([0-9a-f-]{36})$/i)?.[1] ?? []);
   const keys = added.flatMap((image) => image.match(/^\/uploads\/([^/]+)$/)?.[1] ?? []);
   if (ids.length || keys.length) {
+    const allowedOwners = isAdmin && ownerId !== userId ? [ownerId, userId] : [ownerId];
     const owned = await sql.query<{ n: number }>(
-      "select count(*)::int as n from mobile_listing_images where user_id=$1 and (id=any($2::text[]) or storage_key=any($3::text[]))",
-      [ownerId, ids, keys],
+      "select count(*)::int as n from mobile_listing_images where user_id = any($1::text[]) and (id=any($2::text[]) or storage_key=any($3::text[]))",
+      [allowedOwners, ids, keys],
     );
     if ((owned[0]?.n ?? 0) !== new Set([...ids, ...keys]).size) {
       throw new Error("Fotoğraflarınızdan biri bulunamadı. Lütfen yeniden yükleyin.");
@@ -95,7 +97,7 @@ export async function saveListingRecord(userId: string, data: ListingInputData) 
     [data.categoryId],
   );
   if (photoNeed.length && !data.images.length) throw new Error("Emlak ve vasıta ilanlarında en az 1 fotoğraf zorunludur.");
-  const cat = await sql.query<{ id: string }>("select id from categories where id = $1", [data.categoryId]);
+  const cat = await sql.query<{ id: string; slug: string }>("select id, slug from categories where id = $1", [data.categoryId]);
   if (!cat[0]) throw new Error("Kategori bulunamadı");
   const attrRules = await inheritedAttributes(data.categoryId);
   const attrs = cleanAttrs(data.attrs, attrRules, asJson<AttrValues>(existing?.attrs, {}));
@@ -144,6 +146,27 @@ export async function saveListingRecord(userId: string, data: ListingInputData) 
     if (existing.status === "REJECTED" || reReview) {
       await notify(ownerId,"listing","İlanınız tekrar incelemede","Düzenlenen ilan onay kuyruğuna alındı.",`/ilan/${slug}`);
     }
+    if (existing.status === "ACTIVE" && nextStatus === "ACTIVE" && data.price < num(existing.price)) {
+      void sql
+        .query<{ user_id: string }>(
+          "select user_id from favorites where listing_id=$1 and user_id<>$2 limit 500",
+          [data.id, ownerId],
+        )
+        .then((favs) =>
+          Promise.allSettled(
+            favs.map(({ user_id: uid }) =>
+              notify(
+                uid,
+                "favorite",
+                "Favori ilanınızda fiyat düştü",
+                `${data.title} — ${formatPrice(data.price, "TRY")}`,
+                `/ilan/${slug}`,
+              ),
+            ),
+          ),
+        )
+        .catch((err) => console.warn("[listing-write] price drop notify failed", err));
+    }
     return { id: data.id, slug, status: nextStatus };
   }
 
@@ -186,5 +209,17 @@ export async function saveListingRecord(userId: string, data: ListingInputData) 
     throw error;
   });
   if (typeof status === "object") return status.winner;
+  if (status === "ACTIVE") {
+    void notifyMatchingSavedSearches(sql, {
+      id,
+      title: data.title,
+      slug,
+      userId,
+      categorySlug: cat[0].slug,
+      city: data.city || null,
+      district: data.district || null,
+      price: data.price,
+    }).catch((err) => console.warn("[saved-searches] notify failed", err));
+  }
   return { id, slug, status };
 }

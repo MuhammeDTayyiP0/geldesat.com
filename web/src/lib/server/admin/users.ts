@@ -304,7 +304,6 @@ export const adminBanUser = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     if (data.userId === context.adminId) throw new Error("Kendi hesabınızı askıya alamazsınız.");
     const sql = await getSql();
-    if ((await targetProfile(sql, data.userId)).role === "ADMIN") throw new Error("Önce yönetici yetkisini kaldırın.");
     const t = await targetProfile(sql, data.userId);
     if (t.role === "ADMIN") throw new Error("Yönetici hesabı askıya alınamaz. Önce rolünü üyeye çevirin.");
     const hidden = await sql.transaction(async (tx) => {

@@ -370,7 +370,7 @@ export function buildListingSeo(input: ListingSeoInput): ListingSeoOutput {
     price: listing.price,
     ...(priceValidUntil ? { priceValidUntil } : {}),
     availability:
-      listing.status === "ACTIVE"
+      isListingIndexable(listing.status, listing.expires_at)
         ? "https://schema.org/InStock"
         : "https://schema.org/OutOfStock",
     url: pageUrl,

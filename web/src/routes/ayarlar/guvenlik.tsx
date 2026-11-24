@@ -103,7 +103,7 @@ function SecuritySettings() {
     const { error } = await authClient.revokeOtherSessions();
     if (error) return toast.error(authErrorText(error, "Oturumlar kapatılamadı"));
     toast.success("Diğer cihazlardaki oturumlar kapatıldı");
-    void loadSessions();
+    void loadSessions().catch(() => setSessionsFailed(true));
   }
 
   return (
@@ -158,7 +158,7 @@ function SecuritySettings() {
             </p>
           </section>
         ) : (
-          <PasswordForm onChanged={() => void loadSessions()} />
+          <PasswordForm onChanged={() => void loadSessions().catch(() => setSessionsFailed(true))} />
         )}
 
         <section className="rounded-2xl border border-border bg-surface p-4 shadow-card sm:p-6">

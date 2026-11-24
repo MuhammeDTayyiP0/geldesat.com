@@ -29,7 +29,7 @@ import {
 import { ApiError, errorMessage } from '@/api/client';
 import { listings, myListings } from '@/api/endpoints';
 import { keys, queryClient } from '@/api/queries';
-import type { Listing } from '@/api/types';
+import type { Listing, SellerResponseStats } from '@/api/types';
 import { useSession } from '@/auth/session';
 import { useRequireAuth } from '@/auth/useRequireAuth';
 import { useToggleFavorite } from '@/features/listing/favorites';
@@ -488,9 +488,18 @@ function InfoRow({ label, value, icon: Icon, onPress }: { label: string; value: 
   );
 }
 
-function SellerCard({ listing, rating, onPress }: { listing: Listing; rating: { rating_avg: number; rating_count: number }; onPress: () => void }) {
+function SellerCard({
+  listing,
+  rating,
+  onPress,
+}: {
+  listing: Listing;
+  rating: { rating_avg: number; rating_count: number; responseStats?: SellerResponseStats | null };
+  onPress: () => void;
+}) {
   const { c } = useTheme();
   const name = listing.store_name ?? listing.seller_name ?? 'Satıcı';
+  const r = rating.responseStats;
   return (
     <Card onPress={onPress}>
       <View style={styles.row}>
@@ -514,6 +523,14 @@ function SellerCard({ listing, rating, onPress }: { listing: Listing; rating: { 
               Henüz değerlendirme yok
             </Text>
           )}
+          {r && r.responseRate != null && r.avgReplyMinutes != null ? (
+            <View style={[styles.row, styles.responseRow]}>
+              <MessageCircle size={12} color={c.muted} />
+              <Text variant="caption" tone="muted" numberOfLines={1}>
+                {`Yanıt oranı %${Math.round(r.responseRate)} · Ort. ${Math.round(r.avgReplyMinutes)} dk`}
+              </Text>
+            </View>
+          ) : null}
         </View>
         <ChevronRight size={18} color={c.subtle} />
       </View>
@@ -573,6 +590,7 @@ const styles = StyleSheet.create({
   review: { gap: space.xs, padding: space.md },
   safety: { gap: space.sm },
   inlineActions: { flexDirection: 'row', gap: space.sm },
+  responseRow: { marginTop: 2 },
   storeLink: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.md, paddingTop: space.md, borderTopWidth: hairline },
   similar: { paddingBottom: space.lg },
   topBar: {

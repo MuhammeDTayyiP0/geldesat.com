@@ -166,7 +166,7 @@ function LegalPage() {
           ) : null}
           <div className="mt-2 text-sm leading-relaxed text-fg">
             {sections.map((s) => (
-              <section key={s.id} id={s.id} className="scroll-mt-24 border-t border-border py-6 first:border-t-0">
+              <section key={s.id} id={s.id} className="scroll-mt-28 border-t border-border py-6 first:border-t-0">
                 <h2 className="text-lg font-semibold tracking-tight">{s.title}</h2>
                 <LegalBlocks text={s.content} />
               </section>

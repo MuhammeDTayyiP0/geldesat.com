@@ -1,6 +1,6 @@
 import { AppState, Platform } from 'react-native';
 import Constants from 'expo-constants';
-import { QueryClient, focusManager, useQuery } from '@tanstack/react-query';
+import { QueryClient, focusManager, onlineManager, useQuery } from '@tanstack/react-query';
 import { useSession } from '@/auth/session';
 import { cachedConfig, rememberConfig } from '@/lib/configCache';
 import { deviceId } from '@/lib/storage';
@@ -13,7 +13,7 @@ export const queryClient = new QueryClient({
     queries: {
       staleTime: 30_000,
       gcTime: 10 * 60_000,
-      retry: (count, error) => !(error instanceof ApiError && error.status >= 400 && error.status < 500) && count < 2,
+      retry: (count, error) => !(error instanceof ApiError && (error.status === 0 || (error.status >= 400 && error.status < 500))) && count < 2,
       refetchOnWindowFocus: false,
     },
     mutations: { retry: false },
@@ -30,14 +30,17 @@ export const keys = {
   attributes: (categoryId: string) => ['categories', 'attrs', categoryId] as const,
   search: (filters: SearchFilters) => ['search', filters] as const,
   rail: (name: string) => ['rail', name] as const,
+  homeRails: ['rail', 'home'] as const,
   listing: (id: string) => ['listing', id] as const,
   seller: (id: string) => ['seller', id] as const,
   store: (slug: string) => ['store', slug] as const,
   legal: (slug: string) => ['legal', slug] as const,
+  cityCounts: ['cityCounts'] as const,
   me: ['me'] as const,
   counts: ['counts'] as const,
   favorites: ['favorites'] as const,
   recent: ['recent'] as const,
+  savedSearches: ['savedSearches'] as const,
   myListings: ['myListings'] as const,
   forEdit: (id: string) => ['forEdit', id] as const,
   notifications: ['notifications'] as const,
@@ -96,7 +99,11 @@ export function useConfig() {
 
 // React Query's "window focus" is the app coming back to the foreground.
 focusManager.setEventListener((setFocused) => {
-  const sub = AppState.addEventListener('change', (state) => setFocused(state === 'active'));
+  const sub = AppState.addEventListener('change', (state) => {
+    const active = state === 'active';
+    if (active) onlineManager.setOnline(true);
+    setFocused(active);
+  });
   return () => sub.remove();
 });
 
@@ -105,7 +112,7 @@ export function useRoots() {
 }
 
 /** Queries that look the same to everyone; all others belong to the signed-in account. */
-const PUBLIC_QUERIES = new Set(['config', 'stats', 'categories', 'search', 'rail', 'seller', 'store', 'legal']);
+const PUBLIC_QUERIES = new Set(['config', 'stats', 'categories', 'search', 'rail', 'seller', 'store', 'legal', 'cityCounts']);
 
 /**
  * Clear everything tied to the signed-in account (sign-out, expired session,

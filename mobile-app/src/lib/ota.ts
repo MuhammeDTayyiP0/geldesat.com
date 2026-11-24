@@ -29,9 +29,7 @@ export function updateMessage(manifest: unknown): string | null {
 }
 
 function isCritical(update: Updates.UseUpdatesReturnType['downloadedUpdate']): boolean {
-  if (!update) return false;
-  // A rollback to the built-in code is the only kind without a manifest.
-  if (!update.manifest) return true;
+  if (!update?.manifest) return false;
   return geldesatExtra(update.manifest)?.critical === true;
 }
 

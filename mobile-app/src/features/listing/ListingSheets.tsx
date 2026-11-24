@@ -220,6 +220,16 @@ export function ReviewSheet({
   const { c } = useTheme();
   const [rating, setRating] = useState(existing?.rating ?? 0);
   const [comment, setComment] = useState(existing?.comment ?? '');
+  const [prevVisible, setPrevVisible] = useState(visible);
+  const [prevExisting, setPrevExisting] = useState(existing);
+  if (visible !== prevVisible || existing !== prevExisting) {
+    setPrevVisible(visible);
+    setPrevExisting(existing);
+    if (visible) {
+      setRating(existing?.rating ?? 0);
+      setComment(existing?.comment ?? '');
+    }
+  }
   const send = useMutation({
     mutationFn: () => listings.review(listingId, rating, comment.trim() || undefined),
     onSuccess: () => {

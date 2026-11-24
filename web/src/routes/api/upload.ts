@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { getSql } from "@/lib/db";
 import { deleteUnusedListingImages, MAX_UPLOAD_BYTES, saveListingImage } from "@/lib/server/upload.server";
 import { errorStatus, publicErrorMessage } from "@/lib/server/errors";
-import { limitedFormData } from "@/lib/server/request-body";
+import { limitedFormData, readJson } from "@/lib/server/request-body";
 import { authorizeUpload as authorize, json } from "@/lib/server/upload-auth.server";
 
 const TOO_LARGE = "Fotoğraf en fazla 12 MB olabilir.";
@@ -29,12 +29,12 @@ export const Route = createFileRoute("/api/upload")({
         const auth = await authorize(request);
         if (auth instanceof Response) return auth;
         try {
-          const { url } = (await request.json()) as { url?: unknown };
+          const { url } = (await readJson(request, 32 * 1024)) as { url?: unknown };
           if (typeof url !== "string" || url.length > 200) return json({ error: "Geçersiz istek" }, 400);
           await deleteUnusedListingImages(await getSql(), auth.userId, [url]);
           return json({ ok: true });
         } catch (err) {
-          return json({ error: publicErrorMessage(err, "Silinemedi") }, 400);
+          return json({ error: publicErrorMessage(err, "Silinemedi") }, errorStatus(err, 400));
         }
       },
     },

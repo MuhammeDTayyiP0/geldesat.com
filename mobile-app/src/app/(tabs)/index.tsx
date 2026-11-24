@@ -14,6 +14,7 @@ import { ListingGrid } from '@/features/listing/ListingGrid';
 import { ListingRail } from '@/features/listing/ListingRail';
 import { useNearbyCity } from '@/features/location/nearby';
 import { OptionPicker } from '@/features/location/OptionPicker';
+import { useFlag } from '@/lib/flags';
 import { formatNumber, uniqueById } from '@/lib/format';
 import { CountDot, EmptyState, ErrorState, IconButton, Skeleton, Text, Wordmark, hairline, radius, space, toast, useTheme } from '@/ui';
 
@@ -27,6 +28,7 @@ export default function DiscoverScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const session = useSession();
+  const fiyatDusenler = useFlag('fiyat_dususu_vitrini');
   const { data: counts } = useCounts();
   const { data: config } = useConfig();
   const roots = useRoots();
@@ -40,6 +42,11 @@ export default function DiscoverScreen() {
   const stats = useQuery({ queryKey: keys.stats, queryFn: catalog.stats, staleTime: 5 * 60_000 });
   const urgent = useQuery({ queryKey: keys.rail('urgent'), queryFn: () => catalog.listings({ urgent: true, limit: 12 }) });
   const featured = useQuery({ queryKey: keys.rail('featured'), queryFn: () => catalog.listings({ featured: true, limit: 12 }) });
+  const priceDropped = useQuery({
+    queryKey: keys.rail('priceDropped'),
+    queryFn: () => catalog.listings({ priceDropped: true, limit: 8 }),
+    enabled: fiyatDusenler,
+  });
   const near = useQuery({
     queryKey: keys.rail(`city:${nearby.city}`),
     queryFn: () => catalog.listings({ city: nearby.city ?? undefined, limit: 12 }),
@@ -156,6 +163,15 @@ export default function DiscoverScreen() {
 
       {sections.includes('hero') ? null : searchBox}
       {sections.map((name) => blocks[name] ?? null)}
+
+      {fiyatDusenler && priceDropped.data?.listings?.length ? (
+        <ListingRail
+          title="Fiyatı düşenler"
+          subtitle="Yakın zamanda indirime giren ilanlar"
+          items={priceDropped.data.listings}
+          onSeeAll={() => router.push({ pathname: '/sonuclar', params: { priceDropped: '1', title: 'Fiyatı düşenler' } })}
+        />
+      ) : null}
 
       {nearby.city ? (
         <View>

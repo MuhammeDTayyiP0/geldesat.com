@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Image } from 'expo-image';
-import { CircleCheck, Eye, EyeOff, ImageOff, LayoutGrid, MoreVertical, Pencil, Plus, RefreshCw, Rocket, Trash2 } from 'lucide-react-native';
+import { CircleCheck, Eye, EyeOff, Heart, ImageOff, LayoutGrid, MessageCircle, MoreVertical, Pencil, Phone, Plus, RefreshCw, Rocket, Trash2 } from 'lucide-react-native';
 import { errorMessage } from '@/api/client';
 import { myListings } from '@/api/endpoints';
 import { keys, queryClient } from '@/api/queries';
@@ -12,7 +12,7 @@ import type { Listing, OwnerAction } from '@/api/types';
 import { useSession } from '@/auth/session';
 import { mediaUrl } from '@/lib/config';
 import { daysUntil, formatDate, formatNumber, formatPrice, isListingExpired, listingStatusLabel } from '@/lib/format';
-import { Badge, Button, Chip, EmptyState, ErrorState, Header, ListRow, Loading, RowGroup, Sheet, Text, confirm, hairline, radius, space, toast, useTheme } from '@/ui';
+import { Badge, Button, Card, Chip, EmptyState, ErrorState, Header, ListRow, Loading, RowGroup, Sheet, Text, confirm, hairline, radius, space, toast, useTheme } from '@/ui';
 import { useFlag } from '@/lib/flags';
 
 type Tab = 'live' | 'pending' | 'off' | 'sold' | 'rejected';
@@ -55,6 +55,7 @@ export default function MyListingsScreen() {
   const insets = useSafeAreaInsets();
   // Doping sales are closed while this is off: no entry points to an empty shop (K11).
   const dopingOn = useFlag('doping_enabled');
+  const istatistikler = useFlag('satici_istatistikleri');
   const router = useRouter();
   const session = useSession();
   const [tab, setTab] = useState<Tab>('live');
@@ -65,6 +66,20 @@ export default function MyListingsScreen() {
     const map: Record<Tab, Listing[]> = { live: [], pending: [], off: [], sold: [], rejected: [] };
     for (const l of query.data ?? []) map[tabOf(l)].push(l);
     return map;
+  }, [query.data]);
+
+  const totals = useMemo(() => {
+    let views = 0;
+    let favs = 0;
+    let messages = 0;
+    let phoneReveals = 0;
+    for (const l of query.data ?? []) {
+      views += l.view_count ?? 0;
+      favs += l.fav_count ?? 0;
+      messages += l.message_count ?? 0;
+      phoneReveals += l.phone_reveal_count ?? 0;
+    }
+    return { views, favs, messages, phoneReveals };
   }, [query.data]);
 
   const action = useMutation({
@@ -162,6 +177,21 @@ export default function MyListingsScreen() {
           keyExtractor={(l) => l.id}
           contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + space.xxxl }]}
           refreshControl={<RefreshControl refreshing={query.isRefetching} onRefresh={() => void query.refetch()} tintColor={c.primary} />}
+          ListHeaderComponent={
+            istatistikler && (query.data?.length ?? 0) > 0 ? (
+              <Card style={styles.summaryCard}>
+                <Text variant="label" tone="muted">
+                  Toplam ilan istatistikleri
+                </Text>
+                <View style={styles.summaryRow}>
+                  <SummaryStat icon={Eye} label="Görüntülenme" value={totals.views} />
+                  <SummaryStat icon={Heart} label="Favori" value={totals.favs} />
+                  <SummaryStat icon={MessageCircle} label="Mesaj" value={totals.messages} />
+                  <SummaryStat icon={Phone} label="Telefon" value={totals.phoneReveals} />
+                </View>
+              </Card>
+            ) : undefined
+          }
           ListEmptyComponent={
             <EmptyState
               icon={LayoutGrid}
@@ -170,7 +200,14 @@ export default function MyListingsScreen() {
               action={tab === 'live' ? <Button title="İlan ver" icon={Plus} onPress={() => router.push('/ilan-ver')} /> : undefined}
             />
           }
-          renderItem={({ item }) => <MyListingRow listing={item} onPress={() => router.push({ pathname: '/ilan/[id]', params: { id: item.id } })} onMenu={() => setMenu(item)} />}
+          renderItem={({ item }) => (
+            <MyListingRow
+              listing={item}
+              showStats={istatistikler}
+              onPress={() => router.push({ pathname: '/ilan/[id]', params: { id: item.id } })}
+              onMenu={() => setMenu(item)}
+            />
+          )}
         />
       )}
 
@@ -223,7 +260,34 @@ export default function MyListingsScreen() {
   );
 }
 
-function MyListingRow({ listing, onPress, onMenu }: { listing: Listing; onPress: () => void; onMenu: () => void }) {
+function SummaryStat({ icon: Icon, label, value }: { icon: typeof Eye; label: string; value: number }) {
+  const { c } = useTheme();
+  return (
+    <View style={styles.summaryStat}>
+      <View style={styles.summaryValue}>
+        <Icon size={13} color={c.primary} />
+        <Text variant="bodyStrong">{formatNumber(value)}</Text>
+      </View>
+      <Text variant="small" tone="muted" numberOfLines={1}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+function StatChip({ icon: Icon, value, label }: { icon: typeof Eye; value: number; label: string }) {
+  const { c } = useTheme();
+  return (
+    <View style={[styles.statChip, { backgroundColor: c.elevated }]} accessibilityLabel={`${formatNumber(value)} ${label}`}>
+      <Icon size={12} color={c.muted} />
+      <Text variant="small" tone="muted">
+        {formatNumber(value)}
+      </Text>
+    </View>
+  );
+}
+
+function MyListingRow({ listing, showStats, onPress, onMenu }: { listing: Listing; showStats?: boolean; onPress: () => void; onMenu: () => void }) {
   const { c } = useTheme();
   const expired = isExpired(listing);
   const left = daysLeft(listing.expires_at);
@@ -249,10 +313,20 @@ function MyListingRow({ listing, onPress, onMenu }: { listing: Listing; onPress:
           </Text>
           <View style={styles.meta}>
             <Badge label={listingStatusLabel(listing.status ?? '', expired)} tone={tone} />
-            <Text variant="small" tone="subtle">
-              {formatNumber(listing.view_count ?? 0)} görüntülenme
-            </Text>
+            {!showStats ? (
+              <Text variant="small" tone="subtle">
+                {formatNumber(listing.view_count ?? 0)} görüntülenme
+              </Text>
+            ) : null}
           </View>
+          {showStats ? (
+            <View style={styles.statChips}>
+              <StatChip icon={Eye} value={listing.view_count ?? 0} label="görüntülenme" />
+              <StatChip icon={Heart} value={listing.fav_count ?? 0} label="favori" />
+              <StatChip icon={MessageCircle} value={listing.message_count ?? 0} label="mesaj" />
+              <StatChip icon={Phone} value={listing.phone_reveal_count ?? 0} label="telefon görüntüleme" />
+            </View>
+          ) : null}
           {listing.status === 'ACTIVE' && left != null && left > 0 && left <= 7 ? (
             <Text variant="small" tone="warn">
               {left} gün içinde süresi doluyor
@@ -281,5 +355,11 @@ const styles = StyleSheet.create({
   thumb: { width: 88, height: 88, borderRadius: radius.md, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   info: { flex: 1, gap: 4 },
   meta: { flexDirection: 'row', alignItems: 'center', gap: space.sm, flexWrap: 'wrap' },
+  summaryCard: { gap: space.sm, padding: space.md },
+  summaryRow: { flexDirection: 'row', gap: space.sm },
+  summaryStat: { flex: 1, alignItems: 'center', gap: 2 },
+  summaryValue: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  statChips: { flexDirection: 'row', alignItems: 'center', gap: space.xs, flexWrap: 'wrap', marginTop: 2 },
+  statChip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: space.xs + 2, paddingVertical: 2, borderRadius: radius.sm },
   more: { width: 44, alignItems: 'center', paddingTop: space.md },
 });

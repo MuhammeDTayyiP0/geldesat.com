@@ -5,7 +5,7 @@ import { ArrowUpDown, Check, ChevronRight, LayoutGrid, List as ListIcon, Sliders
 import { useEffect, useMemo, useState } from "react";
 import { useViewPreference } from "@/lib/use-view-pref";
 import { getCategory, searchCatalog } from "@/lib/server/catalog";
-import { attrsToSearch, parseAttrs, parseSearch, toFilters } from "@/lib/search-params";
+import { attrsToSearch, normalizeFilterRanges, parseAttrs, parseSearch, toFilters } from "@/lib/search-params";
 import { buildCategorySeo, getCategoryHierarchicalName, BASE_URL, DEFAULT_OG_IMAGE, jsonLd, listingsHeading } from "@/lib/seo";
 
 import { ListingCard } from "@/components/listing/ListingCard";
@@ -17,9 +17,10 @@ import { NotFound } from "@/components/common/NotFound";
 
 const SORT_OPTIONS = [
   { value: "date_desc", label: "En yeni ilanlar" },
+  { value: "date_asc", label: "En eski ilanlar" },
   { value: "price_asc", label: "Fiyat: Düşükten yükseğe" },
   { value: "price_desc", label: "Fiyat: Yüksekten düşüğe" },
-  { value: "date_asc", label: "En eski ilanlar" },
+  { value: "views_desc", label: "En çok incelenenler" },
 ] as const;
 
 export const Route = createFileRoute("/category/$slug")({
@@ -182,6 +183,10 @@ function CategoryPage() {
       maxKm: search.maxKm,
       minM2: search.minM2,
       maxM2: search.maxM2,
+      postedWithin: search.postedWithin,
+      withPhotos: search.withPhotos,
+      sellerType: search.sellerType,
+      priceDropped: search.priceDropped,
       attrs,
     };
   }, [search]);
@@ -200,7 +205,7 @@ function CategoryPage() {
         ...search,
         city: filters.city,
         district: filters.district,
-        neighborhood: filters.district === search.district && filters.city === search.city ? search.neighborhood : undefined,
+        neighborhood: filters.neighborhood,
         minPrice: filters.minPrice,
         maxPrice: filters.maxPrice,
         sort: filters.sort,
@@ -210,6 +215,10 @@ function CategoryPage() {
         maxKm: filters.maxKm,
         minM2: filters.minM2,
         maxM2: filters.maxM2,
+        postedWithin: filters.postedWithin,
+        withPhotos: filters.withPhotos,
+        sellerType: filters.sellerType,
+        priceDropped: filters.priceDropped,
         attrs: attrsToSearch(filters.attrs),
         page: extra?.page ?? "1",
       },
@@ -232,6 +241,13 @@ function CategoryPage() {
       id: "city",
       label: search.district ? `${search.city} / ${search.district}` : search.city,
       onRemove: () => removeFromSearch({ city: undefined, district: undefined, neighborhood: undefined }),
+    });
+  }
+  if (search.neighborhood) {
+    activeChips.push({
+      id: "neighborhood",
+      label: `Mahalle: ${search.neighborhood}`,
+      onRemove: () => removeFromSearch({ neighborhood: undefined }),
     });
   }
   if (search.minPrice || search.maxPrice) {
@@ -267,6 +283,27 @@ function CategoryPage() {
   if (search.sort && search.sort !== "date_desc") {
     const opt = SORT_OPTIONS.find((s) => s.value === search.sort);
     if (opt) activeChips.push({ id: "sort", label: opt.label, onRemove: () => removeFromSearch({ sort: "date_desc" }) });
+  }
+  if (search.postedWithin) {
+    const labels: Record<string, string> = { "1": "Son 24 saat", "3": "Son 3 gün", "7": "Son 7 gün", "30": "Son 30 gün" };
+    activeChips.push({
+      id: "postedWithin",
+      label: labels[search.postedWithin] ?? `Son ${search.postedWithin} gün`,
+      onRemove: () => removeFromSearch({ postedWithin: undefined }),
+    });
+  }
+  if (search.sellerType) {
+    activeChips.push({
+      id: "sellerType",
+      label: search.sellerType === "store" ? "Mağazadan" : "Sahibinden",
+      onRemove: () => removeFromSearch({ sellerType: undefined }),
+    });
+  }
+  if (search.withPhotos) {
+    activeChips.push({ id: "withPhotos", label: "Sadece fotoğraflı", onRemove: () => removeFromSearch({ withPhotos: undefined }) });
+  }
+  if (search.priceDropped) {
+    activeChips.push({ id: "priceDropped", label: "Fiyatı düşenler", onRemove: () => removeFromSearch({ priceDropped: undefined }) });
   }
   const parsedAttrs = parseAttrs(search.attrs) ?? {};
   for (const [k, vals] of Object.entries(parsedAttrs)) {
@@ -451,12 +488,20 @@ function CategoryPage() {
                 onApply={(applied) => apply(undefined, applied)}
                 attributes={cat.attributes}
                 hideApplyButton
+                hideSort
               />
             </div>
 
             {/* Sticky Bottom Actions */}
             <div className="border-t border-border bg-surface p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-lift">
-              <Button className="h-11 w-full text-sm font-semibold rounded-xl" onClick={() => apply()}>
+              <Button
+                className="h-11 w-full text-sm font-semibold rounded-xl"
+                onClick={() => {
+                  const checked = normalizeFilterRanges(filters);
+                  setFilters(checked);
+                  apply(undefined, checked);
+                }}
+              >
                 Filtreleri Uygula ({result.total} İlan)
               </Button>
             </div>

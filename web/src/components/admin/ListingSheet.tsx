@@ -19,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { TURKEY_CITIES } from "@/lib/data/locations";
 import { photoSrc } from "@/lib/images";
 import { cn } from "@/lib/utils";
 import { adminListingDetail, adminUpdateListing, type AdminListingDetail } from "@/lib/server/admin/listings";
@@ -338,6 +339,10 @@ function EditListingForm({ detail, onDone }: { detail: AdminListingDetail; onDon
   const [price, setPrice] = useState(String(l.price));
   const [city, setCity] = useState(l.city ?? "");
   const [district, setDistrict] = useState(l.district ?? "");
+  const selectedCity = TURKEY_CITIES.find((c) => c.name === city);
+  const districts = selectedCity?.districts ?? [];
+  const cityHasLegacy = Boolean(city && !selectedCity);
+  const districtHasLegacy = Boolean(district && !districts.includes(district));
   return (
     <form
       className="mb-5 space-y-3 rounded-xl border border-primary/30 bg-surface p-4"
@@ -364,14 +369,40 @@ function EditListingForm({ detail, onDone }: { detail: AdminListingDetail; onDon
         <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={100} className={inputClass} required minLength={5} />
       </Field>
       <div className="grid gap-3 sm:grid-cols-3">
-        <Field label="Fiyat (TL)">
+        <Field label={`Fiyat (${l.currency})`}>
           <input value={price} onChange={(e) => setPrice(e.target.value)} inputMode="numeric" className={inputClass} />
         </Field>
         <Field label="İl">
-          <input value={city} onChange={(e) => setCity(e.target.value)} required className={inputClass} />
+          <select
+            value={city}
+            onChange={(e) => {
+              const nextCity = e.target.value;
+              setCity(nextCity);
+              const nextDistricts = TURKEY_CITIES.find((c) => c.name === nextCity)?.districts ?? [];
+              if (!nextDistricts.includes(district)) setDistrict("");
+            }}
+            required
+            className="admin-select h-10 w-full"
+          >
+            {!city ? <option value="">İl seçin</option> : null}
+            {cityHasLegacy ? <option value={city}>{city}</option> : null}
+            {TURKEY_CITIES.map((c) => (
+              <option key={c.id} value={c.name}>
+                {c.name}
+              </option>
+            ))}
+          </select>
         </Field>
         <Field label="İlçe">
-          <input value={district} onChange={(e) => setDistrict(e.target.value)} className={inputClass} />
+          <select value={district} onChange={(e) => setDistrict(e.target.value)} className="admin-select h-10 w-full">
+            <option value="">Seçilmedi</option>
+            {districtHasLegacy ? <option value={district}>{district}</option> : null}
+            {districts.map((d) => (
+              <option key={d} value={d}>
+                {d}
+              </option>
+            ))}
+          </select>
         </Field>
       </div>
       <Field label="Açıklama">

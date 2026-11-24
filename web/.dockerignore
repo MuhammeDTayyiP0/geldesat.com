@@ -15,3 +15,8 @@ screenshots
 dist
 *.zip
 .cache
+.engram
+build.log
+env.ornek
+*.md
+**/*.test.*

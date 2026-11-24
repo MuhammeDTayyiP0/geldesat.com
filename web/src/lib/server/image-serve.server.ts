@@ -6,6 +6,11 @@ const CACHE_LIMIT_BYTES = 64 * 1024 * 1024;
 let cacheBytes = 0;
 
 function remember(key: string, data: Buffer) {
+  const prev = variantCache.get(key);
+  if (prev) {
+    variantCache.delete(key);
+    cacheBytes -= prev.byteLength;
+  }
   variantCache.set(key, data);
   cacheBytes += data.byteLength;
   for (const [k, v] of variantCache) {

@@ -15,7 +15,9 @@
 const APP_ID = "com.geldesat.app";
 
 /** Apple Developer → Membership → Team ID (10 karakter). */
-const APPLE_TEAM_ID = "APPLE_TEAM_ID";
+function getAppleTeamId(): string {
+  return process.env.APPLE_TEAM_ID?.trim() || "APPLE_TEAM_ID";
+}
 
 /**
  * İmza sertifikası SHA-256 parmak izleri (`AA:BB:...`, büyük harf).
@@ -23,15 +25,20 @@ const APPLE_TEAM_ID = "APPLE_TEAM_ID";
  * - Play Console → Uygulama bütünlüğü → Uygulama imzalama anahtarı (mağazadan
  *   kurulan sürüm Google'ın anahtarıyla imzalanır)
  */
-const ANDROID_SHA256_FINGERPRINTS: string[] = [];
+function getAndroidFingerprints(): string[] {
+  return (process.env.ANDROID_SHA256_FINGERPRINTS ?? "")
+    .split(/[\s,]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
 
 /** Uygulamanın açtığı web yolları; app.json'daki Android intent filter ile aynı. */
-const APP_PATHS = ["/ilan/*"];
+const APP_PATHS = ["/ilan/*", "/satici/*", "/magaza/*", "/category/*", "/search"];
 
 const FINGERPRINT_RE = /^([0-9A-F]{2}:){31}[0-9A-F]{2}$/;
 
 function assetLinks(): unknown[] | null {
-  const fingerprints = ANDROID_SHA256_FINGERPRINTS.filter((f) => FINGERPRINT_RE.test(f));
+  const fingerprints = getAndroidFingerprints().filter((f) => FINGERPRINT_RE.test(f));
   if (fingerprints.length === 0) return null;
   return [
     {
@@ -42,8 +49,9 @@ function assetLinks(): unknown[] | null {
 }
 
 function appleAppSiteAssociation(): unknown | null {
-  if (!/^[A-Z0-9]{10}$/.test(APPLE_TEAM_ID)) return null;
-  const appID = `${APPLE_TEAM_ID}.${APP_ID}`;
+  const teamId = getAppleTeamId();
+  if (!/^[A-Z0-9]{10}$/.test(teamId)) return null;
+  const appID = `${teamId}.${APP_ID}`;
   return {
     applinks: {
       details: [{ appIDs: [appID], components: APP_PATHS.map((path) => ({ "/": path })) }],

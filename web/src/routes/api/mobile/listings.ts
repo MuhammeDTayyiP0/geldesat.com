@@ -45,6 +45,15 @@ export const Route = createFileRoute("/api/mobile/listings")({
           const sort = ["date_desc", "date_asc", "price_asc", "price_desc", "views_desc"].includes(requestedSort ?? "")
             ? requestedSort as "date_desc" | "date_asc" | "price_asc" | "price_desc" | "views_desc"
             : "date_desc";
+          const rawPostedWithin = url.searchParams.get("postedWithin");
+          const postedWithin =
+            rawPostedWithin === "1" || rawPostedWithin === "3" || rawPostedWithin === "7" || rawPostedWithin === "30"
+              ? rawPostedWithin
+              : undefined;
+          const withPhotos = url.searchParams.get("withPhotos") === "true" || url.searchParams.get("withPhotos") === "1" ? true : undefined;
+          const rawSellerType = url.searchParams.get("sellerType");
+          const sellerType = rawSellerType === "owner" || rawSellerType === "store" ? rawSellerType : undefined;
+          const priceDropped = url.searchParams.get("priceDropped") === "true" || url.searchParams.get("priceDropped") === "1" ? true : undefined;
           const page = Math.floor(offset / limit) + 1;
 
           // Web and mobile now share the same visibility, expiry, and sort rules.
@@ -56,6 +65,10 @@ export const Route = createFileRoute("/api/mobile/listings")({
             q,
             urgent,
             featured,
+            postedWithin,
+            withPhotos,
+            sellerType,
+            priceDropped,
             city,
             district,
             neighborhood,

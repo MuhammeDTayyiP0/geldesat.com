@@ -106,7 +106,7 @@ export const adminListListings = createServerFn({ method: "POST" })
     if (data.city) w.add(`l.city = ${w.param(data.city)}`);
     if (data.userId) w.add(`l.user_id = ${w.param(data.userId)}`);
     if (data.flag === "featured") w.add("l.featured_until > now()");
-    if (data.flag === "reported") w.add("exists (select 1 from reports r where r.listing_id = l.id and r.status = 'OPEN')");
+    if (data.flag === "reported") w.add("exists (select 1 from reports r where r.listing_id = l.id and r.status = 'OPEN' and r.conversation_id is null)");
     if (data.flag === "no_photo") w.add("jsonb_array_length(l.images) = 0");
 
     const { limit, offset } = paging(data.page, data.pageSize);
@@ -297,75 +297,114 @@ export const adminListingsAction = createServerFn({ method: "POST" })
     // deciding at once cannot overwrite each other.
     const allowed = ACTION_FROM[data.action];
     const rows = found.filter((r) => (!allowed || allowed.includes(r.status)) && !(GOES_LIVE.has(data.action) && r.owner_banned));
-    const skipped = found.length - rows.length;
     if (!rows.length) throw new Error("Seçili ilanlar bu işleme uygun değil. Başka bir yönetici işlemiş olabilir.");
     const ids = rows.map((r) => r.id);
     const statuses = allowed ?? [];
     const reason = data.reason?.trim() || "";
 
+    let updatedIds: string[];
     switch (data.action) {
-      case "approve":
+      case "approve": {
         // The 30-day run starts when the listing goes live.
-        await sql.query(
+        const res = await sql.query<{ id: string }>(
           `update listings set status='ACTIVE', approved_at=now(), updated_at=now(),
              expires_at=greatest(coalesce(expires_at, now()), now() + interval '30 days')
-           where id = any($1::text[]) and status = any($2::text[])`,
+           where id = any($1::text[]) and status = any($2::text[])
+           returning id`,
           [ids, statuses],
         );
+        updatedIds = res.map((r) => r.id);
         break;
-      case "reject":
-        await sql.query("update listings set status='REJECTED', approved_at=null, status_before_ban=null, updated_at=now() where id = any($1::text[]) and status = any($2::text[])", [ids, statuses]);
+      }
+      case "reject": {
+        const res = await sql.query<{ id: string }>(
+          "update listings set status='REJECTED', approved_at=null, status_before_ban=null, updated_at=now() where id = any($1::text[]) and status = any($2::text[]) returning id",
+          [ids, statuses],
+        );
+        updatedIds = res.map((r) => r.id);
         break;
-      case "deactivate":
-        await sql.query("update listings set status='INACTIVE', status_before_ban=null, updated_at=now() where id = any($1::text[]) and status = any($2::text[])", [ids, statuses]);
+      }
+      case "deactivate": {
+        const res = await sql.query<{ id: string }>(
+          "update listings set status='INACTIVE', status_before_ban=null, updated_at=now() where id = any($1::text[]) and status = any($2::text[]) returning id",
+          [ids, statuses],
+        );
+        updatedIds = res.map((r) => r.id);
         break;
-      case "activate":
+      }
+      case "activate": {
         // An admin putting a listing live approves it.
-        await sql.query(
+        const res = await sql.query<{ id: string }>(
           `update listings set status='ACTIVE', approved_at=coalesce(approved_at, now()), updated_at=now(),
              expires_at=case when expires_at is null or expires_at < now() then now() + interval '30 days' else expires_at end
-           where id = any($1::text[]) and status = any($2::text[])`,
+           where id = any($1::text[]) and status = any($2::text[])
+           returning id`,
           [ids, statuses],
         );
+        updatedIds = res.map((r) => r.id);
         break;
-      case "sold":
-        await sql.query("update listings set status='SOLD', status_before_ban=null, updated_at=now() where id = any($1::text[]) and status = any($2::text[])", [ids, statuses]);
+      }
+      case "sold": {
+        const res = await sql.query<{ id: string }>(
+          "update listings set status='SOLD', status_before_ban=null, updated_at=now() where id = any($1::text[]) and status = any($2::text[]) returning id",
+          [ids, statuses],
+        );
+        updatedIds = res.map((r) => r.id);
         break;
-      case "extend":
-        await sql.query(
+      }
+      case "extend": {
+        const res = await sql.query<{ id: string }>(
           `update listings set expires_at = greatest(coalesce(expires_at, now()), now()) + make_interval(days => $2), updated_at=now()
-           where id = any($1::text[])`,
+           where id = any($1::text[])
+           returning id`,
           [ids, data.days ?? 30],
         );
+        updatedIds = res.map((r) => r.id);
         break;
-      case "feature":
-        await sql.query(
-          "update listings set featured_until = greatest(coalesce(featured_until, now()), now()) + make_interval(days => $2) where id = any($1::text[])",
+      }
+      case "feature": {
+        const res = await sql.query<{ id: string }>(
+          "update listings set featured_until = greatest(coalesce(featured_until, now()), now()) + make_interval(days => $2) where id = any($1::text[]) returning id",
           [ids, data.days ?? 7],
         );
+        updatedIds = res.map((r) => r.id);
         break;
-      case "unfeature":
-        await sql.query("update listings set featured_until = null where id = any($1::text[])", [ids]);
+      }
+      case "unfeature": {
+        const res = await sql.query<{ id: string }>("update listings set featured_until = null where id = any($1::text[]) returning id", [ids]);
+        updatedIds = res.map((r) => r.id);
         break;
+      }
       case "move": {
         if (!data.categoryId) throw new Error("Hedef kategori seçin.");
         const cat = await sql.query<{ id: string }>("select id from categories where id = $1", [data.categoryId]);
         if (!cat[0]) throw new Error("Hedef kategori bulunamadı.");
-        await sql.query("update listings set category_id=$2, updated_at=now() where id = any($1::text[])", [ids, data.categoryId]);
+        const res = await sql.query<{ id: string }>("update listings set category_id=$2, updated_at=now() where id = any($1::text[]) returning id", [ids, data.categoryId]);
+        updatedIds = res.map((r) => r.id);
         break;
       }
-      case "delete":
-        await sql.query("delete from listings where id = any($1::text[])", [ids]);
-        for (const r of rows) await deleteUnusedListingImages(sql, r.user_id, asJson<string[]>(r.images, []));
+      case "delete": {
+        const res = await sql.query<{ id: string }>("delete from listings where id = any($1::text[]) returning id", [ids]);
+        updatedIds = res.map((r) => r.id);
+        const deletedSet = new Set(updatedIds);
+        for (const r of rows) {
+          if (deletedSet.has(r.id)) await deleteUnusedListingImages(sql, r.user_id, asJson<string[]>(r.images, []));
+        }
         break;
+      }
     }
 
+    const updatedSet = new Set(updatedIds);
+    const actedRows = rows.filter((r) => updatedSet.has(r.id));
+    if (!actedRows.length) throw new Error("Seçili ilanlar bu işleme uygun değil. Başka bir yönetici işlemiş olabilir.");
+    const totalSkipped = found.length - actedRows.length;
+
     const summary =
-      (rows.length === 1
-        ? `#${rows[0].listing_no} "${rows[0].title}" ${ACTION_LABEL[data.action]}${reason ? ` — ${reason}` : ""}`
-        : `${rows.length} ilan ${ACTION_LABEL[data.action]}${reason ? ` — ${reason}` : ""}`) + (skipped ? ` (${skipped} ilan uygun olmadığı için atlandı)` : "");
-    for (const r of rows) {
-      await audit(sql, context.adminId, `listing.${data.action}`, "listing", r.id, rows.length === 1 ? summary : `#${r.listing_no} "${r.title}" ${ACTION_LABEL[data.action]}`, {
+      (actedRows.length === 1
+        ? `#${actedRows[0].listing_no} "${actedRows[0].title}" ${ACTION_LABEL[data.action]}${reason ? ` — ${reason}` : ""}`
+        : `${actedRows.length} ilan ${ACTION_LABEL[data.action]}${reason ? ` — ${reason}` : ""}`) + (totalSkipped ? ` (${totalSkipped} ilan uygun olmadığı için atlandı)` : "");
+    for (const r of actedRows) {
+      await audit(sql, context.adminId, `listing.${data.action}`, "listing", r.id, actedRows.length === 1 ? summary : `#${r.listing_no} "${r.title}" ${ACTION_LABEL[data.action]}`, {
         reason: reason || undefined,
         days: data.days,
         categoryId: data.categoryId,
@@ -374,7 +413,7 @@ export const adminListingsAction = createServerFn({ method: "POST" })
     }
     // The record goes first: a problem while notifying must not leave a change unrecorded.
     if (data.notify) {
-      for (const r of rows) {
+      for (const r of actedRows) {
         const link = `/ilan/${r.slug}`;
         if (data.action === "approve") {
           await notify(r.user_id, "listing", "İlanınız yayında", `"${r.title}" onaylandı ve yayına alındı.`, link);
@@ -402,7 +441,7 @@ export const adminListingsAction = createServerFn({ method: "POST" })
       }
     }
 
-    return { ok: true as const, count: rows.length, summary };
+    return { ok: true as const, count: actedRows.length, summary };
   });
 
 /** Admin correction of the text fields and price. */
@@ -415,23 +454,24 @@ export const adminUpdateListing = createServerFn({ method: "POST" })
       description: z.string().trim().min(10).max(5000),
       price: z.number().min(1).max(1_000_000_000),
       city: z.string().trim().max(60).optional(),
-      district: z.string().trim().max(60).optional(),
+      district: z.string().trim().max(60).nullish(),
     }),
   )
   .handler(async ({ context, data }) => {
     const sql = await getSql();
-    const rows = await sql.query<{ listing_no: number; price: unknown; title: string }>(
-      "select listing_no, price, title from listings where id = $1",
+    const rows = await sql.query<{ listing_no: number; price: unknown; title: string; district: string | null }>(
+      "select listing_no, price, title, district from listings where id = $1",
       [data.id],
     );
     const cur = rows[0];
     if (!cur) throw new Error("İlan bulunamadı.");
     const slug = listingSlug(data.title, cur.listing_no);
+    const nextDistrict = data.district === undefined ? cur.district : data.district || null;
     await sql.query(
       `update listings set title=$2, description=$3, price=$4, slug=$5,
-         city=coalesce(nullif($6, ''), city), district=coalesce(nullif($7, ''), district), updated_at=now()
+         city=coalesce(nullif($6, ''), city), district=$7, updated_at=now()
        where id=$1`,
-      [data.id, data.title, data.description, data.price, slug, data.city ?? "", data.district ?? ""],
+      [data.id, data.title, data.description, data.price, slug, data.city ?? "", nextDistrict],
     );
     if (num(cur.price) !== data.price) {
       await sql.query("insert into price_history (listing_id, price) values ($1,$2)", [data.id, data.price]);

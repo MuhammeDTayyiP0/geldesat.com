@@ -1,22 +1,26 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { adminCategoryTree, type AdminCategory } from "@/lib/server/admin/categories";
 import { adminListingsAction } from "@/lib/server/admin/listings";
 import { errorMessage } from "./format";
 import { useConfirm } from "./ui";
 
-/** Runs a server call with toasts, then refreshes every admin query. */
+/** Runs a server call with toasts, then refreshes admin queries (all of them by default). */
 export function useRunner() {
   const qc = useQueryClient();
   const [busy, setBusy] = useState(false);
   const run = useCallback(
-    async <T,>(fn: () => Promise<T>, success?: string | ((r: T) => string)): Promise<T | undefined> => {
+    async <T,>(
+      fn: () => Promise<T>,
+      success?: string | ((r: T) => string),
+      invalidateKeys: QueryKey[] = [["admin"]],
+    ): Promise<T | undefined> => {
       setBusy(true);
       try {
         const r = await fn();
         if (success) toast.success(typeof success === "function" ? success(r) : success);
-        await qc.invalidateQueries({ queryKey: ["admin"] });
+        await Promise.all(invalidateKeys.map((queryKey) => qc.invalidateQueries({ queryKey })));
         return r;
       } catch (e) {
         toast.error(errorMessage(e));

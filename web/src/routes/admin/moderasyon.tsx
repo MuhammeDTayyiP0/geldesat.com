@@ -76,7 +76,7 @@ function ModerationPage() {
         </Card>
       ) : (
         <div className="grid gap-4 lg:grid-cols-[300px_1fr]">
-          <Card className="overflow-hidden lg:sticky lg:top-20 lg:max-h-[calc(100dvh-7rem)] lg:overflow-y-auto">
+          <Card className="max-h-[42dvh] overflow-x-hidden overflow-y-auto lg:sticky lg:top-20 lg:max-h-[calc(100dvh-7rem)]">
             <ul className="divide-y divide-border">
               {rows.map((r, i) => (
                 <li key={r.id}>

@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth/server";
 import { rateLimit, viewerKey } from "@/lib/server/helpers";
 import { errorStatus, publicErrorMessage } from "@/lib/server/errors";
 import { redeemCode } from "@/lib/server/mobile-oauth";
+import { readJson } from "@/lib/server/request-body";
 
 export const Route = createFileRoute("/api/mobile/oauth/exchange")({
   server: {
@@ -11,7 +12,7 @@ export const Route = createFileRoute("/api/mobile/oauth/exchange")({
       POST: async ({ request }) => {
         try {
           rateLimit(`mobile-oauth:${viewerKey(request.headers)}`, 20, 60_000);
-          const body = (await request.json().catch(() => ({}))) as { code?: unknown; verifier?: unknown };
+          const body = (await readJson(request, 32 * 1024)) as { code?: unknown; verifier?: unknown };
           if (typeof body.code !== "string" || typeof body.verifier !== "string" || body.verifier.length < 43 || body.verifier.length > 128) {
             return Response.json({ success: false, error: "Giriş bilgisi geçersiz." }, { status: 400 });
           }

@@ -711,7 +711,7 @@ function Preview({ draft, attributes, onEdit, editing }: { draft: Draft; attribu
       {attrRows.length ? (
         <PreviewRow
           label="Özellikler"
-          value={attrRows.map((a) => `${a.name}: ${typeof draft.attrs[a.name] === 'number' ? formatNumber(draft.attrs[a.name]) : draft.attrs[a.name]}`).join('\n')}
+          value={attrRows.map((a) => `${a.name}: ${previewAttrValue(a, draft.attrs[a.name])}`).join('\n')}
           onEdit={() => onEdit('attributes')}
         />
       ) : null}
@@ -724,6 +724,17 @@ function Preview({ draft, attributes, onEdit, editing }: { draft: Draft; attribu
       </View>
     </View>
   );
+}
+
+function previewAttrValue(attr: AttrDef, value: string | number | undefined): string {
+  const raw: unknown = value;
+  if (raw === true || raw === 'true') return 'Evet';
+  if (raw === false || raw === 'false') return 'Hayır';
+  if (attr.type === 'BOOLEAN') {
+    if (raw === 1 || raw === 'Evet') return 'Evet';
+    if (raw === 0 || raw === 'Hayır') return 'Hayır';
+  }
+  return typeof value === 'number' ? formatNumber(value) : String(value ?? '');
 }
 
 function PreviewRow({ label, value, onEdit }: { label: string; value: string; onEdit: () => void }) {

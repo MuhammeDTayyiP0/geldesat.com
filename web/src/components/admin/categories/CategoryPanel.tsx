@@ -40,9 +40,26 @@ import { CATEGORY_ICONS, categoryIcon } from "./icons";
 
 type Tab = "info" | "children" | "attributes" | "manage";
 
-export function CategoryPanel({ id, index, onSelect, onRequestDelete }: { id: string; index: CategoryIndex; onSelect: (id: string) => void; onRequestDelete: (id: string) => void }) {
+export function CategoryPanel({
+  id,
+  index,
+  onSelect,
+  onRequestDelete,
+  onDirtyChange,
+}: {
+  id: string;
+  index: CategoryIndex;
+  onSelect: (id: string) => void;
+  onRequestDelete: (id: string) => void;
+  onDirtyChange?: (dirty: boolean) => void;
+}) {
   const q = useQuery({ queryKey: ["admin", "category", id], queryFn: () => adminCategoryDetail({ data: { id } }) });
   const [tab, setTab] = useState<Tab>("info");
+  const [dirty, setDirty] = useState(false);
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
   const node = index.byId.get(id);
   const Icon = categoryIcon(node?.icon);
   const path = index.path(id);
@@ -132,11 +149,11 @@ export function CategoryPanel({ id, index, onSelect, onRequestDelete }: { id: st
             <Spinner /> Yükleniyor…
           </div>
         ) : tab === "info" ? (
-          <InfoTab key={`${id}:${node.name}:${node.slug}:${node.icon}`} detail={q.data} isRoot={!node.parent_id} />
+          <InfoTab key={`${id}:${node.name}:${node.slug}:${node.icon}`} detail={q.data} isRoot={!node.parent_id} onDirtyChange={setDirty} />
         ) : tab === "children" ? (
           <ChildrenTab id={id} index={index} onSelect={onSelect} />
         ) : tab === "attributes" ? (
-          <AttributesTab key={id} detail={q.data} onSelect={onSelect} />
+          <AttributesTab key={id} detail={q.data} onSelect={onSelect} onDirtyChange={setDirty} />
         ) : (
           <ManageTab id={id} index={index} detail={q.data} onRequestDelete={onRequestDelete} />
         )}
@@ -147,7 +164,7 @@ export function CategoryPanel({ id, index, onSelect, onRequestDelete }: { id: st
 
 /* ───────────────────────────── Info ───────────────────────────── */
 
-function InfoTab({ detail, isRoot }: { detail: AdminCategoryDetail; isRoot: boolean }) {
+function InfoTab({ detail, isRoot, onDirtyChange }: { detail: AdminCategoryDetail; isRoot: boolean; onDirtyChange?: (dirty: boolean) => void }) {
   const c = detail.category;
   const { run, busy } = useRunner();
   const [name, setName] = useState(c.name);
@@ -155,6 +172,11 @@ function InfoTab({ detail, isRoot }: { detail: AdminCategoryDetail; isRoot: bool
   const [icon, setIcon] = useState(c.icon ?? "");
   const dirty = name.trim() !== c.name || slugify(slug) !== c.slug || (icon || null) !== (c.icon || null);
   const slugChanged = slugify(slug) !== c.slug;
+
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+    return () => onDirtyChange?.(false);
+  }, [dirty, onDirtyChange]);
 
   return (
     <form
@@ -169,8 +191,11 @@ function InfoTab({ detail, isRoot }: { detail: AdminCategoryDetail; isRoot: bool
       </Field>
       <Field
         label="Adres (slug)"
-        hint={slugChanged ? undefined : "Kategori sayfasının adresi: geldesat.com/category/…"}
-        error={slugChanged ? "Adres değişirse eski kategori bağlantıları ve arama motoru kayıtları çalışmaz." : null}
+        hint={
+          slugChanged
+            ? "Adres değiştiğinde eski kategori bağlantıları otomatik olarak yeni adrese yönlendirilir."
+            : "Kategori sayfasının adresi: geldesat.com/category/…"
+        }
       >
         <div className="flex gap-2">
           <input value={slug} onChange={(e) => setSlug(e.target.value)} maxLength={100} className={cn(inputClass, "font-mono")} />
@@ -314,7 +339,7 @@ function ChildrenTab({ id, index, onSelect }: { id: string; index: CategoryIndex
 
 type OwnItem = { id: string; name: string; type: string; required: boolean; options: string[] | null; unit: string | null };
 
-function AttributesTab({ detail, onSelect }: { detail: AdminCategoryDetail; onSelect: (id: string) => void }) {
+function AttributesTab({ detail, onSelect, onDirtyChange }: { detail: AdminCategoryDetail; onSelect: (id: string) => void; onDirtyChange?: (dirty: boolean) => void }) {
   const { run, busy } = useRunner();
   const library = useQuery({ queryKey: ["admin", "attributes"], queryFn: () => adminListAttributes(), staleTime: 60_000 });
   const initial = useMemo<OwnItem[]>(() => detail.ownAttributes.map((a) => ({ ...a })), [detail.ownAttributes]);
@@ -323,6 +348,10 @@ function AttributesTab({ detail, onSelect }: { detail: AdminCategoryDetail; onSe
   useEffect(() => setItems(initial), [initial]);
 
   const dirty = JSON.stringify(items.map((i) => [i.id, i.required])) !== JSON.stringify(initial.map((i) => [i.id, i.required]));
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+    return () => onDirtyChange?.(false);
+  }, [dirty, onDirtyChange]);
   const inheritedIds = new Set(detail.inheritedAttributes.map((a) => a.id));
   const needle = adding.trim().toLocaleLowerCase("tr");
   const candidates = (library.data ?? [])

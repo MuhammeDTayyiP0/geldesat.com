@@ -19,6 +19,8 @@ import type {
   MobileConfig,
   NotifyPrefs,
   PhoneVisibility,
+  SavedSearch,
+  SavedSearchFilters,
   SearchFilters,
   SearchResult,
   Seller,
@@ -41,8 +43,10 @@ export const catalog = {
   /** Same visibility and sort rules as search; used for home rails. */
   listings: (params: SearchFilters & { offset?: number }) =>
     request<{ listings: Listing[]; total: number; pages?: number }>(`/api/mobile/listings${toQuery(params)}`, { auth: false }),
+  homeRails: () =>
+    rpc<{ urgent: Listing[]; featured: Listing[]; latest: Listing[]; latestPages: number; priceDropped: Listing[] }>('homeListings'),
   legal: (slug: string) => rpc<{ slug: string; title: string; body: string } | null>('getLegal', { slug }),
-  siteSettings: () => rpc<{ support_email: string; support_phone: string; company_name: string }>('getSiteSettings'),
+  cityCounts: () => rpc<{ city: string; n: number }[]>('mapCityCounts'),
 };
 
 // ─── Listings ───────────────────────────────────────────────────────────────
@@ -62,8 +66,13 @@ export const listings = {
   recent: () => rpc<RecentListing[]>('myRecentListings'),
   /** Remove one listing from the history, or all of it with `null`. */
   removeRecent: (listingId: string | null) => rpc('removeRecentListing', { listingId }),
-  seller: (id: string, offset = 0) =>
-    request<{ seller: Seller; listings: Listing[] }>(`/api/mobile/sellers/${encodeURIComponent(id)}${offset ? `?offset=${offset}` : ''}`),
+  seller: (id: string, offset = 0, reviewsPage = 1) =>
+    request<{ seller: Seller; listings: Listing[] }>(
+      `/api/mobile/sellers/${encodeURIComponent(id)}${toQuery({
+        offset: offset || undefined,
+        reviewsPage: reviewsPage > 1 ? reviewsPage : undefined,
+      })}`,
+    ),
   store: (slug: string) => request<{ store: Store; listings: Listing[] }>(`/api/mobile/stores/${encodeURIComponent(slug)}`),
 };
 
@@ -120,6 +129,25 @@ export const account = {
       { sellerId, listingId },
     ),
   leaveReview: (data: { sellerId: string; listingId?: string; rating: number; comment?: string }) => rpc('leaveReview', data),
+};
+
+// ─── Saved Searches ─────────────────────────────────────────────────────────
+
+export const savedSearches = {
+  list: () => rpc<SavedSearch[]>('listSavedSearches'),
+  create: (data: {
+    name: string;
+    category_slug?: string | null;
+    city?: string | null;
+    district?: string | null;
+    q?: string | null;
+    min_price?: number | null;
+    max_price?: number | null;
+    filters?: SavedSearchFilters;
+    notify?: boolean;
+  }) => rpc<SavedSearch>('createSavedSearch', data),
+  remove: (id: string) => rpc<{ ok: true }>('deleteSavedSearch', { id }),
+  toggleNotify: (id: string, notify: boolean) => rpc<{ ok: true; notify: boolean }>('toggleSavedSearchNotify', { id, notify }),
 };
 
 // ─── Chat ───────────────────────────────────────────────────────────────────

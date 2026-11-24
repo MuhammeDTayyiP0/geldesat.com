@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -186,9 +187,9 @@ export function UserSheetBody({ id, canGoBack }: { id: string; canGoBack: boolea
               {u.listing_count > d.listings.length ? (
                 <li className="px-3 py-2.5 text-center text-xs text-muted">
                   Son {d.listings.length} ilan gösteriliyor ·{" "}
-                  <a href={`/admin/ilanlar?userId=${encodeURIComponent(u.user_id)}`} className="font-medium text-primary hover:underline">
+                  <Link to="/admin/ilanlar" search={{ userId: u.user_id }} onClick={close} className="font-medium text-primary hover:underline">
                     tümünü ilan listesinde aç
-                  </a>
+                  </Link>
                 </li>
               ) : null}
             </ul>
@@ -280,7 +281,10 @@ function UserActionBar({ detail, onModal }: { detail: AdminUserDetail; onModal: 
   async function setRole(role: "ADMIN" | "USER") {
     const password = await prompt({
       title: role === "ADMIN" ? "Yönetici yetkisi verilsin mi?" : "Yönetici yetkisi kaldırılsın mı?",
-      body: role === "ADMIN" ? `${u.display_name} tüm yönetim paneline ve üyelerin verilerine erişebilecek. Onaylamak için kendi şifrenizi girin.` : `${u.display_name} artık yönetim paneline giremeyecek. Onaylamak için kendi şifrenizi girin. Google ile giriş yapıyorsanız boş bırakın.`,
+      body:
+        role === "ADMIN"
+          ? `${u.display_name} tüm yönetim paneline ve üyelerin verilerine erişebilecek. Onaylamak için kendi şifrenizi girin; yalnızca Google ile giriş yapıyorsanız boş bırakın (son 30 dakika içinde giriş yapmış olmalısınız).`
+          : `${u.display_name} artık yönetim paneline giremeyecek. Onaylamak için kendi şifrenizi girin; yalnızca Google ile giriş yapıyorsanız boş bırakın (son 30 dakika içinde giriş yapmış olmalısınız).`,
       label: "Şifreniz",
       inputType: "password",
       multiline: false,

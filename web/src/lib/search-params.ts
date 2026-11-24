@@ -19,6 +19,14 @@ export type CatalogSearch = {
   urgent?: string;
   /** "1": only showcase (vitrin) listings. */
   featured?: string;
+  /** "1" | "3" | "7" | "30": only listings posted in the last N days. */
+  postedWithin?: "1" | "3" | "7" | "30";
+  /** "1": only listings with at least one photo. */
+  withPhotos?: string;
+  /** "owner" | "store": filter by individual seller vs corporate store. */
+  sellerType?: "owner" | "store";
+  /** "1": only listings with a recent price drop. */
+  priceDropped?: string;
 };
 
 type SearchCategoryNode = { id: string; parent_id: string | null };
@@ -60,9 +68,14 @@ export function inferSearchCategoryId(
   return commonPath[commonPath.length - 1];
 }
 
+const POSTED_WITHIN = ["1", "3", "7", "30"] as const;
+const SELLER_TYPES = ["owner", "store"] as const;
+
 export function parseSearch(s: Record<string, unknown>): CatalogSearch {
   // The router parses "?page=2" into a number, so numbers are as valid as strings.
   const str = (k: string) => (typeof s[k] === "string" ? (s[k] as string) : typeof s[k] === "number" ? String(s[k]) : undefined);
+  const rawPostedWithin = str("postedWithin");
+  const rawSellerType = str("sellerType");
   return {
     q: str("q"),
     category: str("category"),
@@ -82,6 +95,10 @@ export function parseSearch(s: Record<string, unknown>): CatalogSearch {
     attrs: str("attrs"),
     urgent: s.urgent === "1" || s.urgent === 1 || s.urgent === true ? "1" : undefined,
     featured: s.featured === "1" || s.featured === 1 || s.featured === true ? "1" : undefined,
+    postedWithin: POSTED_WITHIN.find((d) => d === rawPostedWithin),
+    withPhotos: s.withPhotos === "1" || s.withPhotos === 1 || s.withPhotos === true ? "1" : undefined,
+    sellerType: SELLER_TYPES.find((t) => t === rawSellerType),
+    priceDropped: s.priceDropped === "1" || s.priceDropped === 1 || s.priceDropped === true ? "1" : undefined,
   };
 }
 
@@ -125,6 +142,8 @@ export function toFilters(s: CatalogSearch) {
   // Links can hold anything: bad values fall back to defaults instead of failing the page.
   const n = (v?: string) => (v && Number.isFinite(Number(v)) && Number(v) >= 0 ? Number(v) : undefined);
   const page = Math.trunc(n(s.page) ?? 1);
+  const postedWithin = POSTED_WITHIN.find((d) => d === s.postedWithin);
+  const sellerType = SELLER_TYPES.find((t) => t === s.sellerType);
   return {
     q: s.q,
     category: s.category,
@@ -144,6 +163,10 @@ export function toFilters(s: CatalogSearch) {
     attrs: parseAttrs(s.attrs),
     urgent: s.urgent === "1" || undefined,
     featured: s.featured === "1" || undefined,
+    postedWithin: postedWithin ? Number(postedWithin) : undefined,
+    withPhotos: s.withPhotos === "1" || undefined,
+    sellerType,
+    priceDropped: s.priceDropped === "1" || undefined,
     limit: 20,
   };
 }
@@ -155,4 +178,35 @@ export function attrsToSearch(attrs: Record<string, string[]>) {
     if (next.length) cleaned[k] = next;
   }
   return Object.keys(cleaned).length ? JSON.stringify(cleaned) : undefined;
+}
+
+/** Min above max can only mean a slip: swap them rather than show nothing without a reason. */
+export function normalizeFilterRanges<
+  T extends {
+    minPrice?: string;
+    maxPrice?: string;
+    minYear?: string;
+    maxYear?: string;
+    minKm?: string;
+    maxKm?: string;
+    minM2?: string;
+    maxM2?: string;
+  },
+>(value: T): T {
+  let next = value;
+  for (const [min, max] of [
+    ["minPrice", "maxPrice"],
+    ["minYear", "maxYear"],
+    ["minKm", "maxKm"],
+    ["minM2", "maxM2"],
+  ] as const) {
+    const low = next[min];
+    const high = next[max];
+    if (low && high && Number(low) > Number(high)) {
+      if (next === value) next = { ...value };
+      next[min] = high;
+      next[max] = low;
+    }
+  }
+  return next;
 }

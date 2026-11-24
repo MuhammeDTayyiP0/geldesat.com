@@ -38,14 +38,23 @@ import {
 import { getListingForEdit, getMe, myCreditOrders, updateProfile, upsertStore } from "@/lib/server/account";
 import { blockUser, checkReviewEligibility, leaveReview, myRecentListings, removeRecentListing, unblockUser, unreadCount } from "@/lib/server/social";
 import {
+  autocompleteSuggestions,
   browseCategories,
   getCategory,
   getLegal,
   getSiteSettings,
+  homeListings,
   listCategoryRoots,
+  mapCityCounts,
   searchCatalogWithContext,
   statsHome,
 } from "@/lib/server/catalog";
+import {
+  createSavedSearch,
+  deleteSavedSearch,
+  listSavedSearches,
+  toggleSavedSearchNotify,
+} from "@/lib/server/saved-searches";
 
 type ServerFn = (opts: { data?: unknown }) => Promise<unknown>;
 
@@ -56,11 +65,14 @@ type ServerFn = (opts: { data?: unknown }) => Promise<unknown>;
  */
 const FUNCTIONS: Record<string, ServerFn> = {
   // Catalog (public)
+  autocompleteSuggestions,
   browseCategories,
   getCategory,
   getLegal,
   getSiteSettings,
+  homeListings,
   listCategoryRoots,
+  mapCityCounts,
   searchCatalogWithContext,
   statsHome,
   // Account
@@ -76,6 +88,10 @@ const FUNCTIONS: Record<string, ServerFn> = {
   leaveReview,
   myRecentListings,
   removeRecentListing,
+  listSavedSearches,
+  createSavedSearch,
+  deleteSavedSearch,
+  toggleSavedSearchNotify,
   // Settings
   getAccountSettings,
   updatePrivacySettings,

@@ -63,7 +63,15 @@ export function useNearbyCity() {
     try {
       const perm = await Location.requestForegroundPermissionsAsync();
       if (!perm.granted) return { error: 'Konum izni verilmedi. Şehrinizi listeden seçebilirsiniz.' };
-      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low });
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const pos = await Promise.race([
+        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low }),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error('timeout')), 10_000);
+        }),
+      ]).finally(() => {
+        if (timer !== undefined) clearTimeout(timer);
+      });
       const places = await Location.reverseGeocodeAsync({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
       const found = places.map((p) => matchCity(p.region) ?? matchCity(p.city) ?? matchCity(p.subregion)).find(Boolean) ?? null;
       if (!found) return { error: 'Konumunuz bir ile eşleştirilemedi. Şehrinizi listeden seçin.' };

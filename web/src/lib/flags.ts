@@ -46,6 +46,10 @@ export const VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
  */
 export const CODE_FLAGS: Record<string, string> = {
   doping_enabled: "Doping / vitrin satışı ekranları.",
+  ilan_teklif_ver: "İlan detay sayfasında doğrudan Teklif Ver düğmesi.",
+  fiyat_dususu_vitrini: "Ana sayfada Fiyatı Düşenler şeridi.",
+  satici_istatistikleri: "İlanlarım sayfasında görüntülenme, favori, mesaj ve telefon istatistikleri.",
+  kayitli_aramalar: "Arama kaydetme ve yeni ilan bildirimi.",
 };
 
 /** Flags the code actually reads; the panel marks any other as having no effect. */

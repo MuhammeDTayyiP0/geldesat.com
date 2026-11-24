@@ -1,10 +1,11 @@
+import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, History, Pause, Percent, Play, Rocket, Smartphone, Undo2 } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronUp, History, Pause, Percent, Play, Rocket, Smartphone, Undo2 } from "lucide-react";
 import { adminListOtaUpdates, adminRepublishOta, adminRollbackOtaToEmbedded, adminSetOtaRollout, type AdminOtaUpdate } from "@/lib/server/admin/ota";
 import { useRunner } from "@/components/admin/hooks";
 import { bytes, dateTime, relative } from "@/components/admin/format";
-import { Card, CardHead, EmptyState, ErrorState, Menu, MenuItem, MenuLabel, MenuSeparator, PageHeader, Pill, SkeletonRows, Table, Td, Th, useConfirm } from "@/components/admin/ui";
+import { Card, CardHead, EmptyState, ErrorState, Menu, MenuItem, MenuLabel, MenuSeparator, PageHeader, Pill, SearchInput, Segmented, SkeletonRows, Table, Td, Th, useConfirm } from "@/components/admin/ui";
 
 export const Route = createFileRoute("/admin/guncellemeler")({
   component: OtaPage,
@@ -16,6 +17,35 @@ function OtaPage() {
   const q = useQuery({ queryKey: ["admin", "ota"], queryFn: () => adminListOtaUpdates() });
   const { run } = useRunner();
   const { confirm, prompt } = useConfirm();
+  const [platformFilter, setPlatformFilter] = useState<"all" | "ios" | "android">("all");
+  const [fatalOnly, setFatalOnly] = useState(false);
+  const [errorQuery, setErrorQuery] = useState("");
+  const [expandedErrors, setExpandedErrors] = useState<Set<string>>(new Set());
+
+  const filteredErrors = useMemo(() => {
+    const errors = q.data?.recentErrors ?? [];
+    const needle = errorQuery.trim().toLocaleLowerCase("tr");
+    return errors.filter((e) => {
+      if (platformFilter !== "all" && e.platform !== platformFilter) return false;
+      if (fatalOnly && !e.fatal) return false;
+      if (needle) {
+        const hay = [e.message, e.stack, e.screen, e.deviceId, e.updateId, e.appVersion]
+          .filter(Boolean)
+          .join(" ")
+          .toLocaleLowerCase("tr");
+        if (!hay.includes(needle)) return false;
+      }
+      return true;
+    });
+  }, [q.data?.recentErrors, platformFilter, fatalOnly, errorQuery]);
+
+  function toggleErrorStack(id: string) {
+    setExpandedErrors((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }
 
   // The update each runtime/channel is currently serving at 100% (newest first).
   const live = new Set<string>();
@@ -224,23 +254,80 @@ function OtaPage() {
             title="Uygulamadan gelen son hatalar"
             description="Uygulama çöktüğünde ya da bir ekran açılamadığında gönderilir. Yayılımı genişletmeden önce yeni güncellemenin satırına bakın. 30 gün saklanır."
           />
+          {q.data.recentErrors.length ? (
+            <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2.5">
+              <Segmented
+                value={platformFilter}
+                onChange={setPlatformFilter}
+                items={[
+                  { value: "all", label: "Tümü" },
+                  { value: "ios", label: "iOS" },
+                  { value: "android", label: "Android" },
+                ]}
+              />
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-elevated/60">
+                <input
+                  type="checkbox"
+                  checked={fatalOnly}
+                  onChange={(e) => setFatalOnly(e.target.checked)}
+                  className="size-3.5 accent-primary"
+                />
+                Sadece çökmeler
+              </label>
+              <SearchInput
+                value={errorQuery}
+                onChange={setErrorQuery}
+                placeholder="Mesaj, ekran, cihaz veya güncelleme ara…"
+                className="ml-auto w-full sm:w-72"
+              />
+            </div>
+          ) : null}
           {!q.data.recentErrors.length ? (
             <EmptyState icon={Smartphone} title="Hata raporu yok" />
+          ) : !filteredErrors.length ? (
+            <EmptyState icon={Smartphone} title="Filtreyle eşleşen hata yok" />
           ) : (
             <ul className="divide-y divide-border">
-              {q.data.recentErrors.map((e, i) => (
-                <li key={`${e.createdAt}-${i}`} className="px-4 py-2.5">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {e.fatal ? <Pill tone="danger">Çökme</Pill> : <Pill>Hata</Pill>}
-                    <span className="break-all text-sm">{e.message}</span>
-                  </div>
-                  <p className="mt-0.5 text-xs text-muted" title={dateTime(e.createdAt)}>
-                    {relative(e.createdAt)} · {PLATFORM_LABEL[e.platform]} {e.appVersion ?? ""}
-                    {e.updateId ? ` · güncelleme ${e.updateId.slice(0, 8)}` : " · mağaza sürümü"}
-                    {e.screen ? ` · ${e.screen}` : ""}
-                  </p>
-                </li>
-              ))}
+              {filteredErrors.map((e) => {
+                const isExpanded = expandedErrors.has(e.id);
+                return (
+                  <li key={e.id} className="px-4 py-2.5">
+                    <div className="flex flex-wrap items-start gap-1.5">
+                      {e.fatal ? <Pill tone="danger">Çökme</Pill> : <Pill>Hata</Pill>}
+                      <span className="min-w-0 flex-1 break-all text-sm">{e.message}</span>
+                      {e.stack ? (
+                        <button
+                          type="button"
+                          onClick={() => toggleErrorStack(e.id)}
+                          aria-expanded={isExpanded}
+                          className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium text-muted hover:bg-elevated hover:text-fg"
+                        >
+                          {isExpanded ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
+                          {isExpanded ? "Yığın izini gizle" : "Yığın izi"}
+                        </button>
+                      ) : null}
+                    </div>
+                    <p className="mt-0.5 text-xs text-muted" title={dateTime(e.createdAt)}>
+                      {relative(e.createdAt)} · {PLATFORM_LABEL[e.platform]} {e.appVersion ?? ""}
+                      {e.updateId ? ` · güncelleme ${e.updateId.slice(0, 8)}` : " · mağaza sürümü"}
+                      {e.screen ? ` · ${e.screen}` : ""}
+                      {e.deviceId ? (
+                        <>
+                          {" · cihaz "}
+                          <span className="font-mono" title={e.deviceId}>
+                            {e.deviceId.slice(0, 12)}
+                          </span>
+                        </>
+                      ) : null}
+                    </p>
+                    {e.stack && isExpanded ? (
+                      <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-all rounded-lg border border-border bg-elevated/60 p-2.5 font-mono text-[11px] leading-relaxed text-fg">
+                        {e.stack}
+                      </pre>
+                    ) : null}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </Card>

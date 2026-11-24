@@ -69,3 +69,39 @@ test("0035 search text ignores case and Turkish letters", async () => {
     await db.close();
   }
 });
+
+test("0043 applies cleanly even with legacy invalid rows and enforces constraints on new inserts", async () => {
+  const db = await schemaBefore("0043");
+  try {
+    // Existing legacy rows violating constraints must not block migration 0043 (NOT VALID).
+    await db.query("insert into listings (id,slug,user_id,category_id,title,description,price,status) values ('legacy','legacy-ilan','seller','cat','Eski ilan','Açıklama',0,'ACTIVE')");
+    await db.query("insert into reviews (id,seller_id,reviewer_id,rating) values ('legacy-rev','seller','seller',5)");
+
+    const sql0043 = await readFile(join(dir, "0043_indexes_constraints_and_features.sql"), "utf8");
+    await db.exec(sql0043);
+    // Re-running DO blocks must stay idempotent via duplicate_object guard.
+    await db.exec(sql0043);
+
+    await assert.rejects(
+      db.query("insert into listings (id,slug,user_id,category_id,title,description,price) values ('bad-price','bad-price','seller','cat','Sıfır fiyat','Açıklama',0)"),
+    );
+    await assert.rejects(
+      db.query("insert into listings (id,slug,user_id,category_id,title,description,price,status) values ('bad-status','bad-status','seller','cat','Geçersiz durum','Açıklama',100,'DRAFT')"),
+    );
+    await assert.rejects(
+      db.query("insert into reviews (id,seller_id,reviewer_id,rating) values ('bad-self','seller','seller',5)"),
+    );
+    await assert.rejects(
+      db.query("insert into reviews (id,seller_id,reviewer_id,rating) values ('bad-rate','seller','buyer',6)"),
+    );
+
+    await db.query(
+      "insert into saved_searches (id,user_id,name,category_slug,city) values ('ss1','buyer','Arama','kategori','Adana')",
+    );
+    const saved = await db.query<{ id: string; notify: boolean }>("select id, notify from saved_searches where id='ss1'");
+    assert.equal(saved.rows.length, 1);
+    assert.equal(saved.rows[0].notify, true);
+  } finally {
+    await db.close();
+  }
+});

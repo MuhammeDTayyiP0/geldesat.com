@@ -38,12 +38,24 @@ services:
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:-}
       OTA_PUBLISH_TOKEN: ${OTA_PUBLISH_TOKEN:-}
+      OTA_CODE_SIGNING_PRIVATE_KEY: ${OTA_CODE_SIGNING_PRIVATE_KEY:-}
+      OTA_CODE_SIGNING_KEY_ID: ${OTA_CODE_SIGNING_KEY_ID:-}
       CRON_SECRET: ${CRON_SECRET:-}
       TRUSTED_IP_HEADER: ${TRUSTED_IP_HEADER:-}
+      TRUSTED_PROXY_HOPS: ${TRUSTED_PROXY_HOPS:-}
+      DB_POOL_MAX: ${DB_POOL_MAX:-}
+      APPLE_TEAM_ID: ${APPLE_TEAM_ID:-}
+      ANDROID_SHA256_FINGERPRINTS: ${ANDROID_SHA256_FINGERPRINTS:-}
       HOST: "0.0.0.0"
       PORT: "3000"
       NITRO_HOST: "0.0.0.0"
       NITRO_PORT: "3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
 
 volumes:
   geldesat_pg:

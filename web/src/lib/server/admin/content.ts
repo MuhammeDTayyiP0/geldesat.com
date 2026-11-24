@@ -22,6 +22,38 @@ export const adminListPages = createServerFn({ method: "GET" })
     return rows.map((r) => ({ slug: r.slug, title: r.title, body: r.body, length: r.body.length }));
   });
 
+export const adminLegalRevisions = createServerFn({ method: "POST" })
+  .middleware([adminMiddleware])
+  .validator(z.object({ slug: z.string().trim().min(1).max(80) }))
+  .handler(async ({ data }) => {
+    const sql = await getSql();
+    const rows = await sql.query<{
+      id: string | number;
+      slug: string;
+      title: string;
+      body: string;
+      replaced_at: unknown;
+      replaced_by_name: string | null;
+    }>(
+      `select r.id, r.slug, r.title, r.body, r.replaced_at,
+              coalesce(p.display_name, r.replaced_by) as replaced_by_name
+       from legal_page_revisions r
+       left join profiles p on p.user_id = r.replaced_by
+       where r.slug = $1
+       order by r.replaced_at desc
+       limit 20`,
+      [data.slug],
+    );
+    return rows.map((r) => ({
+      id: String(r.id),
+      slug: r.slug,
+      title: r.title,
+      body: r.body,
+      replacedAt: ts(r.replaced_at),
+      replacedBy: r.replaced_by_name,
+    }));
+  });
+
 const LINKED_PAGES = new Set(["hakkimizda", "iletisim", "kvkk", "gizlilik", "cerez", "kullanim", "uyelik"]);
 
 export const adminSavePage = createServerFn({ method: "POST" })

@@ -7,6 +7,7 @@ export type FilterState = {
   categoryName?: string;
   city?: string;
   district?: string;
+  neighborhood?: string;
   minPrice?: string;
   maxPrice?: string;
   minYear?: string;
@@ -18,8 +19,24 @@ export type FilterState = {
   sort?: SortKey;
   urgent?: boolean;
   featured?: boolean;
+  postedWithin?: '1' | '3' | '7' | '30';
+  withPhotos?: boolean;
+  sellerType?: 'owner' | 'store';
+  priceDropped?: boolean;
   attrs: Record<string, string[]>;
 };
+
+export const POSTED_WITHIN_OPTIONS: { value: '1' | '3' | '7' | '30'; label: string }[] = [
+  { value: '1', label: 'Son 24 saat' },
+  { value: '3', label: 'Son 3 gün' },
+  { value: '7', label: 'Son 7 gün' },
+  { value: '30', label: 'Son 30 gün' },
+];
+
+export const SELLER_TYPE_OPTIONS: { value: 'owner' | 'store'; label: string }[] = [
+  { value: 'owner', label: 'Sahibinden' },
+  { value: 'store', label: 'Mağazadan' },
+];
 
 export const SORTS: { value: SortKey; label: string }[] = [
   // Same names as the site's sort menu.
@@ -42,6 +59,26 @@ function ordered(min?: string, max?: string): [number | undefined, number | unde
   return a != null && b != null && a > b ? [b, a] : [a, b];
 }
 
+/** Swap any inverted min/max number pairs before applying filters. */
+export function normalizeFilterRanges(state: FilterState): FilterState {
+  let next = state;
+  for (const [min, max] of [
+    ['minPrice', 'maxPrice'],
+    ['minYear', 'maxYear'],
+    ['minKm', 'maxKm'],
+    ['minM2', 'maxM2'],
+  ] as const) {
+    const low = num(next[min]);
+    const high = num(next[max]);
+    if (low != null && high != null && low > high) {
+      if (next === state) next = { ...state };
+      next[min] = state[max];
+      next[max] = state[min];
+    }
+  }
+  return next;
+}
+
 /** Category-specific ranges and options go with the category, so none stays as an invisible filter. */
 export function withoutCategory(state: FilterState): FilterState {
   return { ...state, category: undefined, categoryName: undefined, attrs: {}, minYear: undefined, maxYear: undefined, minKm: undefined, maxKm: undefined, minM2: undefined, maxM2: undefined };
@@ -58,6 +95,7 @@ export function toSearchFilters(state: FilterState, page: number, limit: number)
     category: state.category || undefined,
     city: state.city || undefined,
     district: state.district || undefined,
+    neighborhood: state.neighborhood?.trim() || undefined,
     minPrice,
     maxPrice,
     minYear,
@@ -69,6 +107,10 @@ export function toSearchFilters(state: FilterState, page: number, limit: number)
     sort: state.sort,
     urgent: state.urgent || undefined,
     featured: state.featured || undefined,
+    postedWithin: state.postedWithin || undefined,
+    withPhotos: state.withPhotos || undefined,
+    sellerType: state.sellerType || undefined,
+    priceDropped: state.priceDropped || undefined,
     attrs: Object.keys(attrs).length ? attrs : undefined,
     page,
     limit,
@@ -80,12 +122,17 @@ export function activeFilterCount(state: FilterState): number {
   let n = 0;
   if (state.city) n++;
   if (state.district) n++;
+  if (state.neighborhood?.trim()) n++;
   if (state.minPrice || state.maxPrice) n++;
   if (state.minYear || state.maxYear) n++;
   if (state.minKm || state.maxKm) n++;
   if (state.minM2 || state.maxM2) n++;
   if (state.urgent) n++;
   if (state.featured) n++;
+  if (state.postedWithin) n++;
+  if (state.withPhotos) n++;
+  if (state.sellerType) n++;
+  if (state.priceDropped) n++;
   n += Object.values(state.attrs).filter((v) => v.length).length;
   return n;
 }

@@ -143,6 +143,10 @@ export const adminDeleteStore = createServerFn({ method: "POST" })
 
 /* ───────────────────────────── Finance ───────────────────────────── */
 
+function likePrefix(q: string): string {
+  return `${q.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`;
+}
+
 export const adminListCreditOrders = createServerFn({ method: "POST" })
   .middleware([adminMiddleware])
   .validator(z.object({ status: z.enum(["ALL", "PENDING", "PAID", "REJECTED", "CANCELLED"]).default("ALL"), q: z.string().trim().max(120).optional(), ...PageInput }))
@@ -152,7 +156,8 @@ export const adminListCreditOrders = createServerFn({ method: "POST" })
     if (data.status !== "ALL") w.add(`o.status = ${w.param(data.status)}`);
     if (data.q) {
       const like = w.param(likeTerm(data.q));
-      w.add(`(p.display_name ilike ${like} or u.email ilike ${like} or o.id = ${w.param(data.q)} or o.sku ilike ${like})`);
+      const prefix = w.param(likePrefix(data.q));
+      w.add(`(p.display_name ilike ${like} or u.email ilike ${like} or o.id ilike ${prefix} or o.sku ilike ${like})`);
     }
     const from = `from credit_orders o left join profiles p on p.user_id = o.user_id left join "user" u on u.id = o.user_id`;
     const { limit, offset } = paging(data.page, data.pageSize);
@@ -228,13 +233,26 @@ export const adminResolveCreditOrder = createServerFn({ method: "POST" })
 
 export const adminCreditLedger = createServerFn({ method: "POST" })
   .middleware([adminMiddleware])
-  .validator(z.object({ userId: z.string().max(200).optional(), ...PageInput }))
+  .validator(
+    z.object({
+      userId: z.string().max(200).optional(),
+      q: z.string().trim().max(120).optional(),
+      kind: z.enum(["all", "in", "out"]).default("all"),
+      ...PageInput,
+    }),
+  )
   .handler(async ({ data }) => {
     const sql = await getSql();
     const w = new Where();
     if (data.userId) w.add(`c.user_id = ${w.param(data.userId)}`);
+    if (data.kind === "in") w.add("c.amount > 0");
+    if (data.kind === "out") w.add("c.amount < 0");
+    if (data.q) {
+      const like = w.param(likeTerm(data.q));
+      w.add(`(p.display_name ilike ${like} or u.email ilike ${like} or c.reason ilike ${like} or c.user_id = ${w.param(data.q)})`);
+    }
     const { limit, offset } = paging(data.page, data.pageSize);
-    const from = "from credit_ledger c left join profiles p on p.user_id = c.user_id";
+    const from = 'from credit_ledger c left join profiles p on p.user_id = c.user_id left join "user" u on u.id = c.user_id';
     const [rows, count] = await Promise.all([
       sql.query<Record<string, unknown>>(
         `select c.*, coalesce(p.display_name, 'Üye') as user_name ${from} ${w.sql} order by c.created_at desc limit ${limit} offset ${offset}`,

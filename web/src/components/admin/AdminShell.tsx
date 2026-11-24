@@ -166,6 +166,15 @@ function Chrome({ children }: { children: ReactNode }) {
             </button>
             {brand}
             {nav}
+            <div className="border-t border-white/8 px-3 pt-2">
+              <a
+                href="/"
+                className="flex items-center justify-between rounded-lg px-2.5 py-2 text-[13px] font-medium text-white/75 transition-colors hover:bg-white/8 hover:text-white"
+              >
+                <span>Siteye git</span>
+                <ArrowUpRight className="size-4" />
+              </a>
+            </div>
             {footer}
           </aside>
         </div>

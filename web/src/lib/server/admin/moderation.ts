@@ -147,38 +147,43 @@ export const adminResolveReports = createServerFn({ method: "POST" })
     const note = data.note?.trim() || null;
     // Only reports that really change state count: closing a closed report would
     // overwrite who closed it and when.
-    const rows = await sql.query<{ id: string; listing_id: string | null; reason: string; conversation_id: string | null }>(
-      "select id, listing_id, reason, conversation_id from reports where id = any($1::text[]) and status <> $2",
-      [data.ids, data.status],
-    );
-    const ids = rows.map((r) => r.id);
-    if (data.status === "CLOSED") {
-      await sql.query(
-        "update reports set status = 'CLOSED', resolved_at = now(), resolved_by = $2, resolution_note = coalesce($3, resolution_note) where id = any($1::text[])",
-        [ids, context.adminId, note],
+    const { rows, listings } = await sql.transaction(async (tx) => {
+      const rows = await tx.query<{ id: string; listing_id: string | null; reason: string; conversation_id: string | null }>(
+        "select id, listing_id, reason, conversation_id from reports where id = any($1::text[]) and status <> $2",
+        [data.ids, data.status],
       );
-    } else {
-      await sql.query("update reports set status = 'OPEN', resolved_at = null, resolved_by = null, resolution_note = null where id = any($1::text[])", [ids]);
-    }
-    let takenDown = 0;
-    if (data.takeDownListing && data.status === "CLOSED") {
-      // A chat report points at the chat's listing, which may be the reporter's
-      // own: only a report about the listing itself can take it down.
-      const listingIds = [...new Set(rows.filter((r) => !r.conversation_id).map((r) => r.listing_id).filter((x): x is string => Boolean(x)))];
-      if (listingIds.length) {
-        const listings = await sql.query<{ id: string; user_id: string; title: string; slug: string; listing_no: number }>(
-          `update listings set status = 'REJECTED', approved_at = null, updated_at = now()
-           where id = any($1::text[]) and status <> 'REJECTED'
-           returning id, user_id, title, slug, listing_no`,
-          [listingIds],
-        );
-        takenDown = listings.length;
-        for (const l of listings) {
-          const why = note || rows.find((r) => r.listing_id === l.id)?.reason || "Yayın kurallarına aykırılık";
-          await notify(l.user_id, "listing", "İlanınız yayından kaldırıldı", `"${l.title}" şikayet incelemesi sonucunda kaldırıldı. Gerekçe: ${why}`, `/ilan/${l.slug}`);
-          await audit(sql, context.adminId, "listing.reject", "listing", l.id, `#${l.listing_no} "${l.title}" şikayet üzerine kaldırıldı — ${why}`);
+      const ids = rows.map((r) => r.id);
+      if (ids.length) {
+        if (data.status === "CLOSED") {
+          await tx.query(
+            "update reports set status = 'CLOSED', resolved_at = now(), resolved_by = $2, resolution_note = coalesce($3, resolution_note) where id = any($1::text[])",
+            [ids, context.adminId, note],
+          );
+        } else {
+          await tx.query("update reports set status = 'OPEN', resolved_at = null, resolved_by = null, resolution_note = null where id = any($1::text[])", [ids]);
         }
       }
+      let listings: Array<{ id: string; user_id: string; title: string; slug: string; listing_no: number }> = [];
+      if (data.takeDownListing && data.status === "CLOSED") {
+        // A chat report points at the chat's listing, which may be the reporter's
+        // own: only a report about the listing itself can take it down.
+        const listingIds = [...new Set(rows.filter((r) => !r.conversation_id).map((r) => r.listing_id).filter((x): x is string => Boolean(x)))];
+        if (listingIds.length) {
+          listings = await tx.query<{ id: string; user_id: string; title: string; slug: string; listing_no: number }>(
+            `update listings set status = 'REJECTED', approved_at = null, status_before_ban = null, updated_at = now()
+             where id = any($1::text[]) and status <> 'REJECTED'
+             returning id, user_id, title, slug, listing_no`,
+            [listingIds],
+          );
+        }
+      }
+      return { rows, listings };
+    });
+
+    for (const l of listings) {
+      const why = note || rows.find((r) => r.listing_id === l.id)?.reason || "Yayın kurallarına aykırılık";
+      await notify(l.user_id, "listing", "İlanınız yayından kaldırıldı", `"${l.title}" şikayet incelemesi sonucunda kaldırıldı. Gerekçe: ${why}`, `/ilan/${l.slug}`);
+      await audit(sql, context.adminId, "listing.reject", "listing", l.id, `#${l.listing_no} "${l.title}" şikayet üzerine kaldırıldı — ${why}`);
     }
     for (const r of rows) {
       await audit(
@@ -190,7 +195,7 @@ export const adminResolveReports = createServerFn({ method: "POST" })
         `Şikayet (${r.reason}) ${data.status === "CLOSED" ? "kapatıldı" : "yeniden açıldı"}${note ? ` — ${note}` : ""}`,
       );
     }
-    return { ok: true as const, count: rows.length, takenDown };
+    return { ok: true as const, count: rows.length, takenDown: listings.length };
   });
 
 /* ───────────────────────────── Reviews ───────────────────────────── */

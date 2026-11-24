@@ -65,6 +65,10 @@ test("query parameters retain multi-select attributes and filter values", () => 
     attrs: { Renk: ["Siyah", "Mavi"] },
     urgent: undefined,
     featured: undefined,
+    postedWithin: undefined,
+    withPhotos: undefined,
+    sellerType: undefined,
+    priceDropped: undefined,
     limit: 20,
   });
 });
@@ -76,4 +80,32 @@ test("urgent and featured flags survive the URL round trip", () => {
   const filters = toFilters(parsed);
   assert.equal(filters.urgent, true);
   assert.equal(filters.featured, undefined);
+});
+
+test("neighborhood, postedWithin, withPhotos, sellerType, and priceDropped parse and sanitize cleanly", () => {
+  const parsed = parseSearch({
+    neighborhood: "Moda",
+    postedWithin: 7,
+    withPhotos: "1",
+    sellerType: "store",
+    priceDropped: "1",
+  });
+  assert.equal(parsed.neighborhood, "Moda");
+  assert.equal(parsed.postedWithin, "7");
+  assert.equal(parsed.withPhotos, "1");
+  assert.equal(parsed.sellerType, "store");
+  assert.equal(parsed.priceDropped, "1");
+
+  const filters = toFilters(parsed);
+  assert.equal(filters.neighborhood, "Moda");
+  assert.equal(filters.postedWithin, 7);
+  assert.equal(filters.withPhotos, true);
+  assert.equal(filters.sellerType, "store");
+  assert.equal(filters.priceDropped, true);
+
+  const invalid = parseSearch({ postedWithin: "99", sellerType: "admin", withPhotos: "no", priceDropped: "0" });
+  assert.equal(invalid.postedWithin, undefined);
+  assert.equal(invalid.sellerType, undefined);
+  assert.equal(invalid.withPhotos, undefined);
+  assert.equal(invalid.priceDropped, undefined);
 });

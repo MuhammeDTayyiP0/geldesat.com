@@ -21,7 +21,9 @@ const BASE_HEADERS: Record<string, string> = {
 };
 
 function securityHeaders(event: HeaderEvent): Record<string, string> {
-  const proto = event.req?.headers?.get("x-forwarded-proto") ?? event.url?.protocol.replace(":", "");
+  const proto =
+    event.req?.headers?.get("x-forwarded-proto")?.split(",")[0]?.trim().toLowerCase() ??
+    event.url?.protocol.replace(":", "").toLowerCase();
   return proto === "https"
     ? { ...BASE_HEADERS, "Strict-Transport-Security": "max-age=31536000; includeSubDomains" }
     : BASE_HEADERS;

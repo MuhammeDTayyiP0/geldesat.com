@@ -46,6 +46,7 @@ function Notes() {
       .then((list) => {
         if (!alive) return;
         // Show which ones are new on this visit, then count them as read.
+        setFailed(false);
         setRows(list);
         if (list.some((n) => !n.read)) {
           void markNotificationsRead().catch(() => undefined).then(() => setUnread((prev) => ({ ...prev, notifications: 0 })));
@@ -65,14 +66,26 @@ function Notes() {
     });
   }, [user]);
 
-  if (failed) return <AccountShell title="Bildirimler"><ErrorState message="Bildirimleriniz yüklenemedi." onRetry={() => { setFailed(false); setAttempt((n) => n + 1); }} /></AccountShell>;
+  if (failed && !rows) return <AccountShell title="Bildirimler"><ErrorState message="Bildirimleriniz yüklenemedi." onRetry={() => { setFailed(false); setAttempt((n) => n + 1); }} /></AccountShell>;
   if (isPending || (user && !rows)) return <BrandSpinner fullPage text="Bildirimleriniz yükleniyor…" />;
   if (!user || !rows) return <RedirectToSignIn />;
 
   function open(n: Note) {
-    // Notification links are site paths; external ones (if any) open normally.
-    if (n.link.startsWith("/")) void navigate({ to: n.link });
-    else window.location.href = n.link;
+    const link = n.link.trim();
+    if (!link || link.startsWith("//")) return;
+    // Notification links are site paths; external ones must be http(s).
+    if (link.startsWith("/")) {
+      void navigate({ to: link });
+      return;
+    }
+    try {
+      const url = new URL(link);
+      if (url.protocol === "http:" || url.protocol === "https:") {
+        window.location.href = url.href;
+      }
+    } catch {
+      // Ignore malformed or unsafe URLs.
+    }
   }
 
   return (

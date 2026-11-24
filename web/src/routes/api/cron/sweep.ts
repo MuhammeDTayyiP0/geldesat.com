@@ -42,7 +42,7 @@ export const Route = createFileRoute("/api/cron/sweep")({
           }
         }
         const ok = Object.values(results).every((r) => r === "ok");
-        await setAppConfig("cron_last_run", new Date().toISOString()).catch(() => undefined);
+        if (ok) await setAppConfig("cron_last_run", new Date().toISOString()).catch(() => undefined);
         return Response.json({ ok, results }, { status: ok ? 200 : 500 });
       },
     },

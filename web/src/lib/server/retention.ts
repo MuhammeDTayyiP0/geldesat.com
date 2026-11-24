@@ -89,39 +89,58 @@ export async function restoreAccount(userId: string): Promise<void> {
 }
 
 let lastSweep = 0;
+let running = false;
 
 /**
  * Purge accounts whose grace period ended and chats whose retention ended.
  * Runs at most hourly, piggybacking on regular traffic like the expiry sweep.
  */
 export async function sweepRetention(force = false): Promise<void> {
-  if (!force && Date.now() - lastSweep < 60 * 60_000) return;
+  if (running || (!force && Date.now() - lastSweep < 60 * 60_000)) return;
+  running = true;
   lastSweep = Date.now();
   const sql = await getSql();
-  // Files of OTA updates nothing refers to any more; recent ones stay for a possible rollback.
-  await sql
-    .query(
-      `delete from ota_assets a
-       where a.created_at < now() - interval '30 days'
-         and not exists (
-           select 1 from ota_updates u
-           where u.launch_asset ->> 'hash' = a.hash or u.assets @> jsonb_build_array(jsonb_build_object('hash', a.hash))
-         )`,
-    )
-    .catch((err) => console.error("[retention] ota asset cleanup failed", err));
-  const due = await sql.query<{ user_id: string }>(
-    `select user_id from profiles
-     where deletion_requested_at is not null and deletion_requested_at < now() - make_interval(days => $1)
-     limit 50`,
-    [ACCOUNT_GRACE_DAYS],
-  );
-  for (const { user_id } of due) {
+  let locked = false;
+  try {
     try {
-      await purgeUserData(sql, user_id);
-    } catch (err) {
-      console.error("[retention] account purge failed", user_id, err);
+      const lockRows = await sql.query<{ ok: boolean }>(
+        "select pg_try_advisory_lock(hashtext('geldesat:retention')) as ok",
+      );
+      if (lockRows[0] && !lockRows[0].ok) return;
+      locked = Boolean(lockRows[0]?.ok);
+    } catch {
+      locked = false;
     }
+    // Files of OTA updates nothing refers to any more; recent ones stay for a possible rollback.
+    await sql
+      .query(
+        `delete from ota_assets a
+         where a.created_at < now() - interval '30 days'
+           and not exists (
+             select 1 from ota_updates u
+             where u.launch_asset ->> 'hash' = a.hash or u.assets @> jsonb_build_array(jsonb_build_object('hash', a.hash))
+           )`,
+      )
+      .catch((err) => console.error("[retention] ota asset cleanup failed", err));
+    const due = await sql.query<{ user_id: string }>(
+      `select user_id from profiles
+       where deletion_requested_at is not null and deletion_requested_at < now() - make_interval(days => $1)
+       limit 50`,
+      [ACCOUNT_GRACE_DAYS],
+    );
+    for (const { user_id } of due) {
+      try {
+        await purgeUserData(sql, user_id);
+      } catch (err) {
+        console.error("[retention] account purge failed", user_id, err);
+      }
+    }
+    await sql.query("delete from conversations where purge_after is not null and purge_after < now()");
+    await sql.query("delete from client_errors where created_at < now() - interval '30 days'");
+  } finally {
+    if (locked) {
+      await sql.query("select pg_advisory_unlock(hashtext('geldesat:retention'))").catch(() => undefined);
+    }
+    running = false;
   }
-  await sql.query("delete from conversations where purge_after is not null and purge_after < now()");
-  await sql.query("delete from client_errors where created_at < now() - interval '30 days'");
 }

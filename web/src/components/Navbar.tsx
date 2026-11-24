@@ -55,6 +55,7 @@ export function Navbar({ className }: NavbarProps) {
     },
   });
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const allCategoriesOpenedAtRef = useRef(0);
 
   // Kategori şeridi taşıyorsa sağ kenarda solma efekti göster
   const stripRef = useRef<HTMLDivElement>(null);
@@ -148,6 +149,7 @@ export function Navbar({ className }: NavbarProps) {
 
   function handleAllCategoriesMouseEnter() {
     if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    allCategoriesOpenedAtRef.current = Date.now();
     setHoveredCategory(null);
     setAllCategoriesHovered(true);
   }
@@ -334,14 +336,21 @@ export function Navbar({ className }: NavbarProps) {
         <div className="mx-auto flex h-11 max-w-7xl items-center px-4 sm:px-6">
           {/* 1. "Tüm Kategoriler" Butonu */}
           <div
-            onMouseEnter={handleAllCategoriesMouseEnter}
+            onPointerEnter={(e) => {
+              if (e.pointerType === "mouse") handleAllCategoriesMouseEnter();
+            }}
             className="relative h-full flex items-center pr-3 border-r border-border/70"
           >
             <button
               type="button"
               aria-expanded={allCategoriesHovered}
               aria-haspopup="true"
-              onClick={() => setAllCategoriesHovered((open) => !open)}
+              onClick={() => {
+                if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+                setHoveredCategory(null);
+                if (allCategoriesHovered && Date.now() - allCategoriesOpenedAtRef.current < 350) return;
+                setAllCategoriesHovered((open) => !open);
+              }}
               className={cn(
                 "flex items-center gap-1.5 h-8 px-2.5 rounded-md text-xs font-bold transition-colors",
                 allCategoriesHovered ? "bg-primary-solid text-primary-fg" : "text-fg hover:bg-elevated",
@@ -370,6 +379,11 @@ export function Navbar({ className }: NavbarProps) {
                     to="/category/$slug"
                     params={{ slug: cat.slug }}
                     aria-expanded={isHovered}
+                    onClick={() => {
+                      if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+                      setHoveredCategory(null);
+                      setAllCategoriesHovered(false);
+                    }}
                     onKeyDown={(e) => {
                       if (e.key === "ArrowDown") {
                         e.preventDefault();

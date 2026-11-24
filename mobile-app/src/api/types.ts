@@ -23,6 +23,9 @@ export type Listing = {
   images: string[];
   attrs: Record<string, string | number>;
   view_count?: number;
+  fav_count?: number;
+  message_count?: number;
+  phone_reveal_count?: number;
   featured_until?: string | null;
   expires_at?: string | null;
   created_at: string;
@@ -57,7 +60,7 @@ export type ListingDetail = {
   history: { price: number; at: string }[];
   similar: Listing[];
   reviews: Review[];
-  sellerStats: { rating_avg: number; rating_count: number };
+  sellerStats: { rating_avg: number; rating_count: number; responseStats?: SellerResponseStats | null };
   favoriteCount: number;
   phoneRevealCount: number;
   /** Whether "Ara" can show a number; missing from servers before 2026-11. */
@@ -119,6 +122,10 @@ export type SearchFilters = {
   maxM2?: number;
   featured?: boolean;
   urgent?: boolean;
+  postedWithin?: '1' | '3' | '7' | '30';
+  withPhotos?: boolean;
+  sellerType?: 'owner' | 'store';
+  priceDropped?: boolean;
 };
 
 export type SortKey = 'date_desc' | 'date_asc' | 'price_asc' | 'price_desc' | 'views_desc';
@@ -154,6 +161,11 @@ export type Me = {
   credits: number;
 };
 
+export type SellerResponseStats = {
+  responseRate?: number | null;
+  avgReplyMinutes?: number | null;
+};
+
 export type Seller = {
   id: string;
   name: string;
@@ -166,6 +178,8 @@ export type Seller = {
   rating_count: number;
   store: { name: string; slug: string; plan: string; description?: string | null; city?: string | null; logo?: string | null } | null;
   reviews: Review[];
+  hasMoreReviews?: boolean;
+  responseStats?: SellerResponseStats | null;
 };
 
 export type Store = {
@@ -315,4 +329,23 @@ export type ListingForEdit = {
   listing: Listing;
   path: string[];
   phone: string | null;
+};
+
+export type SavedSearchFilterLeaf = string | number | boolean | null;
+export type SavedSearchFilters = Record<string, SavedSearchFilterLeaf | SavedSearchFilterLeaf[]>;
+
+export type SavedSearch = {
+  id: string;
+  user_id: string;
+  name: string;
+  category_slug: string | null;
+  city: string | null;
+  district: string | null;
+  q: string | null;
+  min_price: number | null;
+  max_price: number | null;
+  filters: SavedSearchFilters;
+  notify: boolean;
+  last_notified_at: string | null;
+  created_at: string;
 };

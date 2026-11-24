@@ -199,6 +199,7 @@ export function MobileNavigationDrawer({
               <div key={cat.id} className="rounded-xl border border-border/60 overflow-hidden">
                 <button
                   type="button"
+                  aria-expanded={isExpanded}
                   onClick={() => setExpandedCategoryId(isExpanded ? null : cat.id)}
                   className={cn(
                     "w-full flex items-center justify-between p-3 text-left font-semibold text-sm transition-colors",

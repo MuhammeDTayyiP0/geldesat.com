@@ -26,8 +26,32 @@ function CategoriesPage() {
   const { confirm } = useConfirm();
   const pick = usePickCategory();
   const [help, setHelp] = useState(false);
+  const dirtyRef = useRef(false);
+  const handleDirtyChange = useCallback((d: boolean) => {
+    dirtyRef.current = d;
+  }, []);
 
-  const select = useCallback((id: string) => void navigate({ search: (prev) => ({ ...prev, id }), replace: true }), [navigate]);
+  const select = useCallback(
+    (id: string) => {
+      if (id === search.id) return;
+      const go = () => void navigate({ search: (prev) => ({ ...prev, id }), replace: true });
+      if (!dirtyRef.current) {
+        go();
+        return;
+      }
+      void confirm({
+        title: "Kaydedilmemiş değişiklikler silinsin mi?",
+        confirmLabel: "Sil ve geç",
+        danger: true,
+      }).then((ok) => {
+        if (ok) {
+          dirtyRef.current = false;
+          go();
+        }
+      });
+    },
+    [confirm, navigate, search.id],
+  );
   const selectedId = search.id && index?.byId.has(search.id) ? search.id : null;
 
   async function requestDelete(id: string) {
@@ -69,6 +93,7 @@ function CategoriesPage() {
     if (!ok) return;
     const r = await run(() => adminDeleteCategory({ data: { id, moveListingsTo: moveTo?.id } }), (res) => `${res.removed} kategori silindi${res.movedListings ? `, ${res.movedListings} ilan taşındı` : ""}.`);
     if (r) {
+      dirtyRef.current = false;
       if (c.parent_id) select(c.parent_id);
       else void navigate({ search: (prev) => ({ ...prev, id: undefined }), replace: true });
     }
@@ -209,7 +234,14 @@ function CategoriesPage() {
 
           <Card className="min-w-0 overflow-hidden xl:sticky xl:top-20 xl:h-[calc(100dvh-7rem)]">
             {selectedId ? (
-              <CategoryPanel key={selectedId} id={selectedId} index={index} onSelect={select} onRequestDelete={(id) => void requestDelete(id)} />
+              <CategoryPanel
+                key={selectedId}
+                id={selectedId}
+                index={index}
+                onSelect={select}
+                onRequestDelete={(id) => void requestDelete(id)}
+                onDirtyChange={handleDirtyChange}
+              />
             ) : (
               <EmptyState
                 icon={FolderTree}

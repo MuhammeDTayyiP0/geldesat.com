@@ -25,7 +25,7 @@ export const Route = createFileRoute("/sifre-sifirla")({
 function ResetPassword() {
   const { token, error } = Route.useSearch();
   return (
-    <div className="mx-auto grid min-h-[70dvh] max-w-md place-items-center px-4 py-12 pb-32">
+    <div className="mx-auto grid min-h-[70dvh] max-w-md place-items-center px-4 py-12">
       <div className="w-full rounded-xl border border-border bg-surface p-6 shadow-card sm:p-8">
         <div className="mb-6 flex items-center gap-3">
           <LogoMark className="size-10 text-brand" />

@@ -1,12 +1,16 @@
 import { TURKEY_CITIES } from "@/lib/data/locations";
+import { NEIGHBORHOODS } from "@/lib/data/geo";
 import { Input, Label, Select } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { normalizeFilterRanges } from "@/lib/search-params";
 import type { AttrDef } from "@/lib/server/helpers";
 
 export type FilterState = {
   category?: string;
   city?: string;
   district?: string;
+  neighborhood?: string;
   minPrice?: string;
   maxPrice?: string;
   sort?: string;
@@ -16,6 +20,10 @@ export type FilterState = {
   maxKm?: string;
   minM2?: string;
   maxM2?: string;
+  postedWithin?: "1" | "3" | "7" | "30";
+  withPhotos?: string;
+  sellerType?: "owner" | "store";
+  priceDropped?: string;
   attrs: Record<string, string[]>;
 };
 
@@ -36,6 +44,7 @@ export function Filters({
 }) {
   const city = TURKEY_CITIES.find((c) => c.name === value.city);
   const districts = city?.districts ?? [];
+  const neighborhoods = (value.city && value.district && NEIGHBORHOODS[value.city]?.[value.district]) || [];
   const hasVehicle = attributes.some((a) => a.id === "yil" || a.id === "km" || a.name === "Yıl" || a.name === "KM");
   const hasM2 = attributes.some((a) => a.id === "m2" || a.unit === "m²" || a.name.includes("m²"));
 
@@ -43,17 +52,8 @@ export function Filters({
     onChange({ ...value, [key]: v });
   }
 
-  /** Min above max can only mean a slip: swap them rather than show nothing without a reason. */
   function applyChecked() {
-    const next = { ...value };
-    for (const [min, max] of [["minPrice", "maxPrice"], ["minYear", "maxYear"], ["minKm", "maxKm"], ["minM2", "maxM2"]] as const) {
-      const low = next[min];
-      const high = next[max];
-      if (low && high && Number(low) > Number(high)) {
-        next[min] = high;
-        next[max] = low;
-      }
-    }
+    const next = normalizeFilterRanges(value);
     if (next !== value) onChange(next);
     onApply(next);
   }
@@ -78,7 +78,7 @@ export function Filters({
         <Select
           id="filtre-il"
           value={value.city ?? ""}
-          onChange={(e) => onChange({ ...value, city: e.target.value || undefined, district: undefined })}
+          onChange={(e) => onChange({ ...value, city: e.target.value || undefined, district: undefined, neighborhood: undefined })}
         >
           <option value="">Tüm iller</option>
           {TURKEY_CITIES.map((c) => (
@@ -95,7 +95,7 @@ export function Filters({
           id="filtre-ilce"
           value={value.district ?? ""}
           disabled={!value.city}
-          onChange={(e) => onChange({ ...value, district: e.target.value || undefined })}
+          onChange={(e) => onChange({ ...value, district: e.target.value || undefined, neighborhood: undefined })}
         >
           <option value="">Tüm ilçeler</option>
           {districts.map((d) => (
@@ -105,6 +105,34 @@ export function Filters({
           ))}
         </Select>
       </div>
+
+      {value.district ? (
+        <div>
+          <Label htmlFor="filtre-mahalle" className="text-xs font-semibold uppercase tracking-wider text-muted">Mahalle</Label>
+          {neighborhoods.length > 0 ? (
+            <Select
+              id="filtre-mahalle"
+              value={value.neighborhood ?? ""}
+              onChange={(e) => set("neighborhood", e.target.value || undefined)}
+            >
+              <option value="">Tüm mahalleler</option>
+              {neighborhoods.map((h) => (
+                <option key={h} value={h}>
+                  {h}
+                </option>
+              ))}
+            </Select>
+          ) : (
+            <Input
+              id="filtre-mahalle"
+              type="text"
+              placeholder="Mahalle adı yazın..."
+              value={value.neighborhood ?? ""}
+              onChange={(e) => set("neighborhood", e.target.value.trimStart() || undefined)}
+            />
+          )}
+        </div>
+      ) : null}
 
       <div>
         <Label className="text-xs font-semibold uppercase tracking-wider text-muted">Fiyat (TL)</Label>
@@ -297,6 +325,72 @@ export function Filters({
           </div>
         </details>
       ) : null}
+
+      <div>
+        <Label htmlFor="filtre-tarih" className="text-xs font-semibold uppercase tracking-wider text-muted">İlan Tarihi</Label>
+        <Select
+          id="filtre-tarih"
+          value={value.postedWithin ?? ""}
+          onChange={(e) => set("postedWithin", (e.target.value || undefined) as FilterState["postedWithin"])}
+        >
+          <option value="">Tüm tarihler</option>
+          <option value="1">Son 24 saat</option>
+          <option value="3">Son 3 gün</option>
+          <option value="7">Son 7 gün</option>
+          <option value="30">Son 30 gün</option>
+        </Select>
+      </div>
+
+      <div>
+        <Label className="text-xs font-semibold uppercase tracking-wider text-muted">Kimden</Label>
+        <div role="group" aria-label="Satıcı tipi" className="mt-1 grid grid-cols-3 rounded-lg bg-elevated p-0.5 text-xs">
+          {(
+            [
+              { value: undefined, label: "Tümü" },
+              { value: "owner", label: "Sahibinden" },
+              { value: "store", label: "Mağazadan" },
+            ] as const
+          ).map((opt) => {
+            const active = (value.sellerType ?? undefined) === opt.value;
+            return (
+              <button
+                key={opt.label}
+                type="button"
+                aria-pressed={active}
+                onClick={() => set("sellerType", opt.value)}
+                className={cn(
+                  "h-8 rounded-md px-2 font-medium transition-colors",
+                  active ? "bg-surface text-fg shadow-2xs" : "text-muted hover:text-fg",
+                )}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="space-y-1.5 rounded-xl border border-border p-3">
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted">Hızlı Seçenekler</p>
+        <label className="flex min-h-8 cursor-pointer items-center gap-2 text-sm text-fg transition-colors hover:text-primary">
+          <input
+            type="checkbox"
+            className="size-4 rounded border-border accent-primary"
+            checked={value.withPhotos === "1"}
+            onChange={(e) => set("withPhotos", e.target.checked ? "1" : undefined)}
+          />
+          <span>Sadece fotoğraflı</span>
+        </label>
+        <label className="flex min-h-8 cursor-pointer items-center gap-2 text-sm text-fg transition-colors hover:text-primary">
+          <input
+            type="checkbox"
+            className="size-4 rounded border-border accent-primary"
+            checked={value.priceDropped === "1"}
+            onChange={(e) => set("priceDropped", e.target.checked ? "1" : undefined)}
+          />
+          <span>Fiyatı düşenler</span>
+        </label>
+      </div>
 
       {!hideSort ? (
         <div>

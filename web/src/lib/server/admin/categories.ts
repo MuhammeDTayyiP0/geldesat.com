@@ -389,24 +389,26 @@ export const adminDeleteCategory = createServerFn({ method: "POST" })
   .validator(z.object({ id: z.string().max(200), moveListingsTo: z.string().max(200).optional() }))
   .handler(async ({ context, data }) => {
     const sql = await getSql();
-    const name = await nameOf(sql, data.id);
-    const ids = await subtree(sql, data.id);
-    const used = await sql.query<{ n: number }>("select count(*) as n from listings where category_id = any($1::text[])", [ids]);
-    const listingCount = num(used[0]?.n);
-    let targetName: string | null = null;
-    if (listingCount > 0) {
-      if (!data.moveListingsTo) {
-        throw new Error(`Bu dalda ${listingCount} ilan var. Silmeden önce ilanların taşınacağı kategoriyi seçin.`);
+    const { name, ids, listingCount, targetName } = await sql.transaction(async (tx) => {
+      await tx.query("select pg_advisory_xact_lock(hashtext('category-move'))");
+      const name = await nameOf(tx, data.id);
+      const ids = await subtree(tx, data.id);
+      const used = await tx.query<{ n: number }>("select count(*) as n from listings where category_id = any($1::text[])", [ids]);
+      const listingCount = num(used[0]?.n);
+      let targetName: string | null = null;
+      if (listingCount > 0) {
+        if (!data.moveListingsTo) {
+          throw new Error(`Bu dalda ${listingCount} ilan var. Silmeden önce ilanların taşınacağı kategoriyi seçin.`);
+        }
+        if (ids.includes(data.moveListingsTo)) throw new Error("İlanlar silinecek dalın içindeki bir kategoriye taşınamaz.");
+        targetName = await nameOf(tx, data.moveListingsTo);
       }
-      if (ids.includes(data.moveListingsTo)) throw new Error("İlanlar silinecek dalın içindeki bir kategoriye taşınamaz.");
-      targetName = await nameOf(sql, data.moveListingsTo);
-    }
-    await sql.transaction(async (tx) => {
       if (listingCount > 0 && data.moveListingsTo) {
         await tx.query("update listings set category_id = $2, updated_at = now() where category_id = any($1::text[])", [ids, data.moveListingsTo]);
       }
       // Children and attribute links go with it (on delete cascade).
       await tx.query("delete from categories where id = $1", [data.id]);
+      return { name, ids, listingCount, targetName };
     });
     await audit(
       sql,

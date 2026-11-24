@@ -56,15 +56,35 @@ function wrapUrlset(entries: string[]): string {
   );
 }
 
-function xmlResponse(body: string, maxAge = 3600): Response {
+function xmlResponse(body: string, maxAge = 3600, status = 200): Response {
   return new Response(body, {
-    status: 200,
+    status,
     headers: {
       "Content-Type": "application/xml; charset=utf-8",
       "X-Content-Type-Options": "nosniff",
       "Cache-Control": `public, max-age=${maxAge}, s-maxage=${maxAge}`,
     },
   });
+}
+
+const SITEMAP_CACHE_TTL_MS = 5 * 60_000;
+const sitemapCache = new Map<string, { body: string; status: number; at: number }>();
+
+async function cachedXmlResponse(key: string, maxAge: number, build: () => Promise<string>): Promise<Response> {
+  const now = Date.now();
+  const hit = sitemapCache.get(key);
+  if (hit && now - hit.at < SITEMAP_CACHE_TTL_MS) {
+    return xmlResponse(hit.body, maxAge, hit.status);
+  }
+  const body = await build();
+  if (sitemapCache.size >= 1100) {
+    for (const [k, v] of sitemapCache) {
+      if (now - v.at >= SITEMAP_CACHE_TTL_MS) sitemapCache.delete(k);
+    }
+    if (sitemapCache.size >= 1100) sitemapCache.clear();
+  }
+  sitemapCache.set(key, { body, status: 200, at: now });
+  return xmlResponse(body, maxAge, 200);
 }
 
 // ─── Sitemap builders ─────────────────────────────────────────────────────────
@@ -329,7 +349,7 @@ export default async function seoMiddleware(
 
   // ── Sitemap Index ──
   if (path === "/sitemap.xml") {
-    return xmlResponse(await buildSitemapIndex(), 3600);
+    return cachedXmlResponse("/sitemap.xml", 3600, buildSitemapIndex);
   }
 
   // ── Alt Sitemap'ler ──
@@ -337,24 +357,27 @@ export default async function seoMiddleware(
     return xmlResponse(buildStaticSitemap(), 86400);
   }
   if (path === "/sitemap-categories.xml") {
-    return xmlResponse(await buildCategoriesSitemap(), 3600);
+    return cachedXmlResponse("/sitemap-categories.xml", 3600, buildCategoriesSitemap);
   }
 
   // /sitemap-listings-1.xml, /sitemap-listings-2.xml veya /sitemap-listings.xml?page=N
   const listingsMatch = path.match(/^\/sitemap-listings(?:-(\d+))?\.xml$/);
   if (listingsMatch) {
     const pageFromPath = listingsMatch[1] ? parseInt(listingsMatch[1], 10) : NaN;
-    const pageFromQuery = parseInt(params.get("page") ?? "1", 10);
+    const rawQueryPage = params.get("page");
+    const pageFromQuery = rawQueryPage == null ? 1 : parseInt(rawQueryPage, 10);
     const pageNum = !isNaN(pageFromPath) ? pageFromPath : pageFromQuery;
-    const page = Math.max(1, isNaN(pageNum) ? 1 : pageNum);
-    return xmlResponse(await buildListingsSitemap(page), 1800);
+    if (!Number.isInteger(pageNum) || pageNum < 1 || pageNum > 1000) {
+      return new Response("Not Found", { status: 404, headers: { "Cache-Control": "no-store" } });
+    }
+    return cachedXmlResponse(`/sitemap-listings-${pageNum}.xml`, 1800, () => buildListingsSitemap(pageNum));
   }
 
   if (path === "/sitemap-stores.xml") {
     return xmlResponse(await buildStoresSitemap(), 7200);
   }
   if (path === "/sitemap-sellers.xml") {
-    return xmlResponse(await buildSellersSitemap(), 7200);
+    return cachedXmlResponse("/sitemap-sellers.xml", 7200, buildSellersSitemap);
   }
 
   // ── Robots ──

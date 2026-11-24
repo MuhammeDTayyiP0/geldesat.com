@@ -22,33 +22,39 @@ export const Route = createFileRoute("/api/hesap/verilerim")({
           const sql = await getSql();
           const id = user.id;
           const q = (text: string) => sql.query<Record<string, unknown>>(text, [id]);
-          const [account, logins, profile, store, listings, priceHistory, favorites, recentlyViewed, conversations, messages, reviewsGiven, reviewsReceived, reports, notifications, blocks, sessions] =
-            await Promise.all([
-              q(`select id, name, email, "emailVerified" as email_verified, "createdAt" as created_at from "user" where id=$1`),
-              q(`select "providerId" as provider, "createdAt" as created_at from "account" where "userId"=$1`),
-              q(`select user_id, display_name, phone, bio, city, district, avatar_url, role, phone_visibility, show_whatsapp, read_receipts, message_email, chat_templates, terms_accepted_at, terms_version, notify_prefs, created_at
-                 from profiles where user_id=$1`),
-              q(`select id, name, slug, description, city, phone, plan, created_at from stores where user_id=$1`),
-              q(`select id, listing_no, slug, category_id, title, description, price, currency, status, city, district, neighborhood, lat, lng,
-                        images, attrs, phone_override, view_count, created_at, updated_at, expires_at
-                 from listings where user_id=$1 order by created_at`),
-              q(`select h.listing_id, h.price, h.recorded_at from price_history h join listings l on l.id=h.listing_id
-                 where l.user_id=$1 order by h.recorded_at`),
-              q(`select f.listing_id, l.title, f.created_at from favorites f left join listings l on l.id=f.listing_id where f.user_id=$1`),
-              q(`select v.listing_id, l.title, v.viewed_at from listing_views v left join listings l on l.id=v.listing_id where v.user_id=$1 order by v.viewed_at desc`),
-              q(`select c.id, c.listing_id, l.title as listing_title, case when c.buyer_id=$1 then 'alıcı' else 'satıcı' end as role, c.updated_at
-                 from conversations c left join listings l on l.id=c.listing_id where c.buyer_id=$1 or c.seller_id=$1`),
-              q(`select m.conversation_id, case when m.sender_id=$1 then 'ben' else 'karşı taraf' end as sender, m.content, m.kind, m.meta, m.reply_to, m.created_at, m.read_at
-                 from messages m join conversations c on c.id=m.conversation_id
-                 where c.buyer_id=$1 or c.seller_id=$1 order by m.created_at`),
-              q(`select seller_id, listing_id, rating, comment, created_at from reviews where reviewer_id=$1`),
-              q(`select listing_id, rating, comment, created_at from reviews where seller_id=$1`),
-              q(`select listing_id, conversation_id, message_id, reason, details, status, created_at from reports where reporter_id=$1`),
-              q(`select type, title, body, link, read_at, created_at from notifications where user_id=$1 order by created_at`),
-              q(`select blocked_id, created_at from user_blocks where blocker_id=$1`),
-              q(`select "createdAt" as created_at, "updatedAt" as last_active, "userAgent" as user_agent, "ipAddress" as ip_address
-                 from "session" where "userId"=$1`),
-            ]);
+          const [account, logins, profile, store, listings] = await Promise.all([
+            q(`select id, name, email, "emailVerified" as email_verified, "createdAt" as created_at from "user" where id=$1`),
+            q(`select "providerId" as provider, "createdAt" as created_at from "account" where "userId"=$1`),
+            q(`select user_id, display_name, phone, bio, city, district, avatar_url, role, phone_visibility, show_whatsapp, read_receipts, message_email, chat_templates, terms_accepted_at, terms_version, notify_prefs, created_at
+               from profiles where user_id=$1`),
+            q(`select id, name, slug, description, city, phone, plan, created_at from stores where user_id=$1`),
+            q(`select id, listing_no, slug, category_id, title, description, price, currency, status, city, district, neighborhood, lat, lng,
+                      images, attrs, phone_override, view_count, created_at, updated_at, expires_at
+               from listings where user_id=$1 order by created_at`),
+          ]);
+          const [priceHistory, favorites, recentlyViewed, conversations, messages] = await Promise.all([
+            q(`select h.listing_id, h.price, h.recorded_at from price_history h join listings l on l.id=h.listing_id
+               where l.user_id=$1 order by h.recorded_at`),
+            q(`select f.listing_id, l.title, f.created_at from favorites f left join listings l on l.id=f.listing_id where f.user_id=$1`),
+            q(`select v.listing_id, l.title, v.viewed_at from listing_views v left join listings l on l.id=v.listing_id where v.user_id=$1 order by v.viewed_at desc`),
+            q(`select c.id, c.listing_id, l.title as listing_title, case when c.buyer_id=$1 then 'alıcı' else 'satıcı' end as role, c.updated_at
+               from conversations c left join listings l on l.id=c.listing_id where c.buyer_id=$1 or c.seller_id=$1`),
+            q(`select m.conversation_id, case when m.sender_id=$1 then 'ben' else 'karşı taraf' end as sender, m.content, m.kind, m.meta, m.reply_to, m.created_at,
+                      case when m.sender_id=$1 and coalesce(op.read_receipts, true) = false then null else m.read_at end as read_at
+               from messages m
+               join conversations c on c.id=m.conversation_id
+               left join profiles op on op.user_id = case when c.buyer_id=$1 then c.seller_id else c.buyer_id end
+               where c.buyer_id=$1 or c.seller_id=$1 order by m.created_at`),
+          ]);
+          const [reviewsGiven, reviewsReceived, reports, notifications, blocks, sessions] = await Promise.all([
+            q(`select seller_id, listing_id, rating, comment, created_at from reviews where reviewer_id=$1`),
+            q(`select listing_id, rating, comment, created_at from reviews where seller_id=$1`),
+            q(`select listing_id, conversation_id, message_id, reason, details, status, created_at from reports where reporter_id=$1`),
+            q(`select type, title, body, link, read_at, created_at from notifications where user_id=$1 order by created_at`),
+            q(`select blocked_id, created_at from user_blocks where blocker_id=$1`),
+            q(`select "createdAt" as created_at, "updatedAt" as last_active, "userAgent" as user_agent, "ipAddress" as ip_address
+               from "session" where "userId"=$1`),
+          ]);
           const [chatPhotos, creditOrders, creditLedger, boosts, phoneReveals, devices] = await Promise.all([
             q(`select i.id, i.conversation_id, i.mime_type, i.created_at from chat_images i join conversations c on c.id=i.conversation_id
                where c.buyer_id=$1 or c.seller_id=$1`),

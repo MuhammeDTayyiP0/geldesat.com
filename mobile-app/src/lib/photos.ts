@@ -67,9 +67,15 @@ export async function rotatePhoto(photo: PickedPhoto): Promise<PickedPhoto> {
   // After the turn width and height swap.
   const [w, h] = [photo.height, photo.width];
   if (Math.max(w, h) > MAX_EDGE) context.resize(w >= h ? { width: MAX_EDGE } : { height: MAX_EDGE });
-  const image = await context.renderAsync();
-  const saved = await image.saveAsync({ compress: 0.92, format: SaveFormat.JPEG });
-  return { uri: saved.uri, width: saved.width, height: saved.height, mimeType: 'image/jpeg', fileName: photo.fileName };
+  let image: Awaited<ReturnType<typeof context.renderAsync>> | undefined;
+  try {
+    image = await context.renderAsync();
+    const saved = await image.saveAsync({ compress: 0.92, format: SaveFormat.JPEG });
+    return { uri: saved.uri, width: saved.width, height: saved.height, mimeType: 'image/jpeg', fileName: photo.fileName };
+  } finally {
+    image?.release?.();
+    context.release?.();
+  }
 }
 
 /** Shrink very large photos to JPEG before upload so it is quick on mobile data. */
@@ -79,7 +85,13 @@ export async function preparePhoto(photo: PickedPhoto): Promise<{ uri: string; m
   if (longEdge > MAX_EDGE) {
     context.resize(photo.width >= photo.height ? { width: MAX_EDGE } : { height: MAX_EDGE });
   }
-  const image = await context.renderAsync();
-  const saved = await image.saveAsync({ compress: 0.85, format: SaveFormat.JPEG });
-  return { uri: saved.uri, mimeType: 'image/jpeg', fileName: `foto-${Date.now()}.jpg` };
+  let image: Awaited<ReturnType<typeof context.renderAsync>> | undefined;
+  try {
+    image = await context.renderAsync();
+    const saved = await image.saveAsync({ compress: 0.85, format: SaveFormat.JPEG });
+    return { uri: saved.uri, mimeType: 'image/jpeg', fileName: `foto-${Date.now()}.jpg` };
+  } finally {
+    image?.release?.();
+    context.release?.();
+  }
 }

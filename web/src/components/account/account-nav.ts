@@ -3,12 +3,14 @@ import {
   Ban,
   Bell,
   BellRing,
+  Bookmark,
   FileDown,
   Heart,
   History,
   Lock,
   LayoutGrid,
   MessageCircle,
+  MessageSquareText,
   Palette,
   ShieldCheck,
   Store,
@@ -36,6 +38,8 @@ type NavTo =
   | "/ayarlar/bildirimler"
   | "/ayarlar/hesap"
   | "/ayarlar/engellenenler"
+  | "/ayarlar/kayitli-aramalar"
+  | "/ayarlar/sablonlar"
   | "/admin";
 
 export type AccountNavItem = { to: NavTo; label: string; icon: LucideIcon; badge?: "messages" | "notifications"; hint?: string };
@@ -66,6 +70,8 @@ export const SETTINGS_SECTIONS: Array<{ title: string; items: AccountNavItem[] }
       { to: "/ayarlar/gorunum", label: "Görünüm", icon: Palette, hint: "Açık, koyu veya cihaz ayarı" },
       { to: "/ayarlar/bildirimler", label: "Bildirimler", icon: BellRing, hint: "Mesaj, favori, ilan durumu" },
       { to: "/ayarlar/gizlilik", label: "Gizlilik", icon: Lock, hint: "Telefonumu kimler görebilir, WhatsApp" },
+      { to: "/ayarlar/sablonlar", label: "Hazır mesajlarım", icon: MessageSquareText, hint: "Sohbette tek tıkla gönderilecek kalıp mesajlar" },
+      { to: "/ayarlar/kayitli-aramalar", label: "Kayıtlı aramalarım", icon: Bookmark, hint: "Kaydettiğiniz aramalar ve yeni ilan bildirimleri" },
       { to: "/ayarlar/engellenenler", label: "Engellenenler", icon: Ban, hint: "Mesajlaşmayı engellediğiniz kişiler" },
     ],
   },

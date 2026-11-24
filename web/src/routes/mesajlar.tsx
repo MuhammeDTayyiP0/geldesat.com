@@ -296,7 +296,7 @@ function MessagesLayout() {
                     </DropdownMenuTrigger>
                     <MenuContent align="end">
                       {flagged ? (
-                        <MenuItem onSelect={() => void act(c, () => markConversationUnread({ data: { conversationId: c.id, unread: false } }), { marked_unread: false }, "Okundu olarak işaretlendi")}>
+                        <MenuItem onSelect={() => void act(c, () => markConversationUnread({ data: { conversationId: c.id, unread: false } }), { marked_unread: false, unread: 0 }, "Okundu olarak işaretlendi")}>
                           <MailOpen /> Okundu olarak işaretle
                         </MenuItem>
                       ) : (

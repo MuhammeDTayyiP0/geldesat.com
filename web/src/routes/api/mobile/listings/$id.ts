@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { getSql } from "@/lib/db";
 import { auth } from "@/lib/auth/server";
 import { canReviewSeller, firstInWindow, mapListing, rateLimit, revealListingPhone, viewerKey } from "@/lib/server/helpers";
+import { getSellerResponseStats } from "@/lib/server/chat";
 import { errorStatus, publicErrorMessage } from "@/lib/server/errors";
 import { assertMobileJsonWrite } from "@/lib/server/mobile-auth";
 import { recordListingView } from "@/lib/server/recently-viewed";
@@ -46,7 +47,7 @@ export const Route = createFileRoute("/api/mobile/listings/$id")({
           const favoriteRows = userId
             ? await sql.query<{ listing_id: string }>("select listing_id from favorites where user_id=$1 and listing_id=$2", [userId, listing.id])
             : [];
-          const [history, similarRows, reviews, stats] = await Promise.all([
+          const [history, similarRows, reviews, stats, responseStats] = await Promise.all([
             sql.query<{ price: number | string; recorded_at: string }>("select price,recorded_at from price_history where listing_id=$1 order by recorded_at asc", [listing.id]),
             sql.query<Record<string, unknown>>(
               `select l.*,c.name as category_name,c.slug as category_slug,p.display_name as seller_name,
@@ -66,6 +67,7 @@ export const Route = createFileRoute("/api/mobile/listings/$id")({
                 (select coalesce(avg(rating),0) from reviews where seller_id=$2) as rating_avg,
                 (select count(*)::int from reviews where seller_id=$2) as rating_count`, [listing.id, listing.user_id],
             ),
+            getSellerResponseStats(sql, listing.user_id),
           ]);
           const sellerReviewEligible = Boolean(userId && userId !== listing.user_id && (await canReviewSeller(sql, userId, listing.user_id)));
           const existingReview = userId && userId !== listing.user_id
@@ -94,7 +96,7 @@ export const Route = createFileRoute("/api/mobile/listings/$id")({
               history: history.map((row) => ({ price: Number(row.price), at: asIso(row.recorded_at) })),
               similar: similarRows.map(mapListing),
               reviews: reviews.map((row) => ({ id: String(row.id), rating: Number(row.rating), comment: String(row.comment ?? ''), reviewer: String(row.reviewer ?? 'Üye'), at: asIso(row.created_at) })),
-              sellerStats: { rating_avg: Number(metric?.rating_avg || 0), rating_count: Number(metric?.rating_count || 0) },
+              sellerStats: { rating_avg: Number(metric?.rating_avg || 0), rating_count: Number(metric?.rating_count || 0), responseStats },
               favoriteCount: Number(metric?.favorite_count || 0),
               phoneRevealCount: Number(metric?.phone_reveal_count || 0),
               reviewEligibility: { eligible: sellerReviewEligible, existing: existingReview[0] ? { rating: Number(existingReview[0].rating), comment: existingReview[0].comment } : null },

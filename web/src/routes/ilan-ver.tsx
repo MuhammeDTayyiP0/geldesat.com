@@ -160,6 +160,7 @@ function PostForm() {
   const [levelError, setLevelError] = useState(false);
   const [levelAttempt, setLevelAttempt] = useState(0);
   const [attrsError, setAttrsError] = useState(false);
+  const [attrsLoading, setAttrsLoading] = useState(false);
   const [attrAttempt, setAttrAttempt] = useState(0);
   const [profilePhone, setProfilePhone] = useState("");
   const [offeredDraft, setOfferedDraft] = useState<ListingDraft | null>(null);
@@ -209,15 +210,25 @@ function PostForm() {
   // Only a final category has a form; moving through its parents must not wipe
   // what was filled in, unless a different category is really chosen.
   useEffect(() => {
-    if (!selected || !leaf) return;
+    if (!selected || !leaf) {
+      setAttrsLoading(false);
+      return;
+    }
     let cancelled = false;
     setAttrsError(false);
+    setAttrsLoading(true);
     getCategoryAttrs({ data: { categoryId: selected } })
       .then((next) => {
-        if (!cancelled) setAttrs(next);
+        if (!cancelled) {
+          setAttrs(next);
+          setAttrsLoading(false);
+        }
       })
       .catch(() => {
-        if (!cancelled) setAttrsError(true);
+        if (!cancelled) {
+          setAttrsError(true);
+          setAttrsLoading(false);
+        }
       });
     if (keepValuesFor.current !== selected) {
       keepValuesFor.current = selected;
@@ -232,15 +243,17 @@ function PostForm() {
 
   useEffect(() => {
     if (!userId) return;
-    void getMe().then((m) => {
-      if (m.store && !editId) setStoreId(m.store.id);
-      setProfilePhone(m.profile?.phone ?? "");
-      if (!editId && !userProfileLoaded.current) {
-        if (m.profile?.phone) setPhone(maskPhone10(m.profile.phone));
-        if (m.profile?.city) setCity(m.profile.city);
-        userProfileLoaded.current = true;
-      }
-    });
+    void getMe()
+      .then((m) => {
+        if (m.store && !editId) setStoreId(m.store.id);
+        setProfilePhone(m.profile?.phone ?? "");
+        if (!editId && !userProfileLoaded.current) {
+          if (m.profile?.phone) setPhone(maskPhone10(m.profile.phone));
+          if (m.profile?.city) setCity(m.profile.city);
+          userProfileLoaded.current = true;
+        }
+      })
+      .catch(() => undefined);
   }, [userId, editId]);
 
   useEffect(() => {
@@ -414,6 +427,7 @@ function PostForm() {
     const digits = cleanPhone(phone);
     if (!digits && !profilePhone) return "İlan için bir telefon numarası girin.";
     if (digits && !/^0?5\d{9}$/.test(digits)) return "Geçerli bir cep telefonu girin (5xx xxx xx xx).";
+    if (attrsLoading) return "Kategori özellikleri yükleniyor, lütfen bekleyin.";
     if (attrsError) return "Kategori özellikleri yüklenemedi. Sayfadaki “Tekrar dene”ye basın.";
     const missing = attrs.find((a) => a.required && (values[a.name] === undefined || values[a.name] === ""));
     return missing ? `Zorunlu alan: ${missing.name}` : null;
@@ -820,12 +834,16 @@ function PostForm() {
                   <dl className="grid grid-cols-1 overflow-hidden rounded-xl border border-border sm:grid-cols-2">
                     {Object.entries(values)
                       .filter(([, v]) => v !== "" && v != null)
-                      .map(([k, v]) => (
-                        <div key={k} className="flex justify-between gap-4 border-b border-border px-3 py-2.5 text-sm last:border-b-0 sm:odd:border-r">
-                          <dt className="text-muted">{k}</dt>
-                          <dd className="text-right font-medium">{String(v)}</dd>
-                        </div>
-                      ))}
+                      .map(([k, v]) => {
+                        const raw = String(v);
+                        const display = raw === "true" ? "Evet" : raw === "false" ? "Hayır" : raw;
+                        return (
+                          <div key={k} className="flex justify-between gap-4 border-b border-border px-3 py-2.5 text-sm last:border-b-0 sm:odd:border-r">
+                            <dt className="text-muted">{k}</dt>
+                            <dd className="text-right font-medium">{display}</dd>
+                          </div>
+                        );
+                      })}
                   </dl>
                 </div>
               ) : null}

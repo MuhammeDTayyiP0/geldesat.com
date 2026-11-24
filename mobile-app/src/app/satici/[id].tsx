@@ -1,17 +1,31 @@
 import { useMemo, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Pressable, Share, StyleSheet, View } from 'react-native';
+import { Share, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { BadgeCheck, CalendarDays, Eye, LayoutGrid, MapPin, Pencil, Share2, Store, UserX } from 'lucide-react-native';
-import { ApiError } from '@/api/client';
+import { BadgeCheck, CalendarDays, Eye, LayoutGrid, MapPin, MessageCircle, Pencil, Share2, Store, UserX } from 'lucide-react-native';
+import { ApiError, errorMessage } from '@/api/client';
 import { listings } from '@/api/endpoints';
 import { keys, queryClient } from '@/api/queries';
+import type { Review, SellerResponseStats } from '@/api/types';
 import { useSession } from '@/auth/session';
 import { ListingGrid } from '@/features/listing/ListingGrid';
 import { webUrl } from '@/lib/config';
 import { formatDate, memberSince, uniqueById } from '@/lib/format';
-import { Avatar, Button, Card, EmptyState, ErrorState, Header, IconButton, Loading, Stars, Text, radius, space, useTheme } from '@/ui';
+import { Avatar, Badge, Button, Card, EmptyState, ErrorState, Header, IconButton, Loading, Stars, Text, radius, space, toast, useTheme } from '@/ui';
+
+function formatResponseStats(stats: SellerResponseStats | null | undefined): string | null {
+  if (!stats) return null;
+  const parts: string[] = [];
+  if (typeof stats.responseRate === 'number' && Number.isFinite(stats.responseRate)) {
+    parts.push(`%${Math.round(stats.responseRate)} yanıt`);
+  }
+  const mins = stats.avgReplyMinutes;
+  if (typeof mins === 'number' && Number.isFinite(mins)) {
+    parts.push(mins < 60 ? `~${Math.max(1, Math.round(mins))} dk` : `~${Math.round(mins / 60)} saat`);
+  }
+  return parts.length ? parts.join(' · ') : null;
+}
 
 export default function SellerScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -23,7 +37,49 @@ export default function SellerScreen() {
   const session = useSession();
   const isOwner = session.status === 'signedIn' && session.user.id === id;
   const store = seller?.store;
-  const [allReviews, setAllReviews] = useState(false);
+  const [prevId, setPrevId] = useState(id);
+  const [reviewsPage, setReviewsPage] = useState(1);
+  const [extraReviews, setExtraReviews] = useState<Review[]>([]);
+  const [expandedReviews, setExpandedReviews] = useState(false);
+  const [loadingReviews, setLoadingReviews] = useState(false);
+  const [reviewsExhausted, setReviewsExhausted] = useState(false);
+
+  if (id !== prevId) {
+    setPrevId(id);
+    setReviewsPage(1);
+    setExtraReviews([]);
+    setExpandedReviews(false);
+    setReviewsExhausted(false);
+  }
+
+  const reviews = useMemo(() => uniqueById([...(seller?.reviews ?? []), ...extraReviews]), [seller?.reviews, extraReviews]);
+  const responseBadge = formatResponseStats(seller?.responseStats);
+
+  const loadMoreReviews = async () => {
+    if (!seller || loadingReviews) return;
+    if (!expandedReviews && reviews.length > 5 && reviews.length >= seller.rating_count) {
+      setExpandedReviews(true);
+      return;
+    }
+    setExpandedReviews(true);
+    const nextPage = reviewsPage + 1;
+    setLoadingReviews(true);
+    try {
+      const res = await listings.seller(id, 0, nextPage);
+      const next = res.seller.reviews ?? [];
+      if (!next.length) {
+        setReviewsExhausted(true);
+      } else {
+        setExtraReviews((prev) => uniqueById([...prev, ...next]));
+        setReviewsPage(nextPage);
+        if (res.seller.hasMoreReviews === false) setReviewsExhausted(true);
+      }
+    } catch (e) {
+      toast.error(errorMessage(e));
+    } finally {
+      setLoadingReviews(false);
+    }
+  };
 
   // The profile brings the first 24 listings; the rest load as the list scrolls.
   const PAGE = 24;
@@ -69,6 +125,10 @@ export default function SellerScreen() {
           listings={allListings}
           refreshing={query.isRefetching}
           onRefresh={() => {
+            setReviewsPage(1);
+            setExtraReviews([]);
+            setExpandedReviews(false);
+            setReviewsExhausted(false);
             queryClient.removeQueries({ queryKey: [...keys.seller(id), 'more'] });
             void query.refetch();
           }}
@@ -131,15 +191,21 @@ export default function SellerScreen() {
                   {store?.city || seller.city ? <Fact icon={MapPin} text={store?.city || seller.city} /> : null}
                   <Fact icon={CalendarDays} text={memberSince(seller.since)} />
                   <Fact icon={LayoutGrid} text={`${seller.listing_count} yayında ilan`} />
+                  {responseBadge ? (
+                    <View style={styles.row}>
+                      <MessageCircle size={14} color={c.primary} />
+                      <Badge label={responseBadge} tone="primary" />
+                    </View>
+                  ) : null}
                 </View>
                 {store?.description ? <Text>{store.description}</Text> : null}
                 {seller.bio ? <Text tone="muted">{seller.bio}</Text> : null}
               </Card>
 
-              {seller.reviews.length ? (
+              {reviews.length ? (
                 <View style={styles.reviews}>
                   <Text variant="subheading">Değerlendirmeler</Text>
-                  {seller.reviews.slice(0, allReviews ? undefined : 5).map((r) => (
+                  {reviews.slice(0, expandedReviews ? undefined : 5).map((r) => (
                     <Card key={r.id} style={styles.review}>
                       <View style={styles.row}>
                         <Stars value={r.rating} size={12} />
@@ -150,14 +216,14 @@ export default function SellerScreen() {
                       {r.comment ? <Text variant="caption">{r.comment}</Text> : null}
                     </Card>
                   ))}
-                  {seller.reviews.length > 5 && !allReviews ? (
-                    <Pressable accessibilityRole="button" hitSlop={8} onPress={() => setAllReviews(true)}>
-                      <Text variant="label" tone="primary">
-                        {seller.rating_count > seller.reviews.length
-                          ? `Son ${seller.reviews.length} değerlendirmeyi göster`
-                          : `Tüm ${seller.reviews.length} değerlendirmeyi göster`}
-                      </Text>
-                    </Pressable>
+                  {(!expandedReviews && reviews.length > 5) || (!reviewsExhausted && (seller.hasMoreReviews || reviews.length < seller.rating_count)) ? (
+                    <Button
+                      title="Daha fazla yorum göster"
+                      variant="outline"
+                      size="sm"
+                      loading={loadingReviews}
+                      onPress={() => void loadMoreReviews()}
+                    />
                   ) : null}
                 </View>
               ) : null}

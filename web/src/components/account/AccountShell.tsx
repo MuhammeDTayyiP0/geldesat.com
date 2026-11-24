@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight, HelpCircle, LogOut, Settings, Shield } from "lucide-react";
 import { signOut } from "@/lib/auth/client";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { useFlag } from "@/lib/use-flag";
 import { cn } from "@/lib/utils";
 import { ACCOUNT_ITEMS, SETTINGS_ITEMS, useAccountMeta, type AccountNavItem } from "./account-nav";
 
@@ -44,7 +45,9 @@ function NavRow({ item, active, count }: { item: AccountNavItem; active: boolean
 
 /** "Ayarlar" opens the settings page; while one of its pages is shown, its sub-pages are listed below. */
 function SettingsGroup({ pathname }: { pathname: string }) {
+  const savedSearchesOn = useFlag("kayitli_aramalar");
   const inside = pathname === "/ayarlar" || pathname.startsWith("/ayarlar/");
+  const items = SETTINGS_ITEMS.filter((item) => item.to !== "/ayarlar/kayitli-aramalar" || savedSearchesOn);
   return (
     <div>
       <Link
@@ -60,7 +63,7 @@ function SettingsGroup({ pathname }: { pathname: string }) {
       </Link>
       {inside ? (
         <div className="ml-5 mt-0.5 space-y-0.5 border-l border-border pl-2">
-          {SETTINGS_ITEMS.map((item) => (
+          {items.map((item) => (
             <NavRow key={item.to} item={item} active={pathname === item.to} count={0} />
           ))}
         </div>
@@ -71,10 +74,12 @@ function SettingsGroup({ pathname }: { pathname: string }) {
 
 /** Desktop left menu. */
 function AccountSidebar() {
+  const savedSearchesOn = useFlag("kayitli_aramalar");
   const { user } = useCurrentUserState();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { counts, admin } = useAccountMeta();
   const name = user?.displayName || user?.primaryEmail?.split("@")[0] || "Hesabım";
+  const accountItems = ACCOUNT_ITEMS.filter((item) => item.to !== "/ayarlar/kayitli-aramalar" || savedSearchesOn);
   return (
     <nav aria-label="Hesap menüsü" className="space-y-5">
       <Link to="/profil" className="flex items-center gap-3 rounded-xl p-2 hover:bg-elevated">
@@ -85,7 +90,7 @@ function AccountSidebar() {
         </span>
       </Link>
       <div className="space-y-0.5">
-        {ACCOUNT_ITEMS.map((item) => (
+        {accountItems.map((item) => (
           <NavRow key={item.to} item={item} active={pathname === item.to} count={item.badge ? counts[item.badge] : 0} />
         ))}
         <SettingsGroup pathname={pathname} />
@@ -143,21 +148,24 @@ export function AccountShell({
   hub?: boolean;
   children: ReactNode;
 }) {
+  const { user } = useCurrentUserState();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   // Settings sub-pages go back to the settings list; everything else to the account hub.
   const backTo = pathname.startsWith("/ayarlar/") ? "/ayarlar" : "/profil";
   return (
-    <div className="mx-auto max-w-6xl px-4 pb-24 pt-3 md:pb-12 md:pt-8">
-      <div className="md:grid md:grid-cols-[232px_minmax(0,1fr)] md:gap-8 lg:gap-10">
-        <aside className="hidden md:block">
-          <div className="sticky top-28">
-            <AccountSidebar />
-          </div>
-        </aside>
+    <div className="mx-auto max-w-6xl px-4 pb-8 pt-3 md:pb-12 md:pt-8">
+      <div className={cn(user && "md:grid md:grid-cols-[232px_minmax(0,1fr)] md:gap-8 lg:gap-10")}>
+        {user ? (
+          <aside className="hidden md:block">
+            <div className="sticky top-28">
+              <AccountSidebar />
+            </div>
+          </aside>
+        ) : null}
         <div className="min-w-0">
           <header className={cn("mb-5 flex items-center justify-between gap-3", hub && "md:mb-6")}>
             <div className="flex min-w-0 items-center gap-1">
-              {!hub ? (
+              {user && !hub ? (
                 <Link
                   to={backTo}
                   aria-label={backTo === "/ayarlar" ? "Ayarlara dön" : "Hesabıma dön"}
@@ -182,9 +190,11 @@ export function AccountShell({
 
 /** Rows of one menu section, as a rounded list. */
 export function MenuRows({ items, counts }: { items: AccountNavItem[]; counts?: Record<"messages" | "notifications", number> }) {
+  const savedSearchesOn = useFlag("kayitli_aramalar");
+  const visible = items.filter((item) => item.to !== "/ayarlar/kayitli-aramalar" || savedSearchesOn);
   return (
     <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface">
-      {items.map((item) => {
+      {visible.map((item) => {
         const Icon = item.icon;
         const count = item.badge && counts ? counts[item.badge] : 0;
         return (

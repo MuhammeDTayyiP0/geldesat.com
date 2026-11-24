@@ -2,7 +2,7 @@ import { useRef, type ComponentRef } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter, useScrollToTop, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Bell, ChevronRight, Heart, History, LayoutGrid, MessageCircle, Rocket, Settings, Store } from 'lucide-react-native';
+import { Bell, Bookmark, ChevronRight, Heart, History, LayoutGrid, MessageCircle, Rocket, Settings, Store } from 'lucide-react-native';
 import { useQuery } from '@tanstack/react-query';
 import { account } from '@/api/endpoints';
 import { keys, queryClient, useCounts, useMe } from '@/api/queries';
@@ -15,6 +15,7 @@ export default function AccountScreen() {
   const { c } = useTheme();
   // Doping sales are closed while this is off: no entry points to an empty shop (K11).
   const dopingOn = useFlag('doping_enabled');
+  const kayitliAramalar = useFlag('kayitli_aramalar');
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const session = useSession();
@@ -149,6 +150,14 @@ export default function AccountScreen() {
           <ListRow icon={LayoutGrid} label="İlanlarım" detail="Yayındaki, bekleyen ve pasif ilanlar" onPress={() => router.push('/ilanlarim')} />
           <ListRow icon={Heart} label="Favorilerim" detail="Kaydettiğiniz ilanlar" onPress={() => router.push('/favoriler')} />
           <ListRow icon={History} label="Son baktıklarım" detail="Son incelediğiniz 50 ilan" onPress={() => router.push('/son-bakilanlar')} />
+          {kayitliAramalar ? (
+            <ListRow
+              icon={Bookmark}
+              label="Kayıtlı aramalarım"
+              detail="Kaydettiğiniz aramalar ve bildirimler"
+              onPress={() => router.push('/kayitli-aramalar' as Href)}
+            />
+          ) : null}
           <ListRow
             icon={MessageCircle}
             label="Mesajlar"

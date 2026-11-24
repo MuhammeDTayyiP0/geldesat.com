@@ -8,15 +8,16 @@ import { test } from "node:test";
  * token, so adding a function should be a decision. Admin functions never belong.
  */
 const ALLOWED = [
-  "archiveConversation", "blockUser", "browseCategories", "checkReviewEligibility", "deleteConversation",
-  "deleteMessage", "getAccountSettings", "getCategory", "getChatTemplates", "getDeletionStatus", "getLegal",
-  "getListingForEdit", "getMe", "getSiteSettings", "getThread", "leaveReview", "listBlockedUsers",
-  "listCategoryRoots", "listConversations", "loadAroundMessage", "loadOlderMessages", "markConversationUnread",
-  "markThreadRead", "myCreditOrders", "myRecentListings", "pollThread", "removeRecentListing", "reportConversation",
+  "archiveConversation", "autocompleteSuggestions", "blockUser", "browseCategories", "checkReviewEligibility",
+  "createSavedSearch", "deleteConversation", "deleteMessage", "deleteSavedSearch", "getAccountSettings", "getCategory",
+  "getChatTemplates", "getDeletionStatus", "getLegal", "getListingForEdit", "getMe", "getSiteSettings", "getThread",
+  "homeListings", "leaveReview", "listBlockedUsers", "listCategoryRoots", "listConversations", "listSavedSearches",
+  "loadAroundMessage", "loadOlderMessages", "mapCityCounts", "markConversationUnread", "markThreadRead",
+  "myCreditOrders", "myRecentListings", "pollThread", "removeRecentListing", "reportConversation",
   "requestMyAccountDeletion", "respondOffer", "restoreMyAccount", "saveChatTemplates", "searchCatalogWithContext",
   "searchMessages", "sendLocation", "sendMessage", "sendOffer", "sendTyping", "startConversation", "statsHome",
-  "unblockUser", "unreadCount", "updateMessageEmail", "updateNotifyPrefs", "updatePrivacySettings", "updateProfile",
-  "upsertStore",
+  "toggleSavedSearchNotify", "unblockUser", "unreadCount", "updateMessageEmail", "updateNotifyPrefs",
+  "updatePrivacySettings", "updateProfile", "upsertStore",
 ];
 
 test("the app can only call the functions on this list", async () => {

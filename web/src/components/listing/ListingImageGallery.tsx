@@ -1,7 +1,7 @@
 import { useModalPanel } from "@/lib/use-modal-panel";
 import * as React from "react";
 import { createPortal } from "react-dom";
-import { ChevronLeft, ChevronRight, Maximize2, X, ImageIcon } from "lucide-react";
+import { ChevronLeft, ChevronRight, Maximize2, X, ImageIcon, ZoomIn, ZoomOut } from "lucide-react";
 import { photoSrc, photoSrcSet } from "@/lib/images";
 import { fromScreenEdge } from "@/lib/utils";
 
@@ -14,6 +14,7 @@ interface ListingImageGalleryProps {
 export function ListingImageGallery({ images, title, categoryName }: ListingImageGalleryProps) {
   const [currentIdx, setCurrentIdx] = React.useState(0);
   const [isFullscreen, setIsFullscreen] = React.useState(false);
+  const [zoomed, setZoomed] = React.useState(false);
   const [mounted, setMounted] = React.useState(false);
 
   const touchStartX = React.useRef<number | null>(null);
@@ -33,15 +34,18 @@ export function ListingImageGallery({ images, title, categoryName }: ListingImag
 
   const nextImage = React.useCallback(() => {
     if (total <= 1) return;
+    setZoomed(false);
     setCurrentIdx((prev) => (prev + 1) % total);
   }, [total]);
 
   const prevImage = React.useCallback(() => {
     if (total <= 1) return;
+    setZoomed(false);
     setCurrentIdx((prev) => (prev - 1 + total) % total);
   }, [total]);
 
   const closeFullscreen = React.useCallback(() => {
+    setZoomed(false);
     setIsFullscreen(false);
     if (typeof window !== "undefined" && window.history.state?.gallery_fullscreen) {
       window.history.back();
@@ -51,6 +55,7 @@ export function ListingImageGallery({ images, title, categoryName }: ListingImag
   const lightbox = useModalPanel(isFullscreen, closeFullscreen);
 
   const openFullscreen = React.useCallback(() => {
+    setZoomed(false);
     setIsFullscreen(true);
     if (typeof window !== "undefined") {
       window.history.pushState({ gallery_fullscreen: true }, "");
@@ -249,6 +254,8 @@ export function ListingImageGallery({ images, title, categoryName }: ListingImag
               <button
                 key={`${img}-${i}`}
                 type="button"
+                aria-label={`Görsel ${i + 1}`}
+                aria-current={isActive ? "true" : undefined}
                 onClick={() => setCurrentIdx(i)}
                 className={`relative h-18 w-24 shrink-0 overflow-hidden rounded-xl border-2 transition-all duration-200 ${
                   isActive
@@ -294,21 +301,38 @@ export function ListingImageGallery({ images, title, categoryName }: ListingImag
                   </span>
                 </div>
 
-                {/* Prominent, Highly Visible Close Button */}
-                <button
-                  type="button"
-                  onClick={closeFullscreen}
-                  className="flex items-center gap-1.5 rounded-full bg-white/20 hover:bg-white/30 text-white px-3.5 py-2 backdrop-blur-md transition-all hover:scale-105 active:scale-95 shadow-md cursor-pointer"
-                  title="Kapat (ESC / Tıkla)"
-                  aria-label="Kapat"
-                >
-                  <X className="size-5" />
-                  <span className="text-xs font-semibold">Kapat</span>
-                </button>
+                {/* Zoom & Close Controls */}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    aria-pressed={zoomed}
+                    onClick={() => setZoomed((z) => !z)}
+                    className="flex items-center gap-1.5 rounded-full bg-white/20 hover:bg-white/30 text-white px-3 py-2 backdrop-blur-md transition-all hover:scale-105 active:scale-95 shadow-md cursor-pointer"
+                    title={zoomed ? "Uzaklaştır" : "Yakınlaştır"}
+                    aria-label={zoomed ? "Uzaklaştır" : "Yakınlaştır"}
+                  >
+                    {zoomed ? <ZoomOut className="size-4" /> : <ZoomIn className="size-4" />}
+                    <span className="hidden sm:inline text-xs font-semibold">{zoomed ? "Uzaklaştır" : "Yakınlaştır"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={closeFullscreen}
+                    className="flex items-center gap-1.5 rounded-full bg-white/20 hover:bg-white/30 text-white px-3.5 py-2 backdrop-blur-md transition-all hover:scale-105 active:scale-95 shadow-md cursor-pointer"
+                    title="Kapat (ESC / Tıkla)"
+                    aria-label="Kapat"
+                  >
+                    <X className="size-5" />
+                    <span className="text-xs font-semibold">Kapat</span>
+                  </button>
+                </div>
               </div>
 
               {/* Main Viewer Area (Clicking empty background closes lightbox) */}
-              <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden px-2 py-2 sm:px-20 sm:py-4">
+              <div
+                className={`relative flex min-h-0 flex-1 px-2 py-2 sm:px-20 sm:py-4 ${
+                  zoomed ? "overflow-auto" : "items-center justify-center overflow-hidden"
+                }`}
+              >
                 {/* Fill the viewer box and let object-contain fit the photo, so smaller
                     photos are scaled up to the screen instead of sitting at their pixel size. */}
                 <img
@@ -316,8 +340,15 @@ export function ListingImageGallery({ images, title, categoryName }: ListingImag
                   srcSet={photoSrcSet(validImages[currentIdx], [800, 1200])}
                   sizes="100vw"
                   alt={`${title} - Büyük Görsel ${currentIdx + 1}`}
-                  className="size-full cursor-default object-contain"
-                  onClick={(e) => e.stopPropagation()}
+                  className={
+                    zoomed
+                      ? "m-auto h-auto w-[200%] sm:w-[160%] max-w-none cursor-zoom-out object-contain"
+                      : "size-full cursor-zoom-in object-contain"
+                  }
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setZoomed((z) => !z);
+                  }}
                 />
 
                 {/* Left/Right Arrows in Fullscreen */}
@@ -366,7 +397,10 @@ export function ListingImageGallery({ images, title, categoryName }: ListingImag
                       type="button"
                       aria-label={`Görsel ${i + 1}`}
                       aria-current={i === currentIdx ? "true" : undefined}
-                      onClick={() => setCurrentIdx(i)}
+                      onClick={() => {
+                        setZoomed(false);
+                        setCurrentIdx(i);
+                      }}
                       className={`relative h-14 w-18 shrink-0 overflow-hidden rounded-lg transition-all duration-150 cursor-pointer ${
                         i === currentIdx
                           ? "ring-2 ring-primary scale-110 opacity-100 shadow-md"

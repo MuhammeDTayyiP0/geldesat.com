@@ -1,16 +1,26 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
-import { Flame, LayoutGrid, MapPin, Sparkles } from 'lucide-react-native';
+import { Camera, Flame, LayoutGrid, MapPin, Sparkles, TrendingDown } from 'lucide-react-native';
 import { catalog } from '@/api/endpoints';
 import { keys } from '@/api/queries';
 import type { AttrDef } from '@/api/types';
 import { TURKEY_CITIES } from '@/data/locations';
+import { NEIGHBORHOODS } from '@/data/neighborhoods';
 import { CategoryPicker } from '@/features/catalog/CategoryPicker';
 import { OptionPicker } from '@/features/location/OptionPicker';
 import { maskThousands } from '@/lib/format';
 import { Button, Chip, Input, ListRow, RowGroup, SelectField, Sheet, Text, space } from '@/ui';
-import { hasAreaFilter, hasVehicleFilters, optionAttributes, withoutCategory, type FilterState } from './filters';
+import {
+  POSTED_WITHIN_OPTIONS,
+  SELLER_TYPE_OPTIONS,
+  hasAreaFilter,
+  hasVehicleFilters,
+  normalizeFilterRanges,
+  optionAttributes,
+  withoutCategory,
+  type FilterState,
+} from './filters';
 
 type Props = {
   visible: boolean;
@@ -19,7 +29,7 @@ type Props = {
   onApply: (next: FilterState) => void;
 };
 
-type ActiveSheet = 'main' | 'category' | 'city' | 'district' | null;
+type ActiveSheet = 'main' | 'category' | 'city' | 'district' | 'neighborhood' | null;
 
 export function FilterSheet({ visible, onClose, value, onApply }: Props) {
   const [draft, setDraft] = useState<FilterState>(value);
@@ -40,7 +50,7 @@ export function FilterSheet({ visible, onClose, value, onApply }: Props) {
     if (!visible) pendingSheet.current = null;
   }, [visible]);
 
-  const openSubSheet = (next: 'category' | 'city' | 'district') => {
+  const openSubSheet = (next: 'category' | 'city' | 'district' | 'neighborhood') => {
     pendingSheet.current = next;
     setActiveSheet(null);
   };
@@ -67,6 +77,7 @@ export function FilterSheet({ visible, onClose, value, onApply }: Props) {
   });
   const attributes = useMemo(() => info.data?.attributes ?? [], [info.data]);
   const districts = TURKEY_CITIES.find((c) => c.name === draft.city)?.districts ?? [];
+  const neighborhoods = draft.city && draft.district ? (NEIGHBORHOODS[draft.city]?.[draft.district] ?? []) : [];
 
   const set = (patch: Partial<FilterState>) => setDraft((d) => ({ ...d, ...patch }));
   const toggleAttr = (name: string, option: string) =>
@@ -120,7 +131,7 @@ export function FilterSheet({ visible, onClose, value, onApply }: Props) {
             <Button
               title="Sonuçları göster"
               onPress={() => {
-                onApply(draft);
+                onApply(normalizeFilterRanges(draft));
                 onClose();
               }}
               style={styles.grow}
@@ -149,6 +160,24 @@ export function FilterSheet({ visible, onClose, value, onApply }: Props) {
             />
           </View>
         </View>
+        {draft.district ? (
+          neighborhoods.length ? (
+            <SelectField
+              label="Mahalle"
+              placeholder="Tüm mahalleler"
+              value={draft.neighborhood}
+              onPress={() => openSubSheet('neighborhood')}
+            />
+          ) : (
+            <Input
+              label="Mahalle"
+              placeholder="Mahalle adı (isteğe bağlı)"
+              value={draft.neighborhood ?? ''}
+              onChangeText={(t) => set({ neighborhood: t || undefined })}
+              clearButtonMode="while-editing"
+            />
+          )
+        ) : null}
 
         {range('Fiyat', 'minPrice', 'maxPrice', '₺')}
         {hasVehicleFilters(attributes) ? (
@@ -163,9 +192,41 @@ export function FilterSheet({ visible, onClose, value, onApply }: Props) {
           <AttrFilter key={a.id} attr={a} selected={draft.attrs[a.name] ?? []} onToggle={(o) => toggleAttr(a.name, o)} />
         ))}
 
+        <View style={styles.block}>
+          <Text variant="label">İlan tarihi</Text>
+          <View style={styles.chips}>
+            <Chip label="Tümü" selected={!draft.postedWithin} onPress={() => set({ postedWithin: undefined })} />
+            {POSTED_WITHIN_OPTIONS.map((o) => (
+              <Chip
+                key={o.value}
+                label={o.label}
+                selected={draft.postedWithin === o.value}
+                onPress={() => set({ postedWithin: draft.postedWithin === o.value ? undefined : o.value })}
+              />
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.block}>
+          <Text variant="label">Kimden</Text>
+          <View style={styles.chips}>
+            <Chip label="Tümü" selected={!draft.sellerType} onPress={() => set({ sellerType: undefined })} />
+            {SELLER_TYPE_OPTIONS.map((o) => (
+              <Chip
+                key={o.value}
+                label={o.label}
+                selected={draft.sellerType === o.value}
+                onPress={() => set({ sellerType: draft.sellerType === o.value ? undefined : o.value })}
+              />
+            ))}
+          </View>
+        </View>
+
         <RowGroup title="Öne çıkanlar">
           <ListRow icon={Flame} label="Yalnızca acil ilanlar" switchValue={!!draft.urgent} onSwitch={(v) => set({ urgent: v })} />
           <ListRow icon={Sparkles} label="Yalnızca vitrin ilanları" switchValue={!!draft.featured} onSwitch={(v) => set({ featured: v })} />
+          <ListRow icon={Camera} label="Yalnızca fotoğraflı ilanlar" switchValue={!!draft.withPhotos} onSwitch={(v) => set({ withPhotos: v })} />
+          <ListRow icon={TrendingDown} label="Fiyatı düşenler" switchValue={!!draft.priceDropped} onSwitch={(v) => set({ priceDropped: v })} />
         </RowGroup>
       </Sheet>
 
@@ -183,7 +244,7 @@ export function FilterSheet({ visible, onClose, value, onApply }: Props) {
         title="İl seçin"
         value={draft.city}
         allLabel="Tüm iller"
-        onSelect={(city) => set({ city: city ?? undefined, district: undefined })}
+        onSelect={(city) => set({ city: city ?? undefined, district: undefined, neighborhood: undefined })}
       />
       <OptionPicker
         visible={visible && activeSheet === 'district'}
@@ -193,7 +254,17 @@ export function FilterSheet({ visible, onClose, value, onApply }: Props) {
         options={districts}
         value={draft.district}
         allLabel="Tüm ilçeler"
-        onSelect={(district) => set({ district: district ?? undefined })}
+        onSelect={(district) => set({ district: district ?? undefined, neighborhood: undefined })}
+      />
+      <OptionPicker
+        visible={visible && activeSheet === 'neighborhood'}
+        onClose={closeSubSheet}
+        onDismissed={onSubDismissed}
+        title={`${draft.district ?? ''} mahalleleri`}
+        options={neighborhoods}
+        value={draft.neighborhood}
+        allLabel="Tüm mahalleler"
+        onSelect={(neighborhood) => set({ neighborhood: neighborhood ?? undefined })}
       />
     </>
   );

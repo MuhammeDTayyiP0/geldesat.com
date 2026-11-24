@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Star, Trash2 } from "lucide-react";
@@ -39,6 +39,7 @@ function ReviewsPage() {
   const { prompt } = useConfirm();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  useEffect(() => setSelected(new Set()), [filter.q, filter.rating, filter.page]);
   const rows = query.data?.rows ?? [];
   const dist = query.data?.distribution ?? {};
   const total = Object.values(dist).reduce((a, b) => a + b, 0);
@@ -157,18 +158,25 @@ function ReviewsPage() {
                     <Stars value={r.rating} />
                   </Td>
                   <Td className="max-w-[420px]">
-                    <p
-                      className={cn("text-sm", !expanded.has(r.id) && "line-clamp-2")}
-                      title={expanded.has(r.id) ? undefined : "Tamamını görmek için tıklayın"}
-                      onClick={() =>
-                        setExpanded((prev) => {
-                          const next = new Set(prev);
-                          if (!next.delete(r.id)) next.add(r.id);
-                          return next;
-                        })
-                      }
-                    >
-                      {r.comment ?? <span className="text-subtle">Yorum yazılmamış</span>}</p>
+                    {r.comment ? (
+                      <button
+                        type="button"
+                        aria-expanded={expanded.has(r.id)}
+                        title={expanded.has(r.id) ? "Daralt" : "Tamamını görmek için tıklayın"}
+                        onClick={() =>
+                          setExpanded((prev) => {
+                            const next = new Set(prev);
+                            if (!next.delete(r.id)) next.add(r.id);
+                            return next;
+                          })
+                        }
+                        className={cn("block w-full text-left text-sm hover:text-primary focus-visible:outline-2 focus-visible:outline-primary", !expanded.has(r.id) && "line-clamp-2")}
+                      >
+                        {r.comment}
+                      </button>
+                    ) : (
+                      <p className="text-sm text-subtle">Yorum yazılmamış</p>
+                    )}
                     {r.listing_title ? <p className="truncate text-[11px] text-muted">İlan #{r.listing_no}: {r.listing_title}</p> : null}
                   </Td>
                   <Td>

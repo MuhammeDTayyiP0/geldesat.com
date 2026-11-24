@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { keepPreviousData, useQuery, type UseQueryResult } from "@tanstack/react-query";
-import { Check, Coins, CreditCard, Plus, TrendingUp, Wallet, X } from "lucide-react";
+import { Check, Coins, CreditCard, Download, Plus, TrendingUp, Wallet, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { adminCreditLedger, adminListCreditOrders, adminResolveCreditOrder } from "@/lib/server/admin/business";
 import { adminGrantCredits, adminListUsers } from "@/lib/server/admin/users";
 import { useRunner, useSheets } from "@/components/admin/hooks";
 import { dateTime, money, n, ORDER_STATUS, relative } from "@/components/admin/format";
-import { int, oneOf, str } from "@/components/admin/search";
+import { downloadCsv, int, oneOf, str } from "@/components/admin/search";
 import {
   Avatar,
   Card,
@@ -31,12 +31,14 @@ import {
 } from "@/components/admin/ui";
 
 const STATUSES = ["ALL", "PENDING", "PAID", "REJECTED", "CANCELLED"] as const;
-type Search = { tab?: "orders" | "ledger"; status?: (typeof STATUSES)[number]; q?: string; page?: number };
+const LEDGER_KINDS = ["all", "in", "out"] as const;
+type Search = { tab?: "orders" | "ledger"; status?: (typeof STATUSES)[number]; kind?: (typeof LEDGER_KINDS)[number]; q?: string; page?: number };
 
 export const Route = createFileRoute("/admin/finans")({
   validateSearch: (s: Record<string, unknown>): Search => ({
     tab: oneOf(s.tab, ["orders", "ledger"] as const),
     status: oneOf(s.status, STATUSES),
+    kind: oneOf(s.kind, LEDGER_KINDS),
     q: str(s.q),
     page: int(s.page, 1, 100_000),
   }),
@@ -79,13 +81,13 @@ function FinancePage() {
       <Card>
         <TabBar
           value={tab}
-          onChange={(v) => set({ tab: v === "orders" ? undefined : v, status: undefined, q: undefined })}
+          onChange={(v) => set({ tab: v === "orders" ? undefined : v, status: undefined, kind: undefined, q: undefined })}
           items={[
             { value: "orders", label: "Havale talepleri", count: t?.pending },
             { value: "ledger", label: "Kredi hareketleri" },
           ]}
         />
-        {tab === "orders" ? <Orders query={orders} search={search} set={set} /> : <Ledger page={search.page ?? 1} onPage={(page) => set({ page }, false)} />}
+        {tab === "orders" ? <Orders query={orders} search={search} set={set} /> : <Ledger search={search} set={set} />}
       </Card>
 
       {granting ? <GrantModal onClose={() => setGranting(false)} /> : null}
@@ -205,43 +207,79 @@ function Orders({
   );
 }
 
-function Ledger({ page, onPage }: { page: number; onPage: (p: number) => void }) {
-  const q = useQuery({ queryKey: ["admin", "ledger", page], queryFn: () => adminCreditLedger({ data: { page, pageSize: 30 } }), placeholderData: keepPreviousData });
+function Ledger({ search, set }: { search: Search; set: (patch: Partial<Search>, resetPage?: boolean) => void }) {
+  const filter = { kind: search.kind ?? "all", q: search.q, page: search.page ?? 1, pageSize: 30 } as const;
+  const q = useQuery({
+    queryKey: ["admin", "ledger", filter],
+    queryFn: () => adminCreditLedger({ data: filter }),
+    placeholderData: keepPreviousData,
+  });
   const { openUser } = useSheets();
   const rows = q.data?.rows ?? [];
-  if (q.error && !q.data) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;
-  if (q.isLoading) return <SkeletonRows rows={6} />;
-  if (!rows.length) return <EmptyState icon={Coins} title="Kredi hareketi yok" />;
+
+  function exportCsv() {
+    downloadCsv(
+      `kredi-hareketleri-${new Date().toISOString().slice(0, 10)}.csv`,
+      ["Üye", "Üye Kimliği", "Miktar", "Açıklama", "Kayıt", "Tarih"],
+      rows.map((r) => [r.user_name, r.user_id, r.amount, describeLedger(r.reason), r.reason, r.created_at.slice(0, 19).replace("T", " ")]),
+    );
+  }
+
   return (
     <>
-      <Table>
-        <thead>
-          <tr>
-            <Th>Üye</Th>
-            <Th className="text-right">Miktar</Th>
-            <Th>Açıklama</Th>
-            <Th>Tarih</Th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.id} className="hover:bg-elevated/50">
-              <Td>
-                <button type="button" onClick={() => openUser(r.user_id)} className="text-sm font-medium hover:text-primary hover:underline">
-                  {r.user_name}
-                </button>
-              </Td>
-              <Td className={r.amount >= 0 ? "text-right font-semibold tabular-nums text-ok" : "text-right font-semibold tabular-nums text-danger"}>
-                {r.amount > 0 ? "+" : ""}
-                {n(r.amount)}
-              </Td>
-              <Td className="text-xs text-muted">{describeLedger(r.reason)}</Td>
-              <Td className="whitespace-nowrap text-xs text-muted">{dateTime(r.created_at)}</Td>
+      <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
+        <Segmented
+          value={filter.kind}
+          onChange={(kind) => set({ kind: kind === "all" ? undefined : kind })}
+          items={[
+            { value: "all", label: "Tümü" },
+            { value: "in", label: "Yüklemeler (+)" },
+            { value: "out", label: "Kullanım / düşüm (-)" },
+          ]}
+        />
+        <SearchInput value={search.q ?? ""} onChange={(v) => set({ q: v || undefined })} placeholder="Üye, e-posta veya açıklama" className="ml-auto w-full sm:w-72" />
+        <Button size="sm" variant="outline" onClick={exportCsv} disabled={!rows.length}>
+          <Download className="size-4" /> CSV (bu sayfa)
+        </Button>
+      </div>
+      {q.error && !q.data ? (
+        <ErrorState error={q.error} onRetry={() => void q.refetch()} />
+      ) : q.isLoading ? (
+        <SkeletonRows rows={6} />
+      ) : !rows.length ? (
+        <EmptyState icon={Coins} title={search.q || search.kind ? "Bu filtreyle eşleşen hareket yok" : "Kredi hareketi yok"} />
+      ) : (
+        <Table>
+          <thead>
+            <tr>
+              <Th>Üye</Th>
+              <Th className="text-right">Miktar</Th>
+              <Th>Açıklama</Th>
+              <Th>Tarih</Th>
             </tr>
-          ))}
-        </tbody>
-      </Table>
-      {q.data && q.data.total > q.data.pageSize ? <Pagination page={q.data.page} pages={q.data.pages} total={q.data.total} pageSize={q.data.pageSize} onPage={onPage} /> : null}
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.id} className="hover:bg-elevated/50">
+                <Td>
+                  <button type="button" onClick={() => openUser(r.user_id)} className="text-sm font-medium hover:text-primary hover:underline">
+                    {r.user_name}
+                  </button>
+                </Td>
+                <Td className={r.amount >= 0 ? "text-right font-semibold tabular-nums text-ok" : "text-right font-semibold tabular-nums text-danger"}>
+                  {r.amount > 0 ? "+" : ""}
+                  {n(r.amount)}
+                </Td>
+                <Td className="text-xs text-muted">{describeLedger(r.reason)}</Td>
+                <Td className="whitespace-nowrap text-xs text-muted">{dateTime(r.created_at)}</Td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      )}
+      {q.data && q.data.total > q.data.pageSize ? (
+        <Pagination page={q.data.page} pages={q.data.pages} total={q.data.total} pageSize={q.data.pageSize} onPage={(page) => set({ page }, false)} />
+      ) : null}
     </>
   );
 }

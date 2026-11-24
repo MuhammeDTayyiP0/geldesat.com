@@ -2,14 +2,14 @@ import { LegalBlocks } from "@/components/common/LegalBlocks";
 import { useEffect, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Eye, FileText, Pencil, Plus, Save, Trash2 } from "lucide-react";
+import { Eye, FileText, History, Pencil, Plus, RotateCcw, Save, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn, slugify } from "@/lib/utils";
-import { adminDeletePage, adminListPages, adminSavePage } from "@/lib/server/admin/content";
+import { adminDeletePage, adminLegalRevisions, adminListPages, adminSavePage } from "@/lib/server/admin/content";
 import { useRunner } from "@/components/admin/hooks";
-import { n } from "@/components/admin/format";
+import { dateTime, n, relative } from "@/components/admin/format";
 import { str } from "@/components/admin/search";
-import { Card, EmptyState, ErrorState, Field, inputClass, PageHeader, Pill, Spinner, textareaClass, useConfirm } from "@/components/admin/ui";
+import { Card, CardHead, EmptyState, ErrorState, Field, inputClass, PageHeader, Pill, Spinner, textareaClass, useConfirm } from "@/components/admin/ui";
 
 /** Pages linked from the footer and sign-up forms; renaming or deleting them breaks those links. */
 const LINKED = new Set(["hakkimizda", "iletisim", "kvkk", "gizlilik", "cerez", "kullanim", "uyelik"]);
@@ -102,10 +102,31 @@ function Editor({ page, dirtyRef, onSaved, onDeleted }: { page: { slug: string; 
   const [preview, setPreview] = useState(false);
   const { run, busy } = useRunner();
   const { confirm } = useConfirm();
+  const revisions = useQuery({
+    queryKey: ["admin", "page-revisions", page?.slug ?? ""],
+    queryFn: () => adminLegalRevisions({ data: { slug: page!.slug } }),
+    enabled: Boolean(page),
+  });
   // The server trims what it saves, so spaces at the ends are not a change.
-  const dirty = !page || title.trim() !== page.title || slug !== page.slug || body.trim() !== page.body;
+  const dirty = page
+    ? title.trim() !== page.title || slug !== page.slug || body.trim() !== page.body
+    : Boolean(title.trim() || slug.trim() || body.trim());
   const linked = page && LINKED.has(page.slug);
-  dirtyRef.current = dirty && Boolean(page || title.trim() || body.trim());
+  dirtyRef.current = dirty;
+
+  async function loadRevision(rev: { title: string; body: string }) {
+    if (dirty) {
+      const ok = await confirm({
+        title: "Kaydedilmemiş değişiklikler silinsin mi?",
+        body: "Seçilen eski sürüm başlık ve metin alanlarına yüklenecek. Kaydedilene kadar yayındaki sayfa değişmez.",
+        confirmLabel: "Yükle",
+        danger: true,
+      });
+      if (!ok) return;
+    }
+    setTitle(rev.title);
+    setBody(rev.body);
+  }
 
   useEffect(() => {
     if (!dirty) return;
@@ -115,84 +136,125 @@ function Editor({ page, dirtyRef, onSaved, onDeleted }: { page: { slug: string; 
   }, [dirty]);
 
   return (
-    <Card className="flex min-w-0 flex-col">
-      <div className="grid gap-3 border-b border-border p-4 sm:grid-cols-2">
-        <Field label="Başlık">
-          <input
-            value={title}
-            onChange={(e) => {
-              setTitle(e.target.value);
-              if (!page) setSlug(slugify(e.target.value));
-            }}
-            className={inputClass}
-          />
-        </Field>
-        <Field label="Adres" hint={linked ? undefined : "geldesat.com/sayfa/…"} error={linked && slug !== page?.slug ? "Bu sayfa site altbilgisinden bağlı; adresini değiştirmeyin." : null}>
-          <input
-            disabled={Boolean(linked)} value={slug} onChange={(e) => setSlug(e.target.value)} className={cn(inputClass, "font-mono")} />
-        </Field>
-      </div>
-      <div className="flex items-center gap-1 border-b border-border px-4 py-2">
-        <button type="button" onClick={() => setPreview(false)} className={cn("inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold", !preview ? "bg-fg text-bg" : "text-muted hover:bg-elevated")}>
-          <Pencil className="size-3.5" /> Düzenle
-        </button>
-        <button type="button" onClick={() => setPreview(true)} className={cn("inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold", preview ? "bg-fg text-bg" : "text-muted hover:bg-elevated")}>
-          <Eye className="size-3.5" /> Önizle
-        </button>
-        {linked ? <Pill tone="primary">Altbilgide bağlı</Pill> : null}
-        <span className="ml-auto text-xs text-muted">{n(body.length)} karakter</span>
-      </div>
-      <div className="min-h-[420px] flex-1 p-4">
-        {preview ? (
-          <article className="prose-sm max-w-none text-sm leading-relaxed">
-            <h1 className="mb-4 text-2xl font-bold">{title}</h1>
-            <LegalPreview body={body} />
-          </article>
-        ) : (
-          <textarea value={body} onChange={(e) => setBody(e.target.value)} className={cn(textareaClass, "h-[60vh] min-h-[400px] font-mono text-[13px] leading-relaxed")} spellCheck />
-        )}
-      </div>
-      <div className="flex flex-wrap items-center gap-2 border-t border-border bg-elevated/30 px-4 py-3">
-        {page && !linked ? (
+    <div className="min-w-0 space-y-4">
+      <Card className="flex min-w-0 flex-col">
+        <div className="grid gap-3 border-b border-border p-4 sm:grid-cols-2">
+          <Field label="Başlık">
+            <input
+              value={title}
+              onChange={(e) => {
+                setTitle(e.target.value);
+                if (!page) setSlug(slugify(e.target.value));
+              }}
+              className={inputClass}
+            />
+          </Field>
+          <Field label="Adres" hint={linked ? undefined : "geldesat.com/sayfa/…"} error={linked && slug !== page?.slug ? "Bu sayfa site altbilgisinden bağlı; adresini değiştirmeyin." : null}>
+            <input
+              disabled={Boolean(linked)} value={slug} onChange={(e) => setSlug(e.target.value)} className={cn(inputClass, "font-mono")} />
+          </Field>
+        </div>
+        <div className="flex items-center gap-1 border-b border-border px-4 py-2">
+          <button type="button" onClick={() => setPreview(false)} className={cn("inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold", !preview ? "bg-fg text-bg" : "text-muted hover:bg-elevated")}>
+            <Pencil className="size-3.5" /> Düzenle
+          </button>
+          <button type="button" onClick={() => setPreview(true)} className={cn("inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold", preview ? "bg-fg text-bg" : "text-muted hover:bg-elevated")}>
+            <Eye className="size-3.5" /> Önizle
+          </button>
+          {linked ? <Pill tone="primary">Altbilgide bağlı</Pill> : null}
+          <span className="ml-auto text-xs text-muted">{n(body.length)} karakter</span>
+        </div>
+        <div className="min-h-[420px] flex-1 p-4">
+          {preview ? (
+            <article className="prose-sm max-w-none text-sm leading-relaxed">
+              <h1 className="mb-4 text-2xl font-bold">{title}</h1>
+              <LegalPreview body={body} />
+            </article>
+          ) : (
+            <textarea value={body} onChange={(e) => setBody(e.target.value)} className={cn(textareaClass, "h-[60vh] min-h-[400px] font-mono text-[13px] leading-relaxed")} spellCheck />
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-2 border-t border-border bg-elevated/30 px-4 py-3">
+          {page && !linked ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-danger"
+              disabled={busy}
+              onClick={() =>
+                void confirm({ title: `"${page.title}" silinsin mi?`, body: `/sayfa/${page.slug} adresi 404 verecek.`, confirmLabel: "Sil", danger: true }).then((ok) => {
+                  if (ok)
+                    void run(() => adminDeletePage({ data: { slug: page.slug } }), "Sayfa silindi.").then((r) => {
+                      if (r) onDeleted?.();
+                    });
+                })
+              }
+            >
+              <Trash2 className="size-4" /> Sil
+            </Button>
+          ) : null}
+          {page ? (
+            <a href={`/sayfa/${page.slug}`} target="_blank" rel="noreferrer" className="text-xs font-medium text-muted hover:text-fg">
+              Sitede gör ↗
+            </a>
+          ) : null}
           <Button
             size="sm"
-            variant="ghost"
-            className="text-danger"
-            disabled={busy}
+            className="ml-auto"
+            disabled={!dirty || busy || title.trim().length < 2 || body.trim().length < 10}
             onClick={() =>
-              void confirm({ title: `"${page.title}" silinsin mi?`, body: `/sayfa/${page.slug} adresi 404 verecek.`, confirmLabel: "Sil", danger: true }).then((ok) => {
-                if (ok)
-                  void run(() => adminDeletePage({ data: { slug: page.slug } }), "Sayfa silindi.").then((r) => {
-                    if (r) onDeleted?.();
-                  });
+              void run(() => adminSavePage({ data: { originalSlug: page?.slug, slug: slug || slugify(title), title: title.trim(), body } }), "Sayfa kaydedildi.").then((r) => {
+                if (r) {
+                  dirtyRef.current = false;
+                  onSaved(r.slug);
+                }
               })
             }
           >
-            <Trash2 className="size-4" /> Sil
+            {busy ? <Spinner /> : <Save className="size-4" />} Kaydet
           </Button>
-        ) : null}
-        {page ? (
-          <a href={`/sayfa/${page.slug}`} target="_blank" rel="noreferrer" className="text-xs font-medium text-muted hover:text-fg">
-            Sitede gör ↗
-          </a>
-        ) : null}
-        <Button
-          size="sm"
-          className="ml-auto"
-          disabled={!dirty || busy || title.trim().length < 2 || body.trim().length < 10}
-          onClick={() =>
-            void run(() => adminSavePage({ data: { originalSlug: page?.slug, slug: slug || slugify(title), title: title.trim(), body } }), "Sayfa kaydedildi.").then((r) => {
-              if (r) {
-                dirtyRef.current = false;
-                onSaved(r.slug);
-              }
-            })
-          }
-        >
-          {busy ? <Spinner /> : <Save className="size-4" />} Kaydet
-        </Button>
-      </div>
-    </Card>
+        </div>
+      </Card>
+
+      {page ? (
+        <Card>
+          <CardHead
+            title={
+              <span className="inline-flex items-center gap-1.5">
+                <History className="size-4 text-muted" /> Sürüm geçmişi
+              </span>
+            }
+            description="Önceki sürümleri düzenleyiciye yükleyip gözden geçirebilirsiniz; kaydetmeden yayındaki metin değişmez."
+          />
+          {revisions.error && !revisions.data ? (
+            <ErrorState error={revisions.error} onRetry={() => void revisions.refetch()} />
+          ) : revisions.isLoading ? (
+            <div className="flex items-center justify-center gap-2 py-8 text-xs text-muted">
+              <Spinner /> Sürüm geçmişi yükleniyor…
+            </div>
+          ) : !revisions.data?.length ? (
+            <p className="px-4 py-6 text-center text-xs text-muted">Henüz kaydedilmiş eski sürüm yok.</p>
+          ) : (
+            <ul className="divide-y divide-border">
+              {revisions.data.map((rev) => (
+                <li key={rev.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{rev.title}</p>
+                    <p className="text-xs text-muted" title={dateTime(rev.replacedAt)}>
+                      {dateTime(rev.replacedAt)} ({relative(rev.replacedAt)})
+                      {rev.replacedBy ? ` · ${rev.replacedBy}` : ""} · {n(rev.body.length)} karakter
+                    </p>
+                  </div>
+                  <Button size="sm" variant="outline" onClick={() => void loadRevision(rev)}>
+                    <RotateCcw className="size-3.5" /> Forma yükle
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      ) : null}
+    </div>
   );
 }
 

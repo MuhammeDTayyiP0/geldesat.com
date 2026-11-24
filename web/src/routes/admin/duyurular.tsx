@@ -61,29 +61,33 @@ function BroadcastPage() {
           <CardHead title="Yeni duyuru" description="Önce yalnızca yöneticilere göndererek deneyebilirsiniz." />
           <div className="space-y-4 p-4">
             <FieldGroup label="Alıcılar">
-              <div className="grid gap-2 sm:grid-cols-2">
-                {(Object.keys(sizes.data ?? {}) as Audience[]).map((key) => {
-                  const a = sizes.data![key];
-                  return (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => setAudience(key)}
-                      className={cn("rounded-xl border p-3 text-left transition-colors", audience === key ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-border hover:border-primary/40")}
-                    >
-                      <p className="text-sm font-semibold">{a.label}</p>
-                      <p className="mt-0.5 text-xs text-muted">
-                        {n(a.count)} üye · {n(a.devices)} mobil cihaz
-                      </p>
-                    </button>
-                  );
-                })}
-                {sizes.isLoading ? (
-                  <div className="flex items-center gap-2 text-sm text-muted">
-                    <Spinner /> Hedef kitleler hesaplanıyor…
-                  </div>
-                ) : null}
-              </div>
+              {sizes.error && !sizes.data ? (
+                <ErrorState error={sizes.error} onRetry={() => void sizes.refetch()} />
+              ) : (
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {(Object.keys(sizes.data ?? {}) as Audience[]).map((key) => {
+                    const a = sizes.data![key];
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => setAudience(key)}
+                        className={cn("rounded-xl border p-3 text-left transition-colors", audience === key ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-border hover:border-primary/40")}
+                      >
+                        <p className="text-sm font-semibold">{a.label}</p>
+                        <p className="mt-0.5 text-xs text-muted">
+                          {n(a.count)} üye · {n(a.devices)} mobil cihaz
+                        </p>
+                      </button>
+                    );
+                  })}
+                  {sizes.isLoading ? (
+                    <div className="flex items-center gap-2 text-sm text-muted">
+                      <Spinner /> Hedef kitleler hesaplanıyor…
+                    </div>
+                  ) : null}
+                </div>
+              )}
             </FieldGroup>
             <Field label="Başlık">
               <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} className={inputClass} placeholder="Ör. Yeni özellik: ilanınızı öne çıkarın" />

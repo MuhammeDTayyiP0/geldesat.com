@@ -50,6 +50,8 @@ export function appRouteForWebPath(path: string): Href | null {
       return second ? { pathname: '/sayfa/[slug]', params: { slug: second } } : null;
     case 'ilan-ver':
       return '/ilan-ver';
+    case 'harita':
+      return '/harita' as Href;
     case 'doping':
       return '/doping';
     case 'search': {

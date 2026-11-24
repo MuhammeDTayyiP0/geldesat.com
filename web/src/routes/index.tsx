@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { TURKEY_CITIES } from "@/lib/data/locations";
 import { useNearbyCity } from "@/lib/nearby-city";
+import { useFlag } from "@/lib/use-flag";
 import { formatNumber } from "@/lib/utils";
 import { jsonLd } from "@/lib/seo";
 
@@ -96,6 +97,7 @@ const QUICK = ["Civic", "3+1", "iPhone", "Kiralık"];
 /** Same layout as the app's home: search, category strip, rails, then the newest listings. */
 function Home() {
   const { cats, rails, stats } = Route.useLoaderData();
+  const fiyatDusenler = useFlag("fiyat_dususu_vitrini");
   const nav = useNavigate();
   const [q, setQ] = useState("");
 
@@ -156,6 +158,13 @@ function Home() {
         seeAll={{ to: "/search", search: { urgent: "1" } }}
       />
       <ListingRail title="Vitrin" items={rails.featured} seeAll={{ to: "/search", search: { featured: "1" } }} />
+      {fiyatDusenler && rails.priceDropped?.length ? (
+        <ListingRail
+          title="Fiyatı düşenler"
+          items={rails.priceDropped}
+          seeAll={{ to: "/search", search: { priceDropped: "1" } }}
+        />
+      ) : null}
       <NearbyRail />
       <RecentRail />
 

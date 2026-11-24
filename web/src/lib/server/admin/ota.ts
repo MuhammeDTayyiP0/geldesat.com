@@ -27,12 +27,15 @@ export type AdminOtaUpdate = {
 
 /** One error report from the app, newest first. */
 export type AdminClientError = {
+  id: string;
   createdAt: string;
   platform: "ios" | "android";
   appVersion: string | null;
   updateId: string | null;
+  deviceId: string | null;
   fatal: boolean;
   message: string;
+  stack: string | null;
   screen: string | null;
 };
 
@@ -93,21 +96,27 @@ export const adminListOtaUpdates = createServerFn({ method: "GET" })
       errorDevices: Number(r.error_devices ?? 0),
     }));
     const errorRows = await sql.query<{
+      id: string | number;
       created_at: string | Date;
       platform: "ios" | "android";
       app_version: string | null;
       update_id: string | null;
+      device_id: string | null;
       fatal: boolean;
       message: string;
+      stack: string | null;
       screen: string | null;
-    }>("select created_at, platform, app_version, update_id, fatal, message, screen from client_errors order by created_at desc limit 30");
+    }>("select id, created_at, platform, app_version, update_id, device_id, fatal, message, stack, screen from client_errors order by created_at desc limit 100");
     const recentErrors: AdminClientError[] = errorRows.map((r) => ({
+      id: String(r.id),
       createdAt: new Date(r.created_at).toISOString(),
       platform: r.platform,
       appVersion: r.app_version,
       updateId: r.update_id,
+      deviceId: r.device_id,
       fatal: r.fatal,
       message: r.message,
+      stack: r.stack,
       screen: r.screen,
     }));
     return {

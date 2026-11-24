@@ -110,6 +110,9 @@ function SystemPage() {
                   </li>
                 ))}
               </ul>
+              <p className="border-t border-border px-4 py-2 text-[11px] text-muted">
+                Son zamanlanmış çalışma: {d.lastCronRun ? dateTime(d.lastCronRun) : "Henüz çalışmadı"}
+              </p>
             </Card>
           </div>
 
