@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { getSql } from "@/lib/db";
+import { getSql, type Sql } from "@/lib/db";
 import { newId } from "@/lib/utils";
 import { CHANNEL_PATTERN, RUNTIME_PATTERN } from "../ota";
 import { adminMiddleware, audit } from "./common";
@@ -39,92 +39,103 @@ export type AdminClientError = {
   screen: string | null;
 };
 
+/** Load OTA updates and recent mobile error reports for the admin updates page. */
+export async function listAdminOtaUpdates(sql: Sql) {
+  const rows = await sql.query<{
+    group_id: string;
+    kind: "update" | "rollback";
+    runtime_version: string;
+    channel: string;
+    platforms: Array<"ios" | "android">;
+    message: string;
+    rollout: number;
+    critical: boolean;
+    created_at: string | Date;
+    created_by: string | null;
+    creator: string | null;
+    republished_from: string | null;
+    bytes: number | string | null;
+    errors: number;
+    error_devices: number;
+  }>(
+    `select u.group_id, min(u.kind) as kind, min(u.runtime_version) as runtime_version, min(u.channel) as channel,
+            array_agg(u.platform order by u.platform) as platforms, min(u.message) as message,
+            min(u.rollout)::int as rollout, bool_or(u.critical) as critical, min(u.created_at) as created_at,
+            min(u.created_by) as created_by, min(p.display_name) as creator, min(u.republished_from) as republished_from,
+            (select coalesce(sum(octet_length(a.data)), 0) from ota_assets a
+              where a.hash in (
+                select x.launch_asset->>'hash' from ota_updates x where x.group_id = u.group_id
+                union
+                select e->>'hash' from ota_updates x, jsonb_array_elements(x.assets) e where x.group_id = u.group_id
+              )) as bytes,
+            (select count(*)::int from client_errors e
+              where e.update_id in (
+                select x.id::text from ota_updates x where x.group_id = u.group_id
+                union
+                select upper(x.id::text) from ota_updates x where x.group_id = u.group_id
+              )) as errors,
+            (select count(distinct e.device_id)::int from client_errors e
+              where e.update_id in (
+                select x.id::text from ota_updates x where x.group_id = u.group_id
+                union
+                select upper(x.id::text) from ota_updates x where x.group_id = u.group_id
+              )) as error_devices
+       from ota_updates u
+       left join profiles p on p.user_id = u.created_by
+      group by u.group_id
+      order by min(u.created_at) desc
+      limit 100`,
+  );
+  const updates: AdminOtaUpdate[] = rows.map((r) => ({
+    groupId: r.group_id,
+    kind: r.kind,
+    runtimeVersion: r.runtime_version,
+    channel: r.channel,
+    platforms: r.platforms,
+    message: r.message,
+    rollout: Number(r.rollout),
+    critical: r.critical,
+    createdAt: new Date(r.created_at).toISOString(),
+    createdBy: r.created_by === "script" ? "Yayın scripti" : (r.creator ?? r.created_by),
+    republishedFrom: r.republished_from,
+    bytes: Number(r.bytes ?? 0),
+    errors: Number(r.errors ?? 0),
+    errorDevices: Number(r.error_devices ?? 0),
+  }));
+  const errorRows = await sql.query<{
+    id: string | number;
+    created_at: string | Date;
+    platform: "ios" | "android";
+    app_version: string | null;
+    update_id: string | null;
+    device_id: string | null;
+    fatal: boolean;
+    message: string;
+    stack: string | null;
+    screen: string | null;
+  }>("select id, created_at, platform, app_version, update_id, device_id, fatal, message, stack, screen from client_errors order by created_at desc limit 100");
+  const recentErrors: AdminClientError[] = errorRows.map((r) => ({
+    id: String(r.id),
+    createdAt: new Date(r.created_at).toISOString(),
+    platform: r.platform,
+    appVersion: r.app_version,
+    updateId: r.update_id,
+    deviceId: r.device_id,
+    fatal: r.fatal,
+    message: r.message,
+    stack: r.stack,
+    screen: r.screen,
+  }));
+  return {
+    updates,
+    recentErrors,
+    publishingEnabled: (process.env.OTA_PUBLISH_TOKEN?.trim().length ?? 0) >= 24,
+  };
+}
+
 export const adminListOtaUpdates = createServerFn({ method: "GET" })
   .middleware([adminMiddleware])
-  .handler(async () => {
-    const sql = await getSql();
-    const rows = await sql.query<{
-      group_id: string;
-      kind: "update" | "rollback";
-      runtime_version: string;
-      channel: string;
-      platforms: Array<"ios" | "android">;
-      message: string;
-      rollout: number;
-      critical: boolean;
-      created_at: string | Date;
-      created_by: string | null;
-      creator: string | null;
-      republished_from: string | null;
-      bytes: number | string | null;
-      errors: number;
-      error_devices: number;
-    }>(
-      `select u.group_id, min(u.kind) as kind, min(u.runtime_version) as runtime_version, min(u.channel) as channel,
-              array_agg(u.platform order by u.platform) as platforms, min(u.message) as message,
-              min(u.rollout)::int as rollout, bool_or(u.critical) as critical, min(u.created_at) as created_at,
-              min(u.created_by) as created_by, min(p.display_name) as creator, min(u.republished_from) as republished_from,
-              (select coalesce(sum(octet_length(a.data)), 0) from ota_assets a
-                where a.hash in (
-                  select x.launch_asset->>'hash' from ota_updates x where x.group_id = u.group_id
-                  union
-                  select e->>'hash' from ota_updates x, jsonb_array_elements(x.assets) e where x.group_id = u.group_id
-                )) as bytes,
-              (select count(*)::int from client_errors e where e.update_id in (select x.id from ota_updates x where x.group_id = u.group_id)) as errors,
-              (select count(distinct e.device_id)::int from client_errors e
-                where e.update_id in (select x.id from ota_updates x where x.group_id = u.group_id)) as error_devices
-         from ota_updates u
-         left join profiles p on p.user_id = u.created_by
-        group by u.group_id
-        order by min(u.created_at) desc
-        limit 100`,
-    );
-    const updates: AdminOtaUpdate[] = rows.map((r) => ({
-      groupId: r.group_id,
-      kind: r.kind,
-      runtimeVersion: r.runtime_version,
-      channel: r.channel,
-      platforms: r.platforms,
-      message: r.message,
-      rollout: Number(r.rollout),
-      critical: r.critical,
-      createdAt: new Date(r.created_at).toISOString(),
-      createdBy: r.created_by === "script" ? "Yayın scripti" : (r.creator ?? r.created_by),
-      republishedFrom: r.republished_from,
-      bytes: Number(r.bytes ?? 0),
-      errors: Number(r.errors ?? 0),
-      errorDevices: Number(r.error_devices ?? 0),
-    }));
-    const errorRows = await sql.query<{
-      id: string | number;
-      created_at: string | Date;
-      platform: "ios" | "android";
-      app_version: string | null;
-      update_id: string | null;
-      device_id: string | null;
-      fatal: boolean;
-      message: string;
-      stack: string | null;
-      screen: string | null;
-    }>("select id, created_at, platform, app_version, update_id, device_id, fatal, message, stack, screen from client_errors order by created_at desc limit 100");
-    const recentErrors: AdminClientError[] = errorRows.map((r) => ({
-      id: String(r.id),
-      createdAt: new Date(r.created_at).toISOString(),
-      platform: r.platform,
-      appVersion: r.app_version,
-      updateId: r.update_id,
-      deviceId: r.device_id,
-      fatal: r.fatal,
-      message: r.message,
-      stack: r.stack,
-      screen: r.screen,
-    }));
-    return {
-      updates,
-      recentErrors,
-      publishingEnabled: (process.env.OTA_PUBLISH_TOKEN?.trim().length ?? 0) >= 24,
-    };
-  });
+  .handler(async () => listAdminOtaUpdates(await getSql()));
 
 export const adminSetOtaRollout = createServerFn({ method: "POST" })
   .middleware([adminMiddleware])

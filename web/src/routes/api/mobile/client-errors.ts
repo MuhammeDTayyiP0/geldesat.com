@@ -33,12 +33,13 @@ export const Route = createFileRoute("/api/mobile/client-errors")({
           if (!parsed.success) return Response.json({ success: false, error: "Rapor okunamadı." }, { status: 400 });
           const sql = await getSql();
           for (const e of parsed.data.errors) {
-            const dedupKey = `client-err:${e.updateId ?? ""}:${e.platform}:${e.screen ?? ""}:${e.message.slice(0, 160)}`;
+            const updateId = e.updateId?.trim().toLowerCase() || null;
+            const dedupKey = `client-err:${updateId ?? ""}:${e.platform}:${e.screen ?? ""}:${e.message.slice(0, 160)}`;
             if (!firstInWindow(dedupKey, 10 * 60_000)) continue;
             await sql.query(
               `insert into client_errors (platform, app_version, update_id, device_id, fatal, message, stack, screen)
                values ($1,$2,$3,$4,$5,$6,$7,$8)`,
-              [e.platform, e.appVersion ?? null, e.updateId ?? null, e.deviceId ?? null, e.fatal ?? false, e.message, e.stack ?? null, e.screen ?? null],
+              [e.platform, e.appVersion ?? null, updateId, e.deviceId ?? null, e.fatal ?? false, e.message, e.stack ?? null, e.screen ?? null],
             );
           }
           return Response.json({ success: true });
