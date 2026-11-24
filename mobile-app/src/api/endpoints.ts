@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import { request, rpc, toQuery, UPLOAD_HEADER } from './client';
+import { buildImageForm, type LocalImage } from './uploadForm';
 import type {
   AccountSettings,
   AppNotification,
@@ -233,43 +234,41 @@ export const geo = {
 
 // ─── Uploads ────────────────────────────────────────────────────────────────
 
-type LocalImage = { uri: string; mimeType?: string | null; fileName?: string | null };
-
-function imageForm(image: LocalImage, extra: Record<string, string> = {}): FormData {
-  const form = new FormData();
-  const type = image.mimeType || 'image/jpeg';
-  const ext = type.split('/')[1] ?? 'jpg';
-  // React Native's FormData accepts { uri, name, type } for files.
-  form.append('file', { uri: image.uri, name: image.fileName || `foto.${ext}`, type } as unknown as Blob);
-  for (const [key, value] of Object.entries(extra)) form.append(key, value);
-  return form;
+async function imageForm(image: LocalImage, extra: Record<string, string> = {}, signal?: AbortSignal): Promise<FormData> {
+  return buildImageForm(image, { extra, isWeb: Platform.OS === 'web', signal });
 }
 
 const uploadHeaders = { [UPLOAD_HEADER]: '1' };
 
 export const uploads = {
   /** Listing photo (the site converts and resizes it); returns its "/uploads/…" path. */
-  listingPhoto: (image: LocalImage, signal?: AbortSignal) =>
-    request<{ url: string }>('/api/upload', { method: 'POST', form: imageForm(image), headers: uploadHeaders, timeoutMs: 90_000, signal }).then(
-      (r) => r.url,
-    ),
+  listingPhoto: async (image: LocalImage, signal?: AbortSignal) => {
+    const form = await imageForm(image, {}, signal);
+    const r = await request<{ url: string }>('/api/upload', { method: 'POST', form, headers: uploadHeaders, timeoutMs: 90_000, signal });
+    return r.url;
+  },
   discardListingPhoto: (url: string) =>
     request('/api/upload', { method: 'DELETE', body: { url }, headers: uploadHeaders }).catch(() => undefined),
-  chatPhoto: (conversationId: string, image: LocalImage) =>
-    request<{ message: ChatMessage }>('/api/chat/image', {
+  chatPhoto: async (conversationId: string, image: LocalImage) => {
+    const form = await imageForm(image, { conversationId });
+    const r = await request<{ message: ChatMessage }>('/api/chat/image', {
       method: 'POST',
-      form: imageForm(image, { conversationId }),
+      form,
       headers: uploadHeaders,
       timeoutMs: 90_000,
-    }).then((r) => r.message),
-  avatar: (image: LocalImage) =>
-    request<{ url: string }>('/api/avatar', { method: 'POST', form: imageForm(image), headers: uploadHeaders, timeoutMs: 60_000 }).then(
-      (r) => r.url,
-    ),
+    });
+    return r.message;
+  },
+  avatar: async (image: LocalImage) => {
+    const form = await imageForm(image);
+    const r = await request<{ url: string }>('/api/avatar', { method: 'POST', form, headers: uploadHeaders, timeoutMs: 60_000 });
+    return r.url;
+  },
   removeAvatar: () => request('/api/avatar', { method: 'DELETE', headers: uploadHeaders }),
-  storeLogo: (image: LocalImage) =>
-    request<{ url: string }>('/api/store-logo', { method: 'POST', form: imageForm(image), headers: uploadHeaders, timeoutMs: 60_000 }).then(
-      (r) => r.url,
-    ),
+  storeLogo: async (image: LocalImage) => {
+    const form = await imageForm(image);
+    const r = await request<{ url: string }>('/api/store-logo', { method: 'POST', form, headers: uploadHeaders, timeoutMs: 60_000 });
+    return r.url;
+  },
   removeStoreLogo: () => request<{ ok: boolean }>('/api/store-logo', { method: 'DELETE', headers: uploadHeaders }),
 };
