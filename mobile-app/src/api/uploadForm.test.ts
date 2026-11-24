@@ -1,7 +1,7 @@
 /// <reference types="node" />
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { buildImageForm, type NativeFilePart } from './uploadForm';
+import { buildImageForm, UPLOAD_HEADER, type NativeFilePart } from './uploadForm';
 
 class FakeExpoFormData {
   private readonly items: [string, unknown][] = [];
@@ -16,6 +16,10 @@ class FakeExpoFormData {
 }
 
 describe('buildImageForm', () => {
+  it('exposes the expected upload header constant', () => {
+    assert.equal(UPLOAD_HEADER, 'x-geldesat-upload');
+  });
+
   it('builds a native ExpoFetch file part with name, type, bytes, and extra fields', async () => {
     const sampleBytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]);
     let seenUri = '';

@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
-import { request, rpc, toQuery, UPLOAD_HEADER } from './client';
-import { buildImageForm, type LocalImage } from './uploadForm';
+import { request, rpc, toQuery } from './client';
+import { buildImageForm, UPLOAD_HEADER, type LocalImage } from './uploadForm';
 import type {
   AccountSettings,
   AppNotification,

@@ -1,6 +1,5 @@
 import { API_BASE_URL } from '@/lib/config';
 import { clearSession, getToken } from '@/auth/session';
-import { clearLocalPushRegistration } from '@/lib/push';
 
 export class ApiError extends Error {
   readonly status: number;
@@ -26,8 +25,7 @@ export async function timedFetch(url: string, init: RequestInit = {}, timeoutMs 
   }
 }
 
-/** Header the site's upload routes require (see web/src/lib/listing-photos.ts). */
-export const UPLOAD_HEADER = 'x-geldesat-upload';
+export { UPLOAD_HEADER } from './uploadForm';
 
 type RequestOptions = {
   method?: 'GET' | 'POST' | 'DELETE' | 'PUT';
@@ -90,7 +88,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     // Only if this was the current session: a late answer must not end a newer one.
     if (getToken() === token) {
       void clearSession();
-      void clearLocalPushRegistration();
+      void import('@/lib/push').then((m) => m.clearLocalPushRegistration()).catch(() => undefined);
     }
     throw new ApiError(data?.error || 'Oturumunuz sona erdi. Lütfen tekrar giriş yapın.', 401);
   }

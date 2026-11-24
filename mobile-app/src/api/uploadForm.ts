@@ -1,3 +1,6 @@
+/** Header the site's upload routes require (see web/src/lib/listing-photos.ts). */
+export const UPLOAD_HEADER = 'x-geldesat-upload';
+
 export type LocalImage = {
   uri: string;
   mimeType?: string | null;
