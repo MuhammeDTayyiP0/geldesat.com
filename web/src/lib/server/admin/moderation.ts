@@ -170,10 +170,11 @@ export const adminResolveReports = createServerFn({ method: "POST" })
         const listingIds = [...new Set(rows.filter((r) => !r.conversation_id).map((r) => r.listing_id).filter((x): x is string => Boolean(x)))];
         if (listingIds.length) {
           listings = await tx.query<{ id: string; user_id: string; title: string; slug: string; listing_no: number }>(
-            `update listings set status = 'REJECTED', approved_at = null, status_before_ban = null, updated_at = now()
+            `update listings set status = 'REJECTED', approved_at = null, status_before_ban = null,
+                rejection_reason = coalesce(nullif($2, ''), rejection_reason), updated_at = now()
              where id = any($1::text[]) and status <> 'REJECTED'
              returning id, user_id, title, slug, listing_no`,
-            [listingIds],
+            [listingIds, note ?? ""],
           );
         }
       }

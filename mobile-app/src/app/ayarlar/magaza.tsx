@@ -1,19 +1,20 @@
 import { useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Linking, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useQuery } from '@tanstack/react-query';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import { ExternalLink, MapPin, Phone, Store } from 'lucide-react-native';
+import { Camera, Clock, ExternalLink, FileText, MapPin, Phone, Store, Trash2, UserRound } from 'lucide-react-native';
 import { errorMessage } from '@/api/client';
-import { account } from '@/api/endpoints';
+import { account, storeApplications, uploads } from '@/api/endpoints';
 import { keys, queryClient, useMe } from '@/api/queries';
 import { OptionPicker } from '@/features/location/OptionPicker';
-import { SUPPORT_EMAIL } from '@/lib/config';
-import { cleanPhone, maskPhoneInput } from '@/lib/format';
-import { Button, EmptyState, ErrorState, Header, Input, Loading, SelectField, space, toast, useTheme } from '@/ui';
+import { cleanPhone, formatDate, formatPhone, maskPhoneInput } from '@/lib/format';
+import { pickPhotos, preparePhoto } from '@/lib/photos';
+import { Avatar, Badge, Button, Card, ErrorState, Header, Input, ListRow, Loading, RowGroup, SelectField, Sheet, Text, radius, space, toast, useTheme } from '@/ui';
 import { RequireSignIn } from '@/auth/RequireSignIn';
 
-/** Edit the account's store. Stores are opened by the GeldeSat team, not in the app. */
+/** Edit the account's store or submit a corporate store application. */
 export default function StoreSettingsScreen() {
   return (
     <RequireSignIn title="Mağazam">
@@ -35,6 +36,24 @@ function StoreSettings() {
   const [picker, setPicker] = useState(false);
   const [busy, setBusy] = useState(false);
   const [loadedFor, setLoadedFor] = useState<string | null>(null);
+  const [logoSheet, setLogoSheet] = useState(false);
+  const [logoBusy, setLogoBusy] = useState(false);
+  const [afterLogoSheet, setAfterLogoSheet] = useState<'camera' | 'library' | 'remove' | null>(null);
+
+  // Corporate application state (when user has no store yet)
+  const appQuery = useQuery({
+    queryKey: keys.storeApplication,
+    queryFn: storeApplications.mine,
+    enabled: !!me.data && !store,
+  });
+  const [appName, setAppName] = useState('');
+  const [appCity, setAppCity] = useState('');
+  const [appPhone, setAppPhone] = useState('');
+  const [appTaxNo, setAppTaxNo] = useState('');
+  const [appNotes, setAppNotes] = useState('');
+  const [appCityPicker, setAppCityPicker] = useState(false);
+  const [appBusy, setAppBusy] = useState(false);
+  const [appPrefilled, setAppPrefilled] = useState(false);
 
   // Fill the form when the store arrives (or after a save refreshes it).
   if (store && loadedFor !== store.id) {
@@ -43,6 +62,12 @@ function StoreSettings() {
     setDescription(store.description ?? '');
     setCity(store.city ?? '');
     setPhone(store.phone ? maskPhoneInput(store.phone) : '');
+  }
+
+  if (!store && me.data?.profile && !appPrefilled) {
+    setAppPrefilled(true);
+    setAppCity(me.data.profile.city ?? '');
+    setAppPhone(me.data.profile.phone ? maskPhoneInput(me.data.profile.phone) : '');
   }
 
   if (me.isLoading) {
@@ -63,16 +88,155 @@ function StoreSettings() {
     );
   }
 
+  const changeLogo = async (source: 'camera' | 'library') => {
+    try {
+      const [photo] = await pickPhotos(source, 1);
+      if (!photo) return;
+      setLogoBusy(true);
+      await uploads.storeLogo(await preparePhoto(photo));
+      await queryClient.invalidateQueries({ queryKey: keys.me });
+      toast.success('Mağaza logosu güncellendi');
+    } catch (e) {
+      toast.error(errorMessage(e));
+    } finally {
+      setLogoBusy(false);
+    }
+  };
+
+  const removeLogo = async () => {
+    setLogoBusy(true);
+    try {
+      await uploads.removeStoreLogo();
+      await queryClient.invalidateQueries({ queryKey: keys.me });
+      toast.success('Mağaza logosu kaldırıldı');
+    } catch (e) {
+      toast.error(errorMessage(e));
+    } finally {
+      setLogoBusy(false);
+    }
+  };
+
+  const submitApplication = async () => {
+    if (appName.trim().length < 3) return toast.error('Mağaza adı en az 3 karakter olmalı.');
+    const digits = cleanPhone(appPhone);
+    if (digits && !/^05\d{9}$/.test(digits)) return toast.error('Telefon 05xx xxx xx xx biçiminde olmalı.');
+    setAppBusy(true);
+    try {
+      await storeApplications.submit({
+        name: appName.trim(),
+        city: appCity || undefined,
+        phone: digits || undefined,
+        taxNo: appTaxNo.trim() || undefined,
+        notes: appNotes.trim() || undefined,
+      });
+      await queryClient.invalidateQueries({ queryKey: keys.storeApplication });
+      toast.success('Mağaza başvurunuz alındı');
+    } catch (e) {
+      toast.error(errorMessage(e));
+    } finally {
+      setAppBusy(false);
+    }
+  };
+
   if (!store) {
+    const application = appQuery.data;
     return (
       <View style={{ flex: 1, backgroundColor: c.bg }}>
-        <Header title="Mağaza" />
-        <EmptyState
-          icon={Store}
-          title="Kurumsal mağaza"
-          message="Kurumsal mağazalar GeldeSat ekibi tarafından açılır. Başvuru için bize yazın."
-          action={<Button title="Başvur" onPress={() => void Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=Kurumsal%20ma%C4%9Faza%20ba%C5%9Fvurusu`)} />}
-        />
+        <Header title="Kurumsal mağaza" />
+        {appQuery.isLoading ? (
+          <Loading />
+        ) : appQuery.isError && !appQuery.data ? (
+          <ErrorState error={appQuery.error} onRetry={() => void appQuery.refetch()} />
+        ) : application && application.status === 'PENDING' ? (
+          <KeyboardAwareScrollView contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + space.xxxl }]}>
+            <Card style={styles.statusCard}>
+              <View style={styles.statusHead}>
+                <View style={[styles.statusIcon, { backgroundColor: c.warnSoft }]}>
+                  <Clock size={22} color={c.warn} />
+                </View>
+                <View style={styles.flex}>
+                  <Text variant="subheading">Başvurunuz inceleniyor</Text>
+                  <Badge label="Onay bekliyor" tone="warn" style={styles.statusBadge} />
+                </View>
+              </View>
+              <Text variant="caption" tone="muted">
+                Başvurunuz ekibimiz tarafından incelendikten sonra mağazanız aktif edilecektir.
+              </Text>
+              <View style={[styles.appDetails, { borderTopColor: c.border }]}>
+                <DetailLine label="Mağaza adı" value={application.name} />
+                {application.city ? <DetailLine label="Şehir" value={application.city} /> : null}
+                {application.phone ? <DetailLine label="Telefon" value={formatPhone(application.phone)} /> : null}
+                {application.tax_no ? <DetailLine label="Vergi no" value={application.tax_no} /> : null}
+                {application.notes ? <DetailLine label="Not" value={application.notes} /> : null}
+                <DetailLine label="Başvuru tarihi" value={formatDate(application.created_at)} />
+              </View>
+            </Card>
+          </KeyboardAwareScrollView>
+        ) : (
+          <KeyboardAwareScrollView bottomOffset={24} keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + space.xxxl }]}>
+            {application && application.status === 'REJECTED' ? (
+              <Card style={[styles.rejectCard, { backgroundColor: c.dangerSoft, borderColor: c.danger }]}>
+                <Badge label="Önceki başvuru reddedildi" tone="danger" />
+                {application.review_note ? (
+                  <Text variant="caption" tone="danger">
+                    {application.review_note}
+                  </Text>
+                ) : (
+                  <Text variant="caption" tone="danger">
+                    Bilgilerinizi güncelleyerek yeniden başvurabilirsiniz.
+                  </Text>
+                )}
+              </Card>
+            ) : (
+              <Card style={[styles.introCard, { backgroundColor: c.primarySoft, borderColor: c.primarySoft }]}>
+                <Text variant="bodyStrong" tone="primary">
+                  Kurumsal mağaza başvurusu
+                </Text>
+                <Text variant="caption" tone="muted">
+                  Galeri, emlak ofisi veya işletme olarak satış yapıyorsanız ilanlarınızı kendi mağaza sayfanızda toplayabilirsiniz.
+                </Text>
+              </Card>
+            )}
+            <Input
+              label="Mağaza / İşletme adı"
+              required
+              icon={Store}
+              placeholder="Örn. Yıldız Oto Galeri"
+              value={appName}
+              onChangeText={setAppName}
+              maxLength={60}
+            />
+            <SelectField label="Şehir" icon={MapPin} placeholder="Seçin" value={appCity} onPress={() => setAppCityPicker(true)} />
+            <Input
+              label="Telefon"
+              icon={Phone}
+              keyboardType="phone-pad"
+              placeholder="05xx xxx xx xx"
+              value={appPhone}
+              onChangeText={(t) => setAppPhone(maskPhoneInput(t))}
+            />
+            <Input
+              label="Vergi numarası"
+              icon={FileText}
+              placeholder="İsteğe bağlı"
+              keyboardType="number-pad"
+              value={appTaxNo}
+              onChangeText={setAppTaxNo}
+              maxLength={30}
+            />
+            <Input
+              label="Başvuru notu"
+              multiline
+              placeholder="Faaliyet alanınız, ilan sayınız vb. (isteğe bağlı)"
+              value={appNotes}
+              onChangeText={setAppNotes}
+              maxLength={1000}
+              hint={`${appNotes.length}/1000`}
+            />
+            <Button title="Başvuru gönder" size="lg" loading={appBusy} onPress={() => void submitApplication()} />
+          </KeyboardAwareScrollView>
+        )}
+        <OptionPicker visible={appCityPicker} onClose={() => setAppCityPicker(false)} title="Şehir" value={appCity} onSelect={(v) => setAppCity(v ?? '')} />
       </View>
     );
   }
@@ -95,6 +259,17 @@ function StoreSettings() {
     <View style={{ flex: 1, backgroundColor: c.bg }}>
       <Header title="Mağazam" subtitle={store.plan} />
       <KeyboardAwareScrollView bottomOffset={24} keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + space.xxxl }]}>
+        <Pressable
+          onPress={() => setLogoSheet(true)}
+          style={styles.logoWrap}
+          accessibilityRole="button"
+          accessibilityLabel="Mağaza logosunu değiştir"
+        >
+          <Avatar name={name || store.name} uri={store.logo_url} size={88} />
+          <View style={[styles.camera, { backgroundColor: c.primarySolid, borderColor: c.bg }]}>
+            {logoBusy ? <ActivityIndicator color="#fff" size="small" /> : <Camera size={16} color="#fff" />}
+          </View>
+        </Pressable>
         <Input label="Mağaza adı" required icon={Store} value={name} onChangeText={setName} maxLength={60} />
         <SelectField label="Şehir" icon={MapPin} placeholder="Seçin" value={city} onPress={() => setPicker(true)} />
         <Input label="Telefon" icon={Phone} keyboardType="phone-pad" value={phone} onChangeText={(t) => setPhone(maskPhoneInput(t))} />
@@ -108,10 +283,79 @@ function StoreSettings() {
         />
       </KeyboardAwareScrollView>
       <OptionPicker visible={picker} onClose={() => setPicker(false)} title="Şehir" value={city} onSelect={(v) => setCity(v ?? '')} />
+      <Sheet
+        visible={logoSheet}
+        onClose={() => setLogoSheet(false)}
+        title="Mağaza logosu"
+        onDismissed={() => {
+          const next = afterLogoSheet;
+          setAfterLogoSheet(null);
+          if (next === 'remove') void removeLogo();
+          else if (next) void changeLogo(next);
+        }}
+      >
+        <RowGroup>
+          <ListRow
+            icon={Camera}
+            label="Fotoğraf çek"
+            onPress={() => {
+              setAfterLogoSheet('camera');
+              setLogoSheet(false);
+            }}
+          />
+          <ListRow
+            icon={UserRound}
+            label="Galeriden seç"
+            onPress={() => {
+              setAfterLogoSheet('library');
+              setLogoSheet(false);
+            }}
+          />
+          {store.logo_url ? (
+            <ListRow
+              icon={Trash2}
+              label="Logoyu kaldır"
+              danger
+              onPress={() => {
+                setAfterLogoSheet('remove');
+                setLogoSheet(false);
+              }}
+            />
+          ) : null}
+        </RowGroup>
+        <Text variant="caption" tone="subtle" center>
+          Logo kare olarak kırpılır ve küçültülür.
+        </Text>
+      </Sheet>
+    </View>
+  );
+}
+
+function DetailLine({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.detailRow}>
+      <Text variant="caption" tone="muted" style={styles.detailLabel}>
+        {label}
+      </Text>
+      <Text variant="caption" style={styles.flex}>
+        {value}
+      </Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   body: { padding: space.lg, gap: space.lg, paddingBottom: space.xxxl },
+  logoWrap: { alignSelf: 'center', marginVertical: space.sm },
+  camera: { position: 'absolute', right: 0, bottom: 0, width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', borderWidth: 3 },
+  statusCard: { gap: space.md },
+  statusHead: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  statusIcon: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  statusBadge: { marginTop: 4 },
+  appDetails: { paddingTop: space.md, borderTopWidth: 1, gap: space.sm },
+  detailRow: { flexDirection: 'row', gap: space.sm },
+  detailLabel: { width: 100 },
+  introCard: { gap: space.xs, borderRadius: radius.lg },
+  rejectCard: { gap: space.sm, borderWidth: 1 },
 });

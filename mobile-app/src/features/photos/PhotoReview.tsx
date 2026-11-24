@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Modal, Pressable, ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, FlatList, Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -29,18 +29,50 @@ export type PhotoReviewProps = {
  * write a caption. Nothing is uploaded or sent until the person confirms.
  */
 export function PhotoReview(props: PhotoReviewProps) {
+  const [picking, setPicking] = useState(false);
+  const pendingPickRef = useRef<(() => void) | null>(null);
+
+  if (props.photos === null && picking) {
+    setPicking(false);
+  }
+
+  useEffect(() => {
+    if (props.photos === null) {
+      pendingPickRef.current = null;
+    }
+  }, [props.photos]);
+
+  const schedulePick = (run: () => Promise<void>) => {
+    if (Platform.OS !== 'ios') {
+      void run();
+      return;
+    }
+    if (picking || pendingPickRef.current) return;
+    pendingPickRef.current = () => {
+      void run().finally(() => setPicking(false));
+    };
+    setPicking(true);
+  };
+
+  const handleDismiss = () => {
+    const task = pendingPickRef.current;
+    pendingPickRef.current = null;
+    task?.();
+  };
+
   return (
     <Modal
-      visible={props.photos !== null}
+      visible={props.photos !== null && !picking}
       animationType="slide"
       onRequestClose={props.onCancel}
+      onDismiss={handleDismiss}
       statusBarTranslucent
       navigationBarTranslucent
       supportedOrientations={['portrait']}
     >
-      {props.photos ? <ReviewBody {...props} photos={props.photos} /> : null}
+      {props.photos ? <ReviewBody {...props} photos={props.photos} schedulePick={schedulePick} /> : null}
       {/* Messages from this screen would otherwise show behind the modal. */}
-      <ToastHost active={props.photos !== null} />
+      <ToastHost active={props.photos !== null && !picking} />
     </Modal>
   );
 }
@@ -48,7 +80,15 @@ export function PhotoReview(props: PhotoReviewProps) {
 let nextKey = 0;
 const toItems = (photos: PickedPhoto[]): Item[] => photos.map((photo) => ({ key: `r${nextKey++}`, photo }));
 
-function ReviewBody({ photos, mode, max, existing = 0, onCancel, onConfirm }: PhotoReviewProps & { photos: PickedPhoto[] }) {
+function ReviewBody({
+  photos,
+  mode,
+  max,
+  existing = 0,
+  onCancel,
+  onConfirm,
+  schedulePick,
+}: PhotoReviewProps & { photos: PickedPhoto[]; schedulePick: (run: () => Promise<void>) => void }) {
   const { c } = useTheme();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -97,15 +137,20 @@ function ReviewBody({ photos, mode, max, existing = 0, onCancel, onConfirm }: Ph
     setIndex(0);
   };
 
-  const addMore = async () => {
-    try {
-      const picked = await pickPhotos('library', max - items.length);
-      if (!picked.length) return;
-      setItems((list) => [...list, ...toItems(picked)].slice(0, max));
-      setIndex(items.length);
-    } catch {
-      toast.error('Fotoğraf seçilemedi.');
-    }
+  const addMore = () => {
+    const remaining = max - items.length;
+    if (remaining < 1) return;
+    const nextIndex = items.length;
+    schedulePick(async () => {
+      try {
+        const picked = await pickPhotos('library', remaining);
+        if (!picked.length) return;
+        setItems((list) => [...list, ...toItems(picked)].slice(0, max));
+        setIndex(Math.min(nextIndex, max - 1));
+      } catch {
+        toast.error('Fotoğraf seçilemedi.');
+      }
+    });
   };
 
   const confirm = () => {

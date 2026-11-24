@@ -95,7 +95,7 @@ export async function deleteUnusedListingImages(sql: Sql, userId: string, urls: 
     const storageKey = match?.[1] || match?.[2];
     if (!storageKey) continue;
     const rows = await sql.query<{ id: string }>(
-      "select id from mobile_listing_images where user_id=$1 and storage_key=$2",
+      "select id from mobile_listing_images where user_id=$1 and (storage_key=$2 or id=$2)",
       [userId, storageKey],
     );
     if (!rows[0]) continue;

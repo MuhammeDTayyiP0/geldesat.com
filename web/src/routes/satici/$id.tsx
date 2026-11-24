@@ -1,9 +1,26 @@
-import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import { BadgeCheck, CalendarDays, Eye, LayoutGrid, MapPin, MessageCircle, Pencil, Share2, Star, Store as StoreIcon } from "lucide-react";
+import { createFileRoute, Link, notFound, useNavigate } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
+import {
+  BadgeCheck,
+  CalendarDays,
+  Eye,
+  LayoutGrid,
+  MapPin,
+  MessageCircle,
+  Pencil,
+  Search,
+  Share2,
+  Star,
+  Store as StoreIcon,
+  UserCheck,
+  UserPlus,
+  Users,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 import { ProfilePageSkeleton } from "@/components/listing/ListingGridSkeleton";
 import { getSeller, getSellerReviews } from "@/lib/server/account";
+import { followSeller, getFollowStatus, unfollowSeller } from "@/lib/server/follows";
 import { errorText } from "@/lib/error-text";
 import { searchCatalog } from "@/lib/server/catalog";
 import { ListingCard } from "@/components/listing/ListingCard";
@@ -11,7 +28,9 @@ import { NotFound } from "@/components/common/NotFound";
 import { UserAvatar } from "@/components/account/AccountShell";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { Input, Select } from "@/components/ui/input";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { useFlag } from "@/lib/use-flag";
 import { cn, formatDate } from "@/lib/utils";
 import { jsonLd } from "@/lib/seo";
 
@@ -116,9 +135,15 @@ const REVIEWS_PAGE_SIZE = 20;
 /** The one public profile: what everyone sees, with an owner bar when it is your own. */
 function SellerPage() {
   const { seller, listings: firstListings } = Route.useLoaderData();
+  const takipAcik = useFlag("satici_takip");
+  const navigate = useNavigate();
+  const { user } = useCurrentUserState();
+  const isOwner = user?.id === seller.id;
+
   const [listings, setListings] = useState(firstListings);
   const [reviews, setReviews] = useState(seller.reviews);
   const [page, setPage] = useState(1);
+  const [totalListings, setTotalListings] = useState(seller.listing_count);
   const [hasMoreListings, setHasMoreListings] = useState(
     firstListings.length >= LISTINGS_PAGE_SIZE && firstListings.length < seller.listing_count,
   );
@@ -126,25 +151,122 @@ function SellerPage() {
     seller.reviews.length >= REVIEWS_PAGE_SIZE && seller.reviews.length < seller.rating_count,
   );
   const [busy, setBusy] = useState(false);
+  const [q, setQ] = useState("");
+  const [category, setCategory] = useState("");
+  const [filtering, setFiltering] = useState(false);
+  const [followState, setFollowState] = useState<{ following: boolean; followers: number } | null>(null);
+  const [followBusy, setFollowBusy] = useState(false);
+  const [tab, setTab] = useState<"listings" | "reviews">("listings");
+  const store = seller.store;
+  const responseStats = seller.responseStats;
+
+  const categoryOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const l of firstListings) {
+      if (l.category_id && l.category_name) map.set(l.category_id, l.category_name);
+    }
+    for (const l of listings) {
+      if (l.category_id && l.category_name && !map.has(l.category_id)) map.set(l.category_id, l.category_name);
+    }
+    return [...map.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name, "tr"));
+  }, [firstListings, listings]);
 
   useEffect(() => {
     setListings(firstListings);
     setReviews(seller.reviews);
     setPage(1);
+    setQ("");
+    setCategory("");
+    setTotalListings(seller.listing_count);
     setHasMoreListings(firstListings.length >= LISTINGS_PAGE_SIZE && firstListings.length < seller.listing_count);
     setHasMoreReviews(seller.reviews.length >= REVIEWS_PAGE_SIZE && seller.reviews.length < seller.rating_count);
   }, [seller.id, firstListings, seller.reviews, seller.listing_count, seller.rating_count]);
 
+  useEffect(() => {
+    if (!takipAcik || isOwner) {
+      setFollowState(null);
+      return;
+    }
+    let cancelled = false;
+    getFollowStatus({ data: { sellerId: seller.id } })
+      .then((res) => {
+        if (!cancelled) setFollowState(res);
+      })
+      .catch(() => {
+        if (!cancelled) setFollowState(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [takipAcik, isOwner, seller.id]);
+
+  const hasFilter = Boolean(q.trim() || category);
+
+  useEffect(() => {
+    if (!q.trim() && !category) {
+      setListings(firstListings);
+      setPage(1);
+      setTotalListings(seller.listing_count);
+      setHasMoreListings(firstListings.length >= LISTINGS_PAGE_SIZE && firstListings.length < seller.listing_count);
+      setFiltering(false);
+      return;
+    }
+
+    let cancelled = false;
+    setFiltering(true);
+    const timer = window.setTimeout(() => {
+      searchCatalog({
+        data: {
+          userId: seller.id,
+          q: q.trim() || undefined,
+          category: category || undefined,
+          limit: LISTINGS_PAGE_SIZE,
+          page: 1,
+        },
+      })
+        .then((res) => {
+          if (cancelled) return;
+          setListings(res.listings);
+          setPage(1);
+          setTotalListings(res.total);
+          setHasMoreListings(res.listings.length >= LISTINGS_PAGE_SIZE && res.listings.length < res.total);
+        })
+        .catch((err) => {
+          if (!cancelled) toast.error(errorText(err, "İlanlar filtrelenemedi"));
+        })
+        .finally(() => {
+          if (!cancelled) setFiltering(false);
+        });
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [q, category, seller.id, firstListings, seller.listing_count]);
+
   async function moreListings() {
     setBusy(true);
     try {
-      const next = await searchCatalog({ data: { userId: seller.id, limit: LISTINGS_PAGE_SIZE, page: page + 1 } });
+      const next = await searchCatalog({
+        data: {
+          userId: seller.id,
+          q: q.trim() || undefined,
+          category: category || undefined,
+          limit: LISTINGS_PAGE_SIZE,
+          page: page + 1,
+        },
+      });
       setListings((prev) => {
         const seen = new Set(prev.map((l) => l.id));
-        return [...prev, ...next.listings.filter((l) => !seen.has(l.id))];
+        const merged = [...prev, ...next.listings.filter((l) => !seen.has(l.id))];
+        setHasMoreListings(next.listings.length >= LISTINGS_PAGE_SIZE && merged.length < next.total);
+        return merged;
       });
+      setTotalListings(next.total);
       setPage(page + 1);
-      if (next.listings.length < LISTINGS_PAGE_SIZE) setHasMoreListings(false);
     } catch (err) {
       toast.error(errorText(err, "İlanlar yüklenemedi"));
     } finally {
@@ -165,11 +287,24 @@ function SellerPage() {
     }
   }
 
-  const { user } = useCurrentUserState();
-  const isOwner = user?.id === seller.id;
-  const [tab, setTab] = useState<"listings" | "reviews">("listings");
-  const store = seller.store;
-  const responseStats = seller.responseStats;
+  async function toggleFollow() {
+    if (!user) {
+      void navigate({ to: "/login", search: { redirect: `/satici/${seller.id}` } });
+      return;
+    }
+    setFollowBusy(true);
+    try {
+      const res = followState?.following
+        ? await unfollowSeller({ data: { sellerId: seller.id } })
+        : await followSeller({ data: { sellerId: seller.id } });
+      setFollowState(res);
+      toast.success(res.following ? "Satıcı takip edildi" : "Takipten çıkıldı");
+    } catch (err) {
+      toast.error(errorText(err, "İşlem gerçekleştirilemedi"));
+    } finally {
+      setFollowBusy(false);
+    }
+  }
 
   async function share() {
     const url = `${window.location.origin}/satici/${seller.id}`;
@@ -240,14 +375,29 @@ function SellerPage() {
               )}
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => void share()}
-            aria-label="Profili paylaş"
-            className="grid size-10 shrink-0 place-items-center rounded-full text-muted hover:bg-elevated hover:text-fg"
-          >
-            <Share2 className="size-5" />
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            {takipAcik && !isOwner && followState !== null ? (
+              <Button
+                type="button"
+                size="sm"
+                variant={followState.following ? "outline" : "default"}
+                disabled={followBusy}
+                onClick={() => void toggleFollow()}
+                aria-pressed={followState.following}
+              >
+                {followState.following ? <UserCheck className="size-4" /> : <UserPlus className="size-4" />}
+                <span>{followState.following ? "Takip ediliyor" : "Takip et"}</span>
+              </Button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => void share()}
+              aria-label="Profili paylaş"
+              className="grid size-10 shrink-0 place-items-center rounded-full text-muted hover:bg-elevated hover:text-fg"
+            >
+              <Share2 className="size-5" />
+            </button>
+          </div>
         </div>
 
         <ul className="mt-4 flex flex-wrap gap-x-4 gap-y-1.5 text-sm text-muted">
@@ -262,6 +412,11 @@ function SellerPage() {
           <li className="inline-flex items-center gap-1.5">
             <LayoutGrid className="size-4 text-subtle" /> {seller.listing_count} yayında ilan
           </li>
+          {takipAcik && !isOwner && followState !== null ? (
+            <li className="inline-flex items-center gap-1.5">
+              <Users className="size-4 text-subtle" /> {followState.followers} takipçi
+            </li>
+          ) : null}
           {responseStats ? (
             <li className="inline-flex items-center gap-1.5 text-ok">
               <MessageCircle className="size-4 shrink-0" />
@@ -298,30 +453,95 @@ function SellerPage() {
       </div>
 
       {tab === "listings" ? (
-        listings.length ? (
-          <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4">
-            {listings.map((l) => (
-              <ListingCard key={l.id} listing={l} />
-            ))}
-            {hasMoreListings && listings.length < seller.listing_count ? (
-              <div className="col-span-full flex justify-center pt-2">
-                <Button variant="outline" disabled={busy} onClick={() => void moreListings()}>
-                  {busy ? "Yükleniyor…" : "Daha fazla ilan göster"}
-                </Button>
+        <>
+          {seller.listing_count > 0 ? (
+            <div className="mt-4 flex flex-col gap-2.5 sm:flex-row sm:items-center">
+              <div className="relative flex-1">
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle" />
+                <Input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="Satıcının ilanlarında ara…"
+                  aria-label="Satıcının ilanlarında ara"
+                  className="h-10 pl-9"
+                />
               </div>
-            ) : null}
-          </div>
-        ) : (
-          <div className="mt-4 rounded-[14px] border border-dashed border-border bg-surface p-10 text-center">
-            <LayoutGrid className="mx-auto size-7 text-subtle" />
-            <p className="mt-2 text-sm text-muted">Yayında ilanı yok.</p>
-            {isOwner ? (
-              <Link to="/ilan-ver" className="mt-3 inline-block text-sm font-medium text-primary hover:underline">
-                Ücretsiz ilan ver
-              </Link>
-            ) : null}
-          </div>
-        )
+              <Select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                aria-label="Kategoriye göre filtrele"
+                className="h-10 sm:w-56"
+              >
+                <option value="">Tüm kategoriler</option>
+                {categoryOptions.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </Select>
+              {hasFilter ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setQ("");
+                    setCategory("");
+                  }}
+                  className="h-10"
+                >
+                  <X className="size-4" /> Temizle
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+
+          {filtering ? (
+            <div className="mt-4 rounded-[14px] border border-border bg-surface p-8 text-center text-sm text-muted">
+              İlanlar filtreleniyor…
+            </div>
+          ) : listings.length ? (
+            <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4">
+              {listings.map((l) => (
+                <ListingCard key={l.id} listing={l} />
+              ))}
+              {hasMoreListings && listings.length < totalListings ? (
+                <div className="col-span-full flex justify-center pt-2">
+                  <Button variant="outline" disabled={busy} onClick={() => void moreListings()}>
+                    {busy ? "Yükleniyor…" : "Daha fazla ilan göster"}
+                  </Button>
+                </div>
+              ) : null}
+            </div>
+          ) : hasFilter ? (
+            <div className="mt-4 rounded-[14px] border border-dashed border-border bg-surface p-10 text-center">
+              <Search className="mx-auto size-7 text-subtle" />
+              <p className="mt-2 text-sm text-muted">Aramanızla eşleşen ilan bulunamadı.</p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-3"
+                onClick={() => {
+                  setQ("");
+                  setCategory("");
+                }}
+              >
+                Filtreleri temizle
+              </Button>
+            </div>
+          ) : (
+            <div className="mt-4 rounded-[14px] border border-dashed border-border bg-surface p-10 text-center">
+              <LayoutGrid className="mx-auto size-7 text-subtle" />
+              <p className="mt-2 text-sm text-muted">Yayında ilanı yok.</p>
+              {isOwner ? (
+                <Link to="/ilan-ver" className="mt-3 inline-block text-sm font-medium text-primary hover:underline">
+                  Ücretsiz ilan ver
+                </Link>
+              ) : null}
+            </div>
+          )}
+        </>
       ) : reviews.length ? (
         <ul className="mt-4 space-y-3">
           {reviews.map((r) => (

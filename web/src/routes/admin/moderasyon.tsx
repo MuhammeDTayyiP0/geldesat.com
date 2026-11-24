@@ -265,6 +265,13 @@ function Reviewer({ id, position, total, onStep, onDecided }: { id: string; posi
               <p className="mt-1 text-sm text-muted">{[l.city, l.district, l.neighborhood].filter(Boolean).join(" / ")}</p>
             </div>
 
+            {l.rejection_reason ? (
+              <div className="rounded-xl border border-danger/30 bg-danger/8 px-3 py-2.5 text-xs">
+                <span className="font-semibold text-danger">Ret gerekçesi: </span>
+                <span className="text-fg">{l.rejection_reason}</span>
+              </div>
+            ) : null}
+
             {Object.keys(l.attrs).length ? (
               <dl className="grid grid-cols-2 gap-x-4 gap-y-1 rounded-xl bg-elevated/50 p-3 text-xs">
                 {Object.entries(l.attrs).map(([k, v]) => (

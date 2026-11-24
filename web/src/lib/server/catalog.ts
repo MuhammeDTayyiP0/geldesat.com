@@ -3,7 +3,7 @@ import { liveSql } from "@/lib/listing-status";
 import { foldTr, inferSearchCategoryId } from "@/lib/search-params";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { getSql } from "@/lib/db";
+import { getSql, type Sql } from "@/lib/db";
 import { asIso, listingNoFromSlug, num } from "@/lib/utils";
 import type { PhoneVisibility } from "@/lib/notification-prefs";
 import {
@@ -431,6 +431,117 @@ export const mapCityCounts = createServerFn({ method: "GET" }).handler(async () 
   );
   return rows.map((r) => ({ city: r.city, n: num(r.n) }));
 });
+
+const BoundsInput = z.object({
+  north: z.number().min(-90).max(90),
+  south: z.number().min(-90).max(90),
+  east: z.number().min(-180).max(180),
+  west: z.number().min(-180).max(180),
+  category: z.string().max(120).optional(),
+  minPrice: z.number().min(0).optional(),
+  maxPrice: z.number().min(0).optional(),
+  q: z.string().max(200).optional(),
+});
+
+export type MapBoundsFilter = z.infer<typeof BoundsInput>;
+
+/** Fetch up to 4 live listings by id (preserving input order) for side-by-side comparison. */
+export async function fetchListingsByIds(sql: Pick<Sql, "query">, ids: string[]): Promise<ListingCard[]> {
+  const uniqueIds = [...new Set(ids.map((id) => id.trim()).filter(Boolean))].slice(0, 4);
+  if (!uniqueIds.length) return [];
+  const rows = await sql.query<Record<string, unknown>>(
+    `select ${listingSelect("", false)},
+            coalesce((select json_agg(b.kind) from boosts b where b.listing_id = l.id and b.ends_at > now()), '[]'::json) as boosts
+     from listings l
+     join categories c on c.id = l.category_id
+     left join profiles p on p.user_id = l.user_id
+     left join stores s on s.id = l.store_id
+     where l.id = any($1::text[]) and ${liveSql()}`,
+    [uniqueIds],
+  );
+  const byId = new Map(rows.map((r) => [String(r.id), mapListing(r)]));
+  return uniqueIds.map((id) => byId.get(id)).filter((item): item is ListingCard => Boolean(item));
+}
+
+export const getListingsByIds = createServerFn({ method: "POST" })
+  .validator(z.object({ ids: z.array(z.string().min(1).max(120)).max(4) }))
+  .handler(async ({ data }) => fetchListingsByIds(await getSql(), data.ids));
+
+/** Fetch up to 200 live listings whose coordinates (or CITY_COORDS fallback) fall inside viewport bounds. */
+export async function fetchMapListingsInBounds(
+  sql: Pick<Sql, "query">,
+  f: MapBoundsFilter,
+): Promise<ListingCard[]> {
+  if (f.south > f.north || f.west > f.east) return [];
+  const conds: string[] = [liveSql()];
+  const params: unknown[] = [];
+
+  const citiesInBounds = Object.entries(CITY_COORDS)
+    .filter(([, c]) => c.lat >= f.south && c.lat <= f.north && c.lng >= f.west && c.lng <= f.east)
+    .map(([city]) => city);
+
+  params.push(f.south, f.north, f.west, f.east);
+  const sIdx = 1;
+  const nIdx = 2;
+  const wIdx = 3;
+  const eIdx = 4;
+
+  const coordCond = `(l.lat is not null and l.lng is not null and l.lat between $${sIdx} and $${nIdx} and l.lng between $${wIdx} and $${eIdx})`;
+  if (citiesInBounds.length) {
+    params.push(citiesInBounds);
+    conds.push(`(${coordCond} or ((l.lat is null or l.lng is null) and l.city = any($${params.length}::text[])))`);
+  } else {
+    conds.push(coordCond);
+  }
+
+  if (f.category) {
+    const ids = await subtreeIds(f.category);
+    if (!ids.length) return [];
+    params.push(ids);
+    conds.push(`l.category_id = any($${params.length}::text[])`);
+  }
+  if (f.minPrice != null && f.minPrice >= 0) {
+    params.push(f.minPrice);
+    conds.push(`l.price >= $${params.length}`);
+  }
+  if (f.maxPrice != null && f.maxPrice > 0) {
+    params.push(f.maxPrice);
+    conds.push(`l.price <= $${params.length}`);
+  }
+  const qTrimmed = f.q?.trim().slice(0, 200);
+  if (qTrimmed) {
+    const words = foldTr(qTrimmed).split(/\s+/).filter(Boolean).slice(0, 8);
+    for (const word of words) {
+      params.push(`%${escapeLike(word)}%`);
+      conds.push(`l.search_text like $${params.length}`);
+    }
+  }
+
+  const rows = await sql.query<Record<string, unknown>>(
+    `select ${listingSelect("", true)},
+            coalesce((select json_agg(b.kind) from boosts b where b.listing_id = l.id and b.ends_at > now()), '[]'::json) as boosts
+     from listings l
+     join categories c on c.id = l.category_id
+     left join profiles p on p.user_id = l.user_id
+     left join stores s on s.id = l.store_id
+     where ${conds.join(" and ")}
+     order by (l.featured_until is not null and l.featured_until > now()) desc, l.created_at desc
+     limit 200`,
+    params,
+  );
+  return rows.map((row) => {
+    const listing = mapListing(row);
+    if ((listing.lat == null || listing.lng == null) && listing.city && CITY_COORDS[listing.city]) {
+      listing.lat = CITY_COORDS[listing.city].lat;
+      listing.lng = CITY_COORDS[listing.city].lng;
+    }
+    return listing;
+  });
+}
+
+export const mapListingsInBounds = createServerFn({ method: "POST" })
+  .validator(BoundsInput)
+  .handler(async ({ data }) => fetchMapListingsInBounds(await getSql(), data));
 
 export const getListing = createServerFn({ method: "POST" })
   .validator(z.object({ slug: z.string().max(200) }))

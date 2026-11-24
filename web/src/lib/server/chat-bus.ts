@@ -59,6 +59,7 @@ export type UserInboxEvent =
 const globalRef = globalThis as typeof globalThis & {
   __geldesatChatBus__?: EventEmitter;
   __geldesatPresence__?: { online: Map<string, number>; viewing: Map<string, Map<string, number>> };
+  __geldesatSseStreams__?: Map<string, Set<() => void>>;
 };
 
 export const chatBus = (globalRef.__geldesatChatBus__ ??= new EventEmitter());
@@ -130,4 +131,47 @@ export function isOnline(userId: string): boolean {
 /** True while the user has this chat open in some tab (so a notification would be noise). */
 export function isViewingConversation(userId: string, conversationId: string): boolean {
   return Boolean(presence.viewing.get(userId)?.has(conversationId));
+}
+
+const MAX_SSE_PER_USER = 8;
+const userStreams = (globalRef.__geldesatSseStreams__ ??= new Map<string, Set<() => void>>());
+
+/** Track an active SSE stream closer for `userId`, closing the oldest if the per-user cap is exceeded. */
+export function registerUserStream(userId: string, close: () => void): () => void {
+  let set = userStreams.get(userId);
+  if (!set) {
+    set = new Set();
+    userStreams.set(userId, set);
+  }
+  while (set.size >= MAX_SSE_PER_USER) {
+    const oldest = set.values().next().value;
+    if (!oldest) break;
+    set.delete(oldest);
+    try {
+      oldest();
+    } catch {
+      // already closed
+    }
+  }
+  set.add(close);
+  return () => {
+    const current = userStreams.get(userId);
+    if (!current) return;
+    current.delete(close);
+    if (current.size === 0) userStreams.delete(userId);
+  };
+}
+
+/** Force-close all active SSE streams for `userId` (e.g. on ban or session revocation). */
+export function disconnectUserStreams(userId: string): void {
+  const set = userStreams.get(userId);
+  if (!set) return;
+  userStreams.delete(userId);
+  for (const close of set) {
+    try {
+      close();
+    } catch {
+      // already closed
+    }
+  }
 }

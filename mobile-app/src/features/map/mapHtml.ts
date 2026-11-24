@@ -1,11 +1,17 @@
+import { API_BASE_URL } from '@/lib/config';
 import { TILE_ATTRIBUTION, TILE_URL } from './tiles';
 
 export type MapCenter = { lat: number; lng: number; zoom: number };
 
+export type MapBounds = { north: number; south: number; east: number; west: number };
+
 export type MapMarker = { id: string; lat: number; lng: number; label: string; badge?: string };
 
 /** Messages the map page sends back. */
-export type MapEvent = { type: 'movestart' } | ({ type: 'moveend' } & MapCenter) | { type: 'ready' };
+export type MapEvent =
+  | { type: 'movestart' }
+  | ({ type: 'moveend'; bounds?: MapBounds } & MapCenter)
+  | { type: 'ready'; bounds?: MapBounds };
 
 /**
  * A full-page Leaflet map for a WebView / iframe. It reports pans with
@@ -17,7 +23,7 @@ export function mapHtml(initial: MapCenter, dark: boolean): string {
 <html><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="${API_BASE_URL}/vendor/leaflet/leaflet.css">
 <style>
   html,body,#map{margin:0;padding:0;height:100%;width:100%;background:${dark ? '#0b0e13' : '#e9edf2'}}
   .leaflet-control-attribution{font-size:9px}
@@ -26,7 +32,7 @@ export function mapHtml(initial: MapCenter, dark: boolean): string {
 </style>
 </head><body>
 <div id="map"></div>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" onerror="document.body.innerHTML='<p style=&quot;font:14px sans-serif;color:#888;text-align:center;margin-top:40%&quot;>Harita yüklenemedi. İnternet bağlantınızı kontrol edin.</p>'"></script>
+<script src="${API_BASE_URL}/vendor/leaflet/leaflet.js" onerror="document.body.innerHTML='<p style=&quot;font:14px sans-serif;color:#888;text-align:center;margin-top:40%&quot;>Harita yüklenemedi. İnternet bağlantınızı kontrol edin.</p>'"></script>
 <script>
   (function(){
     if (typeof L === 'undefined') return;
@@ -34,6 +40,10 @@ export function mapHtml(initial: MapCenter, dark: boolean): string {
       var s = JSON.stringify(msg);
       if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(s);
       else if (window.parent !== window) window.parent.postMessage({ __geldesatMap: true, data: s }, '*');
+    }
+    function getBounds(){
+      var b = map.getBounds();
+      return { north: b.getNorth(), south: b.getSouth(), east: b.getEast(), west: b.getWest() };
     }
     var map = L.map('map', { zoomControl: false, attributionControl: true })
       .setView([${initial.lat}, ${initial.lng}], ${initial.zoom});
@@ -55,9 +65,9 @@ export function mapHtml(initial: MapCenter, dark: boolean): string {
       }
     };
     map.on('movestart', function(){ post({ type: 'movestart' }); });
-    map.on('moveend', function(){ var c = map.getCenter(); post({ type: 'moveend', lat: c.lat, lng: c.lng, zoom: map.getZoom() }); });
+    map.on('moveend', function(){ var c = map.getCenter(); post({ type: 'moveend', lat: c.lat, lng: c.lng, zoom: map.getZoom(), bounds: getBounds() }); });
     window.__fly = function(lat, lng, zoom){ map.flyTo([lat, lng], zoom || 17, { duration: 0.8 }); };
-    post({ type: 'ready' });
+    post({ type: 'ready', bounds: getBounds() });
   })();
 </script>
 </body></html>`;

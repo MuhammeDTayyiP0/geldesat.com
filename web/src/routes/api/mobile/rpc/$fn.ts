@@ -35,17 +35,29 @@ import {
   updateNotifyPrefs,
   updatePrivacySettings,
 } from "@/lib/server/settings";
-import { getListingForEdit, getMe, myCreditOrders, updateProfile, upsertStore } from "@/lib/server/account";
+import {
+  bulkImportListings,
+  getListingForEdit,
+  getMe,
+  myCreditOrders,
+  myStoreApplication,
+  submitStoreApplication,
+  updateProfile,
+  upsertStore,
+} from "@/lib/server/account";
+import { followSeller, getFollowStatus, myFollowedSellers, unfollowSeller } from "@/lib/server/follows";
 import { blockUser, checkReviewEligibility, leaveReview, myRecentListings, removeRecentListing, unblockUser, unreadCount } from "@/lib/server/social";
 import {
   autocompleteSuggestions,
   browseCategories,
   getCategory,
   getLegal,
+  getListingsByIds,
   getSiteSettings,
   homeListings,
   listCategoryRoots,
   mapCityCounts,
+  mapListingsInBounds,
   searchCatalogWithContext,
   statsHome,
 } from "@/lib/server/catalog";
@@ -69,14 +81,23 @@ const FUNCTIONS: Record<string, ServerFn> = {
   browseCategories,
   getCategory,
   getLegal,
+  getListingsByIds,
   getSiteSettings,
   homeListings,
   listCategoryRoots,
   mapCityCounts,
+  mapListingsInBounds,
   searchCatalogWithContext,
   statsHome,
   // Account
+  bulkImportListings,
+  followSeller,
+  getFollowStatus,
   getMe,
+  myFollowedSellers,
+  myStoreApplication,
+  submitStoreApplication,
+  unfollowSeller,
   updateProfile,
   upsertStore,
   getListingForEdit,
@@ -139,7 +160,13 @@ export const Route = createFileRoute("/api/mobile/rpc/$fn")({
         let body: { data?: unknown } = {};
         try {
           const text = new TextDecoder().decode(await readLimited(request, MAX_BODY_BYTES));
-          if (text) body = JSON.parse(text) as { data?: unknown };
+          if (text.trim()) {
+            const parsed: unknown = JSON.parse(text);
+            if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+              return Response.json({ success: false, error: "Geçersiz istek gövdesi." }, { status: 400 });
+            }
+            body = parsed as { data?: unknown };
+          }
         } catch (error) {
           return Response.json({ success: false, error: error instanceof BodyTooLargeError ? error.message : "İstek okunamadı." }, { status: errorStatus(error, 400) });
         }
@@ -147,6 +174,9 @@ export const Route = createFileRoute("/api/mobile/rpc/$fn")({
           const result = await fn(body.data === undefined ? {} : { data: body.data });
           return Response.json({ success: true, result: result ?? null }, { headers: { "Cache-Control": "private, no-store" } });
         } catch (error) {
+          if (error instanceof Response) {
+            return error;
+          }
           if (error instanceof UnauthorizedError) {
             return Response.json({ success: false, error: "Giriş yapmanız gerekiyor." }, { status: 401 });
           }

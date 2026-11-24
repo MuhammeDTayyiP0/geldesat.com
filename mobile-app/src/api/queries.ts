@@ -36,6 +36,8 @@ export const keys = {
   store: (slug: string) => ['store', slug] as const,
   legal: (slug: string) => ['legal', slug] as const,
   cityCounts: ['cityCounts'] as const,
+  mapListings: (params: Record<string, unknown>) => ['mapListings', params] as const,
+  compare: (ids: string[]) => ['compare', ...ids] as const,
   me: ['me'] as const,
   counts: ['counts'] as const,
   favorites: ['favorites'] as const,
@@ -43,6 +45,9 @@ export const keys = {
   savedSearches: ['savedSearches'] as const,
   myListings: ['myListings'] as const,
   forEdit: (id: string) => ['forEdit', id] as const,
+  followStatus: (sellerId: string) => ['followStatus', sellerId] as const,
+  followedSellers: ['followedSellers'] as const,
+  storeApplication: ['storeApplication'] as const,
   notifications: ['notifications'] as const,
   settings: ['settings'] as const,
   deletion: ['deletion'] as const,
@@ -112,7 +117,7 @@ export function useRoots() {
 }
 
 /** Queries that look the same to everyone; all others belong to the signed-in account. */
-const PUBLIC_QUERIES = new Set(['config', 'stats', 'categories', 'search', 'rail', 'seller', 'store', 'legal', 'cityCounts']);
+const PUBLIC_QUERIES = new Set(['config', 'stats', 'categories', 'search', 'rail', 'seller', 'store', 'legal', 'cityCounts', 'mapListings', 'compare']);
 
 /**
  * Clear everything tied to the signed-in account (sign-out, expired session,

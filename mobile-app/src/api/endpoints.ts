@@ -10,6 +10,8 @@ import type {
   CategoryInfo,
   ChatMessage,
   Conversation,
+  FollowStatus,
+  FollowedSellerSummary,
   Listing,
   ListingDetail,
   RecentListing,
@@ -25,6 +27,7 @@ import type {
   SearchResult,
   Seller,
   Store,
+  StoreApplication,
   Thread,
 } from './types';
 
@@ -47,6 +50,17 @@ export const catalog = {
     rpc<{ urgent: Listing[]; featured: Listing[]; latest: Listing[]; latestPages: number; priceDropped: Listing[] }>('homeListings'),
   legal: (slug: string) => rpc<{ slug: string; title: string; body: string } | null>('getLegal', { slug }),
   cityCounts: () => rpc<{ city: string; n: number }[]>('mapCityCounts'),
+  byIds: (ids: string[]) => rpc<Listing[]>('getListingsByIds', { ids }),
+  inBounds: (params: {
+    north: number;
+    south: number;
+    east: number;
+    west: number;
+    category?: string;
+    minPrice?: number;
+    maxPrice?: number;
+    q?: string;
+  }) => rpc<Listing[]>('mapListingsInBounds', params),
 };
 
 // ─── Listings ───────────────────────────────────────────────────────────────
@@ -129,6 +143,21 @@ export const account = {
       { sellerId, listingId },
     ),
   leaveReview: (data: { sellerId: string; listingId?: string; rating: number; comment?: string }) => rpc('leaveReview', data),
+};
+
+// ─── Follows & Store Applications ───────────────────────────────────────────
+
+export const follows = {
+  status: (sellerId: string) => rpc<FollowStatus>('getFollowStatus', { sellerId }),
+  follow: (sellerId: string) => rpc<FollowStatus>('followSeller', { sellerId }),
+  unfollow: (sellerId: string) => rpc<FollowStatus>('unfollowSeller', { sellerId }),
+  mine: () => rpc<FollowedSellerSummary[]>('myFollowedSellers'),
+};
+
+export const storeApplications = {
+  mine: () => rpc<StoreApplication | null>('myStoreApplication'),
+  submit: (data: { name: string; city?: string; phone?: string; taxNo?: string; notes?: string }) =>
+    rpc<StoreApplication>('submitStoreApplication', data),
 };
 
 // ─── Saved Searches ─────────────────────────────────────────────────────────
@@ -238,4 +267,9 @@ export const uploads = {
       (r) => r.url,
     ),
   removeAvatar: () => request('/api/avatar', { method: 'DELETE', headers: uploadHeaders }),
+  storeLogo: (image: LocalImage) =>
+    request<{ url: string }>('/api/store-logo', { method: 'POST', form: imageForm(image), headers: uploadHeaders, timeoutMs: 60_000 }).then(
+      (r) => r.url,
+    ),
+  removeStoreLogo: () => request<{ ok: boolean }>('/api/store-logo', { method: 'DELETE', headers: uploadHeaders }),
 };

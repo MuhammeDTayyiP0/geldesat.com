@@ -4,7 +4,7 @@ import { useFlag } from "@/lib/use-flag";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { errorText } from "@/lib/error-text";
 import { useEffect, useMemo, useState } from "react";
-import { CircleCheck, Eye, EyeOff, Heart, ImageIcon, LayoutGrid, MessageCircle, MoreVertical, Pencil, Phone, Plus, RefreshCw, Rocket, Trash2 } from "lucide-react";
+import { CircleCheck, Copy, Eye, EyeOff, Heart, ImageIcon, LayoutGrid, MessageCircle, MoreVertical, Pencil, Phone, Plus, RefreshCw, Rocket, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { deleteListing, myListings, renewListing, setListingStatus } from "@/lib/server/account";
 import { RedirectToSignIn } from "@/lib/auth/gates";
@@ -262,6 +262,7 @@ function MyListingRow({
 }) {
   const nav = useNavigate();
   const dopingOn = useFlag("doping_enabled");
+  const benzerIlanOn = useFlag("benzer_ilan_ver");
   const expired = isListingExpired(l);
   const live = l.status === "ACTIVE" && !expired;
   const actions = ownerActions({ status: l.status, approved: l.approved ?? true, expired });
@@ -314,12 +315,28 @@ function MyListingRow({
           </div>
         ) : null}
         {l.status === "PENDING" ? <p className="text-xs text-warn">İnceleme bitince yayına alınır.</p> : null}
-        {live && left != null && left > 0 && left <= 7 ? <p className="text-xs text-warn">{left} gün içinde süresi doluyor</p> : null}
-        {expired && l.status === "ACTIVE" ? (
-          <Button size="sm" variant="outline" className="mt-1" disabled={busy} onClick={onRenew}>
-            <RefreshCw className="size-3.5" /> Yenile ve yayına al
-          </Button>
+        {l.status === "REJECTED" && l.rejection_reason ? (
+          <p className="rounded-lg border border-danger/25 bg-danger/6 px-2.5 py-1.5 text-xs text-danger">
+            Reddetme gerekçesi: {l.rejection_reason}
+          </p>
         ) : null}
+        {live && left != null && left > 0 && left <= 7 ? <p className="text-xs text-warn">{left} gün içinde süresi doluyor</p> : null}
+        <div className="flex flex-wrap items-center gap-2 pt-0.5">
+          {expired && l.status === "ACTIVE" ? (
+            <Button size="sm" variant="outline" className="h-8" disabled={busy} onClick={onRenew}>
+              <RefreshCw className="size-3.5" /> Yenile ve yayına al
+            </Button>
+          ) : null}
+          {benzerIlanOn ? (
+            <Link
+              to="/ilan-ver"
+              search={{ copyFrom: l.id }}
+              className={buttonVariants({ size: "sm", variant: "outline", className: "h-8 text-xs" })}
+            >
+              <Copy className="size-3.5" /> Benzer ilan ver
+            </Link>
+          ) : null}
+        </div>
       </div>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -339,6 +356,11 @@ function MyListingRow({
           <DropdownMenuItem onSelect={() => void nav({ to: "/ilan-ver", search: { id: l.id } })}>
             <Pencil className="size-4" /> Düzenle
           </DropdownMenuItem>
+          {benzerIlanOn ? (
+            <DropdownMenuItem onSelect={() => void nav({ to: "/ilan-ver", search: { copyFrom: l.id } })}>
+              <Copy className="size-4" /> Benzer ilan ver
+            </DropdownMenuItem>
+          ) : null}
           {live ? (
             <DropdownMenuItem onSelect={() => onStatus("INACTIVE", "Yayından kaldırıldı")}>
               <EyeOff className="size-4" /> Yayından kaldır

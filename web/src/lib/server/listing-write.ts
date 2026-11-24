@@ -8,6 +8,7 @@ import { inheritedAttributes, ensureProfile, rateLimit, assertImages, notify, no
 import { deleteUnusedListingImages } from "./upload.server";
 import { getAppConfig } from "./config";
 import { audit } from "./admin/common";
+import { notifySellerFollowers } from "./follows";
 import { notifyMatchingSavedSearches } from "./saved-searches";
 
 export const ListingInput = z.object({
@@ -16,6 +17,7 @@ export const ListingInput = z.object({
   title: z.string().trim().min(5).max(100),
   description: z.string().trim().min(10).max(5000),
   price: z.number().min(1).max(1_000_000_000),
+  currency: z.enum(["TRY", "USD", "EUR"]).optional(),
   city: z.string().min(1).max(60),
   district: z.string().min(1).max(60),
   neighborhood: z.string().max(60).optional(),
@@ -63,8 +65,8 @@ export async function saveListingRecord(userId: string, data: ListingInputData) 
     ? (
         await sql.query<{
           user_id: string; slug: string; listing_no: string | number; price: string | number; status: string; images: unknown;
-          title: string; description: string; category_id: string; attrs: unknown;
-        }>("select user_id, slug, listing_no, price, status, images, title, description, category_id, attrs from listings where id = $1", [data.id])
+          title: string; description: string; category_id: string; attrs: unknown; currency: string | null;
+        }>("select user_id, slug, listing_no, price, status, images, title, description, category_id, attrs, currency from listings where id = $1", [data.id])
       )[0]
     : undefined;
   if (data.id && !existing) throw new Error("İlan bulunamadı");
@@ -115,38 +117,63 @@ export async function saveListingRecord(userId: string, data: ListingInputData) 
   const coords = CITY_COORDS[data.city];
   if (data.id && existing) {
     await assertStoreOwner(ownerId);
-    // An owner changing what the listing shows sends it back to moderation, so
-    // an approved listing cannot be swapped for different content afterwards.
-    const contentChanged =
-      existing.title !== data.title ||
-      existing.description !== data.description ||
-      existing.category_id !== data.categoryId ||
-      added.length > 0 ||
-      !sameAttrs(attrs, asJson<AttrValues>(existing.attrs, {}));
-    const reReview = !isAdmin && mode !== "none" && contentChanged && needsReReview(existing.status);
-    const nextStatus = existing.status === "REJECTED" || reReview ? "PENDING" : existing.status;
-    // The URL follows the title; old links still resolve by the trailing listing number.
-    const slug = listingSlug(data.title, existing.listing_no);
-    await sql.transaction(async (tx) => {
+    const txResult = await sql.transaction(async (tx) => {
+      const lockedRows = await tx.query<{
+        user_id: string; slug: string; listing_no: string | number; price: string | number; status: string; images: unknown;
+        title: string; description: string; category_id: string; attrs: unknown; currency: string | null;
+      }>(
+        "select user_id, slug, listing_no, price, status, images, title, description, category_id, attrs, currency from listings where id = $1 for update",
+        [data.id],
+      );
+      const locked = lockedRows[0];
+      if (!locked) throw new Error("İlan bulunamadı");
+      const lockedImages = asJson<string[]>(locked.images, []);
+      const lockedAdded = data.images.filter((image) => !lockedImages.includes(image));
+      // An owner changing what the listing shows sends it back to moderation, so
+      // an approved listing cannot be swapped for different content afterwards.
+      const contentChanged =
+        locked.title !== data.title ||
+        locked.description !== data.description ||
+        locked.category_id !== data.categoryId ||
+        lockedAdded.length > 0 ||
+        !sameAttrs(attrs, asJson<AttrValues>(locked.attrs, {}));
+      const reReview = !isAdmin && mode !== "none" && contentChanged && needsReReview(locked.status);
+      const nextStatus = locked.status === "REJECTED" || reReview ? "PENDING" : locked.status;
+      const clearRejection = nextStatus === "PENDING" || nextStatus === "ACTIVE";
+      const nextCurrency = data.currency ?? locked.currency ?? "TRY";
+      // The URL follows the title; old links still resolve by the trailing listing number.
+      const slug = listingSlug(data.title, locked.listing_no);
       await tx.query(
         `update listings set category_id=$2,title=$3,description=$4,price=$5,city=$6,district=$7,
           neighborhood=$8,lat=$9,lng=$10,images=$11::jsonb,attrs=$12::jsonb,phone_override=$13,
           store_id=$14,status=$15,approved_at=case when $16::boolean then null else approved_at end,
-          status_before_ban=null,slug=$17,updated_at=now() where id=$1`,
-        [data.id,data.categoryId,data.title,data.description,data.price,data.city,data.district,data.neighborhood || null,
-          coords?.lat ?? null,coords?.lng ?? null,JSON.stringify(data.images),JSON.stringify(attrs),
-          phoneOverride,data.storeId || null,nextStatus,reReview,slug],
+          status_before_ban=null,slug=$17,currency=$18,
+          rejection_reason=case when $19::boolean then null else rejection_reason end,
+          updated_at=now() where id=$1`,
+        [data.id, data.categoryId, data.title, data.description, data.price, data.city, data.district, data.neighborhood || null,
+          coords?.lat ?? null, coords?.lng ?? null, JSON.stringify(data.images), JSON.stringify(attrs),
+          phoneOverride, data.storeId || null, nextStatus, reReview, slug, nextCurrency, clearRejection],
       );
-      if (num(existing.price) !== data.price) await tx.query("insert into price_history (listing_id,price) values ($1,$2)", [data.id,data.price]);
+      if (num(locked.price) !== data.price) await tx.query("insert into price_history (listing_id,price) values ($1,$2)", [data.id, data.price]);
+      return {
+        slug,
+        nextStatus,
+        reReview,
+        prevStatus: locked.status,
+        prevPrice: num(locked.price),
+        listingNo: locked.listing_no,
+        userId: locked.user_id,
+        nextCurrency,
+      };
     });
     await deleteUnusedListingImages(sql, ownerId, existingImages.filter((image) => !data.images.includes(image)));
-    if (isAdmin && existing.user_id !== userId) {
-      await audit(sql, userId, "listing.edit", "listing", data.id, `#${existing.listing_no} "${data.title}" site üzerinden düzenlendi`, { from: existing.status, to: nextStatus });
+    if (isAdmin && txResult.userId !== userId) {
+      await audit(sql, userId, "listing.edit", "listing", data.id, `#${txResult.listingNo} "${data.title}" site üzerinden düzenlendi`, { from: txResult.prevStatus, to: txResult.nextStatus });
     }
-    if (existing.status === "REJECTED" || reReview) {
-      await notify(ownerId,"listing","İlanınız tekrar incelemede","Düzenlenen ilan onay kuyruğuna alındı.",`/ilan/${slug}`);
+    if (txResult.prevStatus === "REJECTED" || txResult.reReview) {
+      await notify(ownerId, "listing", "İlanınız tekrar incelemede", "Düzenlenen ilan onay kuyruğuna alındı.", `/ilan/${txResult.slug}`);
     }
-    if (existing.status === "ACTIVE" && nextStatus === "ACTIVE" && data.price < num(existing.price)) {
+    if (txResult.prevStatus === "ACTIVE" && txResult.nextStatus === "ACTIVE" && data.price < txResult.prevPrice) {
       void sql
         .query<{ user_id: string }>(
           "select user_id from favorites where listing_id=$1 and user_id<>$2 limit 500",
@@ -159,15 +186,15 @@ export async function saveListingRecord(userId: string, data: ListingInputData) 
                 uid,
                 "favorite",
                 "Favori ilanınızda fiyat düştü",
-                `${data.title} — ${formatPrice(data.price, "TRY")}`,
-                `/ilan/${slug}`,
+                `${data.title} — ${formatPrice(data.price, txResult.nextCurrency)}`,
+                `/ilan/${txResult.slug}`,
               ),
             ),
           ),
         )
         .catch((err) => console.warn("[listing-write] price drop notify failed", err));
     }
-    return { id: data.id, slug, status: nextStatus };
+    return { id: data.id, slug: txResult.slug, status: txResult.nextStatus };
   }
 
   await assertStoreOwner(userId);
@@ -183,6 +210,7 @@ export async function saveListingRecord(userId: string, data: ListingInputData) 
   const id = newId("lst");
   const listingNo = (await sql.query<{ n: string }>("select nextval('listing_no_seq')::text as n"))[0].n;
   const slug = listingSlug(data.title, listingNo);
+  const currency = data.currency ?? "TRY";
   const status = await sql.transaction(async (tx) => {
     // Claimed in one statement, so two listings sent together cannot both be "the first".
     const claimedFirst =
@@ -190,15 +218,15 @@ export async function saveListingRecord(userId: string, data: ListingInputData) 
       Boolean((await tx.query("update profiles set first_listing_used=true where user_id=$1 and not first_listing_used returning user_id", [userId]))[0]);
     const next = isAdmin || mode === "none" || claimedFirst ? "ACTIVE" : "PENDING";
     await tx.query(
-      `insert into listings (id,slug,user_id,store_id,category_id,title,description,price,status,city,district,
+      `insert into listings (id,slug,user_id,store_id,category_id,title,description,price,currency,status,city,district,
         neighborhood,lat,lng,images,attrs,phone_override,expires_at,approved_at,listing_no,client_key)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::jsonb,$16::jsonb,$17,now()+interval '30 days',
-         case when $9::text = 'ACTIVE' then now() end,$18::bigint,$19)`,
-      [id,slug,userId,data.storeId || null,data.categoryId,data.title,data.description,data.price,next,data.city,data.district,
-        data.neighborhood || null,coords?.lat ?? null,coords?.lng ?? null,JSON.stringify(data.images),JSON.stringify(attrs),phoneOverride,listingNo,
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::jsonb,$17::jsonb,$18,now()+interval '30 days',
+         case when $10::text = 'ACTIVE' then now() end,$19::bigint,$20)`,
+      [id, slug, userId, data.storeId || null, data.categoryId, data.title, data.description, data.price, currency, next, data.city, data.district,
+        data.neighborhood || null, coords?.lat ?? null, coords?.lng ?? null, JSON.stringify(data.images), JSON.stringify(attrs), phoneOverride, listingNo,
         data.clientKey ?? null],
     );
-    await tx.query("insert into price_history (listing_id,price) values ($1,$2)", [id,data.price]);
+    await tx.query("insert into price_history (listing_id,price) values ($1,$2)", [id, data.price]);
     return next;
   }).catch(async (error: unknown) => {
     // Lost the race to an identical request: answer with the listing that one created.
@@ -220,6 +248,13 @@ export async function saveListingRecord(userId: string, data: ListingInputData) 
       district: data.district || null,
       price: data.price,
     }).catch((err) => console.warn("[saved-searches] notify failed", err));
+    void notifySellerFollowers(sql, {
+      id,
+      title: data.title,
+      slug,
+      userId,
+      sellerName: me.display_name || "Satıcı",
+    }).catch((err) => console.warn("[follows] notify failed", err));
   }
   return { id, slug, status };
 }

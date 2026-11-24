@@ -1,13 +1,15 @@
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { useState } from 'react';
+import { ActivityIndicator, Platform, ScrollView, Share, StyleSheet, View } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Check, CheckCheck, Download, MessageCircle } from 'lucide-react-native';
-import { errorMessage } from '@/api/client';
+import { errorMessage, timedFetch } from '@/api/client';
 import { account } from '@/api/endpoints';
 import { keys, queryClient } from '@/api/queries';
 import type { AccountSettings, PhoneVisibility } from '@/api/types';
-import { webUrl } from '@/lib/config';
+import { getToken } from '@/auth/session';
+import { API_BASE_URL, webUrl } from '@/lib/config';
 import { ErrorState, Header, ListRow, Loading, RowGroup, Text, space, toast, useTheme } from '@/ui';
 import { RequireSignIn } from '@/auth/RequireSignIn';
 
@@ -41,10 +43,37 @@ function PrivacySettings() {
       toast.error(errorMessage(e));
     },
   });
+  const [downloading, setDownloading] = useState(false);
   const s = settings.data;
   const update = (patch: Partial<Pick<AccountSettings, 'phone_visibility' | 'show_whatsapp' | 'read_receipts'>>) => {
     if (!s) return;
     save.mutate({ phone_visibility: s.phone_visibility, show_whatsapp: s.show_whatsapp, read_receipts: s.read_receipts, ...patch });
+  };
+  const downloadData = async () => {
+    if (downloading) return;
+    if (Platform.OS === 'web') {
+      await WebBrowser.openBrowserAsync(webUrl('/ayarlar/hesap'));
+      return;
+    }
+    const token = getToken();
+    if (!token) {
+      await WebBrowser.openBrowserAsync(webUrl('/ayarlar/hesap'));
+      return;
+    }
+    setDownloading(true);
+    try {
+      const res = await timedFetch(`${API_BASE_URL}/api/hesap/verilerim`, {
+        headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+      });
+      if (!res.ok) throw new Error('Veriler indirilemedi');
+      const jsonText = await res.text();
+      await Share.share({ title: 'GeldeSat Verilerim (KVKK)', message: jsonText });
+    } catch {
+      toast.info('Tarayıcı üzerinden indirme sayfası açılıyor…');
+      await WebBrowser.openBrowserAsync(webUrl('/ayarlar/hesap'));
+    } finally {
+      setDownloading(false);
+    }
   };
 
   return (
@@ -91,8 +120,10 @@ function PrivacySettings() {
             <ListRow
               icon={Download}
               label="Verilerimi indir"
-              detail="KVKK kapsamında verilerinizin kopyası. Sitede Ayarlar → Hesap sayfası açılır; orada giriş yapmanız gerekebilir."
-              onPress={() => void WebBrowser.openBrowserAsync(webUrl('/ayarlar/hesap'))}
+              detail="KVKK kapsamında verilerinizin JSON kopyasını kaydedin veya paylaşın."
+              disabled={downloading}
+              right={downloading ? <ActivityIndicator size="small" color={c.primary} /> : undefined}
+              onPress={() => void downloadData()}
             />
           </RowGroup>
           <Text variant="caption" tone="subtle">

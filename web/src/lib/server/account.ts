@@ -1,8 +1,10 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
-import { getSql } from "@/lib/db";
-import { asIso, asJson, num } from "@/lib/utils";
+import { getSql, type Sql } from "@/lib/db";
+import { CITY_COORDS } from "@/lib/data/geo";
+import { asIso, asJson, listingSlug, newId, num } from "@/lib/utils";
+import { getAppConfig } from "./config";
 import { deleteUnusedListingImages } from "./upload.server";
 import {
   inheritedAttributes,
@@ -83,6 +85,7 @@ export const getMe = createServerFn({ method: "GET" })
             city: store[0].city ? String(store[0].city) : null,
             description: store[0].description ? String(store[0].description) : "",
             phone: store[0].phone ? String(store[0].phone) : null,
+            logo_url: store[0].logo_url ? String(store[0].logo_url) : null,
           }
         : null,
       credits,
@@ -218,7 +221,7 @@ export const myListings = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const sql = await getSql();
     const rows = await sql.query<Record<string, unknown>>(
-      `select ${listingSelect("", true)}, (l.approved_at is not null) as approved,
+      `select ${listingSelect("", true)}, l.rejection_reason, (l.approved_at is not null) as approved,
               (select count(*)::int from favorites f where f.listing_id = l.id) as fav_count,
               (select count(*)::int from conversations cv where cv.listing_id = l.id) as message_count,
               (select count(*)::int from phone_reveals pr where pr.listing_id = l.id) as phone_reveal_count,
@@ -232,6 +235,7 @@ export const myListings = createServerFn({ method: "GET" })
     );
     return rows.map((row) => ({
       ...mapListing(row),
+      rejection_reason: row.rejection_reason ? String(row.rejection_reason) : null,
       approved: Boolean(row.approved),
       fav_count: num(row.fav_count),
       message_count: num(row.message_count),
@@ -255,7 +259,10 @@ export const getListingForEdit = createServerFn({ method: "POST" })
     if (String(rows[0].user_id) !== context.userId && me.role !== "ADMIN") {
       throw new Error("Yetkisiz işlem");
     }
-    const listing = mapListing(rows[0]);
+    const listing = {
+      ...mapListing(rows[0]),
+      rejection_reason: rows[0].rejection_reason ? String(rows[0].rejection_reason) : null,
+    };
     const pathRows = await sql.query<{ id: string }>(
       `with recursive chain as (
          select id, parent_id from categories where id = $1
@@ -467,4 +474,200 @@ export const getCategoryAttrs = createServerFn({ method: "POST" })
 export const getSubtree = createServerFn({ method: "POST" })
   .validator(z.object({ slug: z.string() }))
   .handler(async ({ data }) => subtreeIds(data.slug));
+
+const StoreApplicationInput = z.object({
+  name: z.string().trim().min(3, "Mağaza adı en az 3 karakter olmalı.").max(60),
+  city: z.string().trim().max(40).optional(),
+  phone: z.string().trim().max(20).optional(),
+  taxNo: z.string().trim().max(30).optional(),
+  notes: z.string().trim().max(1000).optional(),
+});
+
+export type StoreApplicationRow = {
+  id: string;
+  name: string;
+  city: string | null;
+  phone: string | null;
+  tax_no: string | null;
+  notes: string | null;
+  status: string;
+  review_note: string | null;
+  created_at: string;
+  reviewed_at: string | null;
+};
+
+function mapStoreApplication(r: Record<string, unknown>): StoreApplicationRow {
+  return {
+    id: String(r.id),
+    name: String(r.name),
+    city: r.city ? String(r.city) : null,
+    phone: r.phone ? String(r.phone) : null,
+    tax_no: r.tax_no ? String(r.tax_no) : null,
+    notes: r.notes ? String(r.notes) : null,
+    status: String(r.status),
+    review_note: r.review_note ? String(r.review_note) : null,
+    created_at: asIso(r.created_at),
+    reviewed_at: r.reviewed_at ? asIso(r.reviewed_at) : null,
+  };
+}
+
+/** Submit a store opening application for the signed-in user. */
+export async function submitStoreApplicationRecord(
+  sql: Pick<Sql, "query">,
+  userId: string,
+  data: z.infer<typeof StoreApplicationInput>,
+): Promise<StoreApplicationRow> {
+  rateLimit(`store-app:${userId}`, 5, 60 * 60_000);
+  await ensureProfile(userId);
+  const existingStore = await sql.query<{ id: string }>("select id from stores where user_id=$1 limit 1", [userId]);
+  if (existingStore[0]) throw new Error("Zaten bir mağazanız var.");
+  const pendingApp = await sql.query<{ id: string }>(
+    "select id from store_applications where user_id=$1 and status='PENDING' limit 1",
+    [userId],
+  );
+  if (pendingApp[0]) throw new Error("Zaten inceleme bekleyen bir mağaza başvurunuz var.");
+  const phone = data.phone?.trim() ? normalizeTrPhone(data.phone) : null;
+  const rows = await sql.query<Record<string, unknown>>(
+    `insert into store_applications (id, user_id, name, city, phone, tax_no, notes, status)
+     values ($1, $2, $3, $4, $5, $6, $7, 'PENDING')
+     returning id, name, city, phone, tax_no, notes, status, review_note, created_at, reviewed_at`,
+    [
+      newId("sapp"),
+      userId,
+      data.name,
+      data.city || null,
+      phone,
+      data.taxNo || null,
+      data.notes || null,
+    ],
+  );
+  return mapStoreApplication(rows[0]);
+}
+
+/** Return the latest store application for `userId`, or null. */
+export async function myStoreApplicationRecord(
+  sql: Pick<Sql, "query">,
+  userId: string,
+): Promise<StoreApplicationRow | null> {
+  const rows = await sql.query<Record<string, unknown>>(
+    `select id, name, city, phone, tax_no, notes, status, review_note, created_at, reviewed_at
+     from store_applications where user_id=$1 order by created_at desc limit 1`,
+    [userId],
+  );
+  return rows[0] ? mapStoreApplication(rows[0]) : null;
+}
+
+export const submitStoreApplication = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(StoreApplicationInput)
+  .handler(async ({ context, data }) => submitStoreApplicationRecord(await getSql(), context.userId, data));
+
+export const myStoreApplication = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => myStoreApplicationRecord(await getSql(), context.userId));
+
+const BulkImportRowInput = z.object({
+  title: z.string().trim().min(5, "Başlık en az 5 karakter olmalı.").max(100),
+  description: z.string().trim().min(10, "Açıklama en az 10 karakter olmalı.").max(5000),
+  price: z.number().min(1, "Fiyat en az 1 olmalı.").max(1_000_000_000),
+  currency: z.enum(["TRY", "USD", "EUR"]).optional(),
+  categorySlug: z.string().trim().min(1, "Kategori gerekli.").max(120),
+  city: z.string().trim().min(1, "Şehir gerekli.").max(60),
+  district: z.string().trim().min(1, "İlçe gerekli.").max(60),
+  neighborhood: z.string().trim().max(60).optional(),
+});
+
+/** Bulk import up to 50 listings for an existing store owner inside a single transaction. */
+export async function bulkImportListingsRecord(
+  sql: Sql,
+  userId: string,
+  rawRows: unknown[],
+): Promise<{ imported: number; errors: Array<{ index: number; error: string }> }> {
+  rateLimit(`bulk-import:${userId}`, 10, 60 * 60_000);
+  if (rawRows.length > 50) throw new Error("Tek seferde en fazla 50 ilan yükleyebilirsiniz.");
+  const me = await ensureProfile(userId);
+  await assertNotClosing(sql, userId);
+
+  const stores = await sql.query<{ id: string }>("select id from stores where user_id=$1 limit 1", [userId]);
+  const storeId = stores[0]?.id;
+  if (!storeId) throw new Error("Toplu ilan yüklemek için mağazanız olmalıdır.");
+
+  const categories = await sql.query<{ id: string; slug: string }>("select id, slug from categories");
+  const catBySlug = new Map(categories.map((c) => [c.slug.toLowerCase(), c.id]));
+
+  const errors: Array<{ index: number; error: string }> = [];
+  const validRows: Array<z.infer<typeof BulkImportRowInput> & { categoryId: string }> = [];
+
+  for (let index = 0; index < rawRows.length; index++) {
+    const parsed = BulkImportRowInput.safeParse(rawRows[index]);
+    if (!parsed.success) {
+      errors.push({ index, error: parsed.error.issues[0]?.message ?? "Geçersiz satır." });
+      continue;
+    }
+    const categoryId = catBySlug.get(parsed.data.categorySlug.toLowerCase());
+    if (!categoryId) {
+      errors.push({ index, error: `Kategori bulunamadı: ${parsed.data.categorySlug}` });
+      continue;
+    }
+    validRows.push({ ...parsed.data, categoryId });
+  }
+
+  if (!validRows.length) return { imported: 0, errors };
+
+  const { mode } = await getAppConfig<{ mode: "first_free" | "all" | "none" }>("moderation", { mode: "first_free" });
+  const isAdmin = me.role === "ADMIN";
+
+  const imported = await sql.transaction(async (tx) => {
+    let count = 0;
+    for (const row of validRows) {
+      const claimedFirst =
+        !isAdmin &&
+        mode === "first_free" &&
+        Boolean(
+          (await tx.query("update profiles set first_listing_used=true where user_id=$1 and not first_listing_used returning user_id", [userId]))[0],
+        );
+      const status = isAdmin || mode === "none" || claimedFirst ? "ACTIVE" : "PENDING";
+      const id = newId("lst");
+      const listingNo = (await tx.query<{ n: string }>("select nextval('listing_no_seq')::text as n"))[0].n;
+      const slug = listingSlug(row.title, listingNo);
+      const coords = CITY_COORDS[row.city];
+      const currency = row.currency ?? "TRY";
+
+      await tx.query(
+        `insert into listings (id,slug,user_id,store_id,category_id,title,description,price,currency,status,city,district,
+          neighborhood,lat,lng,images,attrs,expires_at,approved_at,listing_no)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'[]'::jsonb,'{}'::jsonb,now()+interval '30 days',
+           case when $10::text = 'ACTIVE' then now() end,$16::bigint)`,
+        [
+          id,
+          slug,
+          userId,
+          storeId,
+          row.categoryId,
+          row.title,
+          row.description,
+          row.price,
+          currency,
+          status,
+          row.city,
+          row.district,
+          row.neighborhood || null,
+          coords?.lat ?? null,
+          coords?.lng ?? null,
+          listingNo,
+        ],
+      );
+      await tx.query("insert into price_history (listing_id,price) values ($1,$2)", [id, row.price]);
+      count += 1;
+    }
+    return count;
+  });
+
+  return { imported, errors };
+}
+
+export const bulkImportListings = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ rows: z.array(z.unknown()).min(1).max(50) }))
+  .handler(async ({ context, data }) => bulkImportListingsRecord(await getSql(), context.userId, data.rows));
 

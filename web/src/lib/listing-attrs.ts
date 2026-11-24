@@ -25,6 +25,17 @@ export function cleanAttrs(raw: AttrValues, rules: AttrRule[], existing: AttrVal
     const text = String(value).trim();
     if (text.length > MAX_VALUE_LENGTH) throw new Error(`"${name}" en fazla ${MAX_VALUE_LENGTH} karakter olabilir.`);
     const unchanged = name in existing && String(existing[name]) === text;
+    if (name === "_damage") {
+      try {
+        const parsed = JSON.parse(text) as { p?: unknown; parts?: unknown };
+        if (parsed && typeof parsed === "object" && (typeof parsed.p === "string" || (parsed.parts && typeof parsed.parts === "object"))) {
+          clean[name] = text;
+        }
+      } catch {
+        // Ignore malformed damage payload
+      }
+      continue;
+    }
     const rule = byName.get(name);
     if (!rule) {
       if (unchanged) clean[name] = value;

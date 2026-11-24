@@ -16,7 +16,7 @@ export const Route = createFileRoute("/api/mobile/my-listings")({
           if (!userId) return Response.json({ success: false, error: "Giriş yapmanız gerekiyor." }, { status: 401 });
           const sql = await getSql();
           const rows = await sql.query<Record<string, unknown>>(
-            `select ${listingSelect("", true)}, (l.approved_at is not null) as approved,
+            `select ${listingSelect("", true)}, l.rejection_reason, (l.approved_at is not null) as approved,
                     (select count(*)::int from favorites f where f.listing_id=l.id) as fav_count,
                     (select count(*)::int from conversations cv where cv.listing_id=l.id) as message_count,
                     (select count(*)::int from phone_reveals pr where pr.listing_id=l.id) as phone_reveal_count,
@@ -30,6 +30,7 @@ export const Route = createFileRoute("/api/mobile/my-listings")({
             // The app shows exactly what the server would accept.
             return {
               ...listing,
+              rejection_reason: row.rejection_reason ? String(row.rejection_reason) : null,
               fav_count: Number(row.fav_count ?? 0),
               message_count: Number(row.message_count ?? 0),
               phone_reveal_count: Number(row.phone_reveal_count ?? 0),
@@ -53,7 +54,7 @@ export const Route = createFileRoute("/api/mobile/my-listings")({
           return Response.json({ success: true, ...result });
         } catch (error) {
           const message = publicErrorMessage(error, "İlan kaydedilemedi.");
-          return Response.json({ success: false, error: message }, { status: 400 });
+          return Response.json({ success: false, error: message }, { status: errorStatus(error, 400) });
         }
       },
     },

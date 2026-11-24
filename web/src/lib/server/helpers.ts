@@ -48,6 +48,7 @@ export type ListingCard = {
   store_name?: string;
   store_slug?: string;
   boosts?: string[];
+  rejection_reason?: string | null;
 };
 
 export type AttrDef = {
@@ -523,31 +524,39 @@ async function sendPush(sql: QuerySql, userId: string, title: string, body: stri
     if (devices.length) {
       // App icon badge: unread bell notifications plus unread chat messages.
       const badge = await appBadgeCount(sql, userId);
-      const response = await fetch("https://exp.host/--/api/v2/push/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify(devices.map(({ token }) => ({
-          to: token,
-          title,
-          body,
-          sound: "default",
-          badge,
-          data: { link },
-          channelId: "default",
-        }))),
-        signal: AbortSignal.timeout(10_000),
-      });
-      if (!response.ok) {
-        console.warn(`[push] Expo returned ${response.status}`);
-      } else {
-        const tickets = await response.json().catch(() => null) as { data?: Array<{ status?: string; details?: { error?: string } }> } | null;
-        const staleTokens = devices.filter((_, index) =>
-          tickets?.data?.[index]?.status === "error" && tickets.data[index]?.details?.error === "DeviceNotRegistered",
+      for (let i = 0; i < devices.length; i += 100) {
+        const chunk = devices.slice(i, i + 100);
+        const response = await fetch("https://exp.host/--/api/v2/push/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify(
+            chunk.map(({ token }) => ({
+              to: token,
+              title,
+              body,
+              sound: "default",
+              badge,
+              data: { link },
+              channelId: "default",
+            })),
+          ),
+          signal: AbortSignal.timeout(10_000),
+        });
+        if (!response.ok) {
+          console.warn(`[push] Expo returned ${response.status}`);
+          continue;
+        }
+        const tickets = (await response.json().catch(() => null)) as {
+          data?: Array<{ status?: string; details?: { error?: string } }>;
+        } | null;
+        const staleTokens = chunk.filter(
+          (_, index) =>
+            tickets?.data?.[index]?.status === "error" && tickets.data[index]?.details?.error === "DeviceNotRegistered",
         );
         if (staleTokens.length) {
-          await Promise.all(staleTokens.map(({ token }) =>
-            sql.query("delete from mobile_push_tokens where token=$1", [token]),
-          ));
+          await Promise.all(
+            staleTokens.map(({ token }) => sql.query("delete from mobile_push_tokens where token=$1", [token])),
+          );
         }
       }
     }

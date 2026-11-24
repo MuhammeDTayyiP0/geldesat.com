@@ -10,6 +10,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
  */
 
 const TTL_MS = 5 * 60_000;
+const MAX_PENDING = 2000;
 const CHALLENGE_RE = /^[A-Za-z0-9_-]{43}$/;
 
 type Pending = { challenge: string; token: string; expiresAt: number };
@@ -56,6 +57,11 @@ function prune(now: number) {
 export function parkToken(challenge: string, token: string): string {
   const now = Date.now();
   prune(now);
+  while (pending.size >= MAX_PENDING) {
+    const oldest = pending.keys().next().value;
+    if (oldest === undefined) break;
+    pending.delete(oldest);
+  }
   const code = randomBytes(24).toString("base64url");
   pending.set(code, { challenge, token, expiresAt: now + TTL_MS });
   return code;

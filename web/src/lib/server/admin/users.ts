@@ -6,6 +6,7 @@ import { getSql } from "@/lib/db";
 import { newId, num } from "@/lib/utils";
 import { creditBalance, isBootstrapAdmin, normalizeTrPhone, notify, rateLimit } from "../helpers";
 import { purgeUserData } from "../account-purge";
+import { disconnectUserStreams } from "../chat-bus";
 import { adminMiddleware, audit, likeTerm, paged, paging, PageInput, strOrNull, ts, tsOrNull, Where } from "./common";
 import { mapAudit } from "./dashboard";
 
@@ -318,6 +319,7 @@ export const adminBanUser = createServerFn({ method: "POST" })
       await tx.query("delete from mobile_push_tokens where user_id = $1", [data.userId]);
       return rows.length;
     });
+    disconnectUserStreams(data.userId);
     await audit(sql, context.adminId, "user.ban", "user", data.userId, `${t.display_name} askıya alındı — ${data.reason}`, { hiddenListings: hidden });
     return { ok: true as const, hiddenListings: hidden };
   });

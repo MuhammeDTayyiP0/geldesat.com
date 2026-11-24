@@ -20,6 +20,7 @@ function GlobalPending() {
  */
 const pageNonce = createIsomorphicFn()
   .server((): string | undefined => {
+    setResponseHeader("Cache-Control", "private, no-store");
     if (!import.meta.env.PROD) return undefined;
     const nonce = createNonce();
     setResponseHeader("Content-Security-Policy", buildCsp(nonce));

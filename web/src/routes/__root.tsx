@@ -14,7 +14,8 @@ import { appCss, criticalFonts } from "@/lib/critical-assets";
 import { jsonLd } from "@/lib/seo";
 import { getThemePref, useThemePref } from "@/lib/theme";
 import { getWebFlags } from "@/lib/server/config";
-import { useFlagRefresh, type RootLoaderData } from "@/lib/use-flag";
+import { useFlag, useFlagRefresh, type RootLoaderData } from "@/lib/use-flag";
+import { CompareBar } from "@/components/listing/CompareBar";
 
 const APP_NAME = "GeldeSat";
 
@@ -106,6 +107,7 @@ export const Route = createRootRoute({
 
 
 function Shell() {
+  const compareEnabled = useFlag("ilan_karsilastirma");
   useEffect(() => {
     const flash = takeFlash();
     if (flash) {
@@ -162,6 +164,7 @@ function Shell() {
       </main>
       {isChat ? null : <Footer />}
       {isChatThread ? null : <CookieBanner />}
+      {compareEnabled ? <CompareBar /> : null}
       {hideBottomNav ? null : <BottomNav />}
       <Toaster position="top-center" richColors theme={theme} />
     </div>

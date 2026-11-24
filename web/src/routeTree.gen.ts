@@ -17,6 +17,7 @@ import { Route as FavorilerRouteImport } from './routes/favoriler'
 import { Route as HaritaRouteImport } from './routes/harita'
 import { Route as IlanVerRouteImport } from './routes/ilan-ver'
 import { Route as IlanlarimRouteImport } from './routes/ilanlarim'
+import { Route as KarsilastirRouteImport } from './routes/karsilastir'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as MesajlarRouteImport } from './routes/mesajlar'
 import { Route as ProfilRouteImport } from './routes/profil'
@@ -42,6 +43,7 @@ import { Route as AdminYorumlarRouteImport } from './routes/admin/yorumlar'
 import { Route as ApiAvatarRouteImport } from './routes/api/avatar'
 import { Route as ApiGeoRouteImport } from './routes/api/geo'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
+import { Route as ApiStoreLogoRouteImport } from './routes/api/store-logo'
 import { Route as ApiUploadRouteImport } from './routes/api/upload'
 import { Route as AyarlarIndexRouteImport } from './routes/ayarlar/index'
 import { Route as AyarlarBildirimlerRouteImport } from './routes/ayarlar/bildirimler'
@@ -137,6 +139,11 @@ const IlanVerRoute = IlanVerRouteImport.update({
 const IlanlarimRoute = IlanlarimRouteImport.update({
   id: '/ilanlarim',
   path: '/ilanlarim',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const KarsilastirRoute = KarsilastirRouteImport.update({
+  id: '/karsilastir',
+  path: '/karsilastir',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -262,6 +269,11 @@ const ApiGeoRoute = ApiGeoRouteImport.update({
 const ApiHealthRoute = ApiHealthRouteImport.update({
   id: '/api/health',
   path: '/api/health',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiStoreLogoRoute = ApiStoreLogoRouteImport.update({
+  id: '/api/store-logo',
+  path: '/api/store-logo',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiUploadRoute = ApiUploadRouteImport.update({
@@ -556,6 +568,7 @@ export interface FileRoutesByFullPath {
   '/harita': typeof HaritaRoute
   '/ilan-ver': typeof IlanVerRoute
   '/ilanlarim': typeof IlanlarimRoute
+  '/karsilastir': typeof KarsilastirRoute
   '/login': typeof LoginRoute
   '/mesajlar': typeof MesajlarRouteWithChildren
   '/profil': typeof ProfilRoute
@@ -580,6 +593,7 @@ export interface FileRoutesByFullPath {
   '/api/avatar': typeof ApiAvatarRouteWithChildren
   '/api/geo': typeof ApiGeoRoute
   '/api/health': typeof ApiHealthRoute
+  '/api/store-logo': typeof ApiStoreLogoRoute
   '/api/upload': typeof ApiUploadRoute
   '/ayarlar/bildirimler': typeof AyarlarBildirimlerRoute
   '/ayarlar/engellenenler': typeof AyarlarEngellenenlerRoute
@@ -646,6 +660,7 @@ export interface FileRoutesByTo {
   '/harita': typeof HaritaRoute
   '/ilan-ver': typeof IlanVerRoute
   '/ilanlarim': typeof IlanlarimRoute
+  '/karsilastir': typeof KarsilastirRoute
   '/login': typeof LoginRoute
   '/profil': typeof ProfilRoute
   '/search': typeof SearchRoute
@@ -669,6 +684,7 @@ export interface FileRoutesByTo {
   '/api/avatar': typeof ApiAvatarRouteWithChildren
   '/api/geo': typeof ApiGeoRoute
   '/api/health': typeof ApiHealthRoute
+  '/api/store-logo': typeof ApiStoreLogoRoute
   '/api/upload': typeof ApiUploadRoute
   '/ayarlar/bildirimler': typeof AyarlarBildirimlerRoute
   '/ayarlar/engellenenler': typeof AyarlarEngellenenlerRoute
@@ -737,6 +753,7 @@ export interface FileRoutesById {
   '/harita': typeof HaritaRoute
   '/ilan-ver': typeof IlanVerRoute
   '/ilanlarim': typeof IlanlarimRoute
+  '/karsilastir': typeof KarsilastirRoute
   '/login': typeof LoginRoute
   '/mesajlar': typeof MesajlarRouteWithChildren
   '/profil': typeof ProfilRoute
@@ -761,6 +778,7 @@ export interface FileRoutesById {
   '/api/avatar': typeof ApiAvatarRouteWithChildren
   '/api/geo': typeof ApiGeoRoute
   '/api/health': typeof ApiHealthRoute
+  '/api/store-logo': typeof ApiStoreLogoRoute
   '/api/upload': typeof ApiUploadRoute
   '/ayarlar/bildirimler': typeof AyarlarBildirimlerRoute
   '/ayarlar/engellenenler': typeof AyarlarEngellenenlerRoute
@@ -830,6 +848,7 @@ export interface FileRouteTypes {
     | '/harita'
     | '/ilan-ver'
     | '/ilanlarim'
+    | '/karsilastir'
     | '/login'
     | '/mesajlar'
     | '/profil'
@@ -854,6 +873,7 @@ export interface FileRouteTypes {
     | '/api/avatar'
     | '/api/geo'
     | '/api/health'
+    | '/api/store-logo'
     | '/api/upload'
     | '/ayarlar/bildirimler'
     | '/ayarlar/engellenenler'
@@ -920,6 +940,7 @@ export interface FileRouteTypes {
     | '/harita'
     | '/ilan-ver'
     | '/ilanlarim'
+    | '/karsilastir'
     | '/login'
     | '/profil'
     | '/search'
@@ -943,6 +964,7 @@ export interface FileRouteTypes {
     | '/api/avatar'
     | '/api/geo'
     | '/api/health'
+    | '/api/store-logo'
     | '/api/upload'
     | '/ayarlar/bildirimler'
     | '/ayarlar/engellenenler'
@@ -1010,6 +1032,7 @@ export interface FileRouteTypes {
     | '/harita'
     | '/ilan-ver'
     | '/ilanlarim'
+    | '/karsilastir'
     | '/login'
     | '/mesajlar'
     | '/profil'
@@ -1034,6 +1057,7 @@ export interface FileRouteTypes {
     | '/api/avatar'
     | '/api/geo'
     | '/api/health'
+    | '/api/store-logo'
     | '/api/upload'
     | '/ayarlar/bildirimler'
     | '/ayarlar/engellenenler'
@@ -1102,6 +1126,7 @@ export interface RootRouteChildren {
   HaritaRoute: typeof HaritaRoute
   IlanVerRoute: typeof IlanVerRoute
   IlanlarimRoute: typeof IlanlarimRoute
+  KarsilastirRoute: typeof KarsilastirRoute
   LoginRoute: typeof LoginRoute
   MesajlarRoute: typeof MesajlarRouteWithChildren
   ProfilRoute: typeof ProfilRoute
@@ -1111,6 +1136,7 @@ export interface RootRouteChildren {
   ApiAvatarRoute: typeof ApiAvatarRouteWithChildren
   ApiGeoRoute: typeof ApiGeoRoute
   ApiHealthRoute: typeof ApiHealthRoute
+  ApiStoreLogoRoute: typeof ApiStoreLogoRoute
   ApiUploadRoute: typeof ApiUploadRoute
   AyarlarBildirimlerRoute: typeof AyarlarBildirimlerRoute
   AyarlarEngellenenlerRoute: typeof AyarlarEngellenenlerRoute
@@ -1217,6 +1243,13 @@ declare module '@tanstack/react-router' {
       path: '/ilanlarim'
       fullPath: '/ilanlarim'
       preLoaderRoute: typeof IlanlarimRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/karsilastir': {
+      id: '/karsilastir'
+      path: '/karsilastir'
+      fullPath: '/karsilastir'
+      preLoaderRoute: typeof KarsilastirRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -1392,6 +1425,13 @@ declare module '@tanstack/react-router' {
       path: '/api/health'
       fullPath: '/api/health'
       preLoaderRoute: typeof ApiHealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/store-logo': {
+      id: '/api/store-logo'
+      path: '/api/store-logo'
+      fullPath: '/api/store-logo'
+      preLoaderRoute: typeof ApiStoreLogoRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/upload': {
@@ -1924,6 +1964,7 @@ const rootRouteChildren: RootRouteChildren = {
   HaritaRoute: HaritaRoute,
   IlanVerRoute: IlanVerRoute,
   IlanlarimRoute: IlanlarimRoute,
+  KarsilastirRoute: KarsilastirRoute,
   LoginRoute: LoginRoute,
   MesajlarRoute: MesajlarRouteWithChildren,
   ProfilRoute: ProfilRoute,
@@ -1933,6 +1974,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAvatarRoute: ApiAvatarRouteWithChildren,
   ApiGeoRoute: ApiGeoRoute,
   ApiHealthRoute: ApiHealthRoute,
+  ApiStoreLogoRoute: ApiStoreLogoRoute,
   ApiUploadRoute: ApiUploadRoute,
   AyarlarBildirimlerRoute: AyarlarBildirimlerRoute,
   AyarlarEngellenenlerRoute: AyarlarEngellenenlerRoute,

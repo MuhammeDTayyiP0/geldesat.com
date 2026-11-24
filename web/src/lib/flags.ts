@@ -50,6 +50,13 @@ export const CODE_FLAGS: Record<string, string> = {
   fiyat_dususu_vitrini: "Ana sayfada Fiyatı Düşenler şeridi.",
   satici_istatistikleri: "İlanlarım sayfasında görüntülenme, favori, mesaj ve telefon istatistikleri.",
   kayitli_aramalar: "Arama kaydetme ve yeni ilan bildirimi.",
+  satici_takip: "Satıcıyı takip etme ve yeni ilan bildirimi.",
+  ilan_karsilastirma: "İlanları yan yana karşılaştırma.",
+  benzer_ilan_ver: "Mevcut ilanı kopyalayarak hızlı ilan verme ve ilan kalite puanı.",
+  haritada_ara: "Haritada yakınlaşarak ilan pinleri ve filtreli arama.",
+  arac_hasar_semasi: "Vasıta ilanlarında boya, değişen ve tramer şeması.",
+  paylasim_karti: "İlan için QR kodlu görsel paylaşım kartı oluşturma.",
+  toplu_ilan_aktarim: "Kurumsal mağazalar için toplu CSV/XML ilan aktarımı.",
 };
 
 /** Flags the code actually reads; the panel marks any other as having no effect. */

@@ -38,3 +38,9 @@ test("oversized values and empty ones", () => {
   assert.throws(() => cleanAttrs({ Not: "a".repeat(201) }, rules, {}, now), /en fazla 200/);
   assert.deepEqual(cleanAttrs({ Not: "", Kilometre: "" }, rules, {}, now), {});
 });
+
+test("vehicle damage payload (_damage) is preserved when valid JSON and dropped when malformed", () => {
+  const valid = JSON.stringify({ p: "0123000000000", t: 15000 });
+  assert.deepEqual(cleanAttrs({ _damage: valid }, rules, {}, now), { _damage: valid });
+  assert.deepEqual(cleanAttrs({ _damage: "not-json" }, rules, {}, now), {});
+});

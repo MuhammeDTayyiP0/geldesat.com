@@ -141,6 +141,214 @@ export const adminDeleteStore = createServerFn({ method: "POST" })
     return { ok: true as const };
   });
 
+export const adminListStoreApplications = createServerFn({ method: "POST" })
+  .middleware([adminMiddleware])
+  .validator(
+    z.object({
+      status: z.enum(["ALL", "PENDING", "APPROVED", "REJECTED"]).default("ALL"),
+      q: z.string().trim().max(120).optional(),
+      ...PageInput,
+    }),
+  )
+  .handler(async ({ data }) => {
+    const sql = await getSql();
+    const w = new Where();
+    if (data.status !== "ALL") w.add(`a.status = ${w.param(data.status)}`);
+    if (data.q) {
+      const like = w.param(likeTerm(data.q));
+      w.add(`(a.name ilike ${like} or a.city ilike ${like} or a.tax_no ilike ${like} or p.display_name ilike ${like} or u.email ilike ${like} or a.id = ${w.param(data.q)})`);
+    }
+    const from = `
+      from store_applications a
+      left join profiles p on p.user_id = a.user_id
+      left join "user" u on u.id = a.user_id
+      left join profiles rb on rb.user_id = a.reviewed_by
+      left join stores s on s.user_id = a.user_id`;
+    const { limit, offset } = paging(data.page, data.pageSize);
+    const [rows, count, totals] = await Promise.all([
+      sql.query<Record<string, unknown>>(
+        `select a.id, a.user_id, a.name, a.city, a.phone, a.tax_no, a.notes, a.status,
+                a.reviewed_by, a.review_note, a.created_at, a.reviewed_at,
+                coalesce(p.display_name, 'Üye') as applicant_name,
+                u.email as applicant_email,
+                p.avatar_url as applicant_avatar,
+                (p.banned_at is not null) as applicant_banned,
+                rb.display_name as reviewed_by_name,
+                s.id as existing_store_id,
+                s.slug as existing_store_slug
+         ${from} ${w.sql}
+         order by (a.status = 'PENDING') desc, a.created_at desc
+         limit ${limit} offset ${offset}`,
+        w.params,
+      ),
+      sql.query<{ n: number }>(`select count(*) as n ${from} ${w.sql}`, w.params),
+      sql.query<Record<string, unknown>>(
+        `select count(*) as all,
+                count(*) filter (where status = 'PENDING') as pending,
+                count(*) filter (where status = 'APPROVED') as approved,
+                count(*) filter (where status = 'REJECTED') as rejected
+         from store_applications`,
+      ),
+    ]);
+    const t = totals[0] ?? {};
+    return {
+      ...paged(
+        rows.map((r) => ({
+          id: String(r.id),
+          user_id: String(r.user_id),
+          name: String(r.name),
+          city: strOrNull(r.city),
+          phone: strOrNull(r.phone),
+          tax_no: strOrNull(r.tax_no),
+          notes: strOrNull(r.notes),
+          status: String(r.status),
+          reviewed_by: strOrNull(r.reviewed_by),
+          reviewed_by_name: strOrNull(r.reviewed_by_name),
+          review_note: strOrNull(r.review_note),
+          created_at: ts(r.created_at),
+          reviewed_at: tsOrNull(r.reviewed_at),
+          applicant_name: String(r.applicant_name),
+          applicant_email: strOrNull(r.applicant_email),
+          applicant_avatar: strOrNull(r.applicant_avatar),
+          applicant_banned: Boolean(r.applicant_banned),
+          existing_store_id: strOrNull(r.existing_store_id),
+          existing_store_slug: strOrNull(r.existing_store_slug),
+        })),
+        num(count[0]?.n),
+        data.page,
+        data.pageSize,
+      ),
+      totals: {
+        all: num(t.all),
+        pending: num(t.pending),
+        approved: num(t.approved),
+        rejected: num(t.rejected),
+      },
+    };
+  });
+
+export type AdminStoreApplicationRow = Awaited<ReturnType<typeof adminListStoreApplications>>["rows"][number];
+
+export const adminResolveStoreApplication = createServerFn({ method: "POST" })
+  .middleware([adminMiddleware])
+  .validator(
+    z.object({
+      id: z.string().max(200),
+      action: z.enum(["approve", "reject"]),
+      plan: z.enum(STORE_PLANS).default("BASIC"),
+      note: z.string().trim().max(500).optional(),
+    }),
+  )
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    const reviewNote = data.note?.trim() || null;
+    const nextStatus = data.action === "approve" ? "APPROVED" : "REJECTED";
+
+    const result = await sql.transaction(async (tx) => {
+      const app = (
+        await tx.query<{
+          id: string;
+          user_id: string;
+          name: string;
+          city: string | null;
+          phone: string | null;
+          status: string;
+        }>("select id, user_id, name, city, phone, status from store_applications where id = $1 for update", [data.id])
+      )[0];
+      if (!app) throw new Error("Mağaza başvurusu bulunamadı.");
+      if (app.status !== "PENDING") throw new Error("Bu başvuru zaten sonuçlandırıldı.");
+
+      await tx.query(
+        "update store_applications set status = $2, reviewed_by = $3, review_note = $4, reviewed_at = now() where id = $1",
+        [app.id, nextStatus, context.adminId, reviewNote],
+      );
+
+      let storeId: string | null = null;
+      let storeSlug: string | null = null;
+      if (data.action === "approve") {
+        const existing = (
+          await tx.query<{ id: string; slug: string }>("select id, slug from stores where user_id = $1 limit 1", [app.user_id])
+        )[0];
+        if (existing) {
+          storeId = existing.id;
+          storeSlug = existing.slug;
+        } else {
+          const baseSlug = slugify(app.name) || "magaza";
+          let candidate = baseSlug;
+          for (let attempt = 0; attempt < 5; attempt++) {
+            const taken = await tx.query<{ id: string }>("select id from stores where lower(slug) = lower($1) limit 1", [candidate]);
+            if (!taken[0]) break;
+            candidate = `${baseSlug}-${attempt + 2}`;
+          }
+          const stillTaken = await tx.query<{ id: string }>("select id from stores where lower(slug) = lower($1) limit 1", [candidate]);
+          if (stillTaken[0]) candidate = `${baseSlug}-${newId().slice(0, 6)}`;
+
+          const newStoreId = newId("str");
+          const inserted = await tx.query<{ id: string; slug: string }>(
+            `insert into stores (id, user_id, name, slug, city, phone, plan)
+             values ($1, $2, $3, $4, $5, $6, $7)
+             on conflict (user_id) do nothing
+             returning id, slug`,
+            [newStoreId, app.user_id, app.name, candidate, app.city || null, app.phone || null, data.plan],
+          );
+          if (inserted[0]) {
+            storeId = inserted[0].id;
+            storeSlug = inserted[0].slug;
+            await tx.query("update listings set store_id = $2 where user_id = $1 and store_id is null", [app.user_id, storeId]);
+          } else {
+            const fallback = (
+              await tx.query<{ id: string; slug: string }>("select id, slug from stores where user_id = $1 limit 1", [app.user_id])
+            )[0];
+            storeId = fallback?.id ?? null;
+            storeSlug = fallback?.slug ?? null;
+          }
+        }
+      }
+
+      return { app, storeId, storeSlug };
+    });
+
+    if (data.action === "approve") {
+      await audit(
+        sql,
+        context.adminId,
+        "store.application.approve",
+        "store",
+        result.storeId ?? result.app.id,
+        `"${result.app.name}" mağaza başvurusu onaylandı (${data.plan})`,
+        { applicationId: result.app.id, userId: result.app.user_id, plan: data.plan, note: reviewNote ?? undefined },
+      );
+      await notify(
+        result.app.user_id,
+        "system",
+        "Mağaza başvurunuz onaylandı",
+        `"${result.app.name}" mağaza başvurunuz onaylandı ve mağazanız açıldı.`,
+        "/ayarlar/magaza",
+      );
+    } else {
+      await audit(
+        sql,
+        context.adminId,
+        "store.application.reject",
+        "store",
+        result.app.id,
+        `"${result.app.name}" mağaza başvurusu reddedildi${reviewNote ? ` — ${reviewNote}` : ""}`,
+        { applicationId: result.app.id, userId: result.app.user_id, note: reviewNote ?? undefined },
+      );
+      await notify(
+        result.app.user_id,
+        "system",
+        "Mağaza başvurunuz reddedildi",
+        reviewNote
+          ? `"${result.app.name}" mağaza başvurunuz reddedildi. Gerekçe: ${reviewNote}`
+          : `"${result.app.name}" mağaza başvurunuz uygun bulunmadı.`,
+        "/ayarlar/magaza",
+      );
+    }
+
+    return { ok: true as const, status: nextStatus, storeId: result.storeId, slug: result.storeSlug };
+  });
+
 /* ───────────────────────────── Finance ───────────────────────────── */
 
 function likePrefix(q: string): string {

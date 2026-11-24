@@ -105,3 +105,55 @@ test("0043 applies cleanly even with legacy invalid rows and enforces constraint
     await db.close();
   }
 });
+
+test("0044 deduplicates open reports and enforces seller_follows and open report unique indexes", async () => {
+  const db = await schemaBefore("0044");
+  try {
+    await db.exec(`
+      insert into conversations (id, listing_id, buyer_id, seller_id)
+      values ('c1', 'l1', 'buyer', 'seller');
+      insert into reports (id, listing_id, reporter_id, reason, status, created_at) values
+        ('rep-old', 'l1', 'buyer', 'Spam', 'OPEN', '2026-01-01'),
+        ('rep-new', 'l1', 'buyer', 'Sahte', 'OPEN', '2026-02-01'),
+        ('rep-closed', 'l1', 'buyer', 'Eski', 'CLOSED', '2025-01-01');
+      insert into reports (id, listing_id, conversation_id, message_id, reporter_id, reason, status, created_at) values
+        ('chat-old', 'l1', 'c1', null, 'buyer', 'Hakaret', 'OPEN', '2026-01-01'),
+        ('chat-new', 'l1', 'c1', null, 'buyer', 'Dolandırıcılık', 'OPEN', '2026-02-01');
+    `);
+
+    const sql0044 = await readFile(join(dir, "0044_remaining_constraints_and_features.sql"), "utf8");
+    await db.exec(sql0044);
+    await db.exec(sql0044);
+
+    const openListingReports = await db.query<{ id: string }>(
+      "select id from reports where listing_id='l1' and conversation_id is null and status='OPEN'",
+    );
+    assert.deepEqual(openListingReports.rows.map((r) => r.id), ["rep-new"]);
+
+    const openChatReports = await db.query<{ id: string }>(
+      "select id from reports where conversation_id='c1' and status='OPEN'",
+    );
+    assert.deepEqual(openChatReports.rows.map((r) => r.id), ["chat-new"]);
+
+    // Duplicate OPEN reports are rejected, while CLOSED reports do not block a new OPEN report.
+    await assert.rejects(
+      db.query("insert into reports (id, listing_id, reporter_id, reason, status) values ('rep-dup', 'l1', 'buyer', 'Tekrar', 'OPEN')"),
+    );
+    await assert.rejects(
+      db.query("insert into reports (id, listing_id, conversation_id, message_id, reporter_id, reason, status) values ('chat-dup', 'l1', 'c1', null, 'buyer', 'Tekrar', 'OPEN')"),
+    );
+    await db.query("insert into reports (id, listing_id, reporter_id, reason, status) values ('rep-l2', 'l2', 'buyer', 'Spam', 'CLOSED')");
+    await db.query("insert into reports (id, listing_id, reporter_id, reason, status) values ('rep-l2-open', 'l2', 'buyer', 'Spam', 'OPEN')");
+
+    // seller_follows enforces no self-follow and primary key uniqueness.
+    await assert.rejects(
+      db.query("insert into seller_follows (follower_id, seller_id) values ('buyer', 'buyer')"),
+    );
+    await db.query("insert into seller_follows (follower_id, seller_id) values ('buyer', 'seller')");
+    await assert.rejects(
+      db.query("insert into seller_follows (follower_id, seller_id) values ('buyer', 'seller')"),
+    );
+  } finally {
+    await db.close();
+  }
+});

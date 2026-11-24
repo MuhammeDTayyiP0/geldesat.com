@@ -37,6 +37,7 @@ export type Listing = {
   store_name?: string;
   store_slug?: string;
   boosts?: string[];
+  rejection_reason?: string | null;
   /** My listings only: what the server accepts for this listing right now. */
   ownerActions?: OwnerAction[];
 };
@@ -157,8 +158,38 @@ export type Me = {
     city: string | null;
     description: string;
     phone: string | null;
+    logo_url?: string | null;
   } | null;
   credits: number;
+};
+
+export type FollowStatus = {
+  following: boolean;
+  followers: number;
+};
+
+export type FollowedSellerSummary = {
+  id: string;
+  name: string;
+  avatar: string | null;
+  city: string | null;
+  store_name: string | null;
+  store_slug: string | null;
+  active_count: number;
+  followed_at: string;
+};
+
+export type StoreApplication = {
+  id: string;
+  name: string;
+  city: string | null;
+  phone: string | null;
+  tax_no: string | null;
+  notes: string | null;
+  status: string;
+  review_note: string | null;
+  created_at: string;
+  reviewed_at: string | null;
 };
 
 export type SellerResponseStats = {
@@ -315,6 +346,7 @@ export type ListingInput = {
   title: string;
   description: string;
   price: number;
+  currency?: 'TRY' | 'USD' | 'EUR';
   city: string;
   district: string;
   neighborhood?: string;

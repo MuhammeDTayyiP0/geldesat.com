@@ -1,14 +1,17 @@
 import { useEffect, useState } from 'react';
 import { Linking, Platform, Pressable, ScrollView, Share, StyleSheet, View, useWindowDimensions } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery } from '@tanstack/react-query';
+import { Image } from 'expo-image';
 import {
   BadgeCheck,
+  CarFront,
   ChevronLeft,
   ChevronRight,
   Clock,
+  Copy,
   Eye,
   Flag,
   Hash,
@@ -20,14 +23,18 @@ import {
   Pencil,
   RefreshCw,
   Phone,
+  Scale,
   Share2,
   ShieldCheck,
   Star,
   Store,
   TrendingDown,
+  UserCheck,
+  UserPlus,
+  Users,
 } from 'lucide-react-native';
 import { ApiError, errorMessage } from '@/api/client';
-import { listings, myListings } from '@/api/endpoints';
+import { follows, listings, myListings } from '@/api/endpoints';
 import { keys, queryClient } from '@/api/queries';
 import type { Listing, SellerResponseStats } from '@/api/types';
 import { useSession } from '@/auth/session';
@@ -36,7 +43,9 @@ import { useToggleFavorite } from '@/features/listing/favorites';
 import { Gallery } from '@/features/listing/Gallery';
 import { ListingRail } from '@/features/listing/ListingRail';
 import { MessageSheet, OfferSheet, PhoneSheet, ReportSheet, ReviewSheet } from '@/features/listing/ListingSheets';
-import { webUrl } from '@/lib/config';
+import { toggleCompare, useCompareList } from '@/lib/compare';
+import { mediaUrl, webUrl } from '@/lib/config';
+import { useFlag } from '@/lib/flags';
 import { daysUntil, formatDate, formatNumber, formatPrice, isListingExpired, isListingLive, listingStatusLabel, locationLabel, timeAgo } from '@/lib/format';
 import {
   Avatar,
@@ -47,9 +56,11 @@ import {
   EmptyState,
   ErrorState,
   IconButton,
+  Sheet,
   Skeleton,
   Stars,
   Text,
+  Wordmark,
   hairline,
   radius,
   shadow,
@@ -58,7 +69,7 @@ import {
   useTheme,
 } from '@/ui';
 
-type SheetName = 'message' | 'offer' | 'phone' | 'report' | 'review' | null;
+type SheetName = 'message' | 'offer' | 'phone' | 'report' | 'review' | 'shareCard' | null;
 
 /** Deep links open this screen first: going back then lands on the home screen. */
 function useGoBack() {
@@ -76,15 +87,45 @@ export default function ListingScreen() {
   const session = useSession();
   const requireAuth = useRequireAuth();
   const toggleFavorite = useToggleFavorite();
+  const compareOn = useFlag('ilan_karsilastirma');
+  const shareCardOn = useFlag('paylasim_karti');
+  const followOn = useFlag('satici_takip');
+  const copyListingOn = useFlag('benzer_ilan_ver');
+  const damageOn = useFlag('arac_hasar_semasi');
+  const compareList = useCompareList();
   const [sheet, setSheet] = useState<SheetName>(null);
   const [phone, setPhone] = useState<string | null>(null);
   const [phoneBusy, setPhoneBusy] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [prevId, setPrevId] = useState(id);
+
+  if (id !== prevId) {
+    setPrevId(id);
+    setPhone(null);
+    setSheet(null);
+    setExpanded(false);
+  }
 
   const detail = useQuery({ queryKey: keys.listing(id), queryFn: () => listings.detail(id) });
   const data = detail.data;
   const listing = data?.listing;
+  const sellerId = listing?.user_id ?? '';
+
+  const followQuery = useQuery({
+    queryKey: keys.followStatus(sellerId),
+    queryFn: () => follows.status(sellerId),
+    enabled: followOn && !!sellerId,
+  });
+
+  const toggleFollow = useMutation({
+    mutationFn: (currentlyFollowing: boolean) => (currentlyFollowing ? follows.unfollow(sellerId) : follows.follow(sellerId)),
+    onSuccess: (res) => {
+      queryClient.setQueryData(keys.followStatus(sellerId), res);
+      void queryClient.invalidateQueries({ queryKey: keys.followedSellers });
+    },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
 
   // Opening a listing puts it on the account's "Son baktıklarım" (recorded by the server).
   const listingId = listing?.id;
@@ -129,7 +170,13 @@ export default function ListingScreen() {
   const live = isListingLive(listing);
   const daysLeft = daysUntil(listing.expires_at);
   const priceDrop = data.history.length > 1 ? data.history[0].price - listing.price : 0;
-  const attrs = Object.entries(listing.attrs ?? {}).filter(([, v]) => v !== '' && v != null);
+  const damageSummary = damageOn ? parseVehicleDamage(listing.attrs ?? {}) : null;
+  const attrs = Object.entries(listing.attrs ?? {}).filter(([k, v]) => {
+    if (v === '' || v == null || k.startsWith('_')) return false;
+    if (damageSummary && isDamageAttrKey(k)) return false;
+    return true;
+  });
+  const inCompare = compareList.some((x) => x.id === listing.id);
   const description = listing.description ?? '';
   const longDescription = description.length > 320;
 
@@ -201,7 +248,7 @@ export default function ListingScreen() {
                   />
                 </View>
               ) : null}
-              <View style={styles.row}>
+              <View style={styles.ownerActions}>
                 <Button
                   title="Düzenle"
                   icon={Pencil}
@@ -209,6 +256,15 @@ export default function ListingScreen() {
                   variant="soft"
                   onPress={() => router.push({ pathname: '/ilan-ver', params: { id: listing.id } })}
                 />
+                {copyListingOn ? (
+                  <Button
+                    title="Benzer ilan ver"
+                    icon={Copy}
+                    size="sm"
+                    variant="outline"
+                    onPress={() => router.push({ pathname: '/ilan-ver', params: { copyFrom: listing.id } })}
+                  />
+                ) : null}
                 <Button title="İlanlarım" size="sm" variant="outline" onPress={() => router.push('/ilanlarim')} />
               </View>
             </Card>
@@ -261,6 +317,8 @@ export default function ListingScreen() {
             ))}
           </Card>
 
+          {damageSummary ? <VehicleDamageCard summary={damageSummary} /> : null}
+
           {description ? (
             <View style={styles.section}>
               <Text variant="subheading">Açıklama</Text>
@@ -291,7 +349,24 @@ export default function ListingScreen() {
             </View>
           ) : null}
 
-          <SellerCard listing={listing} rating={data.sellerStats} onPress={() => listing.user_id && router.push({ pathname: '/satici/[id]', params: { id: listing.user_id } })} />
+          <SellerCard
+            listing={listing}
+            rating={data.sellerStats}
+            onPress={() => listing.user_id && router.push({ pathname: '/satici/[id]', params: { id: listing.user_id } })}
+            follow={
+              followOn && !isOwner && sellerId
+                ? {
+                    followers: followQuery.data?.followers,
+                    following: Boolean(followQuery.data?.following),
+                    busy: toggleFollow.isPending,
+                    onToggle: () => {
+                      if (!requireAuth('Satıcıyı takip etmek için giriş yapın.')) return;
+                      toggleFollow.mutate(Boolean(followQuery.data?.following));
+                    },
+                  }
+                : undefined
+            }
+          />
 
           {data.reviews.length ? (
             <View style={styles.section}>
@@ -360,6 +435,51 @@ export default function ListingScreen() {
               />
             ) : null}
           </View>
+          {compareOn || shareCardOn ? (
+            <View style={styles.inlineActions}>
+              {compareOn ? (
+                <Button
+                  title={inCompare ? 'Karşılaştırmada' : 'Karşılaştır'}
+                  icon={Scale}
+                  variant={inCompare ? 'soft' : 'outline'}
+                  size="sm"
+                  style={styles.flex}
+                  onPress={() => {
+                    void toggleCompare({
+                      id: listing.id,
+                      title: listing.title,
+                      price: listing.price,
+                      currency: listing.currency,
+                      image: listing.images[0] ?? null,
+                    }).then((res) => {
+                      if (res.full) toast.info('En fazla 4 ilan karşılaştırabilirsiniz.');
+                      else if (res.added) toast.success('Karşılaştırma listesine eklendi');
+                      else toast.info('Karşılaştırmadan çıkarıldı');
+                    });
+                  }}
+                />
+              ) : null}
+              {compareOn && compareList.length > 0 ? (
+                <Button
+                  title={`Listeyi gör (${compareList.length})`}
+                  icon={ChevronRight}
+                  variant="soft"
+                  size="sm"
+                  onPress={() => router.push('/karsilastir' as Href)}
+                />
+              ) : null}
+              {shareCardOn ? (
+                <Button
+                  title="Paylaşım kartı"
+                  icon={Share2}
+                  variant="outline"
+                  size="sm"
+                  style={styles.flex}
+                  onPress={() => setSheet('shareCard')}
+                />
+              ) : null}
+            </View>
+          ) : null}
         </View>
 
         {data.similar.length ? (
@@ -428,6 +548,14 @@ export default function ListingScreen() {
         visible={sheet === 'phone'}
         onClose={() => setSheet(null)}
       />
+      {shareCardOn ? (
+        <ShareCardSheet
+          listing={listing}
+          visible={sheet === 'shareCard'}
+          onClose={() => setSheet(null)}
+          onShare={share}
+        />
+      ) : null}
       {/* Light icons over the photos, the theme's own when there are no photos or once the header turns solid. */}
       <StatusBar style={scrolled || !listing.images.length ? (dark ? 'light' : 'dark') : 'light'} />
     </View>
@@ -492,17 +620,19 @@ function SellerCard({
   listing,
   rating,
   onPress,
+  follow,
 }: {
   listing: Listing;
   rating: { rating_avg: number; rating_count: number; responseStats?: SellerResponseStats | null };
   onPress: () => void;
+  follow?: { followers?: number; following: boolean; busy: boolean; onToggle: () => void };
 }) {
   const { c } = useTheme();
   const name = listing.store_name ?? listing.seller_name ?? 'Satıcı';
   const r = rating.responseStats;
   return (
-    <Card onPress={onPress}>
-      <View style={styles.row}>
+    <Card>
+      <Pressable onPress={onPress} style={styles.row}>
         <Avatar name={name} uri={listing.seller_avatar} size={48} />
         <View style={styles.flex}>
           <View style={styles.row}>
@@ -533,7 +663,7 @@ function SellerCard({
           ) : null}
         </View>
         <ChevronRight size={18} color={c.subtle} />
-      </View>
+      </Pressable>
       {listing.store_name ? (
         <View style={[styles.storeLink, { borderTopColor: c.border }]}>
           <Store size={16} color={c.primary} />
@@ -542,7 +672,254 @@ function SellerCard({
           </Text>
         </View>
       ) : null}
+      {follow ? (
+        <View style={[styles.followRow, { borderTopColor: c.border }]}>
+          <View style={styles.row}>
+            <Users size={15} color={c.muted} />
+            <Text variant="caption" tone="muted">
+              {follow.followers != null ? `${formatNumber(follow.followers)} takipçi` : 'Satıcıyı takip et'}
+            </Text>
+          </View>
+          <Button
+            title={follow.following ? 'Takip ediliyor' : 'Takip et'}
+            icon={follow.following ? UserCheck : UserPlus}
+            variant={follow.following ? 'soft' : 'outline'}
+            size="sm"
+            loading={follow.busy}
+            onPress={follow.onToggle}
+          />
+        </View>
+      ) : null}
     </Card>
+  );
+}
+
+type VehicleDamageSummary = {
+  tramer?: string;
+  painted: string[];
+  localPainted: string[];
+  replaced: string[];
+  note?: string;
+};
+
+const DAMAGE_PARTS: readonly { id: string; label: string }[] = [
+  { id: 'on_tampon', label: 'Ön Tampon' },
+  { id: 'kaput', label: 'Kaput' },
+  { id: 'tavan', label: 'Tavan' },
+  { id: 'bagaj', label: 'Bagaj' },
+  { id: 'arka_tampon', label: 'Arka Tampon' },
+  { id: 'sol_on_camurluk', label: 'Sol Ön Çamurluk' },
+  { id: 'sol_on_kapi', label: 'Sol Ön Kapı' },
+  { id: 'sol_arka_kapi', label: 'Sol Arka Kapı' },
+  { id: 'sol_arka_camurluk', label: 'Sol Arka Çamurluk' },
+  { id: 'sag_on_camurluk', label: 'Sağ Ön Çamurluk' },
+  { id: 'sag_on_kapi', label: 'Sağ Ön Kapı' },
+  { id: 'sag_arka_kapi', label: 'Sağ Arka Kapı' },
+  { id: 'sag_arka_camurluk', label: 'Sağ Arka Çamurluk' },
+];
+const DAMAGE_PART_LABELS = new Map(DAMAGE_PARTS.map((p) => [p.id, p.label]));
+
+const DAMAGE_KEY_MATCH = /^(_damage|boyalı parçalar|lokal boyalı parçalar|değişen parçalar|hasar durumu|hasar şeması|araç hasar|hasar|tramer|tramer kaydı|hasar kaydı|ağır hasar kayıtlı)$/i;
+
+function isDamageAttrKey(key: string): boolean {
+  return DAMAGE_KEY_MATCH.test(key.trim());
+}
+
+function splitParts(value: unknown): string[] {
+  if (typeof value !== 'string') return [];
+  const trimmed = value.trim();
+  if (!trimmed || /^(yok|hayır|orijinal|boyasız|değişensiz)$/i.test(trimmed)) return [];
+  return trimmed
+    .split(/[,;]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function parseVehicleDamage(attrs: Record<string, string | number>): VehicleDamageSummary | null {
+  let tramer: string | undefined;
+  let painted: string[] = [];
+  let localPainted: string[] = [];
+  let replaced: string[] = [];
+  let note: string | undefined;
+  let found = false;
+
+  for (const [rawKey, rawVal] of Object.entries(attrs)) {
+    if (rawVal === '' || rawVal == null) continue;
+    const key = rawKey.trim().toLocaleLowerCase('tr');
+    if (key === '_damage' || key === 'hasar şeması' || key === 'araç hasar' || key === 'hasar durumu' || key === 'hasar') {
+      const text = String(rawVal).trim();
+      if (text.startsWith('{')) {
+        try {
+          const parsed = JSON.parse(text) as {
+            p?: string;
+            t?: number;
+            tramer?: string | number;
+            painted?: string[];
+            localPainted?: string[];
+            replaced?: string[];
+            parts?: Record<string, string>;
+          };
+          if (typeof parsed.p === 'string') {
+            DAMAGE_PARTS.forEach((part, idx) => {
+              const code = parsed.p?.charAt(idx);
+              if (code === '1') localPainted.push(part.label);
+              else if (code === '2') painted.push(part.label);
+              else if (code === '3') replaced.push(part.label);
+            });
+            found = true;
+          } else if (parsed.parts && typeof parsed.parts === 'object') {
+            for (const [partId, status] of Object.entries(parsed.parts)) {
+              const label = DAMAGE_PART_LABELS.get(partId) ?? partId;
+              if (status === 'boyali' || status === 'painted' || status === 'Boyalı') painted.push(label);
+              else if (status === 'lokal' || status === 'local' || status === 'Lokal Boyalı') localPainted.push(label);
+              else if (status === 'degisen' || status === 'replaced' || status === 'Değişen') replaced.push(label);
+            }
+            found = true;
+          }
+          const rawTramer = parsed.t !== undefined ? parsed.t : parsed.tramer;
+          if (rawTramer != null && rawTramer !== '') {
+            tramer = typeof rawTramer === 'number' ? (rawTramer === 0 ? '0 ₺ (Yok)' : formatPrice(rawTramer, 'TRY')) : String(rawTramer);
+            found = true;
+          }
+          if (Array.isArray(parsed.painted)) {
+            painted = parsed.painted;
+            found = true;
+          }
+          if (Array.isArray(parsed.localPainted)) {
+            localPainted = parsed.localPainted;
+            found = true;
+          }
+          if (Array.isArray(parsed.replaced)) {
+            replaced = parsed.replaced;
+            found = true;
+          }
+        } catch {
+          found = true;
+          note = text;
+        }
+      } else {
+        found = true;
+        note = text;
+      }
+    } else if (key === 'tramer' || key === 'tramer kaydı' || key === 'hasar kaydı') {
+      found = true;
+      tramer = typeof rawVal === 'number' ? formatPrice(rawVal, 'TRY') : String(rawVal);
+    } else if (key === 'boyalı parçalar') {
+      found = true;
+      painted = splitParts(rawVal);
+    } else if (key === 'lokal boyalı parçalar') {
+      found = true;
+      localPainted = splitParts(rawVal);
+    } else if (key === 'değişen parçalar') {
+      found = true;
+      replaced = splitParts(rawVal);
+    } else if (key === 'ağır hasar kayıtlı') {
+      found = true;
+      if (rawVal === 'Evet' || rawVal === 'true') note = 'Ağır hasar kayıtlı';
+    }
+  }
+
+  if (!found) return null;
+  return { tramer, painted, localPainted, replaced, note };
+}
+
+function VehicleDamageCard({ summary }: { summary: VehicleDamageSummary }) {
+  const { c } = useTheme();
+  const cleanAll = summary.painted.length === 0 && summary.localPainted.length === 0 && summary.replaced.length === 0;
+  return (
+    <Card style={styles.damageCard}>
+      <View style={styles.row}>
+        <CarFront size={18} color={c.primary} />
+        <Text variant="subheading" style={styles.flex}>
+          Hasar & Tramer Özeti
+        </Text>
+        {cleanAll ? <Badge label="Boyasız / Değişensiz" tone="ok" /> : null}
+      </View>
+      {summary.tramer ? (
+        <View style={[styles.tramerRow, { backgroundColor: c.elevated }]}>
+          <Text variant="caption" tone="muted">
+            Tramer Kaydı
+          </Text>
+          <Text variant="label">{summary.tramer}</Text>
+        </View>
+      ) : null}
+      {summary.note ? (
+        <Text variant="caption" tone="warn">
+          {summary.note}
+        </Text>
+      ) : null}
+      {summary.replaced.length > 0 ? (
+        <DamageGroup label="Değişen" items={summary.replaced} tone="danger" />
+      ) : null}
+      {summary.painted.length > 0 ? (
+        <DamageGroup label="Boyalı" items={summary.painted} tone="warn" />
+      ) : null}
+      {summary.localPainted.length > 0 ? (
+        <DamageGroup label="Lokal Boyalı" items={summary.localPainted} tone="primary" />
+      ) : null}
+    </Card>
+  );
+}
+
+function DamageGroup({ label, items, tone }: { label: string; items: string[]; tone: 'danger' | 'warn' | 'primary' }) {
+  return (
+    <View style={styles.damageGroup}>
+      <Text variant="caption" tone="muted">
+        {label} ({items.length})
+      </Text>
+      <View style={styles.damageBadges}>
+        {items.map((part) => (
+          <Badge key={part} label={part} tone={tone} />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function ShareCardSheet({
+  listing,
+  visible,
+  onClose,
+  onShare,
+}: {
+  listing: Listing;
+  visible: boolean;
+  onClose: () => void;
+  onShare: () => void;
+}) {
+  const { c } = useTheme();
+  const cover = mediaUrl(listing.images[0], 800);
+  const loc = locationLabel(listing.city, listing.district, listing.neighborhood);
+  return (
+    <Sheet visible={visible} onClose={onClose} title="Paylaşım kartı">
+      <Card padded={false} style={[styles.shareCard, { borderColor: c.primary }]}>
+        <View style={[styles.shareHeader, { backgroundColor: c.primarySoft }]}>
+          <Wordmark size={20} />
+          {listing.listing_no ? <Badge label={`#${listing.listing_no}`} tone="primary" /> : null}
+        </View>
+        {cover ? <Image source={cover} style={styles.shareImage} contentFit="cover" /> : null}
+        <View style={styles.shareBody}>
+          <Text variant="display" tone="primary">
+            {formatPrice(listing.price, listing.currency)}
+          </Text>
+          <Text variant="subheading" numberOfLines={2}>
+            {listing.title}
+          </Text>
+          {loc ? (
+            <View style={styles.metaRow}>
+              <MapPin size={14} color={c.muted} />
+              <Text variant="caption" tone="muted">
+                {loc}
+              </Text>
+            </View>
+          ) : null}
+          <Text variant="small" tone="subtle" numberOfLines={1}>
+            {webUrl(`/ilan/${listing.slug}`)}
+          </Text>
+        </View>
+      </Card>
+      <Button title="Paylaş" icon={Share2} block haptic onPress={onShare} />
+    </Sheet>
   );
 }
 
@@ -578,6 +955,7 @@ const styles = StyleSheet.create({
   ownerCard: { gap: space.md, borderWidth: 1 },
   ownerStats: { flexDirection: 'row', gap: space.sm },
   ownerStat: { flex: 1, alignItems: 'center', gap: 2 },
+  ownerActions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: space.sm },
   titleBlock: { gap: space.sm },
   drop: { flexDirection: 'row', alignItems: 'center', gap: space.xs, alignSelf: 'flex-start', paddingHorizontal: space.sm, paddingVertical: 4, borderRadius: radius.sm },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
@@ -589,9 +967,18 @@ const styles = StyleSheet.create({
   description: { lineHeight: 23 },
   review: { gap: space.xs, padding: space.md },
   safety: { gap: space.sm },
-  inlineActions: { flexDirection: 'row', gap: space.sm },
+  inlineActions: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   responseRow: { marginTop: 2 },
   storeLink: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.md, paddingTop: space.md, borderTopWidth: hairline },
+  followRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm, marginTop: space.md, paddingTop: space.md, borderTopWidth: hairline },
+  damageCard: { gap: space.md },
+  tramerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: space.md, borderRadius: radius.md },
+  damageGroup: { gap: space.xs },
+  damageBadges: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs },
+  shareCard: { overflow: 'hidden', borderWidth: 1 },
+  shareHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space.lg, paddingVertical: space.md },
+  shareImage: { width: '100%', aspectRatio: 16 / 9 },
+  shareBody: { padding: space.lg, gap: space.xs },
   similar: { paddingBottom: space.lg },
   topBar: {
     position: 'absolute',

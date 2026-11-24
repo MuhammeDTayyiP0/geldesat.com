@@ -3,6 +3,7 @@ import { createFileRoute, Link, notFound, redirect, useNavigate, useRouter } fro
 import { errorText } from "@/lib/error-text";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
+  ArrowLeftRight,
   Copy,
   Eye,
   Heart,
@@ -10,11 +11,14 @@ import {
   MoreHorizontal,
   Pencil,
   Phone,
+  QrCode,
   Share2,
   ShieldAlert,
   Star,
   Tag,
   Trash2,
+  UserCheck,
+  UserPlus,
 } from "lucide-react";
 import { toast } from "sonner";
 import { NotFound } from "@/components/common/NotFound";
@@ -22,6 +26,7 @@ import { buildListingSeo, isListingIndexable, jsonLd } from "@/lib/seo";
 import { getListing, incrementView } from "@/lib/server/catalog";
 import { setFavorite } from "@/lib/favorites-store";
 import { checkReviewEligibility, favoriteIds, leaveReview, reportListing, toggleFavorite } from "@/lib/server/social";
+import { followSeller, getFollowStatus, unfollowSeller } from "@/lib/server/follows";
 import { startConversation } from "@/lib/server/chat";
 import { deleteListing, renewListing, revealPhone, setListingStatus } from "@/lib/server/account";
 import { cleanPhone, cn, formatDate, formatNumber, formatPhone, formatPrice } from "@/lib/utils";
@@ -33,6 +38,14 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { ListingCard } from "@/components/listing/ListingCard";
 import { ListingDetailSkeleton } from "@/components/listing/ListingDetailSkeleton";
 import { ListingImageGallery } from "@/components/listing/ListingImageGallery";
+import { toggleCompare, useCompareList } from "@/components/listing/CompareBar";
+import { ShareCardDialog } from "@/components/listing/ShareCardDialog";
+import {
+  VehicleDamageDiagram,
+  createEmptyDamageData,
+  hasDamageData,
+  parseDamageValue,
+} from "@/components/listing/VehicleDamageDiagram";
 import {
   Breadcrumbs,
   DescriptionSection,
@@ -40,6 +53,7 @@ import {
   LocationSection,
   PriceHistorySection,
   SafetyNote,
+  Section,
   SellerCard,
   SpecsSection,
   StatusBanner,
@@ -156,6 +170,12 @@ function suggestedOfferChips(listingPrice: number): Array<{ percent: number; amo
 function ListingPage() {
   const data = Route.useLoaderData();
   const teklifAcik = useFlag("ilan_teklif_ver");
+  const karsilastirmaAcik = useFlag("ilan_karsilastirma");
+  const paylasimKartiAcik = useFlag("paylasim_karti");
+  const saticiTakipAcik = useFlag("satici_takip");
+  const benzerIlanAcik = useFlag("benzer_ilan_ver");
+  const hasarSemasiAcik = useFlag("arac_hasar_semasi");
+  const compareItems = useCompareList();
   const nav = useNavigate();
   const router = useRouter();
   const { user, isPending } = useCurrentUserState();
@@ -171,13 +191,24 @@ function ListingPage() {
   const [offerOpen, setOfferOpen] = useState(false);
   const [offerValue, setOfferValue] = useState("");
   const [offerBusy, setOfferBusy] = useState(false);
+  const [shareCardOpen, setShareCardOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [ownerBusy, setOwnerBusy] = useState(false);
   const [review, setReview] = useState<{ eligible: boolean; existing: { rating: number; comment: string | null } | null } | null>(null);
+  const [followState, setFollowState] = useState<{ following: boolean; followers: number } | null>(null);
+  const [followBusy, setFollowBusy] = useState(false);
   const counted = useRef<string | null>(null);
   const ownerPanelRef = useRef<HTMLDivElement>(null);
+
+  const isCompared = compareItems.some((item) => item.id === listing.id);
+  const publicAttrs = Object.fromEntries(Object.entries(listing.attrs ?? {}).filter(([k]) => !k.startsWith("_")));
+  const rawDamage = listing.attrs?.["_damage"];
+  const showDamageDiagram =
+    hasarSemasiAcik &&
+    (hasDamageData(rawDamage) || listing.attrs?.["Boya-Değişen"] === "Tamamı Orijinal");
+  const damageValue = hasDamageData(rawDamage) ? parseDamageValue(rawDamage) : createEmptyDamageData();
 
   const isOwner = Boolean(user && user.id === listing.user_id);
   const expired = Boolean(listing.expires_at && new Date(listing.expires_at).getTime() <= Date.now());
@@ -222,12 +253,55 @@ function ListingPage() {
     };
   }, [seller, user, listing.id]);
 
+  useEffect(() => {
+    if (!saticiTakipAcik || !seller) return setFollowState(null);
+    let alive = true;
+    getFollowStatus({ data: { sellerId: seller.id } })
+      .then((res) => alive && setFollowState(res))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [saticiTakipAcik, seller, user?.id]);
+
   /** Signed-in user, or a trip to login that brings them back to this listing. */
   function requireUser(): boolean {
     if (user) return true;
     toast.message("Bu işlem için giriş yapın");
     void nav({ to: "/login", search: { redirect: `/ilan/${listing.slug}` } });
     return false;
+  }
+
+  function onToggleCompare() {
+    const res = toggleCompare({
+      id: listing.id,
+      title: listing.title,
+      price: listing.price,
+      currency: listing.currency,
+      image: listing.images[0] ?? null,
+    });
+    if (res.full) {
+      toast.error("En fazla 4 ilan karşılaştırabilirsiniz.");
+      return;
+    }
+    toast.success(res.added ? "Karşılaştırma listesine eklendi" : "Karşılaştırma listesinden çıkarıldı");
+  }
+
+  async function onToggleFollow() {
+    if (!seller || !requireUser() || followBusy) return;
+    setFollowBusy(true);
+    const wasFollowing = Boolean(followState?.following);
+    try {
+      const next = wasFollowing
+        ? await unfollowSeller({ data: { sellerId: seller.id } })
+        : await followSeller({ data: { sellerId: seller.id } });
+      setFollowState(next);
+      toast.success(next.following ? "Satıcı takip ediliyor" : "Takip bırakıldı");
+    } catch (err) {
+      toast.error(errorText(err, "İşlem başarısız oldu"));
+    } finally {
+      setFollowBusy(false);
+    }
   }
 
   async function onToggleFav() {
@@ -435,6 +509,32 @@ function ListingPage() {
                 <Button type="button" variant="outline" size="sm" onClick={() => void onShare()}>
                   <Share2 className="size-4" /> Paylaş
                 </Button>
+                {karsilastirmaAcik ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={onToggleCompare}
+                    aria-pressed={isCompared}
+                    className={cn(
+                      isCompared && "border-primary/40 bg-primary/10 text-primary",
+                      !paylasimKartiAcik && "col-span-2",
+                    )}
+                  >
+                    <ArrowLeftRight className="size-4" /> {isCompared ? "Listede" : "Karşılaştır"}
+                  </Button>
+                ) : null}
+                {paylasimKartiAcik ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShareCardOpen(true)}
+                    className={cn(!karsilastirmaAcik && "col-span-2")}
+                  >
+                    <QrCode className="size-4" /> Paylaşım kartı
+                  </Button>
+                ) : null}
               </div>
             ) : null}
           </div>
@@ -456,8 +556,17 @@ function ListingPage() {
               </dl>
               <div className="mt-4 grid gap-2">
                 <Link to="/ilan-ver" search={{ id: listing.id }} className={buttonVariants({ className: "w-full" })}>
-                    <Pencil className="size-4" /> İlanı düzenle
+                  <Pencil className="size-4" /> İlanı düzenle
+                </Link>
+                {benzerIlanAcik ? (
+                  <Link
+                    to="/ilan-ver"
+                    search={{ copyFrom: listing.id }}
+                    className={buttonVariants({ variant: "outline", size: "sm", className: "w-full" })}
+                  >
+                    <Copy className="size-4" /> Benzer ilan ver
                   </Link>
+                ) : null}
                 {isLive ? (
                   <div className="grid grid-cols-2 gap-2">
                     <Button variant="outline" size="sm" disabled={ownerBusy} onClick={() => void setStatus("SOLD", "İlan satıldı olarak işaretlendi")}>
@@ -478,10 +587,17 @@ function ListingPage() {
                     Süreyi 30 gün uzat
                   </Button>
                 ) : null}
-                <div className="flex items-center justify-between pt-1">
-                  <Button variant="ghost" size="sm" onClick={() => void onShare()}>
-                    <Share2 className="size-4" /> Paylaş
-                  </Button>
+                <div className="flex flex-wrap items-center justify-between gap-1 pt-1">
+                  <div className="flex items-center gap-1">
+                    <Button variant="ghost" size="sm" onClick={() => void onShare()}>
+                      <Share2 className="size-4" /> Paylaş
+                    </Button>
+                    {paylasimKartiAcik ? (
+                      <Button variant="ghost" size="sm" onClick={() => setShareCardOpen(true)}>
+                        <QrCode className="size-4" /> Paylaşım kartı
+                      </Button>
+                    ) : null}
+                  </div>
                   <Button variant="ghost" size="sm" className="text-danger hover:bg-danger-solid/10" disabled={ownerBusy} onClick={() => setDeleteOpen(true)}>
                     <Trash2 className="size-4" /> Sil
                   </Button>
@@ -550,6 +666,37 @@ function ListingPage() {
                 store={store}
                 onReview={review?.eligible ? () => setReviewOpen(true) : undefined}
               />
+              {saticiTakipAcik ? (
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface px-4 py-2.5 shadow-card">
+                  <span className="text-xs text-muted">
+                    <strong className="font-semibold tabular-nums text-fg">
+                      {formatNumber(followState?.followers ?? 0)}
+                    </strong>{" "}
+                    takipçi
+                  </span>
+                  {!isOwner ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={followState?.following ? "outline" : "default"}
+                      disabled={followBusy}
+                      aria-pressed={Boolean(followState?.following)}
+                      onClick={() => void onToggleFollow()}
+                      className="h-8 px-3 text-xs"
+                    >
+                      {followState?.following ? (
+                        <>
+                          <UserCheck className="size-3.5" /> Takip ediliyor
+                        </>
+                      ) : (
+                        <>
+                          <UserPlus className="size-3.5" /> Takip et
+                        </>
+                      )}
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
               {seller.responseStats ? (
                 <p className="flex items-center gap-1.5 rounded-xl border border-border bg-surface px-4 py-2.5 text-xs font-medium text-ok shadow-card">
                   <MessageCircle className="size-3.5 shrink-0" aria-hidden="true" />
@@ -576,8 +723,13 @@ function ListingPage() {
         </aside>
 
         <div className="min-w-0 space-y-5 lg:col-start-1 lg:row-start-2">
-          <KeyFacts attrs={listing.attrs} />
-          <SpecsSection attrs={listing.attrs} units={listing.attr_units} />
+          <KeyFacts attrs={publicAttrs} />
+          <SpecsSection attrs={publicAttrs} units={listing.attr_units} />
+          {showDamageDiagram ? (
+            <Section title="Boya, Değişen ve Tramer">
+              <VehicleDamageDiagram readOnly value={damageValue} />
+            </Section>
+          ) : null}
           <DescriptionSection text={listing.description} />
           <PriceHistorySection history={history} currency={listing.currency} />
           <LocationSection city={listing.city} district={listing.district} neighborhood={listing.neighborhood} />
@@ -761,6 +913,21 @@ function ListingPage() {
         </DialogContent>
       </Dialog>
 
+      {paylasimKartiAcik ? (
+        <ShareCardDialog
+          open={shareCardOpen}
+          onOpenChange={setShareCardOpen}
+          slug={listing.slug}
+          title={listing.title}
+          price={listing.price}
+          currency={listing.currency}
+          city={listing.city}
+          district={listing.district}
+          listingNo={listing.listing_no}
+          image={listing.images[0] ?? null}
+        />
+      ) : null}
+
       {seller && review?.eligible ? (
         <ReviewDialog
           open={reviewOpen}
@@ -851,6 +1018,15 @@ function ReviewDialog({
   const [hover, setHover] = useState(0);
   const [comment, setComment] = useState(existing?.comment ?? "");
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setRating(existing?.rating ?? 5);
+      setHover(0);
+      setComment(existing?.comment ?? "");
+    }
+  }, [open, existing]);
+
   async function save() {
     setBusy(true);
     try {
@@ -865,7 +1041,7 @@ function ReviewDialog({
     }
   }
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(next) => !busy && onOpenChange(next)}>
       <DialogContent className="border-border bg-surface">
         <DialogHeader>
           <DialogTitle>{sellerName} adlı satıcıyı değerlendirin</DialogTitle>

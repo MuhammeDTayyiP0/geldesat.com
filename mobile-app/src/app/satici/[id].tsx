@@ -1,18 +1,20 @@
 import { useMemo, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Share, StyleSheet, View } from 'react-native';
+import { ScrollView, Share, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { BadgeCheck, CalendarDays, Eye, LayoutGrid, MapPin, MessageCircle, Pencil, Share2, Store, UserX } from 'lucide-react-native';
+import { useInfiniteQuery, useMutation, useQuery } from '@tanstack/react-query';
+import { BadgeCheck, CalendarDays, Eye, LayoutGrid, MapPin, MessageCircle, Pencil, Search, Share2, Store, UserCheck, UserPlus, Users, UserX, X } from 'lucide-react-native';
 import { ApiError, errorMessage } from '@/api/client';
-import { listings } from '@/api/endpoints';
+import { follows, listings } from '@/api/endpoints';
 import { keys, queryClient } from '@/api/queries';
 import type { Review, SellerResponseStats } from '@/api/types';
 import { useSession } from '@/auth/session';
+import { useRequireAuth } from '@/auth/useRequireAuth';
 import { ListingGrid } from '@/features/listing/ListingGrid';
 import { webUrl } from '@/lib/config';
-import { formatDate, memberSince, uniqueById } from '@/lib/format';
-import { Avatar, Badge, Button, Card, EmptyState, ErrorState, Header, IconButton, Loading, Stars, Text, radius, space, toast, useTheme } from '@/ui';
+import { useFlag } from '@/lib/flags';
+import { formatDate, formatNumber, memberSince, uniqueById } from '@/lib/format';
+import { Avatar, Badge, Button, Card, Chip, EmptyState, ErrorState, Header, IconButton, Input, Loading, Stars, Text, radius, space, toast, useTheme } from '@/ui';
 
 function formatResponseStats(stats: SellerResponseStats | null | undefined): string | null {
   if (!stats) return null;
@@ -32,6 +34,8 @@ export default function SellerScreen() {
   const insets = useSafeAreaInsets();
   const { c } = useTheme();
   const router = useRouter();
+  const followOn = useFlag('satici_takip');
+  const requireAuth = useRequireAuth();
   const query = useQuery({ queryKey: keys.seller(id), queryFn: () => listings.seller(id) });
   const seller = query.data?.seller;
   const session = useSession();
@@ -43,6 +47,8 @@ export default function SellerScreen() {
   const [expandedReviews, setExpandedReviews] = useState(false);
   const [loadingReviews, setLoadingReviews] = useState(false);
   const [reviewsExhausted, setReviewsExhausted] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   if (id !== prevId) {
     setPrevId(id);
@@ -50,7 +56,24 @@ export default function SellerScreen() {
     setExtraReviews([]);
     setExpandedReviews(false);
     setReviewsExhausted(false);
+    setSearchQuery('');
+    setSelectedCategory(null);
   }
+
+  const followQuery = useQuery({
+    queryKey: keys.followStatus(id),
+    queryFn: () => follows.status(id),
+    enabled: followOn && !!id,
+  });
+
+  const toggleFollow = useMutation({
+    mutationFn: (currentlyFollowing: boolean) => (currentlyFollowing ? follows.unfollow(id) : follows.follow(id)),
+    onSuccess: (res) => {
+      queryClient.setQueryData(keys.followStatus(id), res);
+      void queryClient.invalidateQueries({ queryKey: keys.followedSellers });
+    },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
 
   const reviews = useMemo(() => uniqueById([...(seller?.reviews ?? []), ...extraReviews]), [seller?.reviews, extraReviews]);
   const responseBadge = formatResponseStats(seller?.responseStats);
@@ -92,6 +115,31 @@ export default function SellerScreen() {
   });
   const firstPage = query.data?.listings;
   const allListings = useMemo(() => uniqueById([...(firstPage ?? []), ...(more.data?.pages.flat() ?? [])]), [firstPage, more.data]);
+  const categories = useMemo(() => {
+    const map = new Map<string, { key: string; name: string; count: number }>();
+    for (const item of allListings) {
+      if (!item.category_name) continue;
+      const key = item.category_slug ?? item.category_id ?? item.category_name;
+      const prev = map.get(key);
+      if (prev) prev.count += 1;
+      else map.set(key, { key, name: item.category_name, count: 1 });
+    }
+    return [...map.values()];
+  }, [allListings]);
+  const filteredListings = useMemo(() => {
+    const q = searchQuery.trim().toLocaleLowerCase('tr');
+    return allListings.filter((item) => {
+      if (selectedCategory) {
+        const key = item.category_slug ?? item.category_id ?? item.category_name;
+        if (key !== selectedCategory) return false;
+      }
+      if (q) {
+        const hay = `${item.title} ${item.category_name ?? ''} ${item.city ?? ''} ${item.district ?? ''}`.toLocaleLowerCase('tr');
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [allListings, searchQuery, selectedCategory]);
   const hasMore = !!seller && (firstPage?.length ?? 0) === PAGE && (more.data ? more.hasNextPage : true);
   const loadMore = () => {
     if (!hasMore || more.isFetching) return;
@@ -122,7 +170,7 @@ export default function SellerScreen() {
       ) : (
         <ListingGrid
           bottomInset={insets.bottom}
-          listings={allListings}
+          listings={filteredListings}
           refreshing={query.isRefetching}
           onRefresh={() => {
             setReviewsPage(1);
@@ -191,6 +239,9 @@ export default function SellerScreen() {
                   {store?.city || seller.city ? <Fact icon={MapPin} text={store?.city || seller.city} /> : null}
                   <Fact icon={CalendarDays} text={memberSince(seller.since)} />
                   <Fact icon={LayoutGrid} text={`${seller.listing_count} yayında ilan`} />
+                  {followOn && followQuery.data ? (
+                    <Fact icon={Users} text={`${formatNumber(followQuery.data.followers)} takipçi`} />
+                  ) : null}
                   {responseBadge ? (
                     <View style={styles.row}>
                       <MessageCircle size={14} color={c.primary} />
@@ -200,6 +251,19 @@ export default function SellerScreen() {
                 </View>
                 {store?.description ? <Text>{store.description}</Text> : null}
                 {seller.bio ? <Text tone="muted">{seller.bio}</Text> : null}
+                {followOn && !isOwner ? (
+                  <Button
+                    title={followQuery.data?.following ? 'Takip ediliyor' : 'Takip et'}
+                    icon={followQuery.data?.following ? UserCheck : UserPlus}
+                    variant={followQuery.data?.following ? 'soft' : 'primary'}
+                    size="sm"
+                    loading={toggleFollow.isPending}
+                    onPress={() => {
+                      if (!requireAuth('Satıcıyı takip etmek için giriş yapın.')) return;
+                      toggleFollow.mutate(Boolean(followQuery.data?.following));
+                    }}
+                  />
+                ) : null}
               </Card>
 
               {reviews.length ? (
@@ -228,9 +292,55 @@ export default function SellerScreen() {
                 </View>
               ) : null}
               <Text variant="subheading">İlanları</Text>
+              {allListings.length > 0 ? (
+                <View style={styles.filterBox}>
+                  <Input
+                    icon={Search}
+                    placeholder="İlanlarında ara…"
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    right={searchQuery ? <IconButton icon={X} label="Temizle" size={32} onPress={() => setSearchQuery('')} /> : undefined}
+                  />
+                  {categories.length > 1 ? (
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+                      <Chip label="Tümü" count={allListings.length} selected={!selectedCategory} onPress={() => setSelectedCategory(null)} />
+                      {categories.map((cat) => (
+                        <Chip
+                          key={cat.key}
+                          label={cat.name}
+                          count={cat.count}
+                          selected={selectedCategory === cat.key}
+                          onPress={() => setSelectedCategory(selectedCategory === cat.key ? null : cat.key)}
+                        />
+                      ))}
+                    </ScrollView>
+                  ) : null}
+                </View>
+              ) : null}
             </View>
           }
-          empty={<EmptyState compact icon={LayoutGrid} title="Yayında ilanı yok" />}
+          empty={
+            allListings.length > 0 && (searchQuery.trim() || selectedCategory) ? (
+              <EmptyState
+                compact
+                icon={Search}
+                title="Eşleşen ilan bulunamadı"
+                action={
+                  <Button
+                    title="Filtreyi temizle"
+                    size="sm"
+                    variant="outline"
+                    onPress={() => {
+                      setSearchQuery('');
+                      setSelectedCategory(null);
+                    }}
+                  />
+                }
+              />
+            ) : (
+              <EmptyState compact icon={LayoutGrid} title="Yayında ilanı yok" />
+            )
+          }
         />
       )}
     </View>
@@ -259,4 +369,6 @@ const styles = StyleSheet.create({
   bold: { fontWeight: '700' },
   reviews: { gap: space.sm },
   review: { gap: space.xs, padding: space.md },
+  filterBox: { gap: space.sm },
+  chips: { gap: space.sm },
 });

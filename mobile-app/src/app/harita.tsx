@@ -1,18 +1,22 @@
 import { useMemo, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { FlatList, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
-import { MapPin, Search, X } from 'lucide-react-native';
+import { Image } from 'expo-image';
+import { ChevronRight, ImageOff, MapPin, Search, X } from 'lucide-react-native';
 import { errorMessage } from '@/api/client';
 import { catalog } from '@/api/endpoints';
-import { keys } from '@/api/queries';
+import { keys, useRoots } from '@/api/queries';
+import type { Listing } from '@/api/types';
 import { TURKEY_CITIES } from '@/data/locations';
 import { MapCanvas } from '@/features/map/MapCanvas';
-import type { MapMarker } from '@/features/map/mapHtml';
+import type { MapBounds, MapEvent, MapMarker } from '@/features/map/mapHtml';
 import { TURKEY_CENTER } from '@/features/map/tiles';
-import { formatNumber } from '@/lib/format';
-import { Button, Card, Header, IconButton, Input, Text, hairline, radius, space, useTheme } from '@/ui';
+import { mediaUrl } from '@/lib/config';
+import { useFlag } from '@/lib/flags';
+import { formatNumber, formatPrice, locationLabel } from '@/lib/format';
+import { Button, Card, Chip, Header, IconButton, Input, Text, hairline, radius, space, useTheme } from '@/ui';
 
 const CITY_COORDS: Record<string, { lat: number; lng: number }> = {
   Adana: { lat: 37.0, lng: 35.3213 },
@@ -98,12 +102,53 @@ const CITY_COORDS: Record<string, { lat: number; lng: number }> = {
   Düzce: { lat: 40.8438, lng: 31.1565 },
 };
 
+const DEFAULT_BOUNDS: MapBounds = { north: 42.5, south: 35.5, east: 45.0, west: 25.5 };
+
+const PRICE_PRESETS: { key: string; label: string; minPrice?: number; maxPrice?: number }[] = [
+  { key: 'all', label: 'Tüm fiyatlar' },
+  { key: 'u5k', label: '5.000 ₺ altı', maxPrice: 5000 },
+  { key: 'u50k', label: '50.000 ₺ altı', maxPrice: 50000 },
+  { key: 'u500k', label: '500.000 ₺ altı', maxPrice: 500000 },
+  { key: 'o500k', label: '500.000 ₺ üstü', minPrice: 500000 },
+];
+
 export default function MapExploreScreen() {
   const { c, dark } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const mapSearchOn = useFlag('haritada_ara');
+  const roots = useRoots();
   const [filter, setFilter] = useState('');
+  const [bounds, setBounds] = useState<MapBounds>(DEFAULT_BOUNDS);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [pricePreset, setPricePreset] = useState('all');
+  const [selectedListing, setSelectedListing] = useState<Listing | null>(null);
+
   const countsQuery = useQuery({ queryKey: keys.cityCounts, queryFn: catalog.cityCounts, staleTime: 60_000 });
+
+  const priceRange = useMemo(() => PRICE_PRESETS.find((p) => p.key === pricePreset) ?? PRICE_PRESETS[0], [pricePreset]);
+
+  const inBoundsParams = useMemo(
+    () => ({
+      north: Number(bounds.north.toFixed(4)),
+      south: Number(bounds.south.toFixed(4)),
+      east: Number(bounds.east.toFixed(4)),
+      west: Number(bounds.west.toFixed(4)),
+      category: selectedCategory ?? undefined,
+      minPrice: priceRange.minPrice,
+      maxPrice: priceRange.maxPrice,
+      q: mapSearchOn && filter.trim() ? filter.trim() : undefined,
+    }),
+    [bounds, selectedCategory, priceRange, mapSearchOn, filter],
+  );
+
+  const inBoundsQuery = useQuery({
+    queryKey: keys.mapListings(inBoundsParams),
+    queryFn: () => catalog.inBounds(inBoundsParams),
+    enabled: mapSearchOn,
+    placeholderData: (prev) => prev,
+    staleTime: 20_000,
+  });
 
   const countByCity = useMemo(() => {
     const map = new Map<string, number>();
@@ -114,6 +159,20 @@ export default function MapExploreScreen() {
   }, [countsQuery.data]);
 
   const markers = useMemo<MapMarker[]>(() => {
+    if (mapSearchOn) {
+      const list: MapMarker[] = [];
+      for (const l of inBoundsQuery.data ?? []) {
+        if (l.lat == null || l.lng == null) continue;
+        list.push({
+          id: l.id,
+          lat: l.lat,
+          lng: l.lng,
+          label: l.title,
+          badge: formatPrice(l.price, l.currency),
+        });
+      }
+      return list;
+    }
     const list: MapMarker[] = [];
     for (const { city, n } of countsQuery.data ?? []) {
       if (n <= 0) continue;
@@ -122,7 +181,7 @@ export default function MapExploreScreen() {
       list.push({ id: city, lat: coords.lat, lng: coords.lng, label: `${city}: ${formatNumber(n)} ilan`, badge: formatNumber(n) });
     }
     return list;
-  }, [countsQuery.data]);
+  }, [mapSearchOn, inBoundsQuery.data, countsQuery.data]);
 
   const cities = useMemo(() => {
     const q = filter.trim().toLocaleLowerCase('tr');
@@ -140,9 +199,36 @@ export default function MapExploreScreen() {
 
   const openCity = (city: string) => router.push({ pathname: '/sonuclar', params: { city } });
 
+  const handleMapEvent = (event: MapEvent) => {
+    if (!mapSearchOn) return;
+    if ((event.type === 'ready' || event.type === 'moveend') && event.bounds) {
+      setBounds(event.bounds);
+    }
+  };
+
+  const handleMarkerPress = (markerId: string) => {
+    if (!mapSearchOn) {
+      openCity(markerId);
+      return;
+    }
+    const found = inBoundsQuery.data?.find((l) => l.id === markerId) ?? null;
+    setSelectedListing(found);
+  };
+
+  const rootCategories = roots.data?.roots ?? [];
+
   return (
     <View style={[styles.flex, { backgroundColor: c.bg }]}>
-      <Header title="Harita" subtitle="İllere göre yayında ilanlar" />
+      <Header
+        title="Harita"
+        subtitle={
+          mapSearchOn
+            ? inBoundsQuery.isFetching
+              ? 'Bölgedeki ilanlar güncelleniyor…'
+              : `Bölgede ${formatNumber(inBoundsQuery.data?.length ?? 0)} ilan`
+            : 'İllere göre yayında ilanlar'
+        }
+      />
       <FlatList
         data={cities}
         keyExtractor={(item) => String(item.id)}
@@ -152,15 +238,89 @@ export default function MapExploreScreen() {
         keyboardShouldPersistTaps="handled"
         ListHeaderComponent={
           <View style={styles.header}>
+            <Input
+              icon={Search}
+              placeholder={mapSearchOn ? 'Haritada veya il ara…' : 'İl ara…'}
+              value={filter}
+              onChangeText={setFilter}
+              right={filter ? <IconButton icon={X} label="Temizle" size={32} onPress={() => setFilter('')} /> : undefined}
+            />
+            {mapSearchOn ? (
+              <View style={styles.filterRows}>
+                {rootCategories.length > 0 ? (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+                    <Chip label="Tüm kategoriler" selected={!selectedCategory} onPress={() => setSelectedCategory(null)} />
+                    {rootCategories.map((cat) => (
+                      <Chip
+                        key={cat.id}
+                        label={cat.name}
+                        selected={selectedCategory === cat.slug}
+                        onPress={() => setSelectedCategory(selectedCategory === cat.slug ? null : cat.slug)}
+                      />
+                    ))}
+                  </ScrollView>
+                ) : null}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+                  {PRICE_PRESETS.map((preset) => (
+                    <Chip
+                      key={preset.key}
+                      label={preset.label}
+                      selected={pricePreset === preset.key}
+                      onPress={() => setPricePreset(preset.key)}
+                    />
+                  ))}
+                </ScrollView>
+              </View>
+            ) : null}
             <View style={[styles.mapWrap, { borderColor: c.border, backgroundColor: c.surface }]}>
               <MapCanvas
                 initial={{ lat: TURKEY_CENTER.lat, lng: TURKEY_CENTER.lng, zoom: 5 }}
                 dark={dark}
                 markers={markers}
-                onEvent={() => undefined}
-                onMarkerPress={openCity}
+                onEvent={handleMapEvent}
+                onMarkerPress={handleMarkerPress}
               />
             </View>
+            {mapSearchOn && selectedListing ? (
+              <Card padded={false} style={styles.pinPreview}>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => router.push({ pathname: '/ilan/[id]', params: { id: selectedListing.id } })}
+                  style={styles.pinBody}
+                >
+                  <View style={[styles.pinThumb, { backgroundColor: c.elevated }]}>
+                    {mediaUrl(selectedListing.images[0], 240) ? (
+                      <Image source={mediaUrl(selectedListing.images[0], 240)} style={StyleSheet.absoluteFill} contentFit="cover" />
+                    ) : (
+                      <ImageOff size={20} color={c.subtle} />
+                    )}
+                  </View>
+                  <View style={styles.pinInfo}>
+                    <Text variant="bodyStrong" tone="primary" numberOfLines={1}>
+                      {formatPrice(selectedListing.price, selectedListing.currency)}
+                    </Text>
+                    <Text variant="label" numberOfLines={2}>
+                      {selectedListing.title}
+                    </Text>
+                    <Text variant="caption" tone="muted" numberOfLines={1}>
+                      {locationLabel(selectedListing.city, selectedListing.district) || selectedListing.category_name || ''}
+                    </Text>
+                  </View>
+                  <ChevronRight size={18} color={c.subtle} />
+                </Pressable>
+                <View style={styles.pinClose}>
+                  <IconButton icon={X} label="Önizlemeyi kapat" size={28} onPress={() => setSelectedListing(null)} />
+                </View>
+              </Card>
+            ) : null}
+            {mapSearchOn && inBoundsQuery.isError && !inBoundsQuery.data ? (
+              <Card style={styles.errorCard}>
+                <Text variant="caption" tone="muted" style={styles.flex}>
+                  {errorMessage(inBoundsQuery.error, 'Bölgedeki ilanlar yüklenemedi.')}
+                </Text>
+                <Button title="Tekrar dene" size="sm" variant="outline" onPress={() => void inBoundsQuery.refetch()} />
+              </Card>
+            ) : null}
             {countsQuery.isError && !countsQuery.data ? (
               <Card style={styles.errorCard}>
                 <Text variant="caption" tone="muted" style={styles.flex}>
@@ -169,13 +329,6 @@ export default function MapExploreScreen() {
                 <Button title="Tekrar dene" size="sm" variant="outline" onPress={() => void countsQuery.refetch()} />
               </Card>
             ) : null}
-            <Input
-              icon={Search}
-              placeholder="İl ara…"
-              value={filter}
-              onChangeText={setFilter}
-              right={filter ? <IconButton icon={X} label="Temizle" size={32} onPress={() => setFilter('')} /> : undefined}
-            />
             <Text variant="subheading">İllere göre</Text>
           </View>
         }
@@ -217,6 +370,13 @@ const styles = StyleSheet.create({
   list: { padding: space.lg, gap: space.sm },
   header: { gap: space.md, marginBottom: space.xs },
   mapWrap: { height: 280, borderRadius: radius.lg, borderWidth: hairline, overflow: 'hidden' },
+  filterRows: { gap: space.xs },
+  chips: { gap: space.xs },
+  pinPreview: { overflow: 'hidden' },
+  pinBody: { flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.md, paddingRight: 40 },
+  pinThumb: { width: 72, height: 72, borderRadius: radius.md, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  pinInfo: { flex: 1, gap: 2 },
+  pinClose: { position: 'absolute', top: space.xs, right: space.xs },
   errorCard: { flexDirection: 'row', alignItems: 'center', gap: space.sm, padding: space.md },
   row: { gap: space.sm },
   cityCard: {

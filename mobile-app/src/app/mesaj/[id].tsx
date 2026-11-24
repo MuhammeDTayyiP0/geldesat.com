@@ -159,7 +159,19 @@ export default function ChatScreen() {
   const [counterTo, setCounterTo] = useState<ChatMessage | null>(null);
   const [viewer, setViewer] = useState<string | null>(null);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scrollRetryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTypingSent = useRef(0);
+  const clearJumpTimers = useCallback(() => {
+    if (highlightTimer.current) {
+      clearTimeout(highlightTimer.current);
+      highlightTimer.current = null;
+    }
+    if (scrollRetryTimer.current) {
+      clearTimeout(scrollRetryTimer.current);
+      scrollRetryTimer.current = null;
+    }
+  }, []);
   const listRef = useRef<FlatList<Row>>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
   useEffect(() => {
@@ -193,13 +205,16 @@ export default function ChatScreen() {
     jumpedRef.current = false;
     syncedFrom.current = null;
     scrolledToUnread.current = null;
-  }, [id]);
+    clearJumpTimers();
+    return clearJumpTimers;
+  }, [id, clearJumpTimers]);
   if (id !== syncedId) {
     setSyncedId(id);
     setSyncedAt(0);
     setMessages([]);
     setHasMore(false);
     setJumped(false);
+    setHighlight(null);
     setResetOnSync(false);
     setText('');
     setReplyTo(null);
@@ -475,6 +490,7 @@ export default function ChatScreen() {
 
   const pendingJumpId = useRef<string | null>(null);
   const jumpTo = async (messageId: string) => {
+    clearJumpTimers();
     if (messages.some((m) => m.id === messageId)) {
       const index = rows.findIndex((r) => r.type === 'message' && r.message.id === messageId);
       if (index >= 0) listRef.current?.scrollToIndex({ index, viewPosition: 0.5, animated: true });
@@ -492,7 +508,10 @@ export default function ChatScreen() {
       }
     }
     setHighlight(messageId);
-    setTimeout(() => setHighlight(null), 2200);
+    highlightTimer.current = setTimeout(() => {
+      highlightTimer.current = null;
+      setHighlight(null);
+    }, 2200);
   };
 
   useEffect(() => {
@@ -699,7 +718,11 @@ export default function ChatScreen() {
             // The target is not measured yet: scroll near it, then try again.
             onScrollToIndexFailed={(info) => {
               listRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
-              setTimeout(() => listRef.current?.scrollToIndex({ index: info.index, viewPosition: 0.5, animated: true }), 120);
+              if (scrollRetryTimer.current) clearTimeout(scrollRetryTimer.current);
+              scrollRetryTimer.current = setTimeout(() => {
+                scrollRetryTimer.current = null;
+                listRef.current?.scrollToIndex({ index: info.index, viewPosition: 0.5, animated: true });
+              }, 120);
             }}
             // Reading older messages: a new one arriving does not push the screen away.
             maintainVisibleContentPosition={away ? { minIndexForVisible: 1 } : undefined}

@@ -48,7 +48,7 @@ jobs:
         run: npm run build
 
   mobile:
-    name: Mobile (typecheck, lint)
+    name: Mobile (typecheck, lint, test)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -72,3 +72,6 @@ jobs:
 
       - name: Lint
         run: npx eslint .
+
+      - name: Test
+        run: node scripts/run-mobile-tests.mjs

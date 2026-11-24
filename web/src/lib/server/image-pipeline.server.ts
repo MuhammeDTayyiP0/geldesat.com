@@ -1,3 +1,4 @@
+import { Worker } from "node:worker_threads";
 import sharp from "sharp";
 
 /**
@@ -192,10 +193,58 @@ export function inspectHeifMaxPixels(bytes: Uint8Array): { maxPixels: number; ma
   return { maxPixels, maxEdge, foundIspe, truncated };
 }
 
+const HEIF_DECODE_TIMEOUT_MS = 15_000;
+const HEIF_WORKER_CODE = `
+  const { parentPort, workerData } = require("node:worker_threads");
+  const decode = require("heic-decode");
+  Promise.resolve(decode({ buffer: Buffer.from(workerData.buffer) }))
+    .then((res) => {
+      const out = new Uint8Array(res.data);
+      parentPort.postMessage({ width: res.width, height: res.height, data: out }, [out.buffer]);
+    })
+    .catch((err) => {
+      parentPort.postMessage({ error: err instanceof Error ? err.message : String(err) });
+    });
+`;
+
+function decodeHeifInWorker(input: Uint8Array): Promise<{ width: number; height: number; data: Uint8Array }> {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(HEIF_WORKER_CODE, {
+      eval: true,
+      workerData: { buffer: input },
+      resourceLimits: { maxOldGenerationSizeMb: 256 },
+    });
+    let settled = false;
+    const finish = (err: Error | null, result?: { width: number; height: number; data: Uint8Array }) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      void worker.terminate();
+      if (err) reject(err);
+      else resolve(result!);
+    };
+    const timer = setTimeout(() => {
+      finish(new Error("HEIC decode timed out"));
+    }, HEIF_DECODE_TIMEOUT_MS);
+    worker.once("message", (msg: { width?: number; height?: number; data?: Uint8Array; error?: string }) => {
+      if (msg.error || !msg.data || !msg.width || !msg.height) {
+        finish(new Error(msg.error ?? "HEIC decode failed"));
+        return;
+      }
+      finish(null, { width: msg.width, height: msg.height, data: msg.data });
+    });
+    worker.once("error", (err) => finish(err instanceof Error ? err : new Error(String(err))));
+    worker.once("exit", (code) => {
+      if (!settled && code !== 0) finish(new Error(`HEIC worker exited with code ${code}`));
+    });
+  });
+}
+
 /**
  * sharp's prebuilt libvips cannot decode HEVC-coded HEIC (patent-encumbered),
- * so iPhone photos are decoded with libheif (WebAssembly) and handed to sharp
- * as raw pixels. libheif applies the stored rotation, so no EXIF step is needed.
+ * so iPhone photos are decoded with libheif (WebAssembly) inside an isolated
+ * worker thread and handed to sharp as raw pixels. libheif applies the stored
+ * rotation, so no EXIF step is needed.
  */
 async function openHeif(input: Uint8Array): Promise<{ image: sharp.Sharp; width: number; height: number }> {
   if (input.byteLength > MAX_HEIF_BYTES) throw new Error("Fotoğraf en fazla 12 MB olabilir.");
@@ -203,10 +252,9 @@ async function openHeif(input: Uint8Array): Promise<{ image: sharp.Sharp; width:
   if (!foundIspe || truncated || maxPixels <= 0 || maxPixels > MAX_HEIF_PIXELS || maxEdge > MAX_HEIF_DIMENSION) {
     throw new Error("Fotoğraf çözünürlüğü çok yüksek.");
   }
-  const { default: decode } = await import("heic-decode");
-  let decoded: Awaited<ReturnType<typeof decode>>;
+  let decoded: { width: number; height: number; data: Uint8Array };
   try {
-    decoded = await decode({ buffer: input });
+    decoded = await decodeHeifInWorker(input);
   } catch (err) {
     console.error("[upload] HEIC decode failed", err);
     throw new Error("Fotoğraf okunamadı. HEIC dosyası bozuk olabilir; JPEG olarak deneyin.");

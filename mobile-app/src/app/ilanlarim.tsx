@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Image } from 'expo-image';
-import { CircleCheck, Eye, EyeOff, Heart, ImageOff, LayoutGrid, MessageCircle, MoreVertical, Pencil, Phone, Plus, RefreshCw, Rocket, Trash2 } from 'lucide-react-native';
+import { CircleCheck, Copy, Eye, EyeOff, Heart, ImageOff, LayoutGrid, MessageCircle, MoreVertical, Pencil, Phone, Plus, RefreshCw, Rocket, Trash2 } from 'lucide-react-native';
 import { errorMessage } from '@/api/client';
 import { myListings } from '@/api/endpoints';
 import { keys, queryClient } from '@/api/queries';
@@ -56,6 +56,7 @@ export default function MyListingsScreen() {
   // Doping sales are closed while this is off: no entry points to an empty shop (K11).
   const dopingOn = useFlag('doping_enabled');
   const istatistikler = useFlag('satici_istatistikleri');
+  const copyListingOn = useFlag('benzer_ilan_ver');
   const router = useRouter();
   const session = useSession();
   const [tab, setTab] = useState<Tab>('live');
@@ -204,6 +205,7 @@ export default function MyListingsScreen() {
             <MyListingRow
               listing={item}
               showStats={istatistikler}
+              onCopy={copyListingOn ? () => router.push({ pathname: '/ilan-ver', params: { copyFrom: item.id } }) : undefined}
               onPress={() => router.push({ pathname: '/ilan/[id]', params: { id: item.id } })}
               onMenu={() => setMenu(item)}
             />
@@ -230,6 +232,16 @@ export default function MyListingsScreen() {
                 onPress={() => {
                   const id = menu.id;
                   thenGo(() => router.push({ pathname: '/ilan-ver', params: { id } }));
+                }}
+              />
+            ) : null}
+            {copyListingOn ? (
+              <ListRow
+                icon={Copy}
+                label="Benzer ilan ver"
+                onPress={() => {
+                  const id = menu.id;
+                  thenGo(() => router.push({ pathname: '/ilan-ver', params: { copyFrom: id } }));
                 }}
               />
             ) : null}
@@ -287,7 +299,19 @@ function StatChip({ icon: Icon, value, label }: { icon: typeof Eye; value: numbe
   );
 }
 
-function MyListingRow({ listing, showStats, onPress, onMenu }: { listing: Listing; showStats?: boolean; onPress: () => void; onMenu: () => void }) {
+function MyListingRow({
+  listing,
+  showStats,
+  onCopy,
+  onPress,
+  onMenu,
+}: {
+  listing: Listing;
+  showStats?: boolean;
+  onCopy?: () => void;
+  onPress: () => void;
+  onMenu: () => void;
+}) {
   const { c } = useTheme();
   const expired = isExpired(listing);
   const left = daysLeft(listing.expires_at);
@@ -295,53 +319,69 @@ function MyListingRow({ listing, showStats, onPress, onMenu }: { listing: Listin
   const tone = listing.status === 'ACTIVE' && !expired ? 'ok' : listing.status === 'REJECTED' ? 'danger' : listing.status === 'SOLD' ? 'neutral' : 'warn';
   return (
     <View style={[styles.rowWrap, { backgroundColor: c.surface, borderColor: c.border }]}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`${listing.title}, ${formatPrice(listing.price, listing.currency)}, ${listingStatusLabel(listing.status ?? '', expired)}`}
-        onPress={onPress}
-        style={({ pressed }) => [styles.row, { backgroundColor: pressed ? c.elevated : c.surface }]}
-      >
-        <View style={[styles.thumb, { backgroundColor: c.elevated }]}>
-          {cover ? <Image source={cover} style={StyleSheet.absoluteFill} contentFit="cover" /> : <ImageOff size={20} color={c.subtle} />}
-        </View>
-        <View style={styles.info}>
-          <Text variant="label" numberOfLines={2}>
-            {listing.title}
-          </Text>
-          <Text variant="bodyStrong" tone="primary">
-            {formatPrice(listing.price, listing.currency)}
-          </Text>
-          <View style={styles.meta}>
-            <Badge label={listingStatusLabel(listing.status ?? '', expired)} tone={tone} />
-            {!showStats ? (
-              <Text variant="small" tone="subtle">
-                {formatNumber(listing.view_count ?? 0)} görüntülenme
-              </Text>
-            ) : null}
-          </View>
-          {showStats ? (
-            <View style={styles.statChips}>
-              <StatChip icon={Eye} value={listing.view_count ?? 0} label="görüntülenme" />
-              <StatChip icon={Heart} value={listing.fav_count ?? 0} label="favori" />
-              <StatChip icon={MessageCircle} value={listing.message_count ?? 0} label="mesaj" />
-              <StatChip icon={Phone} value={listing.phone_reveal_count ?? 0} label="telefon görüntüleme" />
+      <View style={styles.flex}>
+        <View style={styles.rowTop}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${listing.title}, ${formatPrice(listing.price, listing.currency)}, ${listingStatusLabel(listing.status ?? '', expired)}`}
+            onPress={onPress}
+            style={({ pressed }) => [styles.row, { backgroundColor: pressed ? c.elevated : c.surface }]}
+          >
+            <View style={[styles.thumb, { backgroundColor: c.elevated }]}>
+              {cover ? <Image source={cover} style={StyleSheet.absoluteFill} contentFit="cover" /> : <ImageOff size={20} color={c.subtle} />}
             </View>
-          ) : null}
-          {listing.status === 'ACTIVE' && left != null && left > 0 && left <= 7 ? (
-            <Text variant="small" tone="warn">
-              {left} gün içinde süresi doluyor
-            </Text>
-          ) : listing.status === 'ACTIVE' && listing.expires_at ? (
-            <Text variant="small" tone="subtle">
-              {expired ? 'Süresi doldu' : 'Bitiş'}: {formatDate(listing.expires_at)}
-            </Text>
-          ) : null}
+            <View style={styles.info}>
+              <Text variant="label" numberOfLines={2}>
+                {listing.title}
+              </Text>
+              <Text variant="bodyStrong" tone="primary">
+                {formatPrice(listing.price, listing.currency)}
+              </Text>
+              <View style={styles.meta}>
+                <Badge label={listingStatusLabel(listing.status ?? '', expired)} tone={tone} />
+                {!showStats ? (
+                  <Text variant="small" tone="subtle">
+                    {formatNumber(listing.view_count ?? 0)} görüntülenme
+                  </Text>
+                ) : null}
+              </View>
+              {showStats ? (
+                <View style={styles.statChips}>
+                  <StatChip icon={Eye} value={listing.view_count ?? 0} label="görüntülenme" />
+                  <StatChip icon={Heart} value={listing.fav_count ?? 0} label="favori" />
+                  <StatChip icon={MessageCircle} value={listing.message_count ?? 0} label="mesaj" />
+                  <StatChip icon={Phone} value={listing.phone_reveal_count ?? 0} label="telefon görüntüleme" />
+                </View>
+              ) : null}
+              {listing.status === 'ACTIVE' && left != null && left > 0 && left <= 7 ? (
+                <Text variant="small" tone="warn">
+                  {left} gün içinde süresi doluyor
+                </Text>
+              ) : listing.status === 'ACTIVE' && listing.expires_at ? (
+                <Text variant="small" tone="subtle">
+                  {expired ? 'Süresi doldu' : 'Bitiş'}: {formatDate(listing.expires_at)}
+                </Text>
+              ) : null}
+            </View>
+          </Pressable>
+          {/* Beside the row, not inside it, so screen readers reach it. */}
+          <Pressable accessibilityRole="button" accessibilityLabel={`${listing.title}: işlemler`} onPress={onMenu} style={styles.more}>
+            <MoreVertical size={20} color={c.muted} />
+          </Pressable>
         </View>
-      </Pressable>
-      {/* Beside the row, not inside it, so screen readers reach it. */}
-      <Pressable accessibilityRole="button" accessibilityLabel={`${listing.title}: işlemler`} onPress={onMenu} style={styles.more}>
-        <MoreVertical size={20} color={c.muted} />
-      </Pressable>
+        {listing.status === 'REJECTED' && listing.rejection_reason ? (
+          <View style={[styles.rejectBanner, { backgroundColor: c.dangerSoft, borderTopColor: c.border }]}>
+            <Text variant="small" tone="danger">
+              Red nedeni: {listing.rejection_reason}
+            </Text>
+          </View>
+        ) : null}
+        {onCopy ? (
+          <View style={[styles.rowFooter, { borderTopColor: c.border }]}>
+            <Button title="Benzer ilan ver" icon={Copy} size="sm" variant="soft" onPress={onCopy} />
+          </View>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -350,7 +390,8 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   tabs: { paddingHorizontal: space.lg, paddingBottom: space.md, gap: space.sm },
   list: { padding: space.lg, gap: space.md, paddingBottom: space.xxxl },
-  rowWrap: { flexDirection: 'row', borderRadius: radius.lg, borderWidth: hairline, overflow: 'hidden' },
+  rowWrap: { borderRadius: radius.lg, borderWidth: hairline, overflow: 'hidden' },
+  rowTop: { flexDirection: 'row' },
   row: { flex: 1, flexDirection: 'row', gap: space.md, padding: space.md },
   thumb: { width: 88, height: 88, borderRadius: radius.md, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   info: { flex: 1, gap: 4 },
@@ -362,4 +403,6 @@ const styles = StyleSheet.create({
   statChips: { flexDirection: 'row', alignItems: 'center', gap: space.xs, flexWrap: 'wrap', marginTop: 2 },
   statChip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: space.xs + 2, paddingVertical: 2, borderRadius: radius.sm },
   more: { width: 44, alignItems: 'center', paddingTop: space.md },
+  rejectBanner: { paddingHorizontal: space.md, paddingVertical: space.sm, borderTopWidth: hairline },
+  rowFooter: { paddingHorizontal: space.md, paddingVertical: space.sm, borderTopWidth: hairline, alignItems: 'flex-start' },
 });

@@ -2,8 +2,9 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { getSql } from "@/lib/db";
 import { liveSql } from "@/lib/listing-status";
+import { cleanAttrs, type AttrValues } from "@/lib/listing-attrs";
 import { asJson, listingSlug, num } from "@/lib/utils";
-import { notify } from "../helpers";
+import { inheritedAttributes, notify } from "../helpers";
 import { deleteUnusedListingImages } from "../upload.server";
 import { adminMiddleware, audit, likeTerm, paged, paging, PageInput, strOrNull, ts, tsOrNull, Where } from "./common";
 import { mapAudit } from "./dashboard";
@@ -40,6 +41,7 @@ function mapRow(x: Record<string, unknown>) {
     price: num(x.price),
     currency: String(x.currency ?? "TRY"),
     status: String(x.status),
+    rejection_reason: strOrNull(x.rejection_reason),
     city: strOrNull(x.city),
     district: strOrNull(x.district),
     cover: strOrNull(x.cover),
@@ -64,7 +66,7 @@ function mapRow(x: Record<string, unknown>) {
 export type AdminListingRow = ReturnType<typeof mapRow>;
 
 const ROW_SELECT = `
-  l.id, l.listing_no, l.slug, l.title, l.price, l.currency, l.status, l.city, l.district,
+  l.id, l.listing_no, l.slug, l.title, l.price, l.currency, l.status, l.rejection_reason, l.city, l.district,
   case when jsonb_array_length(l.images) > 0 then l.images->>0 end as cover,
   jsonb_array_length(l.images) as photo_count,
   l.category_id, c.name as category_name, l.user_id,
@@ -169,7 +171,7 @@ export const adminListingDetail = createServerFn({ method: "POST" })
       conversations: num(x.conversations),
     };
     const userId = listing.user_id;
-    const [path, seller, reports, history, log] = await Promise.all([
+    const [path, seller, reports, history, log, categoryAttributes] = await Promise.all([
       sql.query<{ id: string; name: string }>(
         `with recursive chain as (
            select id, name, parent_id, 0 as depth from categories where id = $1
@@ -209,11 +211,13 @@ export const adminListingDetail = createServerFn({ method: "POST" })
          order by a.created_at desc limit 15`,
         [data.id],
       ),
+      inheritedAttributes(listing.category_id),
     ]);
     const s = seller[0];
     return {
       listing,
       path,
+      categoryAttributes,
       seller: s
         ? {
             user_id: String(s.user_id),
@@ -307,7 +311,7 @@ export const adminListingsAction = createServerFn({ method: "POST" })
       case "approve": {
         // The 30-day run starts when the listing goes live.
         const res = await sql.query<{ id: string }>(
-          `update listings set status='ACTIVE', approved_at=now(), updated_at=now(),
+          `update listings set status='ACTIVE', approved_at=now(), rejection_reason=null, updated_at=now(),
              expires_at=greatest(coalesce(expires_at, now()), now() + interval '30 days')
            where id = any($1::text[]) and status = any($2::text[])
            returning id`,
@@ -318,8 +322,8 @@ export const adminListingsAction = createServerFn({ method: "POST" })
       }
       case "reject": {
         const res = await sql.query<{ id: string }>(
-          "update listings set status='REJECTED', approved_at=null, status_before_ban=null, updated_at=now() where id = any($1::text[]) and status = any($2::text[]) returning id",
-          [ids, statuses],
+          "update listings set status='REJECTED', approved_at=null, status_before_ban=null, rejection_reason=$3, updated_at=now() where id = any($1::text[]) and status = any($2::text[]) returning id",
+          [ids, statuses, reason || null],
         );
         updatedIds = res.map((r) => r.id);
         break;
@@ -335,7 +339,7 @@ export const adminListingsAction = createServerFn({ method: "POST" })
       case "activate": {
         // An admin putting a listing live approves it.
         const res = await sql.query<{ id: string }>(
-          `update listings set status='ACTIVE', approved_at=coalesce(approved_at, now()), updated_at=now(),
+          `update listings set status='ACTIVE', approved_at=coalesce(approved_at, now()), rejection_reason=null, updated_at=now(),
              expires_at=case when expires_at is null or expires_at < now() then now() + interval '30 days' else expires_at end
            where id = any($1::text[]) and status = any($2::text[])
            returning id`,
@@ -444,7 +448,22 @@ export const adminListingsAction = createServerFn({ method: "POST" })
     return { ok: true as const, count: actedRows.length, summary };
   });
 
-/** Admin correction of the text fields and price. */
+const ALLOWED_UPLOAD_IMG = /^\/uploads\/[-a-zA-Z0-9_.]+\.(webp|jpg|jpeg|png)$/i;
+const ALLOWED_MOBILE_IMG = /^\/api\/mobile\/images\/[0-9a-f-]{36}$/i;
+
+function normalizeAdminAttrs(raw: Record<string, unknown>): AttrValues {
+  const out: AttrValues = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (v == null || v === "") continue;
+    if (Array.isArray(v)) out[k] = v.map(String).join(", ");
+    else if (typeof v === "number" || typeof v === "string") out[k] = v;
+    else if (typeof v === "boolean") out[k] = v ? "Evet" : "Hayır";
+    else out[k] = String(v);
+  }
+  return out;
+}
+
+/** Admin correction of the listing text, price, currency, images and attributes. */
 export const adminUpdateListing = createServerFn({ method: "POST" })
   .middleware([adminMiddleware])
   .validator(
@@ -453,32 +472,78 @@ export const adminUpdateListing = createServerFn({ method: "POST" })
       title: z.string().trim().min(5).max(100),
       description: z.string().trim().min(10).max(5000),
       price: z.number().min(1).max(1_000_000_000),
+      currency: z.enum(["TRY", "USD", "EUR"]).optional(),
       city: z.string().trim().max(60).optional(),
       district: z.string().trim().max(60).nullish(),
+      images: z.array(z.string().max(300)).max(20).optional(),
+      attrs: z.record(z.string(), z.unknown()).optional(),
     }),
   )
   .handler(async ({ context, data }) => {
     const sql = await getSql();
-    const rows = await sql.query<{ listing_no: number; price: unknown; title: string; district: string | null }>(
-      "select listing_no, price, title, district from listings where id = $1",
+    const rows = await sql.query<{
+      user_id: string;
+      listing_no: number;
+      price: unknown;
+      currency: string | null;
+      title: string;
+      district: string | null;
+      category_id: string;
+      images: unknown;
+      attrs: unknown;
+    }>(
+      "select user_id, listing_no, price, currency, title, district, category_id, images, attrs from listings where id = $1",
       [data.id],
     );
     const cur = rows[0];
     if (!cur) throw new Error("İlan bulunamadı.");
     const slug = listingSlug(data.title, cur.listing_no);
     const nextDistrict = data.district === undefined ? cur.district : data.district || null;
+    const nextCurrency = data.currency ?? cur.currency ?? "TRY";
+    const curImages = asJson<string[]>(cur.images, []);
+    const nextImages = data.images ?? curImages;
+    if (data.images !== undefined) {
+      for (const img of nextImages) {
+        if (!curImages.includes(img) && !ALLOWED_UPLOAD_IMG.test(img) && !ALLOWED_MOBILE_IMG.test(img)) {
+          throw new Error("Geçersiz görsel.");
+        }
+      }
+    }
+    const existingAttrs = asJson<AttrValues>(cur.attrs, {});
+    const nextAttrs =
+      data.attrs !== undefined
+        ? cleanAttrs(normalizeAdminAttrs(data.attrs), await inheritedAttributes(cur.category_id), existingAttrs)
+        : existingAttrs;
+
     await sql.query(
-      `update listings set title=$2, description=$3, price=$4, slug=$5,
-         city=coalesce(nullif($6, ''), city), district=$7, updated_at=now()
+      `update listings set title=$2, description=$3, price=$4, currency=$5, slug=$6,
+         city=coalesce(nullif($7, ''), city), district=$8,
+         images=$9::jsonb, attrs=$10::jsonb, updated_at=now()
        where id=$1`,
-      [data.id, data.title, data.description, data.price, slug, data.city ?? "", nextDistrict],
+      [
+        data.id,
+        data.title,
+        data.description,
+        data.price,
+        nextCurrency,
+        slug,
+        data.city ?? "",
+        nextDistrict,
+        JSON.stringify(nextImages),
+        JSON.stringify(nextAttrs),
+      ],
     );
+    if (data.images !== undefined) {
+      const removed = curImages.filter((img) => !nextImages.includes(img));
+      if (removed.length) await deleteUnusedListingImages(sql, cur.user_id, removed);
+    }
     if (num(cur.price) !== data.price) {
       await sql.query("insert into price_history (listing_id, price) values ($1,$2)", [data.id, data.price]);
     }
     await audit(sql, context.adminId, "listing.edit", "listing", data.id, `#${cur.listing_no} ilan bilgileri düzenlendi`, {
       title: cur.title !== data.title ? { from: cur.title, to: data.title } : undefined,
       price: num(cur.price) !== data.price ? { from: num(cur.price), to: data.price } : undefined,
+      currency: (cur.currency ?? "TRY") !== nextCurrency ? { from: cur.currency ?? "TRY", to: nextCurrency } : undefined,
     });
     return { ok: true as const, slug };
   });

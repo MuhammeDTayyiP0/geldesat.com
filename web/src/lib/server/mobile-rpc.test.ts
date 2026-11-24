@@ -8,16 +8,18 @@ import { test } from "node:test";
  * token, so adding a function should be a decision. Admin functions never belong.
  */
 const ALLOWED = [
-  "archiveConversation", "autocompleteSuggestions", "blockUser", "browseCategories", "checkReviewEligibility",
-  "createSavedSearch", "deleteConversation", "deleteMessage", "deleteSavedSearch", "getAccountSettings", "getCategory",
-  "getChatTemplates", "getDeletionStatus", "getLegal", "getListingForEdit", "getMe", "getSiteSettings", "getThread",
-  "homeListings", "leaveReview", "listBlockedUsers", "listCategoryRoots", "listConversations", "listSavedSearches",
-  "loadAroundMessage", "loadOlderMessages", "mapCityCounts", "markConversationUnread", "markThreadRead",
-  "myCreditOrders", "myRecentListings", "pollThread", "removeRecentListing", "reportConversation",
-  "requestMyAccountDeletion", "respondOffer", "restoreMyAccount", "saveChatTemplates", "searchCatalogWithContext",
-  "searchMessages", "sendLocation", "sendMessage", "sendOffer", "sendTyping", "startConversation", "statsHome",
-  "toggleSavedSearchNotify", "unblockUser", "unreadCount", "updateMessageEmail", "updateNotifyPrefs",
-  "updatePrivacySettings", "updateProfile", "upsertStore",
+  "archiveConversation", "autocompleteSuggestions", "blockUser", "browseCategories", "bulkImportListings",
+  "checkReviewEligibility", "createSavedSearch", "deleteConversation", "deleteMessage", "deleteSavedSearch",
+  "followSeller", "getAccountSettings", "getCategory", "getChatTemplates", "getDeletionStatus", "getFollowStatus",
+  "getLegal", "getListingForEdit", "getListingsByIds", "getMe", "getSiteSettings", "getThread", "homeListings",
+  "leaveReview", "listBlockedUsers", "listCategoryRoots", "listConversations", "listSavedSearches", "loadAroundMessage",
+  "loadOlderMessages", "mapCityCounts", "mapListingsInBounds", "markConversationUnread", "markThreadRead",
+  "myCreditOrders", "myFollowedSellers", "myRecentListings", "myStoreApplication", "pollThread", "removeRecentListing",
+  "reportConversation", "requestMyAccountDeletion", "respondOffer", "restoreMyAccount", "saveChatTemplates",
+  "searchCatalogWithContext", "searchMessages", "sendLocation", "sendMessage", "sendOffer", "sendTyping",
+  "startConversation", "statsHome", "submitStoreApplication", "toggleSavedSearchNotify", "unblockUser",
+  "unfollowSeller", "unreadCount", "updateMessageEmail", "updateNotifyPrefs", "updatePrivacySettings", "updateProfile",
+  "upsertStore",
 ];
 
 test("the app can only call the functions on this list", async () => {

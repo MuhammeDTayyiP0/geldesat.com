@@ -54,6 +54,12 @@ export const Route = createFileRoute("/api/mobile/notifications")({
                on conflict (token) do update set user_id=excluded.user_id, platform=excluded.platform, session_id=excluded.session_id, updated_at=now()`,
               [body.token, userId, body.platform, session?.session.id ?? null],
             );
+            await sql.query(
+              `delete from mobile_push_tokens where user_id=$1 and token not in (
+                 select token from mobile_push_tokens where user_id=$1 order by updated_at desc limit 20
+               )`,
+              [userId],
+            );
             return Response.json({ success: true });
           }
           if (body.action === "unregister-push") {

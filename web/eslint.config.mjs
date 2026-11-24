@@ -8,7 +8,7 @@ import tseslint from "typescript-eslint";
 /** Flat ESLint config for the GeldeSat web app. */
 export default tseslint.config(
   {
-    ignores: [".output/**", ".nitro/**", ".tanstack/**", "node_modules/**", "src/routeTree.gen.ts"],
+    ignores: [".output/**", ".nitro/**", ".tanstack/**", "node_modules/**", "public/vendor/**", "src/routeTree.gen.ts"],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

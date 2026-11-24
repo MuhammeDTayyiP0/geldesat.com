@@ -2,7 +2,9 @@ import { toast } from "sonner";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
+  ArrowDown,
   ArrowLeft,
+  ArrowUp,
   Ban,
   CalendarPlus,
   Check,
@@ -26,7 +28,15 @@ import { adminListingDetail, adminUpdateListing, type AdminListingDetail } from 
 import { useListingActions, useRunner, useSheets } from "./hooks";
 import { dateTime, listingStatus, money, n, relative } from "./format";
 import { AuditList } from "./AuditList";
-import { Avatar, ErrorState, Field, inputClass, KeyValue, Menu, MenuItem, MenuSeparator, MiniStat, Pill, SheetHeader, Spinner, TabBar, textareaClass } from "./ui";
+import { Avatar, ErrorState, Field, FieldGroup, inputClass, KeyValue, Menu, MenuItem, MenuSeparator, MiniStat, Pill, SheetHeader, Spinner, TabBar, textareaClass } from "./ui";
+
+function moveItem<T>(arr: T[], from: number, to: number): T[] {
+  if (to < 0 || to >= arr.length || from === to) return arr;
+  const copy = [...arr];
+  const [item] = copy.splice(from, 1);
+  copy.splice(to, 0, item);
+  return copy;
+}
 
 /** "1250", "1.250" and "1250,50" as a whole number of liras; null when it is not a price. */
 function parsePrice(text: string): number | null {
@@ -116,6 +126,13 @@ export function ListingSheetBody({ id, canGoBack }: { id: string; canGoBack: boo
 
         {tab === "overview" && !editing ? (
           <div className="space-y-5">
+            {l.rejection_reason ? (
+              <div className="rounded-xl border border-danger/30 bg-danger/8 px-4 py-3 text-sm">
+                <p className="text-xs font-semibold uppercase tracking-wide text-danger">Ret gerekçesi</p>
+                <p className="mt-1 whitespace-pre-wrap break-words text-fg">{l.rejection_reason}</p>
+              </div>
+            ) : null}
+
             {l.images.length ? (
               <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
                 {l.images.map((img, i) => (
@@ -337,8 +354,17 @@ function EditListingForm({ detail, onDone }: { detail: AdminListingDetail; onDon
   const [title, setTitle] = useState(l.title);
   const [description, setDescription] = useState(l.description);
   const [price, setPrice] = useState(String(l.price));
+  const [currency, setCurrency] = useState<"TRY" | "USD" | "EUR">(l.currency === "USD" || l.currency === "EUR" ? l.currency : "TRY");
   const [city, setCity] = useState(l.city ?? "");
   const [district, setDistrict] = useState(l.district ?? "");
+  const [images, setImages] = useState<string[]>(l.images);
+  const [attrs, setAttrs] = useState<Record<string, string | number>>(() => {
+    const init: Record<string, string | number> = {};
+    for (const [k, v] of Object.entries(l.attrs)) {
+      init[k] = Array.isArray(v) ? v.join(", ") : v;
+    }
+    return init;
+  });
   const selectedCity = TURKEY_CITIES.find((c) => c.name === city);
   const districts = selectedCity?.districts ?? [];
   const cityHasLegacy = Boolean(city && !selectedCity);
@@ -354,7 +380,7 @@ function EditListingForm({ detail, onDone }: { detail: AdminListingDetail; onDon
           return;
         }
         void run(
-          () => adminUpdateListing({ data: { id: l.id, title, description, price: amount, city, district } }),
+          () => adminUpdateListing({ data: { id: l.id, title, description, price: amount, currency, city, district, images, attrs } }),
           "İlan güncellendi.",
         ).then((r) => {
           if (r) onDone();
@@ -369,8 +395,20 @@ function EditListingForm({ detail, onDone }: { detail: AdminListingDetail; onDon
         <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={100} className={inputClass} required minLength={5} />
       </Field>
       <div className="grid gap-3 sm:grid-cols-3">
-        <Field label={`Fiyat (${l.currency})`}>
-          <input value={price} onChange={(e) => setPrice(e.target.value)} inputMode="numeric" className={inputClass} />
+        <Field label="Fiyat">
+          <div className="flex gap-1.5">
+            <input value={price} onChange={(e) => setPrice(e.target.value)} inputMode="numeric" className={cn(inputClass, "min-w-0 flex-1")} />
+            <select
+              aria-label="Para birimi"
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value as "TRY" | "USD" | "EUR")}
+              className="admin-select h-10 w-24 shrink-0"
+            >
+              <option value="TRY">TRY</option>
+              <option value="USD">USD</option>
+              <option value="EUR">EUR</option>
+            </select>
+          </div>
         </Field>
         <Field label="İl">
           <select
@@ -405,6 +443,138 @@ function EditListingForm({ detail, onDone }: { detail: AdminListingDetail; onDon
           </select>
         </Field>
       </div>
+      <FieldGroup label={`Fotoğraflar (${images.length})`}>
+        {images.length ? (
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+            {images.map((img, i) => (
+              <div key={img + i} className="relative overflow-hidden rounded-lg border border-border bg-elevated">
+                <img src={photoSrc(img, 240)} alt="" className="aspect-square size-full object-cover" />
+                {i === 0 ? (
+                  <span className="absolute left-1.5 top-1.5 rounded bg-ink/75 px-1.5 py-0.5 text-[10px] font-semibold text-white">Kapak</span>
+                ) : null}
+                <div className="absolute inset-x-1 bottom-1 flex items-center justify-between gap-1 rounded-md bg-ink/70 p-0.5 text-white">
+                  <div className="flex items-center gap-0.5">
+                    <button
+                      type="button"
+                      disabled={i === 0}
+                      onClick={() => setImages((prev) => moveItem(prev, i, i - 1))}
+                      className="rounded p-1 hover:bg-white/20 disabled:opacity-35"
+                      aria-label="Yukarı taşı"
+                      title="Yukarı taşı"
+                    >
+                      <ArrowUp className="size-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={i === images.length - 1}
+                      onClick={() => setImages((prev) => moveItem(prev, i, i + 1))}
+                      className="rounded p-1 hover:bg-white/20 disabled:opacity-35"
+                      aria-label="Aşağı taşı"
+                      title="Aşağı taşı"
+                    >
+                      <ArrowDown className="size-3.5" />
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setImages((prev) => prev.filter((_, idx) => idx !== i))}
+                    className="rounded p-1 text-red-300 hover:bg-red-500/30 hover:text-white"
+                    aria-label="Fotoğrafı kaldır"
+                    title="Kaldır"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="rounded-lg border border-dashed border-border px-3 py-2 text-xs text-muted">Fotoğraf yok.</p>
+        )}
+      </FieldGroup>
+      {detail.categoryAttributes.length ? (
+        <FieldGroup label="Kategori özellikleri">
+          <div className="grid gap-3 sm:grid-cols-2">
+            {detail.categoryAttributes.map((a) => {
+              const val = String(attrs[a.name] ?? "");
+              const label = `${a.name}${a.unit ? ` (${a.unit})` : ""}${a.required ? " *" : ""}`;
+              if (a.type === "SELECT" || a.type === "BOOLEAN") {
+                const opts = a.options?.length ? a.options : a.type === "BOOLEAN" ? ["Evet", "Hayır"] : [];
+                const legacyMissing = Boolean(val && !opts.includes(val));
+                return (
+                  <Field key={a.id} label={label}>
+                    <select
+                      value={val}
+                      onChange={(e) => setAttrs((prev) => ({ ...prev, [a.name]: e.target.value }))}
+                      className="admin-select h-10 w-full"
+                    >
+                      <option value="">Seçilmedi</option>
+                      {legacyMissing ? <option value={val}>{val}</option> : null}
+                      {opts.map((o) => (
+                        <option key={o} value={o}>
+                          {o}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                );
+              }
+              if (a.type === "MULTI") {
+                const selected = val
+                  .split(", ")
+                  .map((s) => s.trim())
+                  .filter(Boolean);
+                return (
+                  <FieldGroup key={a.id} label={label} className="sm:col-span-2">
+                    <div className="flex flex-wrap gap-1.5">
+                      {(a.options ?? []).map((o) => {
+                        const on = selected.includes(o);
+                        return (
+                          <button
+                            key={o}
+                            type="button"
+                            aria-pressed={on}
+                            onClick={() => {
+                              const next = on ? selected.filter((x) => x !== o) : [...selected, o];
+                              setAttrs((prev) => ({ ...prev, [a.name]: next.join(", ") }));
+                            }}
+                            className={cn(
+                              "inline-flex h-8 items-center gap-1 rounded-full border px-2.5 text-xs transition-colors",
+                              on ? "border-primary bg-primary/10 font-medium text-primary" : "border-border text-muted hover:border-primary/40 hover:text-fg",
+                            )}
+                          >
+                            {on ? <Check className="size-3" /> : null}
+                            {o}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </FieldGroup>
+                );
+              }
+              return (
+                <Field key={a.id} label={label}>
+                  <input
+                    type={a.type === "NUMBER" ? "number" : "text"}
+                    step={a.type === "NUMBER" ? "any" : undefined}
+                    min={a.name === "Yıl" || a.name === "Model Yılı" ? 1950 : a.type === "NUMBER" ? 0 : undefined}
+                    max={a.name === "Yıl" || a.name === "Model Yılı" ? new Date().getFullYear() + 1 : undefined}
+                    value={val}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      setAttrs((prev) => ({
+                        ...prev,
+                        [a.name]: a.type === "NUMBER" && raw !== "" && !Number.isNaN(Number(raw)) ? Number(raw) : raw,
+                      }));
+                    }}
+                    className={inputClass}
+                  />
+                </Field>
+              );
+            })}
+          </div>
+        </FieldGroup>
+      ) : null}
       <Field label="Açıklama">
         <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={8} className={textareaClass} required minLength={10} />
       </Field>

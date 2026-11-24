@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { auth } from "@/lib/auth/server";
-import { chatBus, trackPresence, type ChatEvent, type UserInboxEvent } from "@/lib/server/chat-bus";
+import { chatBus, registerUserStream, trackPresence, type ChatEvent, type UserInboxEvent } from "@/lib/server/chat-bus";
 import { getSql } from "@/lib/db";
 
 export const Route = createFileRoute("/api/chat/stream")({
@@ -71,7 +71,13 @@ export const Route = createFileRoute("/api/chat/stream")({
               }
             }, 20000);
 
+            let closed = false;
+            let unregisterStream: (() => void) | null = null;
             cleanup = () => {
+              if (closed) return;
+              closed = true;
+              unregisterStream?.();
+              unregisterStream = null;
               chatBus.off(userEventName, userHandler);
               if (chatEventName) {
                 chatBus.off(chatEventName, chatHandler);
@@ -86,9 +92,15 @@ export const Route = createFileRoute("/api/chat/stream")({
               }
             };
 
+            unregisterStream = registerUserStream(user.id, cleanup);
+
+            if (request.signal.aborted) {
+              cleanup();
+              return;
+            }
             request.signal.addEventListener("abort", () => {
               cleanup?.();
-            });
+            }, { once: true });
           },
           cancel() {
             cleanup?.();

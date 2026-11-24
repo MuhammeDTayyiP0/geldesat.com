@@ -13,15 +13,18 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import { PhoneInput } from "@/components/ui/phone-input";
 import {
+  AlertTriangle,
   ArrowLeft,
   ArrowRight,
   Check,
   ChevronRight,
+  Copy,
   ImageIcon,
   Lightbulb,
   MapPin,
   Pencil,
   Send,
+  Sparkles,
 } from "lucide-react";
 import { cleanPhone, cn, formatNumber, formatPrice, maskPhone10 } from "@/lib/utils";
 import { toast } from "sonner";
@@ -30,7 +33,16 @@ import { CategoryButtons } from "@/components/listing/CategoryPicker";
 import { BrandSpinner } from "@/components/brand/BrandSpinner";
 import { PhotoUploader, type PhotoOriginal } from "@/components/listing/PhotoUploader";
 import { ListingImageGallery } from "@/components/listing/ListingImageGallery";
+import {
+  VehicleDamageDiagram,
+  hasDamageData,
+  parseDamageValue,
+  serializeDamageValue,
+  summarizeDamage,
+  type VehicleDamageData,
+} from "@/components/listing/VehicleDamageDiagram";
 import { photoSrc } from "@/lib/images";
+import { useFlag } from "@/lib/use-flag";
 
 const evetHayir = ["Evet", "Hayır"];
 
@@ -79,11 +91,49 @@ function AttrInput({
   );
 }
 
+type Currency = "TRY" | "USD" | "EUR";
+
+function normalizeCurrency(raw: unknown): Currency {
+  return raw === "USD" || raw === "EUR" ? raw : "TRY";
+}
+
+function computeQualityScore(input: {
+  title: string;
+  description: string;
+  imagesCount: number;
+  attrs: AttrDef[];
+  values: Record<string, string | number>;
+  leaf: boolean;
+  city: string;
+  district: string;
+  neighborhood: string;
+}): { score: number; hint: string } {
+  const titleLen = input.title.trim().length;
+  const descLen = input.description.trim().length;
+  const titlePts = titleLen >= 25 ? 20 : titleLen >= 12 ? 12 : titleLen >= 5 ? 6 : 0;
+  const descPts = descLen >= 200 ? 25 : descLen >= 80 ? 18 : descLen >= 30 ? 10 : descLen >= 10 ? 5 : 0;
+  const photoPts = input.imagesCount >= 5 ? 30 : input.imagesCount >= 3 ? 22 : input.imagesCount >= 1 ? 12 : 0;
+  const filledAttrs = input.attrs.filter((a) => input.values[a.name] !== undefined && input.values[a.name] !== "").length;
+  const attrPts = !input.leaf ? 0 : input.attrs.length === 0 ? 15 : Math.round((15 * filledAttrs) / input.attrs.length);
+  const locPts = input.city && input.district && input.neighborhood ? 10 : input.city && input.district ? 6 : 0;
+  const score = Math.min(100, titlePts + descPts + photoPts + attrPts + locPts);
+
+  let hint = "Harika! İlanınız alıcılar için çok detaylı görünüyor.";
+  if (input.imagesCount < 3) hint = "En az 3 net fotoğraf eklemek etkileşimi artırır.";
+  else if (descLen < 80) hint = "Açıklamayı biraz daha detaylandırın.";
+  else if (titleLen < 20) hint = "Başlıkta marka, model veya önemli özellikleri belirtin.";
+  else if (input.attrs.length > 0 && filledAttrs < input.attrs.length) hint = "Kalan özellikleri doldurarak aramalarda öne çıkın.";
+  else if (!input.neighborhood && input.district) hint = "Mahalle bilgisi ekleyerek konumu netleştirin.";
+
+  return { score, hint };
+}
+
 type ListingDraft = {
   path: string[];
   title: string;
   description: string;
   price: string;
+  currency?: Currency;
   city: string;
   district: string;
   neighborhood: string;
@@ -97,8 +147,10 @@ type ListingDraft = {
 const PHOTO_KEEP_MS = 20 * 60 * 60_000;
 
 export const Route = createFileRoute("/ilan-ver")({
-  validateSearch: (s: Record<string, unknown>): { id?: string } =>
-    typeof s.id === "string" && s.id ? { id: s.id } : {},
+  validateSearch: (s: Record<string, unknown>): { id?: string; copyFrom?: string } => ({
+    ...(typeof s.id === "string" && s.id ? { id: s.id } : {}),
+    ...(typeof s.copyFrom === "string" && s.copyFrom ? { copyFrom: s.copyFrom } : {}),
+  }),
   // Only the root level; deeper levels load as the user drills down.
   loader: () => browseCategories({ data: { path: [] } }),
   head: () => ({
@@ -133,14 +185,17 @@ const TIPS: Record<number, string[]> = {
 };
 
 function PostPage() {
-  const { id } = Route.useSearch();
-  return <PostForm key={id ?? "new"} />;
+  const { id, copyFrom } = Route.useSearch();
+  return <PostForm key={id ? `edit:${id}` : copyFrom ? `copy:${copyFrom}` : "new"} />;
 }
 
 function PostForm() {
+  const benzerIlanAcik = useFlag("benzer_ilan_ver");
+  const hasarSemasiAcik = useFlag("arac_hasar_semasi");
   const { user, isPending } = useCurrentUserState();
   const rootLevel = Route.useLoaderData();
-  const { id: editId } = Route.useSearch();
+  const { id: editId, copyFrom } = Route.useSearch();
+  const copyId = !editId && benzerIlanAcik ? copyFrom : undefined;
   const nav = useNavigate();
   const [step, setStep] = useState(0);
   const [path, setPath] = useState<string[]>([]);
@@ -149,6 +204,7 @@ function PostForm() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
+  const [currency, setCurrency] = useState<Currency>("TRY");
   const [city, setCity] = useState("");
   const [district, setDistrict] = useState("");
   const [neighborhood, setNeighborhood] = useState("");
@@ -157,6 +213,9 @@ function PostForm() {
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [storeId, setStoreId] = useState<string | undefined>();
+  const [listingStatus, setListingStatus] = useState<string | null>(null);
+  const [rejectionReason, setRejectionReason] = useState<string | null>(null);
+  const [copiedBanner, setCopiedBanner] = useState(false);
   const [levelError, setLevelError] = useState(false);
   const [levelAttempt, setLevelAttempt] = useState(0);
   const [attrsError, setAttrsError] = useState(false);
@@ -165,7 +224,7 @@ function PostForm() {
   const [profilePhone, setProfilePhone] = useState("");
   const [offeredDraft, setOfferedDraft] = useState<ListingDraft | null>(null);
   const saved = useRef(false);
-  const [loaded, setLoaded] = useState(!editId);
+  const [loaded, setLoaded] = useState(!editId && !copyId);
   const keepValuesFor = useRef<string | null>(null);
   const photoOriginals = useRef(new Map<string, PhotoOriginal>());
   const topRef = useRef<HTMLDivElement>(null);
@@ -257,9 +316,10 @@ function PostForm() {
   }, [userId, editId]);
 
   useEffect(() => {
-    if (!editId || !userId) return;
+    const sourceId = editId ?? copyId;
+    if (!sourceId || !userId) return;
     let cancelled = false;
-    void getListingForEdit({ data: { id: editId } })
+    void getListingForEdit({ data: { id: sourceId } })
       .then((r) => {
         if (cancelled) return;
         keepValuesFor.current = r.path[r.path.length - 1] ?? r.listing.category_id;
@@ -267,25 +327,34 @@ function PostForm() {
         setTitle(r.listing.title);
         setDescription(r.listing.description);
         setPrice(String(Math.round(Number(r.listing.price))));
+        setCurrency(normalizeCurrency(r.listing.currency));
         setCity(r.listing.city ?? "");
         setDistrict(r.listing.district ?? "");
         setNeighborhood(r.listing.neighborhood ?? "");
-        if (r.phone) setPhone(maskPhone10(r.phone));
-        setImages(r.listing.images);
         setValues(r.listing.attrs ?? {});
         if (r.listing.store_id) setStoreId(r.listing.store_id);
+        if (editId) {
+          if (r.phone) setPhone(maskPhone10(r.phone));
+          setImages(r.listing.images);
+          setListingStatus(r.listing.status);
+          setRejectionReason(r.listing.rejection_reason ?? null);
+        } else {
+          setOfferedDraft(null);
+          setCopiedBanner(true);
+        }
         setStep(1);
         setLoaded(true);
       })
       .catch((e) => {
         if (cancelled) return;
         toast.error(errorText(e, "İlan yüklenemedi"));
-        void nav({ to: "/ilanlarim" });
+        if (editId) void nav({ to: "/ilanlarim" });
+        else setLoaded(true);
       });
     return () => {
       cancelled = true;
     };
-  }, [editId, userId, nav]);
+  }, [editId, copyId, userId, nav]);
 
   // Each step starts at the top of the form, not wherever the previous one was scrolled.
   useEffect(() => {
@@ -298,7 +367,7 @@ function PostForm() {
 
   // Drafts: a new listing survives a refresh or the back button; an edit warns before leaving.
   const draftKey = userId ? `geldesat:ilan-taslak:${userId}` : null;
-  const draft: ListingDraft = { path, title, description, price, city, district, neighborhood, phone, images, values, step, savedAt: Date.now() };
+  const draft: ListingDraft = { path, title, description, price, currency, city, district, neighborhood, phone, images, values, step, savedAt: Date.now() };
   const { savedAt: _savedAt, ...draftFields } = draft;
   const draftJson = JSON.stringify(draftFields);
   const hasContent = Boolean(path.length || title || description || price || images.length);
@@ -307,14 +376,14 @@ function PostForm() {
   const editChanged = Boolean(editId) && loadedForm.current !== null && loadedForm.current !== draftJson;
 
   useEffect(() => {
-    if (editId || !draftKey) return;
+    if (editId || copyId || !draftKey) return;
     try {
       const raw = localStorage.getItem(draftKey);
       if (raw) setOfferedDraft(JSON.parse(raw) as ListingDraft);
     } catch {
       // Private mode or a damaged draft: start empty.
     }
-  }, [editId, draftKey]);
+  }, [editId, copyId, draftKey]);
 
   useEffect(() => {
     if (editId || !draftKey || !hasContent || offeredDraft || saved.current) return;
@@ -359,6 +428,7 @@ function PostForm() {
           title: title.trim(),
           description: description.trim(),
           price: Number(price),
+          currency,
           city,
           district,
           neighborhood: neighborhood || undefined,
@@ -397,6 +467,7 @@ function PostForm() {
     setTitle(d.title);
     setDescription(d.description);
     setPrice(d.price);
+    setCurrency(normalizeCurrency(d.currency));
     setCity(d.city);
     setDistrict(d.district);
     setNeighborhood(d.neighborhood);
@@ -422,7 +493,7 @@ function PostForm() {
     if (title.trim().length < 5) return "İlan başlığı en az 5 karakter olmalı.";
     if (description.trim().length < 10) return "Açıklama en az 10 karakter olmalı.";
     if (priceNumber < 1) return "Geçerli bir fiyat girin.";
-    if (priceNumber > 1_000_000_000) return "Fiyat en fazla 1 milyar TL olabilir.";
+    if (priceNumber > 1_000_000_000) return "Fiyat en fazla 1 milyar olabilir.";
     if (!city || !district) return "İl ve ilçe seçin.";
     const digits = cleanPhone(phone);
     if (!digits && !profilePhone) return "İlan için bir telefon numarası girin.";
@@ -432,7 +503,60 @@ function PostForm() {
     const missing = attrs.find((a) => a.required && (values[a.name] === undefined || values[a.name] === ""));
     return missing ? `Zorunlu alan: ${missing.name}` : null;
   }
+
   const location = [neighborhood, district, city].filter(Boolean).join(", ");
+  const isVehicleCategory =
+    path.includes("vasita") ||
+    path.includes("otomobil") ||
+    pathRows.some((c) => c.slug === "vasita" || c.slug === "otomobil" || c.name === "Vasıta" || c.name === "Otomobil");
+  const quality = computeQualityScore({
+    title,
+    description,
+    imagesCount: images.length,
+    attrs,
+    values,
+    leaf,
+    city,
+    district,
+    neighborhood,
+  });
+
+  function handleDamageChange(nextDamage: VehicleDamageData) {
+    const serialized = serializeDamageValue(nextDamage);
+    const counts = summarizeDamage(nextDamage);
+    setValues((prev) => {
+      const next = { ...prev };
+      if (serialized) next["_damage"] = serialized;
+      else delete next["_damage"];
+
+      const boyaAttr = attrs.find((a) => a.name === "Boya-Değişen");
+      if (boyaAttr) {
+        const painted = counts.boyali + counts.lokal;
+        const val =
+          painted > 0 && counts.degisen > 0
+            ? "Boyalı + Değişen"
+            : counts.degisen > 0
+              ? "Değişen"
+              : painted > 0
+                ? "Boyalı"
+                : serialized
+                  ? "Tamamı Orijinal"
+                  : "";
+        if (val && (!boyaAttr.options?.length || boyaAttr.options.includes(val))) {
+          next["Boya-Değişen"] = val;
+        }
+      }
+
+      const hasarAttr = attrs.find((a) => a.name === "Hasar Kaydı");
+      if (hasarAttr && nextDamage.tramer !== null) {
+        const val = nextDamage.tramer > 0 ? "Var" : "Yok";
+        if (!hasarAttr.options?.length || hasarAttr.options.includes(val)) {
+          next["Hasar Kaydı"] = val;
+        }
+      }
+      return next;
+    });
+  }
 
   return (
     <div ref={topRef} className="mx-auto max-w-6xl scroll-mt-20 px-4 pb-44 pt-4 sm:pt-8 md:pb-16">
@@ -460,7 +584,46 @@ function PostForm() {
         </div>
       </header>
 
+      {editId && listingStatus === "REJECTED" ? (
+        <div role="alert" className="mt-4 flex items-start gap-3 rounded-xl border border-danger/30 bg-danger/8 p-4 text-sm text-danger">
+          <AlertTriangle className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
+          <div>
+            <p className="font-semibold">Bu ilan moderasyon tarafından reddedildi</p>
+            {rejectionReason ? <p className="mt-0.5 text-danger/90">Reddetme gerekçesi: {rejectionReason}</p> : null}
+            <p className="mt-1 text-xs text-muted">Gerekli düzenlemeleri yapıp kaydettiğinizde ilanınız yeniden incelemeye gönderilir.</p>
+          </div>
+        </div>
+      ) : null}
+
+      {copiedBanner ? (
+        <div className="mt-4 flex items-center gap-2.5 rounded-xl border border-primary/30 bg-primary/8 px-3.5 py-2.5 text-sm text-primary">
+          <Copy className="size-4 shrink-0" aria-hidden="true" />
+          <span>Mevcut ilandan bilgiler kopyalandı. Fotoğraflarınızı ekleyip yayınlayabilirsiniz.</span>
+        </div>
+      ) : null}
+
       <Stepper step={step} onPick={(i) => i < step && goTo(i)} locked={uploading || busy} />
+
+      {benzerIlanAcik ? (
+        <div className="mt-4 rounded-xl border border-border bg-surface p-3 lg:hidden">
+          <div className="flex items-center justify-between gap-2 text-xs font-semibold">
+            <span className="flex items-center gap-1.5">
+              <Sparkles className="size-3.5 text-primary" aria-hidden="true" /> İlan Kalite Puanı
+            </span>
+            <span className="tabular-nums text-primary">{quality.score}/100</span>
+          </div>
+          <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-elevated">
+            <div
+              className={cn(
+                "h-full rounded-full transition-all",
+                quality.score >= 80 ? "bg-ok" : quality.score >= 50 ? "bg-primary-solid" : "bg-warn",
+              )}
+              style={{ width: `${quality.score}%` }}
+            />
+          </div>
+          <p className="mt-1.5 text-[11px] text-muted">{quality.hint}</p>
+        </div>
+      ) : null}
 
       <div className="mt-5 lg:mt-8 lg:grid lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start lg:gap-8">
         <div className="min-w-0 rounded-2xl border border-border bg-surface p-4 shadow-card sm:p-6">
@@ -575,7 +738,7 @@ function PostForm() {
                   </div>
                   <div>
                     <FieldLabel htmlFor="listing-price">Fiyat</FieldLabel>
-                    <div className="relative">
+                    <div className="flex gap-2">
                       <Input
                         id="listing-price"
                         inputMode="numeric"
@@ -583,12 +746,20 @@ function PostForm() {
                         value={price ? formatNumber(price) : ""}
                         onChange={(e) => setPrice(e.target.value.replace(/\D/g, "").replace(/^0+/, "").slice(0, 10))}
                         placeholder="0"
-                        className="pr-12 text-lg font-semibold tabular-nums md:text-base"
+                        className="flex-1 text-lg font-semibold tabular-nums md:text-base"
                         required
                       />
-                      <span className="pointer-events-none absolute inset-y-0 right-3 grid place-items-center text-sm font-semibold text-muted">
-                        TL
-                      </span>
+                      <Select
+                        id="listing-currency"
+                        aria-label="Para birimi"
+                        value={currency}
+                        onChange={(e) => setCurrency(normalizeCurrency(e.target.value))}
+                        className="w-28 shrink-0 font-semibold"
+                      >
+                        <option value="TRY">TRY (₺)</option>
+                        <option value="USD">USD ($)</option>
+                        <option value="EUR">EUR (€)</option>
+                      </Select>
                     </div>
                   </div>
                   <div>
@@ -760,6 +931,12 @@ function PostForm() {
                       })}
                   </FieldGroup>
                 ) : null}
+
+                {hasarSemasiAcik && isVehicleCategory ? (
+                  <FieldGroup title="Boya, Değişen ve Tramer">
+                    <VehicleDamageDiagram value={parseDamageValue(values["_damage"])} onChange={handleDamageChange} />
+                  </FieldGroup>
+                ) : null}
               </div>
 
               <StepActions>
@@ -818,7 +995,7 @@ function PostForm() {
 
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="font-display text-2xl font-semibold tabular-nums text-primary sm:text-3xl">{formatPrice(priceNumber)}</p>
+                  <p className="font-display text-2xl font-semibold tabular-nums text-primary sm:text-3xl">{formatPrice(priceNumber, currency)}</p>
                   <h2 className="mt-1 text-lg font-semibold leading-snug break-words sm:text-xl">{title}</h2>
                   <p className="mt-1.5 flex items-center gap-1 text-sm text-muted">
                     <MapPin className="size-4 shrink-0" /> {location}
@@ -828,12 +1005,12 @@ function PostForm() {
                 <EditLink onClick={() => goTo(1)}>Bilgileri düzenle</EditLink>
               </div>
 
-              {Object.entries(values).some(([, v]) => v !== "" && v != null) ? (
+              {Object.entries(values).some(([k, v]) => !k.startsWith("_") && v !== "" && v != null) ? (
                 <div>
                   <h3 className="mb-2 text-sm font-semibold">Özellikler</h3>
                   <dl className="grid grid-cols-1 overflow-hidden rounded-xl border border-border sm:grid-cols-2">
                     {Object.entries(values)
-                      .filter(([, v]) => v !== "" && v != null)
+                      .filter(([k, v]) => !k.startsWith("_") && v !== "" && v != null)
                       .map(([k, v]) => {
                         const raw = String(v);
                         const display = raw === "true" ? "Evet" : raw === "false" ? "Hayır" : raw;
@@ -845,6 +1022,13 @@ function PostForm() {
                         );
                       })}
                   </dl>
+                </div>
+              ) : null}
+
+              {hasarSemasiAcik && isVehicleCategory && hasDamageData(values["_damage"]) ? (
+                <div>
+                  <h3 className="mb-2 text-sm font-semibold">Boya, Değişen ve Tramer</h3>
+                  <VehicleDamageDiagram readOnly value={parseDamageValue(values["_damage"])} />
                 </div>
               ) : null}
 
@@ -889,13 +1073,34 @@ function PostForm() {
               ) : null}
             </div>
             <div className="space-y-1 p-4">
-              <p className="font-display text-lg font-semibold tabular-nums">{priceNumber ? formatPrice(priceNumber) : "Fiyat"}</p>
+              <p className="font-display text-lg font-semibold tabular-nums">{priceNumber ? formatPrice(priceNumber, currency) : "Fiyat"}</p>
               <p className={cn("line-clamp-2 text-sm", title ? "text-fg" : "text-subtle")}>{title || "İlan başlığınız burada görünecek"}</p>
               <p className="flex items-center gap-1 pt-1 text-xs text-muted">
                 <MapPin className="size-3.5" /> {location || "Konum"}
               </p>
             </div>
           </div>
+
+          {benzerIlanAcik ? (
+            <div className="rounded-2xl border border-border bg-surface p-4">
+              <div className="flex items-center justify-between gap-2">
+                <p className="flex items-center gap-2 text-sm font-semibold">
+                  <Sparkles className="size-4 text-primary" aria-hidden="true" /> İlan Kalite Puanı
+                </p>
+                <span className="font-display text-sm font-bold tabular-nums text-primary">{quality.score}/100</span>
+              </div>
+              <div className="mt-2.5 h-2 w-full overflow-hidden rounded-full bg-elevated">
+                <div
+                  className={cn(
+                    "h-full rounded-full transition-all",
+                    quality.score >= 80 ? "bg-ok" : quality.score >= 50 ? "bg-primary-solid" : "bg-warn",
+                  )}
+                  style={{ width: `${quality.score}%` }}
+                />
+              </div>
+              <p className="mt-2 text-xs text-muted">{quality.hint}</p>
+            </div>
+          ) : null}
 
           <div className="rounded-2xl border border-border bg-surface p-4">
             <p className="flex items-center gap-2 text-sm font-semibold">

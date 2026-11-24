@@ -5,7 +5,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView, type KeyboardAwareScrollViewRef } from 'react-native-keyboard-controller';
 import { useQuery } from '@tanstack/react-query';
-import { Check, ChevronLeft, ChevronRight, LayoutGrid, MapPin, Phone, X } from 'lucide-react-native';
+import { AlertTriangle, CarFront, Check, ChevronLeft, ChevronRight, LayoutGrid, MapPin, Phone, Sparkles, X } from 'lucide-react-native';
 import { errorMessage } from '@/api/client';
 import { account, catalog, myListings, uploads } from '@/api/endpoints';
 import { keys, queryClient, useMe } from '@/api/queries';
@@ -21,14 +21,23 @@ import { PhotoViewer } from '@/features/listing/Gallery';
 import { PhotoStep } from '@/features/post/PhotoStep';
 import { MAX_PHOTOS, PHOTO_KEEP_MS, STEP_TITLES, emptyDraft, needsPhoto, stepError, type Draft, type PhotoItem, type StepKey } from '@/features/post/draft';
 import { mediaUrl } from '@/lib/config';
+import { useFlag } from '@/lib/flags';
 import { cleanPhone, formatNumber, formatPrice, locationLabel, maskPhoneInput, maskThousands, parseMasked } from '@/lib/format';
 import { pickPhotos, preparePhoto, recoverPickedPhotos, type PickedPhoto } from '@/lib/photos';
 import { clearDraft, loadDraft, saveDraft } from '@/lib/storage';
-import { Button, Card, Divider, EmptyState, ErrorState, IconButton, Input, Loading, SelectField, Text, confirm, hairline, radius, space, toast, useTheme } from '@/ui';
+import { Badge, Button, Card, Divider, EmptyState, ErrorState, IconButton, Input, Loading, Segmented, SelectField, Text, confirm, hairline, radius, space, toast, useTheme } from '@/ui';
 import { Image } from 'expo-image';
 
+type Currency = 'TRY' | 'USD' | 'EUR';
+const CURRENCY_OPTIONS: { value: Currency; label: string }[] = [
+  { value: 'TRY', label: '₺ TRY' },
+  { value: 'USD', label: '$ USD' },
+  { value: 'EUR', label: '€ EUR' },
+];
+const CURRENCY_SUFFIX: Record<Currency, string> = { TRY: '₺', USD: '$', EUR: '€' };
+
 export default function PostListingScreen() {
-  const { id: editId } = useLocalSearchParams<{ id?: string }>();
+  const { id: editId, copyFrom } = useLocalSearchParams<{ id?: string; copyFrom?: string }>();
   const session = useSession();
   const router = useRouter();
   const { c } = useTheme();
@@ -45,17 +54,21 @@ export default function PostListingScreen() {
       </View>
     );
   }
-  return <PostForm key={editId ?? 'new'} editId={editId} owner={session.user.id} />;
+  return <PostForm key={editId ?? (copyFrom ? `copy-${copyFrom}` : 'new')} editId={editId} copyFrom={editId ? undefined : copyFrom} owner={session.user.id} />;
 }
 
-function PostForm({ editId, owner }: { editId?: string; owner: string }) {
+function PostForm({ editId, copyFrom, owner }: { editId?: string; copyFrom?: string; owner: string }) {
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const me = useMe();
+  const copyAndQualityOn = useFlag('benzer_ilan_ver');
+  const damageOn = useFlag('arac_hasar_semasi');
   const [draft, setDraft] = useState<Draft>(() => (editId ? emptyDraft : { ...emptyDraft, clientKey: Crypto.randomUUID() }));
+  const [currency, setCurrency] = useState<Currency>('TRY');
+  const [rejectionReason, setRejectionReason] = useState<string | null>(null);
   const [step, setStep] = useState<StepKey>('category');
-  const [ready, setReady] = useState(!editId);
+  const [ready, setReady] = useState(!(editId || (copyFrom && copyAndQualityOn)));
   // New listing: nothing is saved until the "continue the draft?" question is answered,
   // or the empty form would overwrite the draft while the question is open.
   const [hydrated, setHydrated] = useState(!!editId);
@@ -69,8 +82,21 @@ function PostForm({ editId, owner }: { editId?: string; owner: string }) {
   const uploadsInFlight = useRef(new Map<string, AbortController>());
   const scrollRef = useRef<KeyboardAwareScrollViewRef>(null);
   const prefilled = useRef(false);
+  const copiedRef = useRef(false);
 
   const leaf = draft.path[draft.path.length - 1];
+  const isVehicleCategory = useMemo(
+    () =>
+      draft.path.some(
+        (p) =>
+          p.id === 'vasita' ||
+          p.slug === 'vasita' ||
+          p.slug === 'otomobil' ||
+          p.name.toLocaleLowerCase('tr').includes('vasıta') ||
+          p.name.toLocaleLowerCase('tr').includes('otomobil'),
+      ),
+    [draft.path],
+  );
   const attrsQuery = useQuery({
     queryKey: keys.attributes(leaf?.id ?? ''),
     queryFn: () => catalog.attributes(leaf?.id ?? ''),
@@ -79,7 +105,10 @@ function PostForm({ editId, owner }: { editId?: string; owner: string }) {
   });
   const attributes = useMemo(() => attrsQuery.data ?? [], [attrsQuery.data]);
   // While loading or after a failure the step stays, so required fields are not skipped silently.
-  const showAttributes = attributes.length > 0 || (!!leaf && leaf.has_children === false && (attrsQuery.isLoading || attrsQuery.isError));
+  const showAttributes =
+    attributes.length > 0 ||
+    (damageOn && isVehicleCategory && leaf?.has_children === false) ||
+    (!!leaf && leaf.has_children === false && (attrsQuery.isLoading || attrsQuery.isError));
   const stepContext = { profilePhone: me.data ? !!me.data.profile?.phone : undefined, attributesFailed: attrsQuery.isError && !attrsQuery.data };
 
   const steps: StepKey[] = useMemo(
@@ -87,17 +116,26 @@ function PostForm({ editId, owner }: { editId?: string; owner: string }) {
     [showAttributes],
   );
   const stepIndex = steps.indexOf(step);
+  const quality = useMemo(() => computeListingQuality(draft, attributes), [draft, attributes]);
 
-  // Edit: load the listing; new: offer the saved draft and prefill from the profile.
+  // Edit: load the listing; copyFrom: prefill new listing; new: offer the saved draft and prefill from the profile.
   useEffect(() => {
     let cancelled = false;
-    if (editId) {
+    const sourceId = editId ?? (copyFrom && copyAndQualityOn ? copyFrom : undefined);
+    if (sourceId) {
+      if (!editId && copiedRef.current) return;
+      if (!editId) copiedRef.current = true;
       void (async () => {
         try {
-          const r = await myListings.forEdit(editId);
+          const r = await myListings.forEdit(sourceId);
           const browse = await catalog.browse(r.path);
           if (cancelled) return;
           originalImages.current = r.listing.images;
+          if (editId && r.listing.status === 'REJECTED' && r.listing.rejection_reason) {
+            setRejectionReason(r.listing.rejection_reason);
+          }
+          const cur: Currency = r.listing.currency === 'USD' || r.listing.currency === 'EUR' ? r.listing.currency : 'TRY';
+          setCurrency(cur);
           setDraft({
             path: browse.pathRows.map((row, i) => (i === browse.pathRows.length - 1 ? { ...row, has_children: false } : row)),
             photos: r.listing.images.map((url) => ({ key: url, url, status: 'done' })),
@@ -109,8 +147,10 @@ function PostForm({ editId, owner }: { editId?: string; owner: string }) {
             district: r.listing.district ?? '',
             neighborhood: r.listing.neighborhood ?? '',
             phone: r.phone ? maskPhoneInput(r.phone) : '',
+            clientKey: editId ? undefined : Crypto.randomUUID(),
           });
           setStep('details');
+          setHydrated(true);
           setReady(true);
         } catch (e) {
           toast.error(errorMessage(e));
@@ -148,7 +188,7 @@ function PostForm({ editId, owner }: { editId?: string; owner: string }) {
     return () => {
       cancelled = true;
     };
-  }, [editId, owner, router]);
+  }, [editId, copyFrom, copyAndQualityOn, owner, router]);
 
   // A photo taken just before Android closed the app comes back for review.
   useEffect(() => {
@@ -320,6 +360,7 @@ function PostForm({ editId, owner }: { editId?: string; owner: string }) {
         title: draft.title.trim(),
         description: draft.description.trim(),
         price: parseMasked(draft.price) ?? 0,
+        currency,
         city: draft.city,
         district: draft.district,
         neighborhood: draft.neighborhood || undefined,
@@ -384,6 +425,25 @@ function PostForm({ editId, owner }: { editId?: string; owner: string }) {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.content}
       >
+        {rejectionReason ? (
+          <Card style={[styles.rejectBanner, { backgroundColor: c.dangerSoft, borderColor: c.danger }]}>
+            <View style={styles.rejectHead}>
+              <AlertTriangle size={18} color={c.danger} />
+              <Text variant="label" tone="danger">
+                İlanınız reddedildi
+              </Text>
+            </View>
+            <Text variant="caption" tone="danger">
+              {rejectionReason}
+            </Text>
+            <Text variant="small" tone="muted">
+              Gerekli düzenlemeleri yapıp kaydettiğinizde ilanınız yeniden incelemeye alınır.
+            </Text>
+          </Card>
+        ) : null}
+
+        {copyAndQualityOn && step !== 'category' ? <QualityScoreCard score={quality.score} tip={quality.tip} /> : null}
+
         {step === 'category' ? <CategoryStep path={draft.path} onPath={(path) => update({ path, attrs: path[path.length - 1]?.id === leaf?.id ? draft.attrs : {} })} onLeaf={() => setStep('photos')} /> : null}
 
         {step === 'photos' ? (
@@ -415,6 +475,12 @@ function PostForm({ editId, owner }: { editId?: string; owner: string }) {
               maxLength={100}
               hint={`${draft.title.length}/100 · Marka, model ve en önemli özelliği yazın.`}
             />
+            <View style={styles.currencyWrap}>
+              <Text variant="label" style={styles.currencyLabel}>
+                Para birimi
+              </Text>
+              <Segmented value={currency} onChange={setCurrency} options={CURRENCY_OPTIONS} />
+            </View>
             <Input
               label="Fiyat"
               required
@@ -422,7 +488,7 @@ function PostForm({ editId, owner }: { editId?: string; owner: string }) {
               placeholder="0"
               value={draft.price}
               onChangeText={(t) => update({ price: maskThousands(t) })}
-              suffix="₺"
+              suffix={CURRENCY_SUFFIX[currency]}
               style={styles.price}
             />
             <Input
@@ -444,21 +510,38 @@ function PostForm({ editId, owner }: { editId?: string; owner: string }) {
             <Text tone="muted">Alıcılar ilanınızı bu bilgilerle filtreleyerek bulur.</Text>
             {attrsQuery.isLoading ? <ActivityIndicator color={c.primary} /> : null}
             {attrsQuery.isError && !attrsQuery.data ? <ErrorState error={attrsQuery.error} onRetry={() => void attrsQuery.refetch()} compact /> : null}
-            {attributes.map((a: AttrDef) => (
-              <AttrField
-                key={a.id}
-                attr={a}
-                value={draft.attrs[a.name]}
-                onChange={(v) =>
+            {attributes
+              .filter((a: AttrDef) => !(damageOn && isVehicleCategory && DAMAGE_MANAGED_KEYS.has(a.name)))
+              .map((a: AttrDef) => (
+                <AttrField
+                  key={a.id}
+                  attr={a}
+                  value={draft.attrs[a.name]}
+                  onChange={(v) =>
+                    setDraft((d) => {
+                      const attrs = { ...d.attrs };
+                      if (v === undefined) delete attrs[a.name];
+                      else attrs[a.name] = v;
+                      return { ...d, attrs };
+                    })
+                  }
+                />
+              ))}
+            {damageOn && isVehicleCategory ? (
+              <VehicleDamageEditor
+                attrs={draft.attrs}
+                onPatch={(patch) =>
                   setDraft((d) => {
                     const attrs = { ...d.attrs };
-                    if (v === undefined) delete attrs[a.name];
-                    else attrs[a.name] = v;
+                    for (const [k, v] of Object.entries(patch)) {
+                      if (v === undefined || v === '') delete attrs[k];
+                      else attrs[k] = v;
+                    }
                     return { ...d, attrs };
                   })
                 }
               />
-            ))}
+            ) : null}
           </View>
         ) : null}
 
@@ -500,7 +583,7 @@ function PostForm({ editId, owner }: { editId?: string; owner: string }) {
           </View>
         ) : null}
 
-        {step === 'preview' ? <Preview draft={draft} attributes={attributes} onEdit={setStep} editing={!!editId} /> : null}
+        {step === 'preview' ? <Preview draft={draft} currency={currency} attributes={attributes} onEdit={setStep} editing={!!editId} /> : null}
       </KeyboardAwareScrollView>
 
       <View style={[styles.footer, { backgroundColor: c.surface, borderTopColor: c.border, paddingBottom: insets.bottom + space.sm }]}>
@@ -684,11 +767,28 @@ function CategorySummary({ path, onChange }: { path: Category[]; onChange: () =>
   );
 }
 
-function Preview({ draft, attributes, onEdit, editing }: { draft: Draft; attributes: AttrDef[]; onEdit: (step: StepKey) => void; editing: boolean }) {
+function Preview({
+  draft,
+  currency,
+  attributes,
+  onEdit,
+  editing,
+}: {
+  draft: Draft;
+  currency: Currency;
+  attributes: AttrDef[];
+  onEdit: (step: StepKey) => void;
+  editing: boolean;
+}) {
   const { c } = useTheme();
   const cover = draft.photos[0];
   const coverUri = cover?.localUri ?? mediaUrl(cover?.url, 800);
   const attrRows = attributes.filter((a) => draft.attrs[a.name] !== undefined && draft.attrs[a.name] !== '');
+  const damageSummaryLine = summarizeDamageForPreview(draft.attrs['_damage']);
+  const allAttrLines = [
+    ...attrRows.map((a) => `${a.name}: ${previewAttrValue(a, draft.attrs[a.name])}`),
+    ...(damageSummaryLine ? [`Hasar & Tramer: ${damageSummaryLine}`] : []),
+  ];
   return (
     <View style={styles.form}>
       <Text tone="muted">
@@ -698,7 +798,7 @@ function Preview({ draft, attributes, onEdit, editing }: { draft: Draft; attribu
         {coverUri ? <Image source={coverUri} style={styles.previewImage} contentFit="cover" /> : null}
         <View style={styles.previewBody}>
           <Text variant="title" tone="primary">
-            {formatPrice(parseMasked(draft.price) ?? 0)}
+            {formatPrice(parseMasked(draft.price) ?? 0, currency)}
           </Text>
           <Text variant="subheading">{draft.title}</Text>
           <Text variant="caption" tone="muted">
@@ -708,12 +808,8 @@ function Preview({ draft, attributes, onEdit, editing }: { draft: Draft; attribu
       </Card>
       <PreviewRow label="Kategori" value={draft.path.map((p) => p.name).join(' › ')} onEdit={() => onEdit('category')} />
       <PreviewRow label="Açıklama" value={draft.description} onEdit={() => onEdit('details')} />
-      {attrRows.length ? (
-        <PreviewRow
-          label="Özellikler"
-          value={attrRows.map((a) => `${a.name}: ${previewAttrValue(a, draft.attrs[a.name])}`).join('\n')}
-          onEdit={() => onEdit('attributes')}
-        />
+      {allAttrLines.length ? (
+        <PreviewRow label="Özellikler" value={allAttrLines.join('\n')} onEdit={() => onEdit('attributes')} />
       ) : null}
       <PreviewRow label="Telefon" value={draft.phone || 'Profil telefonunuz'} onEdit={() => onEdit('location')} />
       <View style={[styles.rules, { backgroundColor: c.elevated }]}>
@@ -754,6 +850,268 @@ function PreviewRow({ label, value, onEdit }: { label: string; value: string; on
   );
 }
 
+function computeListingQuality(draft: Draft, attributes: AttrDef[]): { score: number; tip: string | null } {
+  let score = 0;
+  const tips: string[] = [];
+
+  const photoCount = draft.photos.filter((p) => p.status === 'done' || p.localUri).length;
+  if (photoCount >= 4) score += 30;
+  else if (photoCount >= 2) {
+    score += 22;
+    tips.push('4+ fotoğraf ekleyerek puanınızı artırın');
+  } else if (photoCount === 1) {
+    score += 12;
+    tips.push('Birden fazla açıdan fotoğraf ekleyin');
+  } else {
+    tips.push('En az 1 fotoğraf ekleyin');
+  }
+
+  const titleLen = draft.title.trim().length;
+  if (titleLen >= 20) score += 20;
+  else if (titleLen >= 5) {
+    score += 10;
+    tips.push('Başlığa marka/model detayı ekleyin');
+  } else {
+    tips.push('Açıklayıcı bir başlık yazın');
+  }
+
+  if ((parseMasked(draft.price) ?? 0) > 0) score += 10;
+  else tips.push('Fiyat girin');
+
+  const descLen = draft.description.trim().length;
+  if (descLen >= 150) score += 20;
+  else if (descLen >= 60) {
+    score += 14;
+    tips.push('Açıklamayı biraz daha detaylandırın');
+  } else if (descLen >= 10) {
+    score += 8;
+    tips.push('Ürünün durumunu detaylı açıklayın');
+  } else {
+    tips.push('En az 10 karakterlik açıklama yazın');
+  }
+
+  if (attributes.length > 0) {
+    const filled = attributes.filter((a) => draft.attrs[a.name] !== undefined && draft.attrs[a.name] !== '').length;
+    score += Math.round((filled / attributes.length) * 10);
+    if (filled < attributes.length) tips.push('Tüm özellikleri doldurun');
+  } else {
+    score += 10;
+  }
+
+  if (draft.city && draft.district) {
+    score += draft.neighborhood ? 10 : 7;
+  } else {
+    tips.push('İl ve ilçe seçin');
+  }
+
+  return { score: Math.min(100, Math.max(0, score)), tip: tips[0] ?? null };
+}
+
+function QualityScoreCard({ score, tip }: { score: number; tip: string | null }) {
+  const { c } = useTheme();
+  const tone = score >= 80 ? 'ok' : score >= 50 ? 'primary' : 'warn';
+  const color = tone === 'ok' ? c.ok : tone === 'primary' ? c.primary : c.warn;
+  return (
+    <Card style={styles.qualityCard}>
+      <View style={styles.qualityHead}>
+        <Sparkles size={16} color={color} />
+        <Text variant="label" style={styles.flex}>
+          İlan Kalite Puanı
+        </Text>
+        <Badge label={`${score} / 100`} tone={tone} />
+      </View>
+      <View style={[styles.qualityTrack, { backgroundColor: c.elevated }]}>
+        <View style={[styles.qualityBar, { backgroundColor: color, width: `${score}%` }]} />
+      </View>
+      {tip ? (
+        <Text variant="caption" tone="muted">
+          İpucu: {tip}
+        </Text>
+      ) : (
+        <Text variant="caption" tone="ok">
+          Harika! İlanınız tüm önemli bilgileri içeriyor.
+        </Text>
+      )}
+    </Card>
+  );
+}
+
+const VEHICLE_PARTS: readonly { id: string; label: string }[] = [
+  { id: 'on_tampon', label: 'Ön Tampon' },
+  { id: 'kaput', label: 'Kaput' },
+  { id: 'tavan', label: 'Tavan' },
+  { id: 'bagaj', label: 'Bagaj' },
+  { id: 'arka_tampon', label: 'Arka Tampon' },
+  { id: 'sol_on_camurluk', label: 'Sol Ön Çamurluk' },
+  { id: 'sol_on_kapi', label: 'Sol Ön Kapı' },
+  { id: 'sol_arka_kapi', label: 'Sol Arka Kapı' },
+  { id: 'sol_arka_camurluk', label: 'Sol Arka Çamurluk' },
+  { id: 'sag_on_camurluk', label: 'Sağ Ön Çamurluk' },
+  { id: 'sag_on_kapi', label: 'Sağ Ön Kapı' },
+  { id: 'sag_arka_kapi', label: 'Sağ Arka Kapı' },
+  { id: 'sag_arka_camurluk', label: 'Sağ Arka Çamurluk' },
+];
+
+type PartStatus = 'orijinal' | 'lokal' | 'boyali' | 'degisen';
+const NEXT_STATUS: Record<PartStatus, PartStatus> = {
+  orijinal: 'lokal',
+  lokal: 'boyali',
+  boyali: 'degisen',
+  degisen: 'orijinal',
+};
+const STATUS_CODE: Record<PartStatus, string> = {
+  orijinal: '0',
+  lokal: '1',
+  boyali: '2',
+  degisen: '3',
+};
+const CODE_STATUS: Record<string, PartStatus> = {
+  '0': 'orijinal',
+  '1': 'lokal',
+  '2': 'boyali',
+  '3': 'degisen',
+};
+const STATUS_LABEL: Record<PartStatus, string> = {
+  orijinal: 'Orijinal',
+  lokal: 'Lokal',
+  boyali: 'Boyalı',
+  degisen: 'Değişen',
+};
+
+const DAMAGE_MANAGED_KEYS = new Set(['_damage']);
+
+function parseDamageState(raw: string | number | undefined): { statuses: PartStatus[]; tramer: number | null } {
+  const statuses: PartStatus[] = VEHICLE_PARTS.map(() => 'orijinal');
+  let tramer: number | null = null;
+  if (typeof raw !== 'string' || !raw.trim()) return { statuses, tramer };
+  try {
+    const parsed = JSON.parse(raw) as { p?: unknown; t?: unknown; parts?: Record<string, string>; tramer?: unknown };
+    if (typeof parsed.p === 'string') {
+      VEHICLE_PARTS.forEach((_, idx) => {
+        const s = CODE_STATUS[parsed.p?.toString().charAt(idx) ?? '0'];
+        if (s) statuses[idx] = s;
+      });
+    } else if (parsed.parts && typeof parsed.parts === 'object') {
+      VEHICLE_PARTS.forEach((part, idx) => {
+        const s = parsed.parts?.[part.id];
+        if (s === 'orijinal' || s === 'lokal' || s === 'boyali' || s === 'degisen') statuses[idx] = s;
+      });
+    }
+    const rawTramer = parsed.t !== undefined ? parsed.t : parsed.tramer;
+    if (typeof rawTramer === 'number' && Number.isFinite(rawTramer) && rawTramer >= 0) {
+      tramer = Math.round(rawTramer);
+    }
+  } catch {
+    // ignore malformed damage payload
+  }
+  return { statuses, tramer };
+}
+
+function serializeDamageState(statuses: PartStatus[], tramer: number | null): string | undefined {
+  const hasNonOriginal = statuses.some((s) => s !== 'orijinal');
+  const hasTramer = tramer !== null && Number.isFinite(tramer) && tramer >= 0;
+  if (!hasNonOriginal && !hasTramer) return undefined;
+  const p = statuses.map((s) => STATUS_CODE[s]).join('');
+  const payload: { p: string; t?: number } = { p };
+  if (hasTramer) payload.t = Math.round(tramer as number);
+  return JSON.stringify(payload);
+}
+
+function summarizeDamageForPreview(raw: string | number | undefined): string | null {
+  const { statuses, tramer } = parseDamageState(raw);
+  const counts = { lokal: 0, boyali: 0, degisen: 0 };
+  for (const s of statuses) {
+    if (s !== 'orijinal') counts[s] += 1;
+  }
+  const parts: string[] = [];
+  if (counts.degisen) parts.push(`${counts.degisen} Değişen`);
+  if (counts.boyali) parts.push(`${counts.boyali} Boyalı`);
+  if (counts.lokal) parts.push(`${counts.lokal} Lokal`);
+  if (!parts.length && tramer === null) return null;
+  if (!parts.length) parts.push('Boyasız / Değişensiz');
+  if (tramer !== null) parts.push(`Tramer: ${tramer === 0 ? 'Yok' : formatPrice(tramer, 'TRY')}`);
+  return parts.join(' · ');
+}
+
+function VehicleDamageEditor({
+  attrs,
+  onPatch,
+}: {
+  attrs: Record<string, string | number>;
+  onPatch: (patch: Record<string, string | number | undefined>) => void;
+}) {
+  const { c } = useTheme();
+  const { statuses, tramer } = parseDamageState(attrs['_damage']);
+
+  const cyclePart = (idx: number) => {
+    const next = [...statuses];
+    next[idx] = NEXT_STATUS[statuses[idx]];
+    onPatch({ _damage: serializeDamageState(next, tramer) });
+  };
+
+  return (
+    <Card style={styles.damageCard}>
+      <View style={styles.damageHead}>
+        <CarFront size={18} color={c.primary} />
+        <Text variant="label" style={styles.flex}>
+          Araç Hasar & Tramer Durumu
+        </Text>
+      </View>
+      <Text variant="caption" tone="muted">
+        Parçaya dokunarak durumunu değiştirin: Orijinal → Lokal → Boyalı → Değişen.
+      </Text>
+      <View style={styles.partsGrid}>
+        {VEHICLE_PARTS.map((part, idx) => {
+          const st = statuses[idx];
+          const bg =
+            st === 'degisen'
+              ? c.dangerSoft
+              : st === 'boyali'
+                ? c.warnSoft
+                : st === 'lokal'
+                  ? c.primarySoft
+                  : c.elevated;
+          const fg =
+            st === 'degisen'
+              ? c.danger
+              : st === 'boyali'
+                ? c.warn
+                : st === 'lokal'
+                  ? c.primary
+                  : c.muted;
+          const border = st === 'orijinal' ? c.border : fg;
+          return (
+            <Pressable
+              key={part.id}
+              accessibilityRole="button"
+              accessibilityLabel={`${part.label}: ${STATUS_LABEL[st]}`}
+              onPress={() => cyclePart(idx)}
+              style={[styles.partChip, { backgroundColor: bg, borderColor: border }]}
+            >
+              <Text variant="small" style={{ color: fg, fontWeight: st === 'orijinal' ? '500' : '700' }}>
+                {part.label}
+                {st !== 'orijinal' ? ` · ${STATUS_LABEL[st]}` : ''}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      <Input
+        label="Tramer Kaydı (TL)"
+        placeholder="Örn. 15.000 veya 0"
+        keyboardType="number-pad"
+        value={tramer !== null ? maskThousands(String(tramer)) : ''}
+        onChangeText={(t) => {
+          const digits = t.replace(/\D/g, '').slice(0, 9);
+          const nextTramer = digits === '' ? null : Number(digits);
+          onPatch({ _damage: serializeDamageState(statuses, nextTramer) });
+        }}
+        suffix="₺"
+      />
+    </Card>
+  );
+}
+
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   grow: { flex: 2 },
@@ -763,7 +1121,19 @@ const styles = StyleSheet.create({
   progressText: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   track: { height: 4, borderRadius: 2, overflow: 'hidden' },
   bar: { height: 4, borderRadius: 2 },
-  content: { padding: space.lg, paddingBottom: space.xxxl * 2 },
+  content: { padding: space.lg, paddingBottom: space.xxxl * 2, gap: space.lg },
+  rejectBanner: { gap: space.xs, borderWidth: 1 },
+  rejectHead: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
+  qualityCard: { gap: space.sm, padding: space.md },
+  qualityHead: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
+  qualityTrack: { height: 6, borderRadius: 3, overflow: 'hidden' },
+  qualityBar: { height: 6, borderRadius: 3 },
+  currencyWrap: { gap: space.xs + 2 },
+  currencyLabel: { marginLeft: 2 },
+  damageCard: { gap: space.md },
+  damageHead: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  partsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs },
+  partChip: { paddingHorizontal: space.sm + 2, paddingVertical: space.xs + 2, borderRadius: radius.pill, borderWidth: 1 },
   form: { gap: space.lg },
   price: { fontSize: 20, fontWeight: '700' },
   description: { minHeight: 160 },
