@@ -2,6 +2,7 @@ import { forwardRef, useState, type ComponentRef, type ReactNode } from 'react';
 import { Pressable, StyleSheet, TextInput, View, type TextInputProps } from 'react-native';
 import { Eye, EyeOff, type LucideIcon } from 'lucide-react-native';
 import { Text } from './Text';
+import { FONT_FAMILY } from './fonts';
 import { font, radius, space, useTheme } from './theme';
 
 /** Ref type of a TextInput (RN 0.88 exposes an instance type separate from the component). */
@@ -152,7 +153,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     paddingHorizontal: space.md,
   },
-  input: { flex: 1, fontSize: font.md, minHeight: 46 },
+  input: { flex: 1, fontFamily: FONT_FAMILY.regular, fontSize: font.md, minHeight: 46 },
   iconTop: { marginTop: 14 },
   below: { marginLeft: 2 },
   selectText: { flex: 1 },

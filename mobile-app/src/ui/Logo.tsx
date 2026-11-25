@@ -1,5 +1,6 @@
 import { StyleSheet, View } from 'react-native';
 import Svg, { Path, Rect } from 'react-native-svg';
+import { FONT_FAMILY } from './fonts';
 import { Text } from './Text';
 import { useTheme } from './theme';
 
@@ -56,5 +57,5 @@ export function Wordmark({ size = 26 }: { size?: number }) {
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  word: { fontWeight: '800', letterSpacing: -0.6 },
+  word: { fontFamily: FONT_FAMILY.bold, letterSpacing: -0.6 },
 });

@@ -4,6 +4,8 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import {
   Archive,
   Ban,
+  Check,
+  CheckCheck,
   ChevronLeft,
   ExternalLink,
   Flag,
@@ -46,7 +48,7 @@ import { blockUser, unblockUser } from "@/lib/server/social";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuSeparator,
@@ -141,6 +143,7 @@ function Thread() {
     | { deleteMessage: string }
     | { reportMessage: string }
     | { counterTo: string }
+    | { infoMessage: Msg }
   >(null);
   const [replyTo, setReplyTo] = useState<Msg | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -978,6 +981,7 @@ function Thread() {
                     setReplyTo(m);
                     box.current?.focus();
                   }}
+                  onInfo={mine && !m.deleted && !m.localState ? () => setDialog({ infoMessage: m }) : undefined}
                   onJumpTo={(target) => void jumpTo(target)}
                   onCounterOffer={() => setDialog({ counterTo: m.id })}
                   onDelete={() => setDialog({ deleteMessage: m.id })}
@@ -1349,6 +1353,53 @@ function Thread() {
           }
         }}
       />
+
+      <Dialog
+        open={typeof dialog === "object" && dialog !== null && "infoMessage" in dialog}
+        onOpenChange={(o) => !o && setDialog(null)}
+      >
+        <DialogContent className="border-border bg-surface sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Mesaj bilgisi</DialogTitle>
+          </DialogHeader>
+          {typeof dialog === "object" && dialog !== null && "infoMessage" in dialog ? (
+            <div className="space-y-3 text-sm">
+              <p className="rounded-xl bg-elevated px-3.5 py-2.5 text-fg line-clamp-4">
+                {previewText(dialog.infoMessage.kind, dialog.infoMessage.content, dialog.infoMessage.deleted)}
+              </p>
+              <dl className="divide-y divide-border overflow-hidden rounded-xl border border-border">
+                <div className="flex items-center justify-between gap-3 px-3.5 py-2.5">
+                  <dt className="flex items-center gap-2 text-muted">
+                    <Check className="size-4 text-primary" aria-hidden="true" /> Gönderildi
+                  </dt>
+                  <dd className="font-medium tabular-nums">
+                    {dayLabel(dialog.infoMessage.created_at)}{" "}
+                    {new Date(dialog.infoMessage.created_at).toLocaleTimeString("tr-TR", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </dd>
+                </div>
+                <div className="flex items-center justify-between gap-3 px-3.5 py-2.5">
+                  <dt className="flex items-center gap-2 text-muted">
+                    <CheckCheck className="size-4 text-primary" aria-hidden="true" /> Okundu
+                  </dt>
+                  <dd className="font-medium tabular-nums">
+                    {!showReads
+                      ? "Okundu bilgisi kapalı"
+                      : dialog.infoMessage.read_at
+                        ? `${dayLabel(dialog.infoMessage.read_at)} ${new Date(dialog.infoMessage.read_at).toLocaleTimeString("tr-TR", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}`
+                        : "Henüz okunmadı"}
+                  </dd>
+                </div>
+              </dl>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={Boolean(lightbox)} onOpenChange={(o) => !o && setLightbox(null)}>
         <DialogContent className="max-w-[calc(100%-1rem)] border-0 bg-transparent p-0 shadow-none sm:max-w-3xl">

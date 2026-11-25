@@ -26,10 +26,10 @@ const SWIPE_TRIGGER = 64;
  * vertical scrolling to the browser; horizontal drags move the bubble. Drags
  * from the screen edge are the browser's back gesture, so they are ignored.
  */
-function useSwipeToReply(onReply: () => void, enabled: boolean) {
+function useSwipeToReply(onReply: () => void, onInfo: (() => void) | undefined, enabled: boolean) {
   const [dx, setDx] = useState(0);
   const start = useRef<{ x: number; y: number; axis: "x" | "y" | null } | null>(null);
-  const armed = useRef(false);
+  const armed = useRef<"reply" | "info" | null>(null);
   return {
     dx,
     handlers: enabled
@@ -46,20 +46,24 @@ function useSwipeToReply(onReply: () => void, enabled: boolean) {
             const my = t.clientY - s0.y;
             if (!s0.axis && (Math.abs(mx) > 10 || Math.abs(my) > 10)) s0.axis = Math.abs(mx) > Math.abs(my) ? "x" : "y";
             if (s0.axis !== "x") return;
-            const x = Math.max(0, mx > 96 ? 96 + (mx - 96) * 0.15 : mx);
+            let x = 0;
+            if (mx >= 0) x = mx > 96 ? 96 + (mx - 96) * 0.15 : mx;
+            else if (onInfo) x = -(-mx > 96 ? 96 + (-mx - 96) * 0.15 : -mx);
             setDx(x);
-            const over = x >= SWIPE_TRIGGER;
-            if (over && !armed.current) navigator.vibrate?.(10);
-            armed.current = over;
+            const nextDir: "reply" | "info" | null =
+              x >= SWIPE_TRIGGER ? "reply" : x <= -SWIPE_TRIGGER && onInfo ? "info" : null;
+            if (nextDir && nextDir !== armed.current) navigator.vibrate?.(10);
+            armed.current = nextDir;
           },
           onTouchEnd: () => {
-            if (armed.current) onReply();
-            armed.current = false;
+            if (armed.current === "reply") onReply();
+            else if (armed.current === "info") onInfo?.();
+            armed.current = null;
             start.current = null;
             setDx(0);
           },
           onTouchCancel: () => {
-            armed.current = false;
+            armed.current = null;
             start.current = null;
             setDx(0);
           },
@@ -84,6 +88,7 @@ export function MessageBubble({
   listingImage,
   nameOf,
   onReply,
+  onInfo,
   onJumpTo,
   onDelete,
   onReport,
@@ -102,6 +107,7 @@ export function MessageBubble({
   listingImage: string | null;
   nameOf: (senderId: string) => string;
   onReply: () => void;
+  onInfo?: () => void;
   onJumpTo: (messageId: string) => void;
   onDelete: () => void;
   onReport: () => void;
@@ -201,7 +207,8 @@ export function MessageBubble({
     </p>
   );
 
-  const swipe = useSwipeToReply(onReply, !m.deleted && !pending);
+  const swipe = useSwipeToReply(onReply, onInfo, !m.deleted && !pending);
+  const swipeProgress = Math.min(1, Math.abs(swipe.dx) / SWIPE_TRIGGER);
 
   return (
     <div
@@ -211,7 +218,7 @@ export function MessageBubble({
     >
       <div className={cn("relative flex max-w-[min(78%,28rem)] flex-col", mine ? "items-end" : "items-start")}>
         {/* Next to the bubble, not at the screen edge: your own messages sit on the right. */}
-        {swipe.dx ? (
+        {swipe.dx > 0 ? (
           <span
             aria-hidden="true"
             className={cn(
@@ -219,9 +226,18 @@ export function MessageBubble({
               // Your own bubble has the options button on its left: the icon goes past it.
               mine ? "-left-[4.25rem]" : "-left-10",
             )}
-            style={{ opacity: Math.min(1, swipe.dx / SWIPE_TRIGGER), transform: `translateY(-50%) scale(${0.6 + 0.4 * Math.min(1, swipe.dx / SWIPE_TRIGGER)})` }}
+            style={{ opacity: swipeProgress, transform: `translateY(-50%) scale(${0.6 + 0.4 * swipeProgress})` }}
           >
             <Reply className="size-4" />
+          </span>
+        ) : null}
+        {swipe.dx < 0 && onInfo ? (
+          <span
+            aria-hidden="true"
+            className="absolute -right-10 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-full bg-elevated text-primary"
+            style={{ opacity: swipeProgress, transform: `translateY(-50%) scale(${0.6 + 0.4 * swipeProgress})` }}
+          >
+            <CheckCheck className="size-4" />
           </span>
         ) : null}
         <div
@@ -286,6 +302,11 @@ export function MessageBubble({
             <MenuItem onSelect={onReply}>
               <Reply /> Yanıtla
             </MenuItem>
+            {mine && onInfo ? (
+              <MenuItem onSelect={onInfo}>
+                <CheckCheck /> Mesaj bilgisi
+              </MenuItem>
+            ) : null}
             {m.kind === "text" && m.content !== LISTING_PHOTO_MSG ? (
               <MenuItem onSelect={() => void navigator.clipboard?.writeText(m.content).catch(() => undefined)}>
                 <Copy /> Kopyala

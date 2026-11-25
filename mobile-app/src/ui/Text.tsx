@@ -1,19 +1,20 @@
 import { Text as RNText, type TextProps as RNTextProps, type TextStyle } from 'react-native';
-import { font, useTheme, weight, type Colors } from './theme';
+import { FONT_FAMILY } from './fonts';
+import { font, useTheme, type Colors } from './theme';
 
 type Variant = 'display' | 'title' | 'heading' | 'subheading' | 'body' | 'bodyStrong' | 'caption' | 'label' | 'small';
 type Tone = 'default' | 'muted' | 'subtle' | 'primary' | 'danger' | 'ok' | 'warn' | 'inverse' | 'onPrimary';
 
 const VARIANTS: Record<Variant, TextStyle> = {
-  display: { fontSize: font.display, fontWeight: weight.bold, letterSpacing: -0.5, lineHeight: 34 },
-  title: { fontSize: font.xxl, fontWeight: weight.bold, letterSpacing: -0.3, lineHeight: 30 },
-  heading: { fontSize: font.xl, fontWeight: weight.semibold, letterSpacing: -0.2, lineHeight: 26 },
-  subheading: { fontSize: font.lg, fontWeight: weight.semibold, lineHeight: 23 },
-  body: { fontSize: font.md, fontWeight: weight.regular, lineHeight: 21 },
-  bodyStrong: { fontSize: font.md, fontWeight: weight.semibold, lineHeight: 21 },
-  caption: { fontSize: font.sm, fontWeight: weight.regular, lineHeight: 18 },
-  label: { fontSize: font.sm, fontWeight: weight.semibold, lineHeight: 18 },
-  small: { fontSize: font.xs, fontWeight: weight.medium, lineHeight: 15 },
+  display: { fontFamily: FONT_FAMILY.bold, fontSize: font.display, letterSpacing: -0.5, lineHeight: 34 },
+  title: { fontFamily: FONT_FAMILY.bold, fontSize: font.xxl, letterSpacing: -0.3, lineHeight: 30 },
+  heading: { fontFamily: FONT_FAMILY.semibold, fontSize: font.xl, letterSpacing: -0.2, lineHeight: 26 },
+  subheading: { fontFamily: FONT_FAMILY.semibold, fontSize: font.lg, lineHeight: 23 },
+  body: { fontFamily: FONT_FAMILY.regular, fontSize: font.md, lineHeight: 21 },
+  bodyStrong: { fontFamily: FONT_FAMILY.semibold, fontSize: font.md, lineHeight: 21 },
+  caption: { fontFamily: FONT_FAMILY.regular, fontSize: font.sm, lineHeight: 18 },
+  label: { fontFamily: FONT_FAMILY.semibold, fontSize: font.sm, lineHeight: 18 },
+  small: { fontFamily: FONT_FAMILY.medium, fontSize: font.xs, lineHeight: 15 },
 };
 
 function toneColor(c: Colors, tone: Tone): string {

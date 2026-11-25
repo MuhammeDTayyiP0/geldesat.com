@@ -26,7 +26,7 @@ import { useOtaUpdates } from '@/lib/ota';
 import { BACK_SWIPE_END } from '@/features/chat/SwipeToReply';
 import { loadThemePref } from '@/lib/themePref';
 import { isOlderVersion } from '@/lib/version';
-import { Button, Text, ToastHost, space, useTheme } from '@/ui';
+import { Button, Text, ToastHost, loadFonts, space, useTheme } from '@/ui';
 
 void SplashScreen.preventAutoHideAsync();
 installGlobalErrorHandler();
@@ -63,7 +63,7 @@ export default function RootLayout() {
 
   useEffect(() => {
     // All local reads: the stored session is checked with the server in the background.
-    void Promise.all([loadThemePref(), restoreSession(), loadCachedConfig()]).finally(() => {
+    void Promise.all([loadThemePref(), restoreSession(), loadCachedConfig(), loadFonts()]).finally(() => {
       setReady(true);
       SplashScreen.hide();
       void flushErrorReports();
