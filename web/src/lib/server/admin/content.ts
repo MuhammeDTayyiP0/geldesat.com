@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { getSql, dbSource, type Sql } from "@/lib/db";
 import { newId, num, slugify } from "@/lib/utils";
-import { firstInWindow, LIVE_PUSH_TOKEN } from "../helpers";
+import { firstInWindow, LIVE_PUSH_TOKEN, releaseWindow } from "../helpers";
 import { broadcastUserInbox } from "../chat-bus";
 import { DEFAULT_FLAGS, getAppConfig, setAppConfig } from "../config";
 import { FLAG_NAME_PATTERN, FLAG_PLATFORMS, VERSION_PATTERN, normalizeFlags } from "@/lib/flags";
@@ -74,25 +74,30 @@ export const adminSavePage = createServerFn({ method: "POST" })
     if (data.originalSlug && slug !== data.originalSlug && LINKED_PAGES.has(data.originalSlug)) {
       throw new Error("Bu sayfaya site içinden bağlantı veriliyor; adresi değiştirilemez.");
     }
-    if (slug !== data.originalSlug) {
-      const taken = await sql.query("select 1 from legal_pages where slug = $1", [slug]);
-      if (taken.length) throw new Error("Bu adreste başka bir sayfa var.");
-    }
-    if (data.originalSlug) {
-      await sql.query(
-        "insert into legal_page_revisions (slug, title, body, replaced_by) select slug, title, body, $2 from legal_pages where slug = $1",
-        [data.originalSlug, context.adminId],
-      );
-      const rows = await sql.query<{ slug: string }>("update legal_pages set slug = $2, title = $3, body = $4, updated_at = now() where slug = $1 returning slug", [
-        data.originalSlug,
-        slug,
-        data.title,
-        data.body,
-      ]);
-      if (!rows[0]) throw new Error("Sayfa bulunamadı.");
-    } else {
-      await sql.query("insert into legal_pages (slug, title, body) values ($1,$2,$3)", [slug, data.title, data.body]);
-    }
+    await sql.transaction(async (tx) => {
+      if (slug !== data.originalSlug) {
+        const taken = await tx.query("select 1 from legal_pages where slug = $1", [slug]);
+        if (taken.length) throw new Error("Bu adreste başka bir sayfa var.");
+      }
+      if (data.originalSlug) {
+        const prev = await tx.query<{ slug: string }>(
+          "insert into legal_page_revisions (slug, title, body, replaced_by) select slug, title, body, $2 from legal_pages where slug = $1 returning slug",
+          [data.originalSlug, context.adminId],
+        );
+        if (!prev[0]) throw new Error("Sayfa bulunamadı.");
+        if (slug !== data.originalSlug) {
+          await tx.query("update legal_page_revisions set slug = $2 where slug = $1", [data.originalSlug, slug]);
+        }
+        await tx.query("update legal_pages set slug = $2, title = $3, body = $4, updated_at = now() where slug = $1", [
+          data.originalSlug,
+          slug,
+          data.title,
+          data.body,
+        ]);
+      } else {
+        await tx.query("insert into legal_pages (slug, title, body, updated_at) values ($1,$2,$3,now())", [slug, data.title, data.body]);
+      }
+    });
     await audit(sql, context.adminId, data.originalSlug ? "page.edit" : "page.create", "page", slug, `Sayfa "${data.title}" ${data.originalSlug ? "güncellendi" : "oluşturuldu"}`);
     return { ok: true as const, slug };
   });
@@ -129,19 +134,25 @@ const AUDIENCE_SQL: Record<keyof typeof AUDIENCES, string> = {
   admins: "select user_id from profiles where role = 'ADMIN'",
 };
 
+const wantsSystem = (channel: "inapp" | "push") =>
+  `coalesce((select p.notify_prefs -> 'system' ->> '${channel}' from profiles p where p.user_id = a.user_id), 'true') <> 'false'`;
+
 export const adminAudienceSizes = createServerFn({ method: "GET" })
   .middleware([adminMiddleware])
   .handler(async () => {
     const sql = await getSql();
-    const out: Record<string, { label: string; count: number; devices: number }> = {};
-    for (const [key, label] of Object.entries(AUDIENCES) as Array<[keyof typeof AUDIENCES, string]>) {
-      const rows = await sql.query<{ n: number; d: number }>(
-        `with a as (${AUDIENCE_SQL[key]})
-         select (select count(*) from a) as n, (select count(*) from mobile_push_tokens t where t.user_id in (select user_id from a)) as d`,
-      );
-      out[key] = { label, count: num(rows[0]?.n), devices: num(rows[0]?.d) };
-    }
-    return out;
+    const entries = await Promise.all(
+      (Object.entries(AUDIENCES) as Array<[keyof typeof AUDIENCES, string]>).map(async ([key, label]) => {
+        const rows = await sql.query<{ n: number; d: number }>(
+          `with a as (${AUDIENCE_SQL[key]})
+           select
+             (select count(*) from a where ${wantsSystem("inapp")}) as n,
+             (select count(*) from mobile_push_tokens t join a on a.user_id = t.user_id where ${LIVE_PUSH_TOKEN} and ${wantsSystem("push")}) as d`,
+        );
+        return [key, { label, count: num(rows[0]?.n), devices: num(rows[0]?.d) }] as const;
+      }),
+    );
+    return Object.fromEntries(entries) as Record<string, { label: string; count: number; devices: number }>;
   });
 
 /** In-app notification to a whole audience, optionally pushed to their phones. */
@@ -179,28 +190,37 @@ export const adminBroadcast = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     const sql = await getSql();
-    const link = data.link ? safeRedirect(data.link) : "/bildirimler";
+    const rawLink = data.link?.trim();
+    if (rawLink && (!rawLink.startsWith("/") || rawLink.startsWith("//") || safeRedirect(rawLink) !== rawLink)) {
+      throw new Error("Bağlantı site içinde bir yol olmalı (/ ile başlar).");
+    }
+    const link = rawLink || "/bildirimler";
+    const dedupKey = `broadcast:${data.audience}:${data.push ? 1 : 0}:${link}:${data.title}:${data.body}`;
     // A second press, or a retry after a timeout, must not notify everyone twice.
-    if (!firstInWindow(`broadcast:${data.audience}:${data.title}:${data.body}`, 10 * 60_000)) {
+    if (!firstInWindow(dedupKey, 10 * 60_000)) {
       throw new Error("Bu duyuru az önce gönderildi.");
     }
-    // Members who turned announcements off in their settings are skipped.
-    const wants = (channel: string) => `coalesce((select p.notify_prefs -> 'system' ->> '${channel}' from profiles p where p.user_id = a.user_id), 'true') <> 'false'`;
-    const inserted = await sql.query<{ user_id: string }>(
-      `insert into notifications (id, user_id, type, title, body, link)
-       select 'ntf_' || substr(md5(random()::text || a.user_id), 1, 12), a.user_id, 'system', $1, $2, $3
-       from (${AUDIENCE_SQL[data.audience]}) a
-       where ${wants("inapp")}
-       returning user_id`,
-      [data.title, data.body, link],
-    );
+    let inserted: Array<{ user_id: string }>;
+    try {
+      inserted = await sql.query<{ user_id: string }>(
+        `insert into notifications (id, user_id, type, title, body, link)
+         select 'ntf_' || substr(md5(random()::text || a.user_id), 1, 12), a.user_id, 'system', $1, $2, $3
+         from (${AUDIENCE_SQL[data.audience]}) a
+         where ${wantsSystem("inapp")}
+         returning user_id`,
+        [data.title, data.body, link],
+      );
+    } catch (err) {
+      releaseWindow(dedupKey);
+      throw err;
+    }
     for (const row of inserted) broadcastUserInbox(row.user_id, { type: "notification" });
     let pushed = 0;
     if (data.push) {
       const tokens = await sql.query<{ token: string }>(
         `select t.token from mobile_push_tokens t
          join (${AUDIENCE_SQL[data.audience]}) a on a.user_id = t.user_id
-         where ${LIVE_PUSH_TOKEN} and ${wants("push")}`,
+         where ${LIVE_PUSH_TOKEN} and ${wantsSystem("push")}`,
       );
       pushed = tokens.length;
       void sendBroadcastPush(sql, tokens.map((t) => t.token), data.title, data.body, link);
@@ -257,8 +277,9 @@ export const adminSaveSiteSettings = createServerFn({ method: "POST" })
     if (iban && !/^TR\d{24}$/.test(iban)) throw new Error("IBAN TR ile başlamalı ve 26 karakter olmalı.");
     if (iban && !ibanChecks(iban)) throw new Error("IBAN hatalı görünüyor. Rakamları kontrol edin.");
     if (data.support_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.support_email)) throw new Error("Geçerli bir destek e-postası girin.");
-    // A support line is often landline or 0850, unlike a member's mobile number.
-    const phoneDigits = data.support_phone?.replace(/\D/g, "") ?? "";
+    // A support line is often landline or 0850, unlike a member's mobile number; +90 prefix is also accepted.
+    const rawDigits = data.support_phone?.replace(/\D/g, "") ?? "";
+    const phoneDigits = rawDigits.startsWith("90") && rawDigits.length === 12 ? rawDigits.slice(2) : rawDigits;
     if (phoneDigits && !/^0?\d{10}$/.test(phoneDigits)) throw new Error("Geçerli bir telefon numarası girin.");
     const phone = phoneDigits ? (phoneDigits.startsWith("0") ? phoneDigits : `0${phoneDigits}`) : "";
     const sql = await getSql();
@@ -271,9 +292,11 @@ export const adminSaveSiteSettings = createServerFn({ method: "POST" })
       ["account_holder", data.account_holder],
       ["iban", iban],
     ];
-    for (const [key, value] of values) {
-      await sql.query("insert into site_settings (key, value) values ($1,$2) on conflict (key) do update set value = excluded.value", [key, value]);
-    }
+    await sql.transaction(async (tx) => {
+      for (const [key, value] of values) {
+        await tx.query("insert into site_settings (key, value) values ($1,$2) on conflict (key) do update set value = excluded.value", [key, value]);
+      }
+    });
     clearSiteSettingsCache();
     await audit(sql, context.adminId, "settings.site", "settings", "site", "Site ve iletişim bilgileri güncellendi", {
       changed: values.filter(([key, value]) => String(before[key as keyof typeof before] ?? "") !== value).map(([key]) => key),
@@ -346,6 +369,8 @@ export const adminListAudit = createServerFn({ method: "POST" })
       targetType: z.string().max(40).optional(),
       adminId: z.string().max(200).optional(),
       targetId: z.string().max(200).optional(),
+      from: z.string().trim().max(40).optional(),
+      to: z.string().trim().max(40).optional(),
       ...PageInput,
     }),
   )
@@ -355,9 +380,20 @@ export const adminListAudit = createServerFn({ method: "POST" })
     if (data.targetType) w.add(`a.target_type = ${w.param(data.targetType)}`);
     if (data.adminId) w.add(`a.admin_id = ${w.param(data.adminId)}`);
     if (data.targetId) w.add(`a.target_id = ${w.param(data.targetId)}`);
+    if (data.from) {
+      const fromTs = /^\d{4}-\d{2}-\d{2}$/.test(data.from) ? `${data.from}T00:00:00+03:00` : data.from;
+      w.add(`a.created_at >= ${w.param(fromTs)}::timestamptz`);
+    }
+    if (data.to) {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(data.to)) {
+        w.add(`a.created_at < (${w.param(`${data.to}T00:00:00+03:00`)}::timestamptz + interval '1 day')`);
+      } else {
+        w.add(`a.created_at <= ${w.param(data.to)}::timestamptz`);
+      }
+    }
     if (data.q) {
       const like = w.param(likeTerm(data.q));
-      w.add(`(a.summary ilike ${like} or a.action ilike ${like})`);
+      w.add(`(a.summary ilike ${like} or a.action ilike ${like} or coalesce(a.target_id, '') ilike ${like})`);
     }
     const from = "from admin_audit_log a left join profiles p on p.user_id = a.admin_id";
     const { limit, offset } = paging(data.page, data.pageSize);
@@ -402,15 +438,6 @@ export const adminSystemInfo = createServerFn({ method: "GET" })
   .middleware([adminMiddleware])
   .handler(async () => {
     const sql = await getSql();
-    const counts: Record<string, number> = {};
-    for (const t of TABLES) {
-      try {
-        const rows = await sql.query<{ n: number }>(`select count(*) as n from ${t}`);
-        counts[t] = num(rows[0]?.n);
-      } catch {
-        counts[t] = -1;
-      }
-    }
     const safe = async <T>(fn: () => Promise<T>, fallback: T): Promise<T> => {
       try {
         return await fn();
@@ -418,7 +445,13 @@ export const adminSystemInfo = createServerFn({ method: "GET" })
         return fallback;
       }
     };
-    const [version, size, migrations, imageBytes, sessions] = await Promise.all([
+    const [countEntries, version, size, migrations, imageBytes, sessions] = await Promise.all([
+      Promise.all(
+        TABLES.map(async (t) => {
+          const n = await safe(async () => num((await sql.query<{ n: number }>(`select count(*) as n from ${t}`))[0]?.n), -1);
+          return [t, n] as const;
+        }),
+      ),
       safe(async () => (await sql.query<{ v: string }>("select version() as v"))[0]?.v ?? "", ""),
       safe(async () => num((await sql.query<{ n: number }>("select pg_database_size(current_database()) as n"))[0]?.n), 0),
       safe(async () => {
@@ -430,7 +463,7 @@ export const adminSystemInfo = createServerFn({ method: "GET" })
           num(
             (
               await sql.query<{ n: number }>(
-                "select coalesce((select sum(octet_length(data)) from mobile_listing_images),0) + coalesce((select sum(octet_length(data)) from chat_images),0) + coalesce((select sum(octet_length(data)) from user_avatars),0) as n",
+                "select coalesce(pg_total_relation_size('mobile_listing_images'),0) + coalesce(pg_total_relation_size('chat_images'),0) + coalesce(pg_total_relation_size('user_avatars'),0) as n",
               )
             )[0]?.n,
           ),
@@ -438,6 +471,7 @@ export const adminSystemInfo = createServerFn({ method: "GET" })
       ),
       safe(async () => num((await sql.query<{ n: number }>('select count(*) as n from "session" where "expiresAt" > now()'))[0]?.n), 0),
     ]);
+    const counts = Object.fromEntries(countEntries) as Record<string, number>;
     const env = (key: string) => Boolean(process.env[key]?.trim());
     const mem = process.memoryUsage();
     return {

@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { adminCategoryTree, type AdminCategory } from "@/lib/server/admin/categories";
@@ -9,14 +9,15 @@ import { useConfirm } from "./ui";
 /** Runs a server call with toasts, then refreshes admin queries (all of them by default). */
 export function useRunner() {
   const qc = useQueryClient();
-  const [busy, setBusy] = useState(false);
+  const [inFlight, setInFlight] = useState(0);
+  const busy = inFlight > 0;
   const run = useCallback(
     async <T,>(
       fn: () => Promise<T>,
       success?: string | ((r: T) => string),
       invalidateKeys: QueryKey[] = [["admin"]],
     ): Promise<T | undefined> => {
-      setBusy(true);
+      setInFlight((c) => c + 1);
       try {
         const r = await fn();
         if (success) toast.success(typeof success === "function" ? success(r) : success);
@@ -26,7 +27,7 @@ export function useRunner() {
         toast.error(errorMessage(e));
         return undefined;
       } finally {
-        setBusy(false);
+        setInFlight((c) => Math.max(0, c - 1));
       }
     },
     [qc],
@@ -136,11 +137,15 @@ const PickerContext = createContext<((o: PickerOptions) => Promise<PickedCategor
 
 export function CategoryPickerProvider({ children, render }: { children: ReactNode; render: (props: { options: PickerOptions; resolve: (v: PickedCategory | "root" | undefined) => void }) => ReactNode }) {
   const [state, setState] = useState<{ options: PickerOptions; resolve: (v: PickedCategory | "root" | undefined) => void } | null>(null);
+  const stateRef = useRef(state);
+  stateRef.current = state;
   const pick = useCallback(
-    (options: PickerOptions) =>
-      new Promise<PickedCategory | "root" | undefined>((resolve) => {
+    (options: PickerOptions) => {
+      stateRef.current?.resolve(undefined);
+      return new Promise<PickedCategory | "root" | undefined>((resolve) => {
         setState({ options, resolve });
-      }),
+      });
+    },
     [],
   );
   return (
@@ -180,16 +185,27 @@ const SheetContext = createContext<{
 
 export function SheetProvider({ children }: { children: ReactNode }) {
   const [stack, setStack] = useState<SheetEntry[]>([]);
-  const value = useMemo(
-    () => ({
-      stack,
-      openListing: (id: string) => setStack((s) => [...s.slice(-4), { type: "listing" as const, id }]),
-      openUser: (id: string) => setStack((s) => [...s.slice(-4), { type: "user" as const, id }]),
-      back: () => setStack((s) => s.slice(0, -1)),
-      close: () => setStack([]),
-    }),
-    [stack],
+  const openListing = useCallback(
+    (id: string) =>
+      setStack((s) => {
+        const top = s[s.length - 1];
+        if (top?.type === "listing" && top.id === id) return s;
+        return [...s.slice(-4), { type: "listing" as const, id }];
+      }),
+    [],
   );
+  const openUser = useCallback(
+    (id: string) =>
+      setStack((s) => {
+        const top = s[s.length - 1];
+        if (top?.type === "user" && top.id === id) return s;
+        return [...s.slice(-4), { type: "user" as const, id }];
+      }),
+    [],
+  );
+  const back = useCallback(() => setStack((s) => s.slice(0, -1)), []);
+  const close = useCallback(() => setStack([]), []);
+  const value = useMemo(() => ({ stack, openListing, openUser, back, close }), [stack, openListing, openUser, back, close]);
   return <SheetContext.Provider value={value}>{children}</SheetContext.Provider>;
 }
 
@@ -280,8 +296,6 @@ export function useListingActions() {
         });
         if (r == null) return false;
         reason = r;
-      } else if (action === "sold" || action === "unfeature") {
-        // No questions.
       } else if (ids.length > 5) {
         const ok = await confirm({ title: `${ids.length} ilan için işlem yapılsın mı?`, confirmLabel: "Devam et" });
         if (!ok) return false;

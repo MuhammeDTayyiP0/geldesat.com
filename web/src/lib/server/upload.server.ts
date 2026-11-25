@@ -90,19 +90,26 @@ export async function saveListingImage(bytes: Uint8Array, userId: string): Promi
 
 /** Remove stored image objects detached from a listing, preserving shared references. */
 export async function deleteUnusedListingImages(sql: Sql, userId: string, urls: string[]): Promise<void> {
-  for (const url of urls) {
-    const match = url.match(/^\/(?:uploads\/([^/]+)|api\/mobile\/images\/([0-9a-f-]{36}))$/i);
-    const storageKey = match?.[1] || match?.[2];
-    if (!storageKey) continue;
-    const rows = await sql.query<{ id: string }>(
-      "select id from mobile_listing_images where user_id=$1 and (storage_key=$2 or id=$2)",
-      [userId, storageKey],
-    );
-    if (!rows[0]) continue;
-    await sql.query(
-      `delete from mobile_listing_images i where i.id=$1 and i.user_id=$2
-        and not exists (select 1 from listings l where l.images @> jsonb_build_array($3::text))`,
-      [rows[0].id, userId, url],
-    );
-  }
+  const keys = [
+    ...new Set(
+      urls
+        .map((url) => {
+          const match = url.match(/^\/(?:uploads\/([^/]+)|api\/mobile\/images\/([0-9a-f-]{36}))$/i);
+          return match?.[1] || match?.[2] || null;
+        })
+        .filter((k): k is string => Boolean(k)),
+    ),
+  ];
+  if (!keys.length) return;
+  await sql.query(
+    `delete from mobile_listing_images i
+     where i.user_id = $1
+       and (i.storage_key = any($2::text[]) or i.id = any($2::text[]))
+       and not exists (
+         select 1 from listings l
+         where l.images @> jsonb_build_array('/uploads/' || i.storage_key)
+            or l.images @> jsonb_build_array('/api/mobile/images/' || i.id)
+       )`,
+    [userId, keys],
+  );
 }

@@ -5,36 +5,55 @@ import { liveSql } from "@/lib/listing-status";
 import { asJson, num } from "@/lib/utils";
 import { adminMiddleware, IST, likeTerm, ts, tsOrNull } from "./common";
 
-const KPI_SQL = `select
-  (select count(*) from listings) as listings_total,
-  (select count(*) from listings where status='ACTIVE' and (expires_at is null or expires_at > now())) as listings_live,
-  (select count(*) from listings where status='PENDING') as listings_pending,
-  (select count(*) from listings where status='ACTIVE' and expires_at <= now()) as listings_expired,
-  (select count(*) from listings where status='REJECTED') as listings_rejected,
-  (select count(*) from listings where created_at >= $1::timestamptz) as listings_today,
-  (select count(*) from listings where created_at > now() - interval '7 days') as listings_7d,
-  (select count(*) from listings where created_at > now() - interval '14 days' and created_at <= now() - interval '7 days') as listings_prev_7d,
-  (select count(*) from profiles) as users_total,
-  (select count(*) from profiles where created_at >= $1::timestamptz) as users_today,
-  (select count(*) from profiles where created_at > now() - interval '7 days') as users_7d,
-  (select count(*) from profiles where created_at > now() - interval '14 days' and created_at <= now() - interval '7 days') as users_prev_7d,
-  (select count(*) from profiles where last_seen_at > now() - interval '1 day') as users_active_24h,
-  (select count(*) from profiles where banned_at is not null) as users_banned,
-  (select count(*) from profiles where deletion_requested_at is not null) as users_closing,
-  (select count(*) from messages where created_at >= $1::timestamptz) as messages_today,
-  (select count(*) from messages where created_at > now() - interval '7 days') as messages_7d,
-  (select count(*) from messages where created_at > now() - interval '14 days' and created_at <= now() - interval '7 days') as messages_prev_7d,
+const KPI_SQL = `with
+  l as (
+    select
+      count(*) as listings_total,
+      count(*) filter (where status='ACTIVE' and (expires_at is null or expires_at > now())) as listings_live,
+      count(*) filter (where status='PENDING') as listings_pending,
+      count(*) filter (where status='ACTIVE' and expires_at <= now()) as listings_expired,
+      count(*) filter (where status='REJECTED') as listings_rejected,
+      count(*) filter (where created_at >= $1::timestamptz) as listings_today,
+      count(*) filter (where created_at > now() - interval '7 days') as listings_7d,
+      count(*) filter (where created_at > now() - interval '14 days' and created_at <= now() - interval '7 days') as listings_prev_7d,
+      coalesce(sum(view_count), 0) as views_total,
+      min(created_at) filter (where status='PENDING') as oldest_pending_at
+    from listings
+  ),
+  p as (
+    select
+      count(*) as users_total,
+      count(*) filter (where created_at >= $1::timestamptz) as users_today,
+      count(*) filter (where created_at > now() - interval '7 days') as users_7d,
+      count(*) filter (where created_at > now() - interval '14 days' and created_at <= now() - interval '7 days') as users_prev_7d,
+      count(*) filter (where last_seen_at > now() - interval '1 day') as users_active_24h,
+      count(*) filter (where banned_at is not null) as users_banned,
+      count(*) filter (where deletion_requested_at is not null) as users_closing
+    from profiles
+  ),
+  m as (
+    select
+      count(*) filter (where created_at >= $1::timestamptz) as messages_today,
+      count(*) filter (where created_at > now() - interval '7 days') as messages_7d,
+      count(*) filter (where created_at > now() - interval '14 days' and created_at <= now() - interval '7 days') as messages_prev_7d
+    from messages
+  ),
+  r as (
+    select
+      count(*) filter (where status='OPEN') as reports_open,
+      count(*) filter (where created_at > now() - interval '7 days') as reports_7d
+    from reports
+  )
+select
+  l.*, p.*, m.*, r.*,
   (select count(*) from conversations where updated_at > now() - interval '7 days') as conversations_7d,
-  (select count(*) from reports where status='OPEN') as reports_open,
-  (select count(*) from reports where created_at > now() - interval '7 days') as reports_7d,
   (select count(*) from credit_orders where status='PENDING') as orders_pending,
   (select count(*) from stores) as stores_total,
   (select count(*) from reviews) as reviews_total,
-  (select coalesce(sum(view_count), 0) from listings) as views_total,
   (select count(*) from phone_reveals where created_at > now() - interval '7 days') as phone_reveals_7d,
   (select count(*) from favorites where created_at > now() - interval '7 days') as favorites_7d,
-  (select count(*) from categories) as categories_total,
-  (select min(created_at) from listings where status='PENDING') as oldest_pending_at`;
+  (select count(*) from categories) as categories_total
+from l cross join p cross join m cross join r`;
 
 /** Start of "today" in Turkish time, as an ISO timestamp. */
 async function todayStart(sql: Awaited<ReturnType<typeof getSql>>): Promise<string> {
@@ -45,10 +64,12 @@ async function todayStart(sql: Awaited<ReturnType<typeof getSql>>): Promise<stri
 }
 
 /** Everything the dashboard shows, in one round trip from the client. */
-export const adminDashboard = createServerFn({ method: "GET" })
+export const adminDashboard = createServerFn({ method: "POST" })
   .middleware([adminMiddleware])
-  .handler(async () => {
+  .validator(z.object({ days: z.union([z.literal(7), z.literal(30), z.literal(90)]).default(30) }).optional())
+  .handler(async ({ data }) => {
     const sql = await getSql();
+    const daysBack = (data?.days ?? 30) - 1;
     const since = await todayStart(sql);
     const kpiRows = await sql.query<Record<string, unknown>>(KPI_SQL, [since]);
     const k = kpiRows[0] ?? {};
@@ -56,18 +77,19 @@ export const adminDashboard = createServerFn({ method: "GET" })
       Object.entries(k).filter(([key]) => key !== "oldest_pending_at").map(([key, v]) => [key, num(v)]),
     ) as Record<string, number>;
 
-    // Daily series for the last 30 days, bucketed in Turkish time.
+    // Daily series for the selected window, bucketed in Turkish time.
     const dayExpr = `to_char((created_at at time zone '${IST}')::date, 'YYYY-MM-DD')`;
-    const start = `(((now() at time zone '${IST}')::date - 29)::timestamp at time zone '${IST}')`;
+    const start = `(((now() at time zone '${IST}')::date - $1::int)::timestamp at time zone '${IST}')`;
     const [days, l, u, m, r] = await Promise.all([
       sql.query<{ day: string }>(
         `select to_char(d, 'YYYY-MM-DD') as day
-         from generate_series((now() at time zone '${IST}')::date - 29, (now() at time zone '${IST}')::date, interval '1 day') d`,
+         from generate_series((now() at time zone '${IST}')::date - $1::int, (now() at time zone '${IST}')::date, interval '1 day') d`,
+        [daysBack],
       ),
-      sql.query<{ day: string; n: number }>(`select ${dayExpr} as day, count(*) as n from listings where created_at >= ${start} group by 1`),
-      sql.query<{ day: string; n: number }>(`select ${dayExpr} as day, count(*) as n from profiles where created_at >= ${start} group by 1`),
-      sql.query<{ day: string; n: number }>(`select ${dayExpr} as day, count(*) as n from messages where created_at >= ${start} group by 1`),
-      sql.query<{ day: string; n: number }>(`select ${dayExpr} as day, count(*) as n from reports where created_at >= ${start} group by 1`),
+      sql.query<{ day: string; n: number }>(`select ${dayExpr} as day, count(*) as n from listings where created_at >= ${start} group by 1`, [daysBack]),
+      sql.query<{ day: string; n: number }>(`select ${dayExpr} as day, count(*) as n from profiles where created_at >= ${start} group by 1`, [daysBack]),
+      sql.query<{ day: string; n: number }>(`select ${dayExpr} as day, count(*) as n from messages where created_at >= ${start} group by 1`, [daysBack]),
+      sql.query<{ day: string; n: number }>(`select ${dayExpr} as day, count(*) as n from reports where created_at >= ${start} group by 1`, [daysBack]),
     ]);
     const toMap = (rows: Array<{ day: string; n: number }>) => new Map(rows.map((x) => [x.day, num(x.n)]));
     const [lm, um, mm, rm] = [toMap(l), toMap(u), toMap(m), toMap(r)];
@@ -167,9 +189,15 @@ export const adminCounters = createServerFn({ method: "GET" })
       `select
          (select count(*) from listings where status='PENDING') as pending,
          (select count(*) from reports where status='OPEN') as reports,
-         (select count(*) from credit_orders where status='PENDING') as orders`,
+         (select count(*) from credit_orders where status='PENDING') as orders,
+         (select count(*) from store_applications where status='PENDING') as store_applications`,
     );
-    return { pending: num(rows[0]?.pending), reports: num(rows[0]?.reports), orders: num(rows[0]?.orders) };
+    return {
+      pending: num(rows[0]?.pending),
+      reports: num(rows[0]?.reports),
+      orders: num(rows[0]?.orders),
+      storeApplications: num(rows[0]?.store_applications),
+    };
   });
 
 export function mapAudit(x: Record<string, unknown>) {

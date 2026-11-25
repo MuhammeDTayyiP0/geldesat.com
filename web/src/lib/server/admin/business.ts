@@ -58,6 +58,19 @@ export const adminListStores = createServerFn({ method: "POST" })
 
 export type AdminStoreRow = Awaited<ReturnType<typeof adminListStores>>["rows"][number];
 
+function isUniqueError(err: unknown): boolean {
+  return typeof err === "object" && err !== null && (err as { code?: string }).code === "23505";
+}
+
+function normalizeStorePhone(raw: string | null): string | null {
+  if (!raw?.trim()) return null;
+  try {
+    return normalizeTrPhone(raw);
+  } catch {
+    return raw.trim();
+  }
+}
+
 /** Stores are opened by the team: create one for a member (by e-mail or id), or edit it. */
 export const adminSaveStore = createServerFn({ method: "POST" })
   .middleware([adminMiddleware])
@@ -79,44 +92,69 @@ export const adminSaveStore = createServerFn({ method: "POST" })
     const slug = slugify(data.slug || data.name);
     if (!slug) throw new Error("Geçerli bir mağaza adresi girin.");
     const phone = data.phone ? normalizeTrPhone(data.phone) : null;
-    const slugTaken = await sql.query<{ id: string }>("select id from stores where lower(slug) = lower($1) and id <> coalesce($2, '')", [slug, data.id ?? null]);
-    if (slugTaken[0]) throw new Error("Bu mağaza adresi kullanılıyor.");
 
     if (data.id) {
-      const cur = (await sql.query<{ name: string; plan: string }>("select name, plan from stores where id = $1", [data.id]))[0];
-      if (!cur) throw new Error("Mağaza bulunamadı.");
-      await sql.query("update stores set name=$2, slug=$3, description=$4, city=$5, phone=$6, plan=$7 where id=$1", [
-        data.id,
-        data.name,
-        slug,
-        data.description || null,
-        data.city || null,
-        phone,
-        data.plan,
-      ]);
+      const cur = await sql.transaction(async (tx) => {
+        const slugTaken = await tx.query<{ id: string }>(
+          "select id from stores where lower(slug) = lower($1) and id <> $2",
+          [slug, data.id],
+        );
+        if (slugTaken[0]) throw new Error("Bu mağaza adresi kullanılıyor.");
+        const existing = (await tx.query<{ name: string; plan: string }>("select name, plan from stores where id = $1 for update", [data.id]))[0];
+        if (!existing) throw new Error("Mağaza bulunamadı.");
+        try {
+          await tx.query("update stores set name=$2, slug=$3, description=$4, city=$5, phone=$6, plan=$7 where id=$1", [
+            data.id,
+            data.name,
+            slug,
+            data.description || null,
+            data.city || null,
+            phone,
+            data.plan,
+          ]);
+        } catch (err) {
+          if (isUniqueError(err)) throw new Error("Bu mağaza adresi kullanılıyor.");
+          throw err;
+        }
+        return existing;
+      });
       await audit(sql, context.adminId, "store.edit", "store", data.id, `Mağaza "${data.name}" düzenlendi${cur.plan !== data.plan ? ` (paket ${cur.plan} → ${data.plan})` : ""}`);
       return { ok: true as const, id: data.id, slug };
     }
 
     const owner = data.owner?.trim();
     if (!owner) throw new Error("Mağaza sahibinin e-postasını veya kullanıcı kimliğini girin.");
-    const found = await sql.query<{ user_id: string; display_name: string }>(
-      `select p.user_id, p.display_name from profiles p left join "user" u on u.id = p.user_id
-       where p.user_id = $1 or lower(u.email) = lower($1) limit 1`,
-      [owner],
-    );
-    const ownerRow = found[0];
-    if (!ownerRow) throw new Error("Bu e-posta veya kimlikle kayıtlı üye bulunamadı.");
-    const has = await sql.query<{ id: string }>("select id from stores where user_id = $1", [ownerRow.user_id]);
-    if (has[0]) throw new Error("Bu üyenin zaten bir mağazası var.");
-    const id = newId("str");
-    await sql.query(
-      "insert into stores (id, user_id, name, slug, description, city, phone, plan) values ($1,$2,$3,$4,$5,$6,$7,$8)",
-      [id, ownerRow.user_id, data.name, slug, data.description || null, data.city || null, phone, data.plan],
-    );
-    if (data.attachListings) {
-      await sql.query("update listings set store_id = $2 where user_id = $1 and store_id is null", [ownerRow.user_id, id]);
-    }
+    const { id, ownerRow } = await sql.transaction(async (tx) => {
+      const slugTaken = await tx.query<{ id: string }>("select id from stores where lower(slug) = lower($1)", [slug]);
+      if (slugTaken[0]) throw new Error("Bu mağaza adresi kullanılıyor.");
+      const found = await tx.query<{ user_id: string; display_name: string; banned_at: unknown; deletion_requested_at: unknown }>(
+        `select p.user_id, p.display_name, p.banned_at, p.deletion_requested_at
+         from profiles p left join "user" u on u.id = p.user_id
+         where p.user_id = $1 or lower(u.email) = lower($1) limit 1`,
+        [owner],
+      );
+      const user = found[0];
+      if (!user) throw new Error("Bu e-posta veya kimlikle kayıtlı üye bulunamadı.");
+      if (user.banned_at || user.deletion_requested_at) {
+        throw new Error("Askıda olan veya silinme sürecindeki üye için mağaza açılamaz.");
+      }
+      const has = await tx.query<{ id: string }>("select id from stores where user_id = $1", [user.user_id]);
+      if (has[0]) throw new Error("Bu üyenin zaten bir mağazası var.");
+      const newStoreId = newId("str");
+      try {
+        await tx.query(
+          "insert into stores (id, user_id, name, slug, description, city, phone, plan) values ($1,$2,$3,$4,$5,$6,$7,$8)",
+          [newStoreId, user.user_id, data.name, slug, data.description || null, data.city || null, phone, data.plan],
+        );
+      } catch (err) {
+        if (isUniqueError(err)) throw new Error("Bu mağaza adresi veya üye mağazası zaten mevcut.");
+        throw err;
+      }
+      if (data.attachListings) {
+        await tx.query("update listings set store_id = $2 where user_id = $1 and store_id is null", [user.user_id, newStoreId]);
+      }
+      return { id: newStoreId, ownerRow: user };
+    });
     await notify(ownerRow.user_id, "system", "Mağazanız açıldı", `"${data.name}" mağazanız GeldeSat'ta yayında.`, `/satici/${ownerRow.user_id}`);
     await audit(sql, context.adminId, "store.create", "store", id, `${ownerRow.display_name} için "${data.name}" mağazası açıldı (${data.plan})`);
     return { ok: true as const, id, slug };
@@ -266,31 +304,46 @@ export const adminResolveStoreApplication = createServerFn({ method: "POST" })
       let storeId: string | null = null;
       let storeSlug: string | null = null;
       if (data.action === "approve") {
+        const applicantProfile = (
+          await tx.query<{ banned_at: unknown; deletion_requested_at: unknown }>(
+            "select banned_at, deletion_requested_at from profiles where user_id = $1",
+            [app.user_id],
+          )
+        )[0];
+        if (!applicantProfile || applicantProfile.banned_at || applicantProfile.deletion_requested_at) {
+          throw new Error("Askıda olan veya silinme sürecindeki üyenin mağaza başvurusu onaylanamaz.");
+        }
         const existing = (
           await tx.query<{ id: string; slug: string }>("select id, slug from stores where user_id = $1 limit 1", [app.user_id])
         )[0];
         if (existing) {
+          await tx.query("update stores set plan = $2 where id = $1", [existing.id, data.plan]);
           storeId = existing.id;
           storeSlug = existing.slug;
         } else {
           const baseSlug = slugify(app.name) || "magaza";
-          let candidate = baseSlug;
-          for (let attempt = 0; attempt < 5; attempt++) {
+          const normalizedPhone = normalizeStorePhone(app.phone);
+          let inserted: { id: string; slug: string }[] = [];
+          for (let attempt = 0; attempt < 6; attempt++) {
+            let candidate = attempt === 0 ? baseSlug : `${baseSlug}-${attempt + 1}`;
+            if (attempt === 5) candidate = `${baseSlug}-${newId().slice(0, 6)}`;
             const taken = await tx.query<{ id: string }>("select id from stores where lower(slug) = lower($1) limit 1", [candidate]);
-            if (!taken[0]) break;
-            candidate = `${baseSlug}-${attempt + 2}`;
+            if (taken[0]) continue;
+            const newStoreId = newId("str");
+            try {
+              inserted = await tx.query<{ id: string; slug: string }>(
+                `insert into stores (id, user_id, name, slug, city, phone, plan)
+                 values ($1, $2, $3, $4, $5, $6, $7)
+                 on conflict (user_id) do nothing
+                 returning id, slug`,
+                [newStoreId, app.user_id, app.name, candidate, app.city || null, normalizedPhone, data.plan],
+              );
+              break;
+            } catch (err) {
+              if (isUniqueError(err) && attempt < 5) continue;
+              throw err;
+            }
           }
-          const stillTaken = await tx.query<{ id: string }>("select id from stores where lower(slug) = lower($1) limit 1", [candidate]);
-          if (stillTaken[0]) candidate = `${baseSlug}-${newId().slice(0, 6)}`;
-
-          const newStoreId = newId("str");
-          const inserted = await tx.query<{ id: string; slug: string }>(
-            `insert into stores (id, user_id, name, slug, city, phone, plan)
-             values ($1, $2, $3, $4, $5, $6, $7)
-             on conflict (user_id) do nothing
-             returning id, slug`,
-            [newStoreId, app.user_id, app.name, candidate, app.city || null, app.phone || null, data.plan],
-          );
           if (inserted[0]) {
             storeId = inserted[0].id;
             storeSlug = inserted[0].slug;
@@ -409,12 +462,24 @@ export const adminListCreditOrders = createServerFn({ method: "POST" })
 
 export const adminResolveCreditOrder = createServerFn({ method: "POST" })
   .middleware([adminMiddleware])
-  .validator(z.object({ id: z.string().max(200), status: z.enum(["PAID", "REJECTED"]) }))
+  .validator(
+    z.object({
+      id: z.string().max(200),
+      status: z.enum(["PAID", "REJECTED"]),
+      reason: z.string().trim().max(200).optional(),
+    }),
+  )
   .handler(async ({ context, data }) => {
     const sql = await getSql();
+    const reason = data.reason?.trim() || undefined;
     // Claiming the order in one conditional update stops a second approval, or
     // the member's cancellation, from racing this one.
     const row = await sql.transaction(async (tx) => {
+      const target = (await tx.query<{ user_id: string }>("select user_id from credit_orders where id = $1 for update", [data.id]))[0];
+      if (!target) throw new Error("Bu talep bulunamadı veya zaten işlendi.");
+      if (target.user_id === context.adminId) {
+        throw new Error("Kendi kredi talebinizi onaylayamaz veya reddedemezsiniz.");
+      }
       const claimed = (await tx.query<{ user_id: string; credits: number; price: number }>(
         "update credit_orders set status = $2, resolved_at = now() where id = $1 and status = 'PENDING' returning user_id, credits, price",
         [data.id, data.status],
@@ -433,9 +498,25 @@ export const adminResolveCreditOrder = createServerFn({ method: "POST" })
     if (data.status === "PAID") {
       await notify(row.user_id, "credit", "Krediniz yüklendi", `${row.credits} doping kredisi hesabınıza eklendi.`, "/doping");
     } else {
-      await notify(row.user_id, "credit", "Kredi talebi reddedildi", "Havaleniz bulunamadı veya talep iptal edildi. Sorularınız için destek ekibimize yazın.", "/doping");
+      await notify(
+        row.user_id,
+        "credit",
+        "Kredi talebi reddedildi",
+        reason
+          ? `Kredi talebiniz reddedildi. Gerekçe: ${reason}`
+          : "Havaleniz bulunamadı veya talep iptal edildi. Sorularınız için destek ekibimize yazın.",
+        "/doping",
+      );
     }
-    await audit(sql, context.adminId, data.status === "PAID" ? "order.paid" : "order.reject", "order", data.id, `${row.credits} kredilik talep (${row.price} TL) ${data.status === "PAID" ? "onaylandı" : "reddedildi"}`);
+    await audit(
+      sql,
+      context.adminId,
+      data.status === "PAID" ? "order.paid" : "order.reject",
+      "order",
+      data.id,
+      `${row.credits} kredilik talep (${row.price} TL) ${data.status === "PAID" ? "onaylandı" : "reddedildi"}${reason ? ` — ${reason}` : ""}`,
+      reason ? { reason } : undefined,
+    );
     return { ok: true as const };
   });
 

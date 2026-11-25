@@ -1,5 +1,6 @@
 import { toast } from "sonner";
 import { useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowDown,
@@ -112,7 +113,10 @@ export function ListingSheetBody({ id, canGoBack }: { id: string; canGoBack: boo
 
       <TabBar
         value={tab}
-        onChange={setTab}
+        onChange={(next) => {
+          setEditing(false);
+          setTab(next);
+        }}
         items={[
           { value: "overview", label: "Genel" },
           { value: "seller", label: "Satıcı" },
@@ -231,7 +235,14 @@ export function ListingSheetBody({ id, canGoBack }: { id: string; canGoBack: boo
                     <Pill tone={r.status === "OPEN" ? "danger" : "muted"}>{r.status === "OPEN" ? "Açık" : "Kapalı"}</Pill>
                     <span className="font-semibold">{r.reason}</span>
                     <span className="ml-auto text-xs text-muted">
-                      {r.reporter_name} · {relative(r.created_at)}
+                      {r.reporter_id ? (
+                        <button type="button" onClick={() => openUser(r.reporter_id!)} className="hover:text-primary hover:underline">
+                          {r.reporter_name}
+                        </button>
+                      ) : (
+                        r.reporter_name
+                      )}{" "}
+                      · {relative(r.created_at)}
                     </span>
                   </div>
                   {r.details ? <p className="mt-1.5 text-muted">“{r.details}”</p> : null}
@@ -259,7 +270,12 @@ export function ListingSheetBody({ id, canGoBack }: { id: string; canGoBack: boo
               </section>
             ) : null}
             <section>
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Yönetici işlemleri</h3>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">Yönetici işlemleri</h3>
+                <Link to="/admin/kayitlar" search={{ targetId: l.id }} onClick={close} className="text-xs font-medium text-primary hover:underline">
+                  Tüm geçmişi gör
+                </Link>
+              </div>
               <AuditList entries={d.log} empty="Bu ilan üzerinde henüz yönetici işlemi yapılmadı." />
             </section>
           </div>
@@ -275,19 +291,21 @@ function ListingActionBar({ detail, onEdit }: { detail: AdminListingDetail; onEd
   const l = detail.listing;
   const ids = [l.id];
   const featured = l.featured_until && new Date(l.featured_until) > new Date();
+  const canExtendOrFeature = l.status === "ACTIVE" || l.status === "INACTIVE";
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface px-5 py-2.5">
       {l.status === "PENDING" || l.status === "REJECTED" || l.status === "INACTIVE" ? (
         <Button
           size="sm"
           className="bg-ok-solid text-white hover:bg-ok-solid/90"
-          disabled={busy}
+          disabled={busy || l.seller_banned}
+          title={l.seller_banned ? "Satıcı askıda olduğu için yayına alınamaz" : undefined}
           onClick={() => void act(ids, l.status === "PENDING" ? "approve" : "activate", l.title)}
         >
           <Check className="size-4" /> {l.status === "PENDING" ? "Onayla" : "Yayına al"}
         </Button>
       ) : null}
-      {l.status !== "REJECTED" ? (
+      {l.status === "PENDING" || l.status === "ACTIVE" || l.status === "INACTIVE" ? (
         <Button size="sm" variant="outline" className="text-danger" disabled={busy} onClick={() => void act(ids, "reject", l.title)}>
           <X className="size-4" /> Reddet
         </Button>
@@ -297,9 +315,11 @@ function ListingActionBar({ detail, onEdit }: { detail: AdminListingDetail; onEd
           <Ban className="size-4" /> Yayından kaldır
         </Button>
       ) : null}
-      <Button size="sm" variant="outline" disabled={busy} onClick={() => void act(ids, "extend", l.title)}>
-        <CalendarPlus className="size-4" /> Süre uzat
-      </Button>
+      {canExtendOrFeature ? (
+        <Button size="sm" variant="outline" disabled={busy} onClick={() => void act(ids, "extend", l.title)}>
+          <CalendarPlus className="size-4" /> Süre uzat
+        </Button>
+      ) : null}
       <a href={`/ilan/${l.slug}`} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-sm font-medium text-muted hover:bg-elevated hover:text-fg">
         <ExternalLink className="size-4" /> Sitede gör
       </a>
@@ -315,21 +335,16 @@ function ListingActionBar({ detail, onEdit }: { detail: AdminListingDetail; onEd
             <MenuItem icon={Undo2} onSelect={() => void act(ids, "unfeature", l.title)}>
               Vitrinden çıkar
             </MenuItem>
-          ) : (
+          ) : canExtendOrFeature ? (
             <MenuItem icon={Sparkles} onSelect={() => void act(ids, "feature", l.title)}>
               Vitrine al
             </MenuItem>
-          )}
-          {l.status !== "SOLD" ? (
+          ) : null}
+          {canExtendOrFeature ? (
             <MenuItem icon={Tag} onSelect={() => void act(ids, "sold", l.title)}>
               Satıldı olarak işaretle
             </MenuItem>
           ) : null}
-          {l.status === "ACTIVE" ? null : (
-            <MenuItem icon={Eye} onSelect={() => void act(ids, "activate", l.title)}>
-              Doğrudan yayına al
-            </MenuItem>
-          )}
           <MenuSeparator />
           <MenuItem
             icon={Trash2}

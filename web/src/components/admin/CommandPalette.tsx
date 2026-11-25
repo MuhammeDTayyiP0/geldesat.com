@@ -65,7 +65,22 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
               {search.isFetching ? <Spinner className="text-subtle" /> : <Kbd>Esc</Kbd>}
             </div>
             <Command.List className="max-h-[60vh] overflow-y-auto p-2">
-              <Command.Empty className="px-3 py-8 text-center text-sm text-muted">{term.length >= 2 && !search.isFetching ? "Sonuç bulunamadı." : "Aramak için yazın."}</Command.Empty>
+              {search.isError ? (
+                <div className="px-3 py-6 text-center text-sm text-danger">
+                  Arama başarısız oldu.{" "}
+                  <button type="button" onClick={() => void search.refetch()} className="font-semibold underline">
+                    Tekrar dene
+                  </button>
+                </div>
+              ) : (
+                <Command.Empty className="px-3 py-8 text-center text-sm text-muted">
+                  {q.trim().length >= 2 && (search.isFetching || term !== q.trim())
+                    ? "Aranıyor…"
+                    : term.length >= 2
+                      ? "Sonuç bulunamadı."
+                      : "Aramak için yazın."}
+                </Command.Empty>
+              )}
               {pages.length ? (
                 <Command.Group heading="Sayfalar" className={GROUP}>
                   {pages.map((p) => (

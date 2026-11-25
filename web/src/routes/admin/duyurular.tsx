@@ -26,7 +26,9 @@ function BroadcastPage() {
   const { run, busy } = useRunner();
   const { confirm } = useConfirm();
   const target = sizes.data?.[audience];
-  const valid = title.trim().length >= 2 && body.trim().length >= 2 && (!link || link.startsWith("/"));
+  const trimmedLink = link.trim();
+  const linkInvalid = Boolean(trimmedLink && (!trimmedLink.startsWith("/") || trimmedLink.startsWith("//")));
+  const valid = title.trim().length >= 2 && body.trim().length >= 2 && !linkInvalid;
 
   async function send() {
     const ok = await confirm({
@@ -42,7 +44,7 @@ function BroadcastPage() {
     });
     if (!ok) return;
     const r = await run(
-      () => adminBroadcast({ data: { audience, title: title.trim(), body: body.trim(), link: link || undefined, push } }),
+      () => adminBroadcast({ data: { audience, title: title.trim(), body: body.trim(), link: trimmedLink || undefined, push } }),
       (res) => `${n(res.recipients)} üyeye gönderildi${push ? `, ${n(res.pushed)} cihaza gönderiliyor` : ""}.`,
     );
     if (r) {
@@ -95,7 +97,7 @@ function BroadcastPage() {
             <Field label="Mesaj" hint={`${body.length}/1000`}>
               <textarea value={body} onChange={(e) => setBody(e.target.value)} maxLength={1000} rows={5} className={textareaClass} />
             </Field>
-            <Field label="Bağlantı (isteğe bağlı)" hint="Bildirime tıklayınca açılacak site içi sayfa, ör. /ilan-ver" error={link && !link.startsWith("/") ? "Bağlantı / ile başlamalı." : null}>
+            <Field label="Bağlantı (isteğe bağlı)" hint="Bildirime tıklayınca açılacak site içi sayfa, ör. /ilan-ver" error={linkInvalid ? "Bağlantı / ile başlamalı ve // içermemelidir." : null}>
               <input value={link} onChange={(e) => setLink(e.target.value)} className={inputClass} placeholder="/ilan-ver" />
             </Field>
             <label className="flex items-start gap-2.5 rounded-xl border border-border p-3 text-sm">
@@ -106,7 +108,7 @@ function BroadcastPage() {
               </span>
             </label>
             <div className="flex justify-end">
-              <Button disabled={!valid || busy || !target} onClick={() => void send()}>
+              <Button disabled={!valid || busy || !target || target.count === 0} onClick={() => void send()}>
                 {busy ? <Spinner /> : <Send className="size-4" />} {target ? `${n(target.count)} üyeye gönder` : "Gönder"}
               </Button>
             </div>
@@ -153,12 +155,17 @@ function BroadcastPage() {
               <ul className="divide-y divide-border">
                 {history.data.rows.map((h) => {
                   const meta = parseMeta(h.meta);
+                  const audienceKey = typeof meta.audience === "string" ? meta.audience : null;
+                  const audienceLabel = audienceKey ? sizes.data?.[audienceKey as Audience]?.label ?? audienceKey : null;
+                  const metaLink = typeof meta.link === "string" ? meta.link : null;
                   return (
                     <li key={h.id} className="px-4 py-3">
                       <p className="text-sm font-medium">{String(meta.title ?? h.summary)}</p>
                       {meta.body ? <p className="mt-0.5 line-clamp-2 text-xs text-muted">{String(meta.body)}</p> : null}
                       <p className="mt-0.5 text-xs text-muted" title={dateTime(h.created_at)}>
-                        {n(Number(meta.recipients ?? 0))} üye{Number(meta.pushed ?? 0) ? ` · ${n(Number(meta.pushed))} cihaz` : ""} · {h.admin_name} · {relative(h.created_at)}
+                        {audienceLabel ? `${audienceLabel} · ` : ""}
+                        {n(Number(meta.recipients ?? 0))} üye{Number(meta.pushed ?? 0) ? ` · ${n(Number(meta.pushed))} cihaz` : ""}
+                        {metaLink ? ` · ${metaLink}` : ""} · {h.admin_name} · {relative(h.created_at)}
                       </p>
                     </li>
                   );

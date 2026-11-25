@@ -19,7 +19,7 @@ export function AuditList({ entries, empty, compact }: { entries: AuditEntry[]; 
     <ol className="relative space-y-0">
       {entries.map((e, i) => (
         <li key={e.id} className="relative flex gap-3 pb-4 pl-1">
-          {i < entries.length - 1 ? <span className="absolute left-[7px] top-4 h-full w-px bg-border" aria-hidden /> : null}
+          {i < entries.length - 1 ? <span className="absolute left-[9px] top-4 h-full w-px bg-border" aria-hidden /> : null}
           <span className={cn("relative mt-1.5 size-2.5 shrink-0 rounded-full ring-4 ring-surface", DOT[actionTone(e.action)])} />
           <div className="min-w-0 flex-1">
             <p className={cn("break-words text-fg", compact ? "text-xs" : "text-sm")}>{e.summary}</p>

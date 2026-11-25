@@ -34,12 +34,21 @@ function ReviewsPage() {
     void navigate({ search: (prev) => ({ ...prev, ...(resetPage ? { page: undefined } : {}), ...patch }), replace: true });
   const filter = { q: search.q, rating: search.rating ?? 0, page: search.page ?? 1, pageSize: 25 };
   const query = useQuery({ queryKey: ["admin", "reviews", filter], queryFn: () => adminListReviews({ data: filter }), placeholderData: keepPreviousData });
-  const { openUser } = useSheets();
+  const { openUser, openListing } = useSheets();
   const { run } = useRunner();
   const { prompt } = useConfirm();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  useEffect(() => setSelected(new Set()), [filter.q, filter.rating, filter.page]);
+  useEffect(() => {
+    setSelected(new Set());
+    setExpanded(new Set());
+  }, [filter.q, filter.rating, filter.page]);
+  const lastPage = query.data?.pages;
+  useEffect(() => {
+    if (lastPage && filter.page > lastPage) {
+      void navigate({ search: (prev) => ({ ...prev, page: lastPage > 1 ? lastPage : undefined }), replace: true });
+    }
+  }, [lastPage, filter.page, navigate]);
   const rows = query.data?.rows ?? [];
   const dist = query.data?.distribution ?? {};
   const total = Object.values(dist).reduce((a, b) => a + b, 0);
@@ -109,7 +118,7 @@ function ReviewsPage() {
         ) : !rows.length ? (
           <EmptyState icon={Star} title="Değerlendirme bulunamadı" />
         ) : (
-          <Table>
+          <Table className={query.isFetching ? "opacity-70 transition-opacity" : undefined}>
             <thead>
               <tr>
                 <Th className="w-10">
@@ -177,17 +186,36 @@ function ReviewsPage() {
                     ) : (
                       <p className="text-sm text-subtle">Yorum yazılmamış</p>
                     )}
-                    {r.listing_title ? <p className="truncate text-[11px] text-muted">İlan #{r.listing_no}: {r.listing_title}</p> : null}
+                    {r.listing_title ? (
+                      r.listing_id ? (
+                        <button type="button" onClick={() => openListing(r.listing_id!)} className="block max-w-full truncate text-[11px] text-muted hover:text-primary hover:underline">
+                          İlan #{r.listing_no}: {r.listing_title}
+                        </button>
+                      ) : (
+                        <p className="truncate text-[11px] text-muted">
+                          {r.listing_no != null ? `İlan #${r.listing_no}: ` : ""}
+                          {r.listing_title}
+                        </p>
+                      )
+                    ) : null}
                   </Td>
                   <Td>
-                    <button type="button" onClick={() => openUser(r.seller_id)} className="text-sm font-medium hover:text-primary hover:underline">
-                      {r.seller_name}
-                    </button>
+                    {r.seller_deleted ? (
+                      <span className="text-sm text-subtle">{r.seller_name}</span>
+                    ) : (
+                      <button type="button" onClick={() => openUser(r.seller_id)} className="text-sm font-medium hover:text-primary hover:underline">
+                        {r.seller_name}
+                      </button>
+                    )}
                   </Td>
                   <Td>
-                    <button type="button" onClick={() => openUser(r.reviewer_id)} className="text-sm text-muted hover:text-primary hover:underline">
-                      {r.reviewer_name}
-                    </button>
+                    {r.reviewer_deleted ? (
+                      <span className="text-sm text-subtle">{r.reviewer_name}</span>
+                    ) : (
+                      <button type="button" onClick={() => openUser(r.reviewer_id)} className="text-sm text-muted hover:text-primary hover:underline">
+                        {r.reviewer_name}
+                      </button>
+                    )}
                   </Td>
                   <Td className="whitespace-nowrap text-xs text-muted" >
                     <span title={dateTime(r.created_at)}>{relative(r.created_at)}</span>
@@ -202,7 +230,7 @@ function ReviewsPage() {
             </tbody>
           </Table>
         )}
-        {query.data && query.data.total > query.data.pageSize ? (
+        {query.data && (query.data.total > query.data.pageSize || filter.page > 1) ? (
           <Pagination page={query.data.page} pages={query.data.pages} total={query.data.total} pageSize={query.data.pageSize} onPage={(page) => set({ page }, false)} />
         ) : null}
       </Card>

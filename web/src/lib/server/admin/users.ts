@@ -4,7 +4,7 @@ import { safeRedirect } from "@/lib/auth/sign-in-gate";
 import { liveSql } from "@/lib/listing-status";
 import { getSql } from "@/lib/db";
 import { newId, num } from "@/lib/utils";
-import { creditBalance, isBootstrapAdmin, normalizeTrPhone, notify, rateLimit } from "../helpers";
+import { bootstrapAdminEmails, creditBalance, isBootstrapAdmin, normalizeTrPhone, notify, rateLimit } from "../helpers";
 import { purgeUserData } from "../account-purge";
 import { disconnectUserStreams } from "../chat-bus";
 import { adminMiddleware, audit, likeTerm, paged, paging, PageInput, strOrNull, ts, tsOrNull, Where } from "./common";
@@ -126,7 +126,7 @@ export const adminUserDetail = createServerFn({ method: "POST" })
     );
     const x = rows[0];
     if (!x) throw new Error("Kullanıcı bulunamadı.");
-    const [stats, sessions, listings, reviews, reportsAgainst, store, log, credits] = await Promise.all([
+    const [stats, sessions, listings, reviews, reportsAgainst, store, log, credits, creditLedger] = await Promise.all([
       sql.query<Record<string, unknown>>(
         `select
            (select count(*) from listings where user_id = $1 and status = 'PENDING') as pending,
@@ -155,13 +155,13 @@ export const adminUserDetail = createServerFn({ method: "POST" })
         [data.userId],
       ),
       sql.query<Record<string, unknown>>(
-        `select r.id, r.rating, r.comment, r.created_at, coalesce(p.display_name, 'Silinmiş kullanıcı') as reviewer_name
+        `select r.id, r.reviewer_id, r.rating, r.comment, r.created_at, coalesce(p.display_name, 'Silinmiş kullanıcı') as reviewer_name
          from reviews r left join profiles p on p.user_id = r.reviewer_id
          where r.seller_id = $1 order by r.created_at desc limit 8`,
         [data.userId],
       ),
       sql.query<Record<string, unknown>>(
-        `select r.id, r.reason, r.status, r.created_at, coalesce(l.title, r.listing_snapshot->>'title', 'Mesajlaşma') as title
+        `select r.id, r.listing_id, r.reason, r.status, r.created_at, coalesce(l.title, r.listing_snapshot->>'title', 'Mesajlaşma') as title
          from reports r
          left join listings l on l.id = r.listing_id
          left join conversations cv on cv.id = r.conversation_id
@@ -179,6 +179,10 @@ export const adminUserDetail = createServerFn({ method: "POST" })
         [data.userId],
       ),
       creditBalance(data.userId),
+      sql.query<Record<string, unknown>>(
+        "select id, amount, reason, created_at from credit_ledger where user_id = $1 order by created_at desc limit 15",
+        [data.userId],
+      ),
     ]);
     const s = stats[0] ?? {};
     return {
@@ -192,6 +196,12 @@ export const adminUserDetail = createServerFn({ method: "POST" })
       },
       stats: Object.fromEntries(Object.entries(s).map(([k, v]) => [k, num(v)])) as Record<string, number>,
       credits,
+      creditLedger: creditLedger.map((r) => ({
+        id: String(r.id),
+        amount: num(r.amount),
+        reason: String(r.reason),
+        created_at: ts(r.created_at),
+      })),
       sessions: sessions.map((r) => ({
         id: String(r.id),
         created_at: ts(r.created_at),
@@ -213,6 +223,7 @@ export const adminUserDetail = createServerFn({ method: "POST" })
       })),
       reviews: reviews.map((r) => ({
         id: String(r.id),
+        reviewer_id: strOrNull(r.reviewer_id),
         rating: num(r.rating),
         comment: strOrNull(r.comment),
         reviewer_name: String(r.reviewer_name),
@@ -220,6 +231,7 @@ export const adminUserDetail = createServerFn({ method: "POST" })
       })),
       reportsAgainst: reportsAgainst.map((r) => ({
         id: String(r.id),
+        listing_id: strOrNull(r.listing_id),
         reason: String(r.reason),
         status: String(r.status),
         title: String(r.title ?? ""),
@@ -283,11 +295,16 @@ export const adminSetUserRole = createServerFn({ method: "POST" })
       throw new Error("Bu hesap ADMIN_EMAILS listesinde olduğu için yetkisi geri gelir. Önce listeden çıkarın.");
     }
     await sql.transaction(async (tx) => {
-      // Locks the admin rows, so two admins demoting each other cannot leave nobody.
-      const others = await tx.query<{ user_id: string }>(
-        "select user_id from profiles where role = 'ADMIN' and banned_at is null and user_id <> $1 for update",
-        [data.userId],
+      // Lock active admin rows in deterministic order to avoid deadlocks when demoting peers.
+      const activeAdmins = await tx.query<{ user_id: string }>(
+        "select user_id from profiles where role = 'ADMIN' and banned_at is null order by user_id for update",
       );
+      const lockedTarget = (
+        await tx.query<{ banned_at: unknown }>("select banned_at from profiles where user_id = $1 for update", [data.userId])
+      )[0];
+      if (!lockedTarget) throw new Error("Kullanıcı bulunamadı.");
+      if (lockedTarget.banned_at && data.role === "ADMIN") throw new Error("Askıdaki bir hesap yönetici yapılamaz.");
+      const others = activeAdmins.filter((row) => row.user_id !== data.userId);
       if (data.role === "USER" && !others.length) throw new Error("Son yöneticinin yetkisi kaldırılamaz.");
       await tx.query("update profiles set role = $2 where user_id = $1", [data.userId, data.role]);
     });
@@ -308,6 +325,9 @@ export const adminBanUser = createServerFn({ method: "POST" })
     const t = await targetProfile(sql, data.userId);
     if (t.role === "ADMIN") throw new Error("Yönetici hesabı askıya alınamaz. Önce rolünü üyeye çevirin.");
     const hidden = await sql.transaction(async (tx) => {
+      const cur = (await tx.query<{ role: string }>("select role from profiles where user_id = $1 for update", [data.userId]))[0];
+      if (!cur) throw new Error("Kullanıcı bulunamadı.");
+      if (cur.role === "ADMIN") throw new Error("Yönetici hesabı askıya alınamaz. Önce rolünü üyeye çevirin.");
       await tx.query("update profiles set banned_at = coalesce(banned_at, now()), ban_reason = $2 where user_id = $1", [data.userId, data.reason]);
       const rows = await tx.query<{ id: string }>(
         `update listings set status_before_ban = status, status = 'INACTIVE', updated_at = now()
@@ -330,10 +350,20 @@ export const adminUnbanUser = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     const t = await targetProfile(sql, data.userId);
+    if (!t.banned_at) throw new Error("Bu hesap zaten askıda değil.");
     const restored = await sql.transaction(async (tx) => {
+      const cur = (
+        await tx.query<{ banned_at: unknown; deletion_requested_at: unknown }>(
+          "select banned_at, deletion_requested_at from profiles where user_id = $1 for update",
+          [data.userId],
+        )
+      )[0];
+      if (!cur?.banned_at) throw new Error("Bu hesap zaten askıda değil.");
       await tx.query("update profiles set banned_at = null, ban_reason = null where user_id = $1", [data.userId]);
-      if (!data.restoreListings) {
-        await tx.query("update listings set status_before_ban = null where user_id = $1", [data.userId]);
+      if (!data.restoreListings || cur.deletion_requested_at) {
+        if (!data.restoreListings) {
+          await tx.query("update listings set status_before_ban = null where user_id = $1", [data.userId]);
+        }
         return 0;
       }
       const rows = await tx.query<{ id: string }>(
@@ -353,9 +383,13 @@ export const adminRevokeSessions = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     const t = await targetProfile(sql, data.userId);
+    if (t.role === "ADMIN" && data.userId !== context.adminId) {
+      throw new Error("Başka bir yönetici hesabı üzerinde bu işlem yapılamaz.");
+    }
     const rows = data.sessionId
       ? await sql.query<{ id: string }>('delete from "session" where "userId" = $1 and id = $2 returning id', [data.userId, data.sessionId])
       : await sql.query<{ id: string }>('delete from "session" where "userId" = $1 returning id', [data.userId]);
+    if (!data.sessionId) disconnectUserStreams(data.userId);
     await audit(sql, context.adminId, "user.sessions", "user", data.userId, `${t.display_name}: ${rows.length} oturum kapatıldı`);
     return { ok: true as const, count: rows.length };
   });
@@ -400,6 +434,9 @@ export const adminUpdateUser = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     const t = await targetProfile(sql, data.userId);
+    if (t.role === "ADMIN" && data.userId !== context.adminId) {
+      throw new Error("Başka bir yönetici hesabı üzerinde bu işlem yapılamaz.");
+    }
     const phone = data.phone ? normalizeTrPhone(data.phone) : null;
     const before = (await sql.query<Record<string, string | null>>("select display_name, phone, city, district, bio from profiles where user_id = $1", [data.userId]))[0];
     if (phone) {
@@ -423,6 +460,11 @@ export const adminVerifyEmail = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     const t = await targetProfile(sql, data.userId);
+    const uRow = (await sql.query<{ email: string | null }>('select email from "user" where id = $1 limit 1', [data.userId]))[0];
+    const email = uRow?.email?.trim().toLowerCase();
+    if (email && bootstrapAdminEmails().has(email)) {
+      throw new Error("ADMIN_EMAILS listesindeki hesapların e-postası buradan doğrulanamaz.");
+    }
     await sql.query('update "user" set "emailVerified" = true, "updatedAt" = now() where id = $1', [data.userId]);
     await audit(sql, context.adminId, "user.verify", "user", data.userId, `${t.display_name}: e-posta doğrulandı olarak işaretlendi`);
     return { ok: true as const };
@@ -436,7 +478,8 @@ export const adminDeleteUser = createServerFn({ method: "POST" })
     const sql = await getSql();
     const t = await targetProfile(sql, data.userId);
     if (t.role === "ADMIN") throw new Error("Yönetici hesabı silinemez. Önce rolünü üyeye çevirin.");
-    await purgeUserData(sql, data.userId, { deleteListings: data.deleteListings });
+    await purgeUserData(sql, data.userId, { deleteListings: data.deleteListings, forbidAdmin: true });
+    disconnectUserStreams(data.userId);
     await audit(sql, context.adminId, "user.delete", "user", data.userId, `${t.display_name} hesabı kalıcı olarak silindi`, {
       deleteListings: data.deleteListings,
     });

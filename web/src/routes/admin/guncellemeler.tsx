@@ -1,7 +1,10 @@
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, ChevronDown, ChevronUp, History, Pause, Percent, Play, Rocket, Smartphone, Undo2 } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronUp, History, Pause, Percent, Play, RefreshCw, Rocket, Smartphone, Undo2 } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { adminListOtaUpdates, adminRepublishOta, adminRollbackOtaToEmbedded, adminSetOtaRollout, type AdminOtaUpdate } from "@/lib/server/admin/ota";
 import { useRunner } from "@/components/admin/hooks";
 import { bytes, dateTime, relative } from "@/components/admin/format";
@@ -15,19 +18,22 @@ const PLATFORM_LABEL = { ios: "iOS", android: "Android" } as const;
 
 function OtaPage() {
   const q = useQuery({ queryKey: ["admin", "ota"], queryFn: () => adminListOtaUpdates() });
-  const { run } = useRunner();
+  const { run, busy } = useRunner();
   const { confirm, prompt } = useConfirm();
   const [platformFilter, setPlatformFilter] = useState<"all" | "ios" | "android">("all");
   const [fatalOnly, setFatalOnly] = useState(false);
   const [errorQuery, setErrorQuery] = useState("");
+  const [selectedUpdateFilter, setSelectedUpdateFilter] = useState<{ label: string; ids: string[] } | null>(null);
   const [expandedErrors, setExpandedErrors] = useState<Set<string>>(new Set());
 
   const filteredErrors = useMemo(() => {
     const errors = q.data?.recentErrors ?? [];
     const needle = errorQuery.trim().toLocaleLowerCase("tr");
+    const allowedIds = selectedUpdateFilter ? new Set(selectedUpdateFilter.ids.map((id) => id.toLowerCase())) : null;
     return errors.filter((e) => {
       if (platformFilter !== "all" && e.platform !== platformFilter) return false;
       if (fatalOnly && !e.fatal) return false;
+      if (allowedIds && (!e.updateId || !allowedIds.has(e.updateId.toLowerCase()))) return false;
       if (needle) {
         const hay = [e.message, e.stack, e.screen, e.deviceId, e.updateId, e.appVersion]
           .filter(Boolean)
@@ -37,7 +43,7 @@ function OtaPage() {
       }
       return true;
     });
-  }, [q.data?.recentErrors, platformFilter, fatalOnly, errorQuery]);
+  }, [q.data?.recentErrors, platformFilter, fatalOnly, selectedUpdateFilter, errorQuery]);
 
   function toggleErrorStack(id: string) {
     setExpandedErrors((prev) => {
@@ -83,8 +89,12 @@ function OtaPage() {
       multiline: false,
     });
     if (value == null) return;
-    const rollout = Math.round(Number(value.replace("%", "")));
-    if (!Number.isFinite(rollout) || rollout < 0 || rollout > 100) return;
+    const raw = value.replace(/%/g, "").trim();
+    const rollout = raw && /^\d+$/.test(raw) ? Number(raw) : Number.NaN;
+    if (!Number.isFinite(rollout) || rollout < 0 || rollout > 100) {
+      toast.error("0 ile 100 arasında bir tam sayı girin.");
+      return;
+    }
     await run(() => adminSetOtaRollout({ data: { groupId: u.groupId, rollout } }), `Yayılım %${rollout} yapıldı.`);
   }
 
@@ -122,6 +132,11 @@ function OtaPage() {
         icon={Rocket}
         title="Uygulama güncellemeleri"
         description="Mağaza onayı beklemeden yayınlanan mobil uygulama güncellemeleri (OTA). Telefonlar yeni kodu açılışta indirir, bir sonraki açılışta kullanır."
+        actions={
+          <Button size="sm" variant="outline" onClick={() => void q.refetch()} disabled={q.isFetching}>
+            <RefreshCw className={cn("size-4", q.isFetching && "animate-spin")} /> Yenile
+          </Button>
+        }
       />
 
       {q.data && !q.data.publishingEnabled ? (
@@ -205,41 +220,48 @@ function OtaPage() {
                     {u.kind === "rollback" ? (
                       <span className="text-muted">—</span>
                     ) : u.errors ? (
-                      <span className="font-medium text-danger">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setSelectedUpdateFilter({
+                            label: u.message || u.groupId,
+                            ids: u.updateIds,
+                          })
+                        }
+                        className="font-medium text-danger hover:underline"
+                      >
                         {u.errors} hata · {u.errorDevices} cihaz
-                      </span>
+                      </button>
                     ) : (
                       <span className="text-muted">Yok</span>
                     )}
                   </Td>
                   <Td>
-                    <Menu>
-                      {u.kind === "update" ? (
-                        <>
-                          <MenuLabel>Yayılım</MenuLabel>
-                          <MenuItem icon={Percent} onSelect={() => void setRollout(u)}>
-                            Yüzdeyi değiştir
+                    {u.kind === "update" ? (
+                      <Menu>
+                        <MenuLabel>Yayılım</MenuLabel>
+                        <MenuItem icon={Percent} disabled={busy} onSelect={() => void setRollout(u)}>
+                          Yüzdeyi değiştir
+                        </MenuItem>
+                        {u.rollout < 100 ? (
+                          <MenuItem icon={Play} disabled={busy} onSelect={() => void openToAll(u)}>
+                            Herkese aç (%100)
                           </MenuItem>
-                          {u.rollout < 100 ? (
-                            <MenuItem icon={Play} onSelect={() => void openToAll(u)}>
-                              Herkese aç (%100)
-                            </MenuItem>
-                          ) : null}
-                          {u.rollout > 0 ? (
-                            <MenuItem icon={Pause} onSelect={() => void pause(u)}>
-                              Durdur
-                            </MenuItem>
-                          ) : null}
-                          <MenuSeparator />
-                          <MenuItem icon={History} onSelect={() => void republish(u)}>
-                            Bu sürüme geri dön
+                        ) : null}
+                        {u.rollout > 0 ? (
+                          <MenuItem icon={Pause} disabled={busy} onSelect={() => void pause(u)}>
+                            Durdur
                           </MenuItem>
-                        </>
-                      ) : null}
-                      <MenuItem icon={Undo2} danger onSelect={() => void toEmbedded(u)}>
-                        Herkesi mağaza sürümüne döndür
-                      </MenuItem>
-                    </Menu>
+                        ) : null}
+                        <MenuSeparator />
+                        <MenuItem icon={History} disabled={busy} onSelect={() => void republish(u)}>
+                          Bu sürüme geri dön
+                        </MenuItem>
+                        <MenuItem icon={Undo2} danger disabled={busy} onSelect={() => void toEmbedded(u)}>
+                          Herkesi mağaza sürümüne döndür
+                        </MenuItem>
+                      </Menu>
+                    ) : null}
                   </Td>
                 </tr>
               ))}
@@ -282,6 +304,16 @@ function OtaPage() {
               />
             </div>
           ) : null}
+          {selectedUpdateFilter ? (
+            <div className="flex items-center gap-2 border-b border-border bg-elevated/30 px-4 py-2 text-xs text-muted">
+              <span>
+                Güncelleme hatası filtrelendi: <strong className="text-fg">{selectedUpdateFilter.label}</strong>
+              </span>
+              <button type="button" onClick={() => setSelectedUpdateFilter(null)} className="font-semibold text-primary hover:underline">
+                Temizle
+              </button>
+            </div>
+          ) : null}
           {!q.data.recentErrors.length ? (
             <EmptyState icon={Smartphone} title="Hata raporu yok" />
           ) : !filteredErrors.length ? (
@@ -294,7 +326,7 @@ function OtaPage() {
                   <li key={e.id} className="px-4 py-2.5">
                     <div className="flex flex-wrap items-start gap-1.5">
                       {e.fatal ? <Pill tone="danger">Çökme</Pill> : <Pill>Hata</Pill>}
-                      <span className="min-w-0 flex-1 break-all text-sm">{e.message}</span>
+                      <span className="min-w-0 flex-1 break-words text-sm">{e.message}</span>
                       {e.stack ? (
                         <button
                           type="button"

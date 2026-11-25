@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowDown, ArrowUp, Building2, ChevronRight, Landmark, LayoutTemplate, ListChecks, Plus, Save, Settings2, Smartphone, ToggleLeft, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ToggleSwitch } from "@/components/ui/toggle-switch";
 import { cn } from "@/lib/utils";
@@ -15,8 +16,33 @@ export const Route = createFileRoute("/admin/ayarlar")({
   component: SettingsPage,
 });
 
+function compareSemver(a: string, b: string): number {
+  const pa = a.split(".").map(Number);
+  const pb = b.split(".").map(Number);
+  for (let i = 0; i < 3; i++) {
+    const diff = (pa[i] || 0) - (pb[i] || 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+}
+
 function SettingsPage() {
   const q = useQuery({ queryKey: ["admin", "settings"], queryFn: () => adminGetSettings() });
+  const [dirtyMap, setDirtyMap] = useState<Record<string, boolean>>({});
+  const setCardDirty = useCallback((key: string, dirty: boolean) => {
+    setDirtyMap((prev) => (Boolean(prev[key]) === dirty ? prev : { ...prev, [key]: dirty }));
+  }, []);
+  const anyDirty = Object.values(dirtyMap).some(Boolean);
+  useEffect(() => {
+    if (!anyDirty) return;
+    const onUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onUnload);
+    return () => window.removeEventListener("beforeunload", onUnload);
+  }, [anyDirty]);
+
   if (q.error && !q.data) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;
   if (!q.data) {
     return (
@@ -30,11 +56,11 @@ function SettingsPage() {
     <div className="mx-auto max-w-[1100px]">
       <PageHeader icon={Settings2} title="Ayarlar" description="Site bilgileri, ilan onay politikası, özellik anahtarları ve mobil uygulama ayarları. Her değişiklik işlem kaydına yazılır." />
       <div className="space-y-4">
-        <ModerationCard key={d.moderation.mode} mode={d.moderation.mode} />
-        <SiteCard key={JSON.stringify(d.site)} site={d.site} />
-        <FeaturesCard key={JSON.stringify(d.features)} features={d.features} />
-        <HomeSectionsCard key={d.homeSections.join(",")} sections={d.homeSections} />
-        <MobileCard key={JSON.stringify(d.mobileApp)} config={d.mobileApp} />
+        <ModerationCard key={d.moderation.mode} mode={d.moderation.mode} onDirty={(v) => setCardDirty("moderation", v)} />
+        <SiteCard key={JSON.stringify(d.site)} site={d.site} onDirty={(v) => setCardDirty("site", v)} />
+        <FeaturesCard key={JSON.stringify(d.features)} features={d.features} onDirty={(v) => setCardDirty("features", v)} />
+        <HomeSectionsCard key={d.homeSections.join(",")} sections={d.homeSections} onDirty={(v) => setCardDirty("home", v)} />
+        <MobileCard key={JSON.stringify(d.mobileApp)} config={d.mobileApp} onDirty={(v) => setCardDirty("mobile", v)} />
       </div>
     </div>
   );
@@ -46,10 +72,12 @@ const MODES: Array<{ value: ModerationMode; title: string; body: string }> = [
   { value: "none", title: "Onaysız yayın", body: "İlanlar ve düzenlemeler doğrudan yayına girer; yalnızca şikayetle müdahale edilir." },
 ];
 
-function ModerationCard({ mode }: { mode: ModerationMode }) {
+function ModerationCard({ mode, onDirty }: { mode: ModerationMode; onDirty: (d: boolean) => void }) {
   const [value, setValue] = useState(mode);
   const { run, busy } = useRunner();
   const { confirm } = useConfirm();
+  const dirty = value !== mode;
+  useEffect(() => onDirty(dirty), [dirty, onDirty]);
   return (
     <Card>
       <CardHead title={<span className="inline-flex items-center gap-2"><ListChecks className="size-4 text-primary" /> İlan onay politikası</span>} description="Yeni ve düzenlenen ilanların yayına nasıl gireceği. Yöneticilerin ilanları her zaman doğrudan yayına girer." />
@@ -90,10 +118,11 @@ function ModerationCard({ mode }: { mode: ModerationMode }) {
   );
 }
 
-function SiteCard({ site }: { site: Awaited<ReturnType<typeof adminGetSettings>>["site"] }) {
+function SiteCard({ site, onDirty }: { site: Awaited<ReturnType<typeof adminGetSettings>>["site"]; onDirty: (d: boolean) => void }) {
   const [form, setForm] = useState(site);
   const { run, busy } = useRunner();
   const dirty = JSON.stringify(form) !== JSON.stringify(site);
+  useEffect(() => onDirty(dirty), [dirty, onDirty]);
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, [k]: e.target.value }));
   return (
     <Card>
@@ -112,7 +141,7 @@ function SiteCard({ site }: { site: Awaited<ReturnType<typeof adminGetSettings>>
             <input type="email" value={form.support_email} onChange={set("support_email")} maxLength={120} className={inputClass} />
           </Field>
           <Field label="Destek telefonu">
-            <input value={form.support_phone} onChange={set("support_phone")} className={inputClass} placeholder="05xx xxx xx xx" />
+            <input value={form.support_phone} onChange={set("support_phone")} maxLength={20} className={inputClass} placeholder="05xx xxx xx xx" />
           </Field>
         </div>
         <div className="border-t border-border p-4">
@@ -160,13 +189,20 @@ function flagStatus(rule: FlagRule): { label: string; tone: Tone } {
   return { label: `Üyelerin %${rule.rollout}'i`, tone: "warn" };
 }
 
-function FeaturesCard({ features }: { features: FlagRules }) {
+function FeaturesCard({ features, onDirty }: { features: FlagRules; onDirty: (d: boolean) => void }) {
   const [value, setValue] = useState(features);
   const [open, setOpen] = useState<string | null>(null);
   const [newKey, setNewKey] = useState("");
   const { run, busy } = useRunner();
   const { confirm } = useConfirm();
   const dirty = JSON.stringify(value) !== JSON.stringify(features);
+  useEffect(() => onDirty(dirty), [dirty, onDirty]);
+  function addFlagKey() {
+    if (!newKey || newKey in value) return;
+    setValue((v) => ({ ...v, [newKey]: newRule(CODE_FLAGS[newKey]) }));
+    setOpen(newKey);
+    setNewKey("");
+  }
   const missing = FLAGS_IN_CODE.filter((key) => !(key in value));
   const patch = (key: string, p: Partial<FlagRule>) => setValue((v) => ({ ...v, [key]: { ...v[key], ...p } }));
   const remove = async (key: string) => {
@@ -335,19 +371,16 @@ function FeaturesCard({ features }: { features: FlagRules }) {
         <input
           value={newKey}
           onChange={(e) => setNewKey(e.target.value.replace(/[^a-z0-9_]/gi, "_").toLowerCase().slice(0, 60))}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              addFlagKey();
+            }
+          }}
           placeholder="yeni_ozellik"
           className={cn(inputClass, "h-9 font-mono")}
         />
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={!newKey || newKey in value}
-          onClick={() => {
-            setValue((v) => ({ ...v, [newKey]: newRule(CODE_FLAGS[newKey]) }));
-            setOpen(newKey);
-            setNewKey("");
-          }}
-        >
+        <Button size="sm" variant="outline" disabled={!newKey || newKey in value} onClick={addFlagKey}>
           <Plus className="size-4" /> Ekle
         </Button>
       </div>
@@ -374,12 +407,13 @@ const SECTION_LABELS: Record<string, string> = {
 };
 const ALL_SECTIONS = ["hero", "categories", "featured", "recent", "stats"] as const;
 
-function HomeSectionsCard({ sections }: { sections: string[] }) {
+function HomeSectionsCard({ sections, onDirty }: { sections: string[]; onDirty: (d: boolean) => void }) {
   const initial = sections.filter((s): s is (typeof ALL_SECTIONS)[number] => (ALL_SECTIONS as readonly string[]).includes(s));
   const [order, setOrder] = useState(initial);
   const { run, busy } = useRunner();
   const hidden = ALL_SECTIONS.filter((s) => !order.includes(s));
   const dirty = order.join(",") !== initial.join(",");
+  useEffect(() => onDirty(dirty), [dirty, onDirty]);
   const move = (i: number, d: -1 | 1) =>
     setOrder((o) => {
       const next = [...o];
@@ -427,19 +461,61 @@ function HomeSectionsCard({ sections }: { sections: string[] }) {
   );
 }
 
-function MobileCard({ config }: { config: MobileAppConfig }) {
+function MobileCard({ config, onDirty }: { config: MobileAppConfig; onDirty: (d: boolean) => void }) {
   const initial = () => ({ ...config, announcement: config.announcement ?? "", ios_store_url: config.ios_store_url ?? "", android_store_url: config.android_store_url ?? "" });
   const [form, setForm] = useState(initial);
   const { run, busy } = useRunner();
+  const { confirm } = useConfirm();
   const dirty = JSON.stringify(form) !== JSON.stringify(initial());
+  useEffect(() => onDirty(dirty), [dirty, onDirty]);
+
+  const iosValid = /^\d+\.\d+\.\d+$/.test(form.min_ios_version.trim());
+  const androidValid = /^\d+\.\d+\.\d+$/.test(form.min_android_version.trim());
+
+  async function saveMobile() {
+    if (!iosValid || !androidValid) {
+      toast.error("Sürüm numaraları 1.2.3 biçiminde olmalıdır.");
+      return;
+    }
+    const raised =
+      compareSemver(form.min_ios_version.trim(), config.min_ios_version) > 0 ||
+      compareSemver(form.min_android_version.trim(), config.min_android_version) > 0;
+    if (raised) {
+      const ok = await confirm({
+        title: "Zorunlu güncelleme sürümü yükseltilsin mi?",
+        body: "Bu sürümlerin altındaki tüm mobil uygulamalar mağaza güncellemesi yapana kadar kilitlenir.",
+        confirmLabel: "Yükselt ve kaydet",
+        danger: true,
+      });
+      if (!ok) return;
+    }
+    await run(
+      () =>
+        adminSaveAppConfig({
+          data: {
+            key: "mobile_app",
+            value: {
+              ...form,
+              min_ios_version: form.min_ios_version.trim(),
+              min_android_version: form.min_android_version.trim(),
+              announcement: form.announcement.trim() || null,
+              ios_store_url: form.ios_store_url.trim() || null,
+              android_store_url: form.android_store_url.trim() || null,
+            },
+          },
+        }),
+      "Mobil uygulama ayarları kaydedildi.",
+    );
+  }
+
   return (
     <Card>
       <CardHead title={<span className="inline-flex items-center gap-2"><Smartphone className="size-4 text-primary" /> Mobil uygulama</span>} description="Zorunlu güncelleme sürümleri ve uygulama içi duyuru bandı." />
       <div className="grid gap-4 p-4 md:grid-cols-[200px_200px_1fr]">
-        <Field label="En düşük iOS sürümü" hint="Altındaki sürümler güncellemeye zorlanır">
+        <Field label="En düşük iOS sürümü" hint="Altındaki sürümler güncellemeye zorlanır" error={!iosValid ? "Örn. 1.0.0" : null}>
           <input value={form.min_ios_version} onChange={(e) => setForm((f) => ({ ...f, min_ios_version: e.target.value }))} className={cn(inputClass, "font-mono")} placeholder="1.0.0" />
         </Field>
-        <Field label="En düşük Android sürümü">
+        <Field label="En düşük Android sürümü" error={!androidValid ? "Örn. 1.0.0" : null}>
           <input value={form.min_android_version} onChange={(e) => setForm((f) => ({ ...f, min_android_version: e.target.value }))} className={cn(inputClass, "font-mono")} placeholder="1.0.0" />
         </Field>
         <Field label="Duyuru bandı" hint="Boş bırakırsanız gösterilmez (en fazla 300 karakter)">
@@ -459,11 +535,7 @@ function MobileCard({ config }: { config: MobileAppConfig }) {
           <Button size="sm" variant="ghost" onClick={() => setForm(initial())}>
             Geri al
           </Button>
-          <Button
-            size="sm"
-            disabled={busy}
-            onClick={() => void run(() => adminSaveAppConfig({ data: { key: "mobile_app", value: { ...form, announcement: form.announcement.trim() || null, ios_store_url: form.ios_store_url.trim() || null, android_store_url: form.android_store_url.trim() || null } } }), "Mobil uygulama ayarları kaydedildi.")}
-          >
+          <Button size="sm" disabled={busy || !iosValid || !androidValid} onClick={() => void saveMobile()}>
             <Save className="size-4" /> Kaydet
           </Button>
         </div>

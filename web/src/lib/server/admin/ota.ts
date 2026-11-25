@@ -8,6 +8,7 @@ import { adminMiddleware, audit } from "./common";
 /** One published update as the admin panel shows it (its iOS and Android rows together). */
 export type AdminOtaUpdate = {
   groupId: string;
+  updateIds: string[];
   kind: "update" | "rollback";
   runtimeVersion: string;
   channel: string;
@@ -40,9 +41,10 @@ export type AdminClientError = {
 };
 
 /** Load OTA updates and recent mobile error reports for the admin updates page. */
-export async function listAdminOtaUpdates(sql: Sql) {
+export async function listAdminOtaUpdates(sql: Sql, opts?: { updateId?: string }) {
   const rows = await sql.query<{
     group_id: string;
+    update_ids: string[];
     kind: "update" | "rollback";
     runtime_version: string;
     channel: string;
@@ -58,7 +60,17 @@ export async function listAdminOtaUpdates(sql: Sql) {
     errors: number;
     error_devices: number;
   }>(
-    `select u.group_id, min(u.kind) as kind, min(u.runtime_version) as runtime_version, min(u.channel) as channel,
+    `with err_agg as (
+       select lower(update_id) as uid,
+              count(*)::int as errors,
+              count(distinct device_id)::int as error_devices
+       from client_errors
+       where update_id is not null
+       group by lower(update_id)
+     )
+     select u.group_id,
+            array_agg(u.id::text order by u.platform) as update_ids,
+            min(u.kind) as kind, min(u.runtime_version) as runtime_version, min(u.channel) as channel,
             array_agg(u.platform order by u.platform) as platforms, min(u.message) as message,
             min(u.rollout)::int as rollout, bool_or(u.critical) as critical, min(u.created_at) as created_at,
             min(u.created_by) as created_by, min(p.display_name) as creator, min(u.republished_from) as republished_from,
@@ -68,26 +80,22 @@ export async function listAdminOtaUpdates(sql: Sql) {
                 union
                 select e->>'hash' from ota_updates x, jsonb_array_elements(x.assets) e where x.group_id = u.group_id
               )) as bytes,
-            (select count(*)::int from client_errors e
-              where e.update_id in (
-                select x.id::text from ota_updates x where x.group_id = u.group_id
-                union
-                select upper(x.id::text) from ota_updates x where x.group_id = u.group_id
-              )) as errors,
-            (select count(distinct e.device_id)::int from client_errors e
-              where e.update_id in (
-                select x.id::text from ota_updates x where x.group_id = u.group_id
-                union
-                select upper(x.id::text) from ota_updates x where x.group_id = u.group_id
-              )) as error_devices
+            coalesce(sum(ea.errors), 0)::int as errors,
+            coalesce(
+              (select count(distinct e.device_id)::int from client_errors e
+               where lower(e.update_id) in (select lower(x.id::text) from ota_updates x where x.group_id = u.group_id)),
+              0
+            )::int as error_devices
        from ota_updates u
        left join profiles p on p.user_id = u.created_by
+       left join err_agg ea on ea.uid = lower(u.id::text)
       group by u.group_id
       order by min(u.created_at) desc
       limit 100`,
   );
   const updates: AdminOtaUpdate[] = rows.map((r) => ({
     groupId: r.group_id,
+    updateIds: (r.update_ids ?? []).map(String),
     kind: r.kind,
     runtimeVersion: r.runtime_version,
     channel: r.channel,
@@ -102,6 +110,7 @@ export async function listAdminOtaUpdates(sql: Sql) {
     errors: Number(r.errors ?? 0),
     errorDevices: Number(r.error_devices ?? 0),
   }));
+  const filterId = opts?.updateId?.trim();
   const errorRows = await sql.query<{
     id: string | number;
     created_at: string | Date;
@@ -113,7 +122,12 @@ export async function listAdminOtaUpdates(sql: Sql) {
     message: string;
     stack: string | null;
     screen: string | null;
-  }>("select id, created_at, platform, app_version, update_id, device_id, fatal, message, stack, screen from client_errors order by created_at desc limit 100");
+  }>(
+    filterId
+      ? "select id, created_at, platform, app_version, update_id, device_id, fatal, message, stack, screen from client_errors where lower(update_id) = lower($1) order by created_at desc limit 100"
+      : "select id, created_at, platform, app_version, update_id, device_id, fatal, message, stack, screen from client_errors order by created_at desc limit 100",
+    filterId ? [filterId] : [],
+  );
   const recentErrors: AdminClientError[] = errorRows.map((r) => ({
     id: String(r.id),
     createdAt: new Date(r.created_at).toISOString(),

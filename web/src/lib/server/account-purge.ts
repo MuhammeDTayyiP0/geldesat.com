@@ -15,11 +15,19 @@ export const ACCOUNT_GRACE_DAYS = 30;
 export async function purgeUserData(
   sql: Sql,
   userId: string,
-  { deleteListings = true, includeAuth = true }: { deleteListings?: boolean; includeAuth?: boolean } = {},
+  { deleteListings = true, includeAuth = true, forbidAdmin = false }: { deleteListings?: boolean; includeAuth?: boolean; forbidAdmin?: boolean } = {},
 ): Promise<void> {
   await sql.transaction(async (tx) => {
+    if (forbidAdmin) {
+      const cur = (await tx.query<{ role: string }>("select role from profiles where user_id = $1 for update", [userId]))[0];
+      if (!cur) throw new Error("Kullanıcı bulunamadı.");
+      if (cur.role === "ADMIN") throw new Error("Yönetici hesabı silinemez. Önce rolünü üyeye çevirin.");
+    }
     await tx.query("delete from notifications where user_id=$1", [userId]);
     await tx.query("delete from mobile_push_tokens where user_id=$1", [userId]);
+    await tx.query("delete from saved_searches where user_id=$1", [userId]);
+    await tx.query("delete from seller_follows where follower_id=$1 or seller_id=$1", [userId]);
+    await tx.query("delete from store_applications where user_id=$1", [userId]);
     await tx.query("delete from credit_ledger where user_id=$1", [userId]);
     await tx.query("delete from credit_orders where user_id=$1", [userId]);
     await tx.query("delete from boosts where user_id=$1", [userId]);

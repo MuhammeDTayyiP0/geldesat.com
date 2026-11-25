@@ -14,6 +14,7 @@ import {
   type AdminStoreApplicationRow,
   type AdminStoreRow,
 } from "@/lib/server/admin/business";
+import { adminListUsers } from "@/lib/server/admin/users";
 import { useRunner, useSheets } from "@/components/admin/hooks";
 import { dateOnly, dateTime, n } from "@/components/admin/format";
 import { int, oneOf, str } from "@/components/admin/search";
@@ -132,12 +133,22 @@ function StoresPage() {
             ) : !rows.length ? (
               <EmptyState
                 icon={Store}
-                title="Henüz mağaza yok"
-                description="Kurumsal üyeler için ilk mağazayı açın; üyenin mevcut ilanları mağazaya bağlanabilir."
+                title={search.q || search.plan ? "Eşleşen mağaza yok" : "Henüz mağaza yok"}
+                description={
+                  search.q || search.plan
+                    ? "Arama veya paket filtresini değiştirerek tekrar deneyin."
+                    : "Kurumsal üyeler için ilk mağazayı açın; üyenin mevcut ilanları mağazaya bağlanabilir."
+                }
                 action={
-                  <Button size="sm" onClick={() => setEditing("new")}>
-                    <Plus className="size-4" /> Mağaza aç
-                  </Button>
+                  search.q || search.plan ? (
+                    <Button size="sm" variant="outline" onClick={() => set({ q: undefined, plan: undefined })}>
+                      Filtreleri temizle
+                    </Button>
+                  ) : (
+                    <Button size="sm" onClick={() => setEditing("new")}>
+                      <Plus className="size-4" /> Mağaza aç
+                    </Button>
+                  )
                 }
               />
             ) : (
@@ -277,13 +288,15 @@ function ApplicationsTab({
   const { run, busy } = useRunner();
   const { confirm, prompt } = useConfirm();
   const [plans, setPlans] = useState<Record<string, StorePlan>>({});
+  const [detailApp, setDetailApp] = useState<AdminStoreApplicationRow | null>(null);
 
   async function approve(a: AdminStoreApplicationRow) {
+    if (a.applicant_banned) return;
     const plan = plans[a.id] ?? "BASIC";
     const ok = await confirm({
       title: `"${a.name}" başvurusu onaylansın mı?`,
       body: a.existing_store_id
-        ? "Başvuranın zaten bir mağazası var; başvuru onaylandı olarak işaretlenir."
+        ? `Başvuranın mevcut mağazasının paketi ${PLAN_LABEL[plan]} olarak güncellenir ve başvuru onaylanır.`
         : `Üye için ${PLAN_LABEL[plan]} paketli mağaza açılır ve bildirim gönderilir.`,
       confirmLabel: "Onayla",
     });
@@ -362,7 +375,14 @@ function ApplicationsTab({
                   </Td>
                   <Td className="max-w-xs text-xs">
                     {a.tax_no ? <p className="font-mono text-fg">VN: {a.tax_no}</p> : null}
-                    {a.notes ? <p className="mt-0.5 line-clamp-2 text-muted">{a.notes}</p> : !a.tax_no ? <span className="text-subtle">—</span> : null}
+                    {a.notes ? (
+                      <button type="button" onClick={() => setDetailApp(a)} className="mt-0.5 text-left text-muted hover:text-primary">
+                        <span className="line-clamp-2">{a.notes}</span>
+                        {a.notes.length > 80 ? <span className="text-[11px] font-medium text-primary">Tamamını oku</span> : null}
+                      </button>
+                    ) : !a.tax_no ? (
+                      <span className="text-subtle">—</span>
+                    ) : null}
                   </Td>
                   <Td>
                     <Pill tone={st.tone} dot>
@@ -393,7 +413,13 @@ function ApplicationsTab({
                             </option>
                           ))}
                         </select>
-                        <Button size="sm" className="h-8 bg-ok-solid text-white hover:bg-ok-solid/90" disabled={busy} onClick={() => void approve(a)}>
+                        <Button
+                          size="sm"
+                          className="h-8 bg-ok-solid text-white hover:bg-ok-solid/90"
+                          disabled={busy || a.applicant_banned}
+                          title={a.applicant_banned ? "Askıda olan üyenin başvurusu onaylanamaz" : undefined}
+                          onClick={() => void approve(a)}
+                        >
                           <Check className="size-3.5" /> Onayla
                         </Button>
                         <Button size="sm" variant="outline" className="h-8 text-danger" disabled={busy} onClick={() => void reject(a)}>
@@ -417,13 +443,33 @@ function ApplicationsTab({
       {pagination ? (
         <Pagination page={pagination.page} pages={pagination.pages} total={pagination.total} pageSize={pagination.pageSize} onPage={(page) => set({ page }, false)} />
       ) : null}
+      {detailApp ? (
+        <Modal open onOpenChange={(o) => !o && setDetailApp(null)} title={`${detailApp.name} — Başvuru notu`} size="md">
+          <div className="space-y-3 text-sm">
+            <p className="text-xs text-muted">
+              Başvuran: <strong className="text-fg">{detailApp.applicant_name}</strong>
+              {detailApp.tax_no ? ` · VN: ${detailApp.tax_no}` : ""}
+            </p>
+            <p className="whitespace-pre-wrap break-words rounded-xl border border-border bg-elevated/40 p-3">{detailApp.notes}</p>
+          </div>
+        </Modal>
+      ) : null}
     </>
   );
 }
 
 function StoreModal({ store, onClose }: { store: AdminStoreRow | null; onClose: () => void }) {
   const { run, busy } = useRunner();
-  const [form, setForm] = useState({
+  const { confirm } = useConfirm();
+  const [ownerQuery, setOwnerQuery] = useState("");
+  const [selectedUser, setSelectedUser] = useState<{ user_id: string; display_name: string; email: string | null; store_name: string | null; banned_at: string | null } | null>(null);
+  const userSearch = useQuery({
+    queryKey: ["admin", "store-owner-search", ownerQuery],
+    queryFn: () => adminListUsers({ data: { q: ownerQuery, role: "ALL", state: "all", sort: "newest", page: 1, pageSize: 8 } }),
+    enabled: !store && !selectedUser && ownerQuery.trim().length >= 2,
+  });
+
+  const initial = {
     owner: "",
     name: store?.name ?? "",
     slug: store?.slug ?? "",
@@ -432,34 +478,48 @@ function StoreModal({ store, onClose }: { store: AdminStoreRow | null; onClose: 
     phone: store?.phone ?? "",
     plan: (store?.plan as (typeof STORE_PLANS)[number]) ?? "BASIC",
     attachListings: true,
-  });
+  };
+  const [form, setForm] = useState(initial);
   const [slugTouched, setSlugTouched] = useState(Boolean(store));
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const dirty = JSON.stringify(form) !== JSON.stringify(initial) || Boolean(selectedUser);
+  const resolvedOwner = selectedUser?.user_id ?? form.owner.trim();
+  const effectiveSlug = slugify(form.slug.trim() || (store ? store.slug : form.name));
+
+  async function requestClose() {
+    if (dirty) {
+      const ok = await confirm({ title: "Kaydedilmemiş değişiklikler silinsin mi?", confirmLabel: "Kapat", danger: true });
+      if (!ok) return;
+    }
+    onClose();
+  }
 
   return (
     <Modal
       open
-      onOpenChange={(o) => !o && onClose()}
+      onOpenChange={(o) => {
+        if (!o) void requestClose();
+      }}
       title={store ? `"${store.name}" mağazasını düzenle` : "Yeni mağaza aç"}
-      description={store ? undefined : "Mağaza, e-postası veya kullanıcı kimliği girilen üyeye bağlanır. Üyeye bildirim gönderilir."}
+      description={store ? undefined : "Mağaza seçilen üyeye bağlanır. Üyeye bildirim gönderilir."}
       size="lg"
       footer={
         <>
-          <Button size="sm" variant="outline" onClick={onClose}>
+          <Button size="sm" variant="outline" onClick={() => void requestClose()}>
             Vazgeç
           </Button>
           <Button
             size="sm"
-            disabled={busy || form.name.trim().length < 3 || (!store && !form.owner.trim())}
+            disabled={busy || form.name.trim().length < 3 || !effectiveSlug || (!store && !resolvedOwner)}
             onClick={() =>
               void run(
                 () =>
                   adminSaveStore({
                     data: {
                       id: store?.id,
-                      owner: store ? undefined : form.owner,
+                      owner: store ? undefined : resolvedOwner,
                       name: form.name,
-                      slug: form.slug || undefined,
+                      slug: store ? form.slug.trim() || store.slug : form.slug.trim() || undefined,
                       description: form.description,
                       city: form.city,
                       phone: form.phone,
@@ -480,8 +540,59 @@ function StoreModal({ store, onClose }: { store: AdminStoreRow | null; onClose: 
     >
       <div className="grid gap-3 sm:grid-cols-2">
         {!store ? (
-          <Field label="Mağaza sahibi" hint="Üyenin giriş e-postası veya kullanıcı kimliği" className="sm:col-span-2">
-            <input value={form.owner} onChange={set("owner")} className={inputClass} placeholder="ornek@firma.com" autoFocus />
+          <Field label="Mağaza sahibi" hint="Ad, e-posta veya kullanıcı kimliğiyle arayın" className="sm:col-span-2">
+            {selectedUser ? (
+              <div className="flex items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 p-2.5">
+                <Avatar name={selectedUser.display_name} size={30} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold">{selectedUser.display_name}</p>
+                  <p className="truncate text-xs text-muted">{selectedUser.email ?? selectedUser.user_id}</p>
+                </div>
+                <Button size="sm" variant="ghost" onClick={() => setSelectedUser(null)}>
+                  Değiştir
+                </Button>
+              </div>
+            ) : (
+              <div>
+                <SearchInput
+                  value={ownerQuery}
+                  onChange={(v) => {
+                    setOwnerQuery(v);
+                    setForm((f) => ({ ...f, owner: v }));
+                  }}
+                  placeholder="Üye adı, e-posta veya kullanıcı kimliği…"
+                  autoFocus
+                />
+                {userSearch.isFetching ? (
+                  <p className="mt-1.5 flex items-center gap-1.5 text-xs text-muted">
+                    <Spinner className="size-3.5" /> Üyeler aranıyor…
+                  </p>
+                ) : ownerQuery.trim().length >= 2 && userSearch.data && !userSearch.data.rows.length ? (
+                  <p className="mt-1.5 text-xs text-muted">Eşleşen üye bulunamadı (tam kullanıcı kimliği veya e-posta yazabilirsiniz).</p>
+                ) : userSearch.data?.rows.length ? (
+                  <ul className="mt-1.5 max-h-44 divide-y divide-border overflow-y-auto rounded-lg border border-border">
+                    {userSearch.data.rows.map((u) => {
+                      const blocked = Boolean(u.banned_at || u.store_name);
+                      return (
+                        <li key={u.user_id}>
+                          <button
+                            type="button"
+                            disabled={blocked}
+                            onClick={() => setSelectedUser(u)}
+                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-elevated disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            <Avatar name={u.display_name} src={u.avatar_url} size={24} />
+                            <span className="min-w-0 flex-1 truncate font-medium">{u.display_name}</span>
+                            <span className="truncate text-xs text-muted">{u.email}</span>
+                            {u.store_name ? <Pill>Mağazası var</Pill> : u.banned_at ? <Pill tone="danger">Askıda</Pill> : null}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : null}
+              </div>
+            )}
           </Field>
         ) : null}
         <Field label="Mağaza adı">
@@ -495,13 +606,14 @@ function StoreModal({ store, onClose }: { store: AdminStoreRow | null; onClose: 
             className={inputClass}
           />
         </Field>
-        <Field label="Adres (geldesat.com/magaza/…)" hint="Değiştirirseniz eski bağlantılar çalışmaz.">
+        <Field label="Adres (geldesat.com/magaza/…)" hint="Değiştirirseniz eski bağlantılar çalışmaz." error={!effectiveSlug && form.name ? "Geçerli harf/rakam içermeli." : null}>
           <input
             value={form.slug}
             onChange={(e) => {
               setSlugTouched(true);
               setForm((f) => ({ ...f, slug: e.target.value }));
             }}
+            maxLength={80}
             className={inputClass}
           />
         </Field>
@@ -515,10 +627,10 @@ function StoreModal({ store, onClose }: { store: AdminStoreRow | null; onClose: 
           </select>
         </Field>
         <Field label="İl">
-          <input value={form.city} onChange={set("city")} className={inputClass} />
+          <input value={form.city} onChange={set("city")} maxLength={40} className={inputClass} />
         </Field>
         <Field label="Mağaza telefonu" className="sm:col-span-2">
-          <input value={form.phone} onChange={set("phone")} className={inputClass} placeholder="05xx xxx xx xx" />
+          <input value={form.phone} onChange={set("phone")} maxLength={20} className={inputClass} placeholder="05xx xxx xx xx" />
         </Field>
         <Field label="Açıklama" className="sm:col-span-2">
           <textarea value={form.description} onChange={set("description")} rows={3} maxLength={400} className={textareaClass} />

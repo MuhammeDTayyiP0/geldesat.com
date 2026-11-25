@@ -1,17 +1,27 @@
 import { Fragment, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, History } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, History, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { adminListAudit } from "@/lib/server/admin/content";
 import { useSheets } from "@/components/admin/hooks";
 import { actionTone, dateTime, relative, TARGET_LABEL } from "@/components/admin/format";
-import { int, str } from "@/components/admin/search";
+import { downloadCsv, int, str } from "@/components/admin/search";
 import { Avatar, Card, EmptyState, ErrorState, PageHeader, Pagination, Pill, SearchInput, SelectBox, SkeletonRows, Table, Td, Th } from "@/components/admin/ui";
 
-type Search = { q?: string; type?: string; admin?: string; page?: number };
+type Search = { q?: string; type?: string; admin?: string; targetId?: string; from?: string; to?: string; page?: number };
 
 export const Route = createFileRoute("/admin/kayitlar")({
-  validateSearch: (s: Record<string, unknown>): Search => ({ q: str(s.q), type: str(s.type, 40), admin: str(s.admin), page: int(s.page, 1, 100_000) }),
+  validateSearch: (s: Record<string, unknown>): Search => ({
+    q: str(s.q),
+    type: str(s.type, 40),
+    admin: str(s.admin),
+    targetId: str(s.targetId, 200),
+    from: str(s.from, 40),
+    to: str(s.to, 40),
+    page: int(s.page, 1, 100_000),
+  }),
   component: AuditPage,
 });
 
@@ -20,18 +30,50 @@ function AuditPage() {
   const navigate = Route.useNavigate();
   const set = (patch: Partial<Search>, resetPage = true) =>
     void navigate({ search: (prev) => ({ ...prev, ...(resetPage ? { page: undefined } : {}), ...patch }), replace: true });
-  const filter = { q: search.q, targetType: search.type, adminId: search.admin, page: search.page ?? 1, pageSize: 50 };
+  const filter = {
+    q: search.q,
+    targetType: search.type,
+    adminId: search.admin,
+    targetId: search.targetId,
+    from: search.from,
+    to: search.to,
+    page: search.page ?? 1,
+    pageSize: 50,
+  };
   const q = useQuery({ queryKey: ["admin", "audit", filter], queryFn: () => adminListAudit({ data: filter }), placeholderData: keepPreviousData });
   const { openListing, openUser } = useSheets();
   const [open, setOpen] = useState<string | null>(null);
   const rows = q.data?.rows ?? [];
+  const hasFilters = Boolean(search.q || search.type || search.admin || search.targetId || search.from || search.to);
+
+  function exportCsv() {
+    downloadCsv(
+      `islem-kayitlari-${new Date().toISOString().slice(0, 10)}.csv`,
+      ["Zaman", "Yönetici", "İşlem", "Hedef Türü", "Hedef ID", "Özet"],
+      rows.map((e) => [e.created_at, e.admin_name, e.action, e.target_type, e.target_id, e.summary]),
+    );
+  }
 
   return (
     <div className="mx-auto max-w-[1300px]">
-      <PageHeader icon={History} title="İşlem kayıtları" description="Yöneticilerin yaptığı her değişiklik: kim, ne zaman, neyi, neden. Kayıtlar silinemez." />
+      <PageHeader
+        icon={History}
+        title="İşlem kayıtları"
+        description="Yöneticilerin yaptığı her değişiklik: kim, ne zaman, neyi, neden. Kayıtlar silinemez."
+        actions={
+          <>
+            <Button size="sm" variant="outline" onClick={() => void q.refetch()} disabled={q.isFetching}>
+              <RefreshCw className={cn("size-4", q.isFetching && "animate-spin")} /> Yenile
+            </Button>
+            <Button size="sm" variant="outline" onClick={exportCsv} disabled={!rows.length}>
+              <Download className="size-4" /> CSV (bu sayfa)
+            </Button>
+          </>
+        }
+      />
       <Card>
         <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
-          <SearchInput value={search.q ?? ""} onChange={(v) => set({ q: v || undefined })} placeholder="Özet veya işlem türünde ara" className="w-full sm:w-80" />
+          <SearchInput value={search.q ?? ""} onChange={(v) => set({ q: v || undefined })} placeholder="Özet veya işlem türünde ara" className="w-full sm:w-72" />
           <SelectBox
             label="Kayıt türü"
             value={search.type ?? ""}
@@ -44,13 +86,50 @@ function AuditPage() {
             onChange={(v) => set({ admin: v || undefined })}
             options={[{ value: "", label: "Tüm yöneticiler" }, ...(q.data?.admins ?? []).map((a) => ({ value: a.user_id, label: a.display_name }))]}
           />
+          <input
+            type="date"
+            aria-label="Başlangıç tarihi"
+            value={search.from ?? ""}
+            onChange={(e) => set({ from: e.target.value || undefined })}
+            className="h-9 rounded-lg border border-border bg-surface px-2.5 text-xs text-fg outline-none focus:border-primary"
+          />
+          <input
+            type="date"
+            aria-label="Bitiş tarihi"
+            value={search.to ?? ""}
+            onChange={(e) => set({ to: e.target.value || undefined })}
+            className="h-9 rounded-lg border border-border bg-surface px-2.5 text-xs text-fg outline-none focus:border-primary"
+          />
+          {hasFilters ? (
+            <button
+              type="button"
+              onClick={() => set({ q: undefined, type: undefined, admin: undefined, targetId: undefined, from: undefined, to: undefined })}
+              className="text-xs font-semibold text-primary hover:underline"
+            >
+              Filtreleri temizle
+            </button>
+          ) : null}
         </div>
+        {search.targetId ? (
+          <div className="flex items-center gap-2 border-b border-border bg-elevated/30 px-3 py-2 text-xs text-muted">
+            <span>
+              Hedef kimliği: <code className="font-mono text-fg">{search.targetId}</code>
+            </span>
+            <button type="button" onClick={() => set({ targetId: undefined })} className="font-semibold text-primary hover:underline">
+              Kaldır
+            </button>
+          </div>
+        ) : null}
         {q.error && !q.data ? (
           <ErrorState error={q.error} onRetry={() => void q.refetch()} />
         ) : q.isLoading ? (
           <SkeletonRows rows={10} />
         ) : !rows.length ? (
-          <EmptyState icon={History} title="Kayıt yok" description="Yönetici işlemleri burada görünür." />
+          <EmptyState
+            icon={History}
+            title={hasFilters ? "Eşleşen kayıt yok" : "Kayıt yok"}
+            description={hasFilters ? "Filtreleri değiştirin veya temizleyin." : "Yönetici işlemleri burada görünür."}
+          />
         ) : (
           <Table>
             <thead>

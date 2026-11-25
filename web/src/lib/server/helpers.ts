@@ -181,7 +181,7 @@ export async function inheritedAttributes(categoryId: string): Promise<AttrDef[]
  * applies once Better Auth marks the email verified (e.g. Google sign-in), so a
  * password sign-up cannot claim an admin address it does not own.
  */
-function bootstrapAdminEmails(): Set<string> {
+export function bootstrapAdminEmails(): Set<string> {
   const raw = typeof process !== "undefined" ? process.env.ADMIN_EMAILS : undefined;
   return new Set(
     (raw ?? "")
@@ -233,8 +233,14 @@ export async function ensureProfile(
     }
   }
 
-  const existing = await sql.query<{ user_id: string; role: string; display_name?: string | null }>(
-    "select user_id, role, display_name from profiles where user_id = $1",
+  const existing = await sql.query<{
+    user_id: string;
+    role: string;
+    display_name?: string | null;
+    banned_at: unknown;
+    deletion_requested_at: unknown;
+  }>(
+    "select user_id, role, display_name, banned_at, deletion_requested_at from profiles where user_id = $1",
     [userId],
   );
   if (existing[0]) {
@@ -248,7 +254,12 @@ export async function ensureProfile(
       await sql.query("update profiles set display_name = $1 where user_id = $2", [resolvedName, userId]);
       existing[0].display_name = resolvedName;
     }
-    if (existing[0].role !== "ADMIN" && (await isBootstrapAdmin(sql, userId))) {
+    if (
+      existing[0].role !== "ADMIN" &&
+      !existing[0].banned_at &&
+      !existing[0].deletion_requested_at &&
+      (await isBootstrapAdmin(sql, userId))
+    ) {
       await sql.query("update profiles set role = 'ADMIN' where user_id = $1", [userId]);
       existing[0].role = "ADMIN";
     }
@@ -266,16 +277,24 @@ export async function ensureProfile(
      on conflict (user_id) do nothing`,
     [userId, name, avatar, role, TERMS_VERSION],
   );
-  const row = await sql.query<{ user_id: string; role: string; display_name: string }>(
-    "select user_id, role, display_name from profiles where user_id = $1",
+  const row = await sql.query<{
+    user_id: string;
+    role: string;
+    display_name: string;
+    banned_at: unknown;
+    deletion_requested_at: unknown;
+  }>(
+    "select user_id, role, display_name, banned_at, deletion_requested_at from profiles where user_id = $1",
     [userId],
   );
-  return row[0] ?? { user_id: userId, role, display_name: name };
+  return row[0] ?? { user_id: userId, role, display_name: name, banned_at: null, deletion_requested_at: null };
 }
 
 export async function requireAdmin(userId: string) {
   const profile = await ensureProfile(userId);
-  if (profile.role !== "ADMIN") throw new Error("Yetkisiz işlem");
+  if (profile.role !== "ADMIN" || profile.banned_at != null || profile.deletion_requested_at != null) {
+    throw new Error("Yetkisiz işlem");
+  }
   return profile;
 }
 
@@ -391,6 +410,10 @@ export function firstInWindow(key: string, windowMs: number): boolean {
   }
   dedupBuckets.set(key, now + windowMs);
   return true;
+}
+
+export function releaseWindow(key: string): void {
+  dedupBuckets.delete(key);
 }
 
 /** Start the window over, so the next `firstInWindow(key)` is true again. */

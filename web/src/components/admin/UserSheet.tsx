@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -19,6 +19,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { TURKEY_CITIES } from "@/lib/data/locations";
 import { photoSrc } from "@/lib/images";
 import {
   adminBanUser,
@@ -36,20 +38,12 @@ import {
   type AdminUserDetail,
 } from "@/lib/server/admin/users";
 import { useRunner, useSheets } from "./hooks";
-import { dateTime, listingStatus, money, n, relative } from "./format";
+import { BAN_REASONS, dateTime, listingStatus, money, n, relative } from "./format";
 import { AuditList } from "./AuditList";
 import { Avatar, ErrorState, Field, inputClass, KeyValue, Menu, MenuItem, MenuSeparator, MiniStat, Modal, Pill, SheetHeader, Spinner, TabBar, textareaClass, Thumb, useConfirm } from "./ui";
 
-const BAN_REASONS = [
-  "Dolandırıcılık şüphesi",
-  "Sahte veya yanıltıcı ilanlar",
-  "Taciz / hakaret içeren mesajlar",
-  "Yasaklı ürün satışı",
-  "Çoklu hesap / spam",
-];
-
 export function UserSheetBody({ id, canGoBack }: { id: string; canGoBack: boolean }) {
-  const { back, close, openListing } = useSheets();
+  const { back, close, openListing, openUser } = useSheets();
   const query = useQuery({ queryKey: ["admin", "user", id], queryFn: () => adminUserDetail({ data: { userId: id } }) });
   const [tab, setTab] = useState<"overview" | "listings" | "sessions" | "reviews" | "history">("overview");
   const [modal, setModal] = useState<null | "edit" | "credits" | "notify">(null);
@@ -98,7 +92,13 @@ export function UserSheetBody({ id, canGoBack }: { id: string; canGoBack: boolea
               {u.role === "ADMIN" ? <Pill tone="ink">Yönetici</Pill> : null}
               {u.banned_at ? <Pill tone="danger">Askıda</Pill> : null}
               {u.deletion_requested_at ? <Pill tone="warn">Silinme sürecinde</Pill> : null}
-              {d.store ? <Pill tone="violet">Mağaza: {d.store.name}</Pill> : null}
+              {d.store ? (
+                <Link to="/admin/magazalar" search={{ q: d.store.name }} onClick={close} className="inline-flex">
+                  <Pill tone="violet" className="hover:opacity-80">
+                    Mağaza: {d.store.name}
+                  </Pill>
+                </Link>
+              ) : null}
             </div>
             <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-sm text-muted">
               <span>{u.email ?? "E-posta yok"}</span>
@@ -161,6 +161,25 @@ export function UserSheetBody({ id, canGoBack }: { id: string; canGoBack: boolea
               {u.bio ? <p className="mt-3 whitespace-pre-wrap border-t border-border pt-3 text-sm text-muted">{u.bio}</p> : null}
             </section>
             <AdminNote user={u} />
+            {d.creditLedger.length ? (
+              <section className="rounded-xl border border-border bg-surface p-4">
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Son kredi hareketleri</h3>
+                <ul className="divide-y divide-border text-sm">
+                  {d.creditLedger.map((entry) => (
+                    <li key={entry.id} className="flex items-center justify-between gap-2 py-2 first:pt-0 last:pb-0">
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-medium text-fg">{entry.reason}</p>
+                        <p className="text-[11px] text-muted">{dateTime(entry.created_at)}</p>
+                      </div>
+                      <span className={entry.amount > 0 ? "shrink-0 font-semibold tabular-nums text-ok" : "shrink-0 font-semibold tabular-nums text-danger"}>
+                        {entry.amount > 0 ? "+" : ""}
+                        {n(entry.amount)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
           </div>
         ) : null}
 
@@ -212,7 +231,13 @@ export function UserSheetBody({ id, canGoBack }: { id: string; canGoBack: boolea
                         <span className="inline-flex items-center gap-0.5 font-semibold text-warn">
                           {r.rating} <Star className="size-3.5 fill-current" />
                         </span>
-                        <span className="text-muted">{r.reviewer_name}</span>
+                        {r.reviewer_id ? (
+                          <button type="button" onClick={() => openUser(r.reviewer_id!)} className="text-muted hover:text-primary hover:underline">
+                            {r.reviewer_name}
+                          </button>
+                        ) : (
+                          <span className="text-muted">{r.reviewer_name}</span>
+                        )}
                         <span className="ml-auto text-xs text-muted">{relative(r.created_at)}</span>
                       </div>
                       {r.comment ? <p className="mt-1">{r.comment}</p> : null}
@@ -231,7 +256,13 @@ export function UserSheetBody({ id, canGoBack }: { id: string; canGoBack: boolea
                     <li key={r.id} className="flex items-center gap-2 rounded-xl border border-border bg-surface p-3 text-sm">
                       <Pill tone={r.status === "OPEN" ? "danger" : "muted"}>{r.status === "OPEN" ? "Açık" : "Kapalı"}</Pill>
                       <span className="font-medium">{r.reason}</span>
-                      <span className="truncate text-muted">· {r.title}</span>
+                      {r.listing_id ? (
+                        <button type="button" onClick={() => openListing(r.listing_id!)} className="truncate text-muted hover:text-primary hover:underline">
+                          · {r.title}
+                        </button>
+                      ) : (
+                        <span className="truncate text-muted">· {r.title}</span>
+                      )}
                       <span className="ml-auto shrink-0 text-xs text-muted">{relative(r.created_at)}</span>
                     </li>
                   ))}
@@ -243,7 +274,17 @@ export function UserSheetBody({ id, canGoBack }: { id: string; canGoBack: boolea
           </div>
         ) : null}
 
-        {tab === "history" ? <AuditList entries={d.log} empty="Bu üye üzerinde henüz yönetici işlemi yapılmadı." /> : null}
+        {tab === "history" ? (
+          <div>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">Yönetici işlemleri</h3>
+              <Link to="/admin/kayitlar" search={{ targetId: u.user_id }} onClick={close} className="text-xs font-medium text-primary hover:underline">
+                Tüm geçmişi gör
+              </Link>
+            </div>
+            <AuditList entries={d.log} empty="Bu üye üzerinde henüz yönetici işlemi yapılmadı." />
+          </div>
+        ) : null}
       </div>
 
       {modal === "edit" ? <EditUserModal detail={d} onClose={() => setModal(null)} /> : null}
@@ -255,6 +296,9 @@ export function UserSheetBody({ id, canGoBack }: { id: string; canGoBack: boolea
 
 function UserActionBar({ detail, onModal }: { detail: AdminUserDetail; onModal: (m: "edit" | "credits" | "notify") => void }) {
   const u = detail.user;
+  const { user: currentUser } = useCurrentUserState();
+  const isSelf = currentUser?.id === u.user_id;
+  const isPeerAdmin = u.role === "ADMIN" && !isSelf;
   const { run, busy } = useRunner();
   const { confirm, prompt } = useConfirm();
   const { close } = useSheets();
@@ -340,7 +384,7 @@ function UserActionBar({ detail, onModal }: { detail: AdminUserDetail; onModal: 
       <Button size="sm" variant="outline" disabled={busy} onClick={() => onModal("notify")}>
         <Bell className="size-4" /> Bildirim gönder
       </Button>
-      <Button size="sm" variant="outline" disabled={busy} onClick={() => onModal("edit")}>
+      <Button size="sm" variant="outline" disabled={busy || isPeerAdmin} title={isPeerAdmin ? "Başka yönetici düzenlenemez" : undefined} onClick={() => onModal("edit")}>
         <Pencil className="size-4" /> Düzenle
       </Button>
       <a href={`/satici/${u.user_id}`} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-sm font-medium text-muted hover:bg-elevated hover:text-fg">
@@ -349,16 +393,16 @@ function UserActionBar({ detail, onModal }: { detail: AdminUserDetail; onModal: 
       <div className="ml-auto">
         <Menu>
           {u.role === "ADMIN" ? (
-            <MenuItem icon={ShieldOff} onSelect={() => void setRole("USER")}>
-              Yönetici yetkisini kaldır
+            <MenuItem icon={ShieldOff} disabled={isSelf} onSelect={() => void setRole("USER")}>
+              Yönetici yetkisini kaldır{isSelf ? " (kendi hesabınız)" : ""}
             </MenuItem>
           ) : (
             <MenuItem icon={ShieldCheck} onSelect={() => void setRole("ADMIN")} disabled={Boolean(u.banned_at)}>
               Yönetici yap
             </MenuItem>
           )}
-          <MenuItem icon={Coins} onSelect={() => onModal("credits")}>
-            Kredi tanımla
+          <MenuItem icon={Coins} disabled={isSelf} onSelect={() => onModal("credits")}>
+            Kredi tanımla{isSelf ? " (kendi hesabınız)" : ""}
           </MenuItem>
           {!u.email_verified && u.email ? (
             <MenuItem icon={BadgeCheck} onSelect={() => void run(() => adminVerifyEmail({ data: { userId: u.user_id } }), "E-posta doğrulandı olarak işaretlendi.")}>
@@ -370,11 +414,11 @@ function UserActionBar({ detail, onModal }: { detail: AdminUserDetail; onModal: 
               Silinme talebini iptal et
             </MenuItem>
           ) : null}
-          <MenuItem icon={LogOut} onSelect={() => void revoke()}>
+          <MenuItem icon={LogOut} disabled={isPeerAdmin} onSelect={() => void revoke()}>
             Tüm oturumları kapat
           </MenuItem>
           <MenuSeparator />
-          <MenuItem icon={Trash2} danger disabled={u.role === "ADMIN"} onSelect={() => void remove()}>
+          <MenuItem icon={Trash2} danger disabled={isSelf || u.role === "ADMIN"} onSelect={() => void remove()}>
             Hesabı kalıcı olarak sil
           </MenuItem>
         </Menu>
@@ -421,7 +465,10 @@ function summarizeUa(ua: string): string {
 function AdminNote({ user }: { user: AdminUserDetail["user"] }) {
   const { run, busy } = useRunner();
   const [value, setValue] = useState(user.admin_note ?? "");
-  const dirty = value !== (user.admin_note ?? "");
+  useEffect(() => {
+    setValue(user.admin_note ?? "");
+  }, [user.admin_note]);
+  const dirty = value.trim() !== (user.admin_note ?? "").trim();
   return (
     <section className="rounded-xl border border-warn/30 bg-warn/5 p-4">
       <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-warn">Yönetici notu (yalnızca yöneticiler görür)</h3>
@@ -453,6 +500,10 @@ function EditUserModal({ detail, onClose }: { detail: AdminUserDetail; onClose: 
     district: u.district ?? "",
     bio: u.bio ?? "",
   });
+  const selectedCity = TURKEY_CITIES.find((c) => c.name === form.city);
+  const districts = selectedCity?.districts ?? [];
+  const cityHasLegacy = Boolean(form.city && !selectedCity);
+  const districtHasLegacy = Boolean(form.district && !districts.includes(form.district));
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setForm((f) => ({ ...f, [k]: e.target.value }));
   return (
     <Modal
@@ -487,10 +538,42 @@ function EditUserModal({ detail, onClose }: { detail: AdminUserDetail; onClose: 
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="İl">
-            <input value={form.city} onChange={set("city")} className={inputClass} />
+            <select
+              value={form.city}
+              onChange={(e) => {
+                const nextCity = e.target.value;
+                const nextDistricts = TURKEY_CITIES.find((c) => c.name === nextCity)?.districts ?? [];
+                setForm((f) => ({
+                  ...f,
+                  city: nextCity,
+                  district: nextDistricts.includes(f.district) ? f.district : "",
+                }));
+              }}
+              className="admin-select h-10 w-full"
+            >
+              <option value="">Seçilmedi</option>
+              {cityHasLegacy ? <option value={form.city}>{form.city}</option> : null}
+              {TURKEY_CITIES.map((c) => (
+                <option key={c.id} value={c.name}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
           </Field>
           <Field label="İlçe">
-            <input value={form.district} onChange={set("district")} className={inputClass} />
+            <select
+              value={form.district}
+              onChange={(e) => setForm((f) => ({ ...f, district: e.target.value }))}
+              className="admin-select h-10 w-full"
+            >
+              <option value="">Seçilmedi</option>
+              {districtHasLegacy ? <option value={form.district}>{form.district}</option> : null}
+              {districts.map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
+            </select>
           </Field>
         </div>
         <Field label="Hakkında">
@@ -506,7 +589,10 @@ function CreditsModal({ detail, onClose }: { detail: AdminUserDetail; onClose: (
   const { confirm } = useConfirm();
   const [amount, setAmount] = useState("10");
   const [reason, setReason] = useState("");
-  const value = Number.parseInt(amount, 10) || 0;
+  const trimmedAmount = amount.trim();
+  const parsed = /^-?\d+$/.test(trimmedAmount) ? Number(trimmedAmount) : 0;
+  const validAmount = Number.isInteger(parsed) && parsed !== 0 && parsed >= -100_000 && parsed <= 100_000;
+  const value = validAmount ? parsed : 0;
   return (
     <Modal
       open
@@ -521,7 +607,7 @@ function CreditsModal({ detail, onClose }: { detail: AdminUserDetail; onClose: (
           </Button>
           <Button
             size="sm"
-            disabled={busy || !value || reason.trim().length < 3}
+            disabled={busy || !validAmount || reason.trim().length < 3}
             onClick={() =>
               void confirm({
                 title: `${value > 0 ? "+" : ""}${value} kredi işlensin mi?`,
@@ -542,11 +628,11 @@ function CreditsModal({ detail, onClose }: { detail: AdminUserDetail; onClose: (
       }
     >
       <div className="space-y-3">
-        <Field label="Miktar">
-          <input value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^\d-]/g, ""))} inputMode="numeric" className={inputClass} />
+        <Field label="Miktar" error={trimmedAmount && trimmedAmount !== "-" && !validAmount ? "±100.000 arasında sıfır dışı tam sayı girin." : null}>
+          <input value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9-]/g, ""))} inputMode="numeric" className={inputClass} />
         </Field>
         <Field label="Gerekçe" hint="İşlem kaydına ve kredi hareketine yazılır.">
-          <input value={reason} onChange={(e) => setReason(e.target.value)} className={inputClass} placeholder="Ör. kampanya hediyesi, hatalı yükleme düzeltmesi" />
+          <input value={reason} onChange={(e) => setReason(e.target.value)} maxLength={200} className={inputClass} placeholder="Ör. kampanya hediyesi, hatalı yükleme düzeltmesi" />
         </Field>
       </div>
     </Modal>

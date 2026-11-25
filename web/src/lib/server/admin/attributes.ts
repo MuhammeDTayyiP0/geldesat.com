@@ -108,23 +108,28 @@ export const adminSaveAttribute = createServerFn({ method: "POST" })
 
     if (!data.id) {
       const base = slugify(data.name).replace(/-/g, "_") || "ozellik";
-      let id = base;
-      for (let n = 2; (await sql.query("select 1 from attribute_defs where id = $1", [id])).length; n += 1) id = `${base}_${n}`;
-      await sql.query("insert into attribute_defs (id, name, type, options, unit) values ($1,$2,$3,$4::jsonb,$5)", [
-        id,
-        data.name,
-        data.type,
-        options ? JSON.stringify(options) : null,
-        unit,
-      ]);
+      const id = await sql.transaction(async (tx) => {
+        await tx.query("select pg_advisory_xact_lock(hashtext('attribute-create'))");
+        let candidate = base;
+        for (let n = 2; (await tx.query("select 1 from attribute_defs where id = $1", [candidate])).length; n += 1) {
+          candidate = `${base}_${n}`;
+        }
+        await tx.query("insert into attribute_defs (id, name, type, options, unit) values ($1,$2,$3,$4::jsonb,$5)", [
+          candidate,
+          data.name,
+          data.type,
+          options ? JSON.stringify(options) : null,
+          unit,
+        ]);
+        return candidate;
+      });
       await audit(sql, context.adminId, "attribute.create", "attribute", id, `Özellik "${data.name}" (${data.type}) oluşturuldu`);
       return { ok: true as const, id, migrated: 0 };
     }
 
-    const cur = (await sql.query<{ name: string; type: string }>("select name, type from attribute_defs where id = $1", [data.id]))[0];
-    if (!cur) throw new Error("Özellik bulunamadı.");
-    let migrated = 0;
-    await sql.transaction(async (tx) => {
+    const { prevName, migrated } = await sql.transaction(async (tx) => {
+      const cur = (await tx.query<{ name: string; type: string }>("select name, type from attribute_defs where id = $1 for update", [data.id!]))[0];
+      if (!cur) throw new Error("Özellik bulunamadı.");
       await tx.query("update attribute_defs set name = $2, type = $3, options = $4::jsonb, unit = $5 where id = $1", [
         data.id,
         data.name,
@@ -134,6 +139,7 @@ export const adminSaveAttribute = createServerFn({ method: "POST" })
       ]);
       // Listing values are keyed by the attribute's name; carry them over to the
       // new name, but only in categories that actually use this attribute.
+      let migratedCount = 0;
       if (data.migrateValues && cur.name !== data.name) {
         const rows = await tx.query<{ id: string }>(
           `with recursive scope as (
@@ -141,13 +147,18 @@ export const adminSaveAttribute = createServerFn({ method: "POST" })
              union
              select c.id from categories c join scope s on c.parent_id = s.id
            )
-           update listings set attrs = (attrs - $2::text) || jsonb_build_object($3::text, attrs -> $2::text)
-           where attrs ? $2::text and not attrs ? $3::text and category_id in (select id from scope)
+           update listings
+           set attrs = case
+             when attrs ? $3::text then attrs - $2::text
+             else (attrs - $2::text) || jsonb_build_object($3::text, attrs -> $2::text)
+           end
+           where attrs ? $2::text and category_id in (select id from scope)
            returning id`,
           [data.id, cur.name, data.name],
         );
-        migrated = rows.length;
+        migratedCount = rows.length;
       }
+      return { prevName: cur.name, migrated: migratedCount };
     });
     await audit(
       sql,
@@ -155,7 +166,7 @@ export const adminSaveAttribute = createServerFn({ method: "POST" })
       "attribute.edit",
       "attribute",
       data.id,
-      cur.name !== data.name ? `Özellik "${cur.name}" → "${data.name}"${migrated ? ` (${migrated} ilan değeri taşındı)` : ""}` : `Özellik "${data.name}" düzenlendi`,
+      prevName !== data.name ? `Özellik "${prevName}" → "${data.name}"${migrated ? ` (${migrated} ilan değeri taşındı)` : ""}` : `Özellik "${data.name}" düzenlendi`,
     );
     return { ok: true as const, id: data.id, migrated };
   });

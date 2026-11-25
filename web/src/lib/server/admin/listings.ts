@@ -6,7 +6,7 @@ import { cleanAttrs, type AttrValues } from "@/lib/listing-attrs";
 import { asJson, listingSlug, num } from "@/lib/utils";
 import { inheritedAttributes, notify } from "../helpers";
 import { deleteUnusedListingImages } from "../upload.server";
-import { adminMiddleware, audit, likeTerm, paged, paging, PageInput, strOrNull, ts, tsOrNull, Where } from "./common";
+import { adminMiddleware, audit, auditMany, likeTerm, paged, paging, PageInput, strOrNull, ts, tsOrNull, Where } from "./common";
 import { mapAudit } from "./dashboard";
 
 export const LISTING_STATUSES = ["PENDING", "ACTIVE", "INACTIVE", "SOLD", "REJECTED"] as const;
@@ -195,7 +195,7 @@ export const adminListingDetail = createServerFn({ method: "POST" })
         [userId],
       ),
       sql.query<Record<string, unknown>>(
-        `select r.id, r.reason, r.details, r.status, r.created_at, coalesce(p.display_name, 'Üye') as reporter_name
+        `select r.id, r.reporter_id, r.reason, r.details, r.status, r.created_at, coalesce(p.display_name, 'Üye') as reporter_name
          from reports r left join profiles p on p.user_id = r.reporter_id
          where r.listing_id = $1 order by r.created_at desc limit 20`,
         [data.id],
@@ -238,6 +238,7 @@ export const adminListingDetail = createServerFn({ method: "POST" })
         : null,
       reports: reports.map((r) => ({
         id: String(r.id),
+        reporter_id: strOrNull(r.reporter_id),
         reason: String(r.reason),
         details: strOrNull(r.details),
         status: String(r.status),
@@ -280,8 +281,10 @@ const ACTION_FROM: Partial<Record<string, string[]>> = {
   deactivate: ["ACTIVE"],
   activate: ["INACTIVE", "PENDING", "REJECTED"],
   sold: ["ACTIVE", "INACTIVE"],
+  extend: ["ACTIVE", "INACTIVE"],
+  feature: ["ACTIVE", "INACTIVE"],
 };
-/** Actions that put a listing live: never for a suspended owner, whose listings must stay hidden. */
+/** Actions that put a listing live: never for a suspended or closing owner, whose listings must stay hidden. */
 const GOES_LIVE = new Set(["approve", "activate"]);
 
 /** One action on up to 200 listings: moderation, visibility, duration, vitrin, category, delete. */
@@ -290,159 +293,209 @@ export const adminListingsAction = createServerFn({ method: "POST" })
   .validator(BulkInput)
   .handler(async ({ context, data }) => {
     const sql = await getSql();
-    const found = await sql.query<{ id: string; user_id: string; slug: string; title: string; listing_no: number; images: unknown; status: string; owner_banned: boolean }>(
-      `select l.id, l.user_id, l.slug, l.title, l.listing_no, l.images, l.status, (p.banned_at is not null) as owner_banned
-       from listings l left join profiles p on p.user_id = l.user_id where l.id = any($1::text[])`,
-      [data.ids],
-    );
-    if (!found.length) throw new Error("İlan bulunamadı.");
-    // A bulk selection can hold anything; each action touches only the listings
-    // it makes sense for, and the updates repeat the check so two moderators
-    // deciding at once cannot overwrite each other.
-    const allowed = ACTION_FROM[data.action];
-    const rows = found.filter((r) => (!allowed || allowed.includes(r.status)) && !(GOES_LIVE.has(data.action) && r.owner_banned));
-    if (!rows.length) throw new Error("Seçili ilanlar bu işleme uygun değil. Başka bir yönetici işlemiş olabilir.");
-    const ids = rows.map((r) => r.id);
-    const statuses = allowed ?? [];
     const reason = data.reason?.trim() || "";
+    const { found, actedRows } = await sql.transaction(async (tx) => {
+      const found = await tx.query<{
+        id: string;
+        user_id: string;
+        slug: string;
+        title: string;
+        listing_no: number;
+        images: unknown;
+        status: string;
+        owner_banned: boolean;
+        owner_closing: boolean;
+      }>(
+        `select l.id, l.user_id, l.slug, l.title, l.listing_no, l.images, l.status,
+                (p.banned_at is not null) as owner_banned,
+                (p.deletion_requested_at is not null) as owner_closing
+         from listings l left join profiles p on p.user_id = l.user_id
+         where l.id = any($1::text[])
+         for update of l`,
+        [data.ids],
+      );
+      if (!found.length) throw new Error("İlan bulunamadı.");
 
-    let updatedIds: string[];
-    switch (data.action) {
-      case "approve": {
-        // The 30-day run starts when the listing goes live.
-        const res = await sql.query<{ id: string }>(
-          `update listings set status='ACTIVE', approved_at=now(), rejection_reason=null, updated_at=now(),
-             expires_at=greatest(coalesce(expires_at, now()), now() + interval '30 days')
-           where id = any($1::text[]) and status = any($2::text[])
-           returning id`,
-          [ids, statuses],
-        );
-        updatedIds = res.map((r) => r.id);
-        break;
-      }
-      case "reject": {
-        const res = await sql.query<{ id: string }>(
-          "update listings set status='REJECTED', approved_at=null, status_before_ban=null, rejection_reason=$3, updated_at=now() where id = any($1::text[]) and status = any($2::text[]) returning id",
-          [ids, statuses, reason || null],
-        );
-        updatedIds = res.map((r) => r.id);
-        break;
-      }
-      case "deactivate": {
-        const res = await sql.query<{ id: string }>(
-          "update listings set status='INACTIVE', status_before_ban=null, updated_at=now() where id = any($1::text[]) and status = any($2::text[]) returning id",
-          [ids, statuses],
-        );
-        updatedIds = res.map((r) => r.id);
-        break;
-      }
-      case "activate": {
-        // An admin putting a listing live approves it.
-        const res = await sql.query<{ id: string }>(
-          `update listings set status='ACTIVE', approved_at=coalesce(approved_at, now()), rejection_reason=null, updated_at=now(),
-             expires_at=case when expires_at is null or expires_at < now() then now() + interval '30 days' else expires_at end
-           where id = any($1::text[]) and status = any($2::text[])
-           returning id`,
-          [ids, statuses],
-        );
-        updatedIds = res.map((r) => r.id);
-        break;
-      }
-      case "sold": {
-        const res = await sql.query<{ id: string }>(
-          "update listings set status='SOLD', status_before_ban=null, updated_at=now() where id = any($1::text[]) and status = any($2::text[]) returning id",
-          [ids, statuses],
-        );
-        updatedIds = res.map((r) => r.id);
-        break;
-      }
-      case "extend": {
-        const res = await sql.query<{ id: string }>(
-          `update listings set expires_at = greatest(coalesce(expires_at, now()), now()) + make_interval(days => $2), updated_at=now()
-           where id = any($1::text[])
-           returning id`,
-          [ids, data.days ?? 30],
-        );
-        updatedIds = res.map((r) => r.id);
-        break;
-      }
-      case "feature": {
-        const res = await sql.query<{ id: string }>(
-          "update listings set featured_until = greatest(coalesce(featured_until, now()), now()) + make_interval(days => $2) where id = any($1::text[]) returning id",
-          [ids, data.days ?? 7],
-        );
-        updatedIds = res.map((r) => r.id);
-        break;
-      }
-      case "unfeature": {
-        const res = await sql.query<{ id: string }>("update listings set featured_until = null where id = any($1::text[]) returning id", [ids]);
-        updatedIds = res.map((r) => r.id);
-        break;
-      }
-      case "move": {
-        if (!data.categoryId) throw new Error("Hedef kategori seçin.");
-        const cat = await sql.query<{ id: string }>("select id from categories where id = $1", [data.categoryId]);
-        if (!cat[0]) throw new Error("Hedef kategori bulunamadı.");
-        const res = await sql.query<{ id: string }>("update listings set category_id=$2, updated_at=now() where id = any($1::text[]) returning id", [ids, data.categoryId]);
-        updatedIds = res.map((r) => r.id);
-        break;
-      }
-      case "delete": {
-        const res = await sql.query<{ id: string }>("delete from listings where id = any($1::text[]) returning id", [ids]);
-        updatedIds = res.map((r) => r.id);
-        const deletedSet = new Set(updatedIds);
-        for (const r of rows) {
-          if (deletedSet.has(r.id)) await deleteUnusedListingImages(sql, r.user_id, asJson<string[]>(r.images, []));
+      const allowed = ACTION_FROM[data.action];
+      const rows = found.filter(
+        (r) => (!allowed || allowed.includes(r.status)) && !(GOES_LIVE.has(data.action) && (r.owner_banned || r.owner_closing)),
+      );
+      if (!rows.length) {
+        if (GOES_LIVE.has(data.action) && found.every((r) => r.owner_banned || r.owner_closing)) {
+          throw new Error("Satıcı hesabı askıda veya silinme sürecinde olduğu için ilan yayına alınamaz.");
         }
-        break;
+        throw new Error("Seçili ilanlar bu işleme uygun değil. Başka bir yönetici işlemiş olabilir.");
       }
+
+      const ids = rows.map((r) => r.id);
+      const statuses = allowed ?? [];
+      let updatedIds: string[];
+
+      switch (data.action) {
+        case "approve": {
+          // The 30-day run starts when the listing goes live.
+          const res = await tx.query<{ id: string }>(
+            `update listings l set status='ACTIVE', approved_at=now(), status_before_ban=null, rejection_reason=null, updated_at=now(),
+               expires_at=greatest(coalesce(expires_at, now()), now() + interval '30 days')
+             where l.id = any($1::text[]) and l.status = any($2::text[])
+               and exists (select 1 from profiles p where p.user_id = l.user_id and p.banned_at is null and p.deletion_requested_at is null)
+             returning l.id`,
+            [ids, statuses],
+          );
+          updatedIds = res.map((r) => r.id);
+          break;
+        }
+        case "reject": {
+          const res = await tx.query<{ id: string }>(
+            "update listings set status='REJECTED', approved_at=null, status_before_ban=null, rejection_reason=$3, updated_at=now() where id = any($1::text[]) and status = any($2::text[]) returning id",
+            [ids, statuses, reason || null],
+          );
+          updatedIds = res.map((r) => r.id);
+          break;
+        }
+        case "deactivate": {
+          const res = await tx.query<{ id: string }>(
+            "update listings set status='INACTIVE', status_before_ban=null, updated_at=now() where id = any($1::text[]) and status = any($2::text[]) returning id",
+            [ids, statuses],
+          );
+          updatedIds = res.map((r) => r.id);
+          break;
+        }
+        case "activate": {
+          // An admin putting a listing live approves it.
+          const res = await tx.query<{ id: string }>(
+            `update listings l set status='ACTIVE', approved_at=coalesce(approved_at, now()), status_before_ban=null, rejection_reason=null, updated_at=now(),
+               expires_at=case when expires_at is null or expires_at < now() then now() + interval '30 days' else expires_at end
+             where l.id = any($1::text[]) and l.status = any($2::text[])
+               and exists (select 1 from profiles p where p.user_id = l.user_id and p.banned_at is null and p.deletion_requested_at is null)
+             returning l.id`,
+            [ids, statuses],
+          );
+          updatedIds = res.map((r) => r.id);
+          break;
+        }
+        case "sold": {
+          const res = await tx.query<{ id: string }>(
+            "update listings set status='SOLD', status_before_ban=null, updated_at=now() where id = any($1::text[]) and status = any($2::text[]) returning id",
+            [ids, statuses],
+          );
+          updatedIds = res.map((r) => r.id);
+          break;
+        }
+        case "extend": {
+          const res = await tx.query<{ id: string }>(
+            `update listings set expires_at = greatest(coalesce(expires_at, now()), now()) + make_interval(days => $2), updated_at=now()
+             where id = any($1::text[]) and status = any($3::text[])
+             returning id`,
+            [ids, data.days ?? 30, statuses],
+          );
+          updatedIds = res.map((r) => r.id);
+          break;
+        }
+        case "feature": {
+          const res = await tx.query<{ id: string }>(
+            "update listings set featured_until = greatest(coalesce(featured_until, now()), now()) + make_interval(days => $2) where id = any($1::text[]) and status = any($3::text[]) returning id",
+            [ids, data.days ?? 7, statuses],
+          );
+          updatedIds = res.map((r) => r.id);
+          break;
+        }
+        case "unfeature": {
+          const res = await tx.query<{ id: string }>("update listings set featured_until = null where id = any($1::text[]) returning id", [ids]);
+          updatedIds = res.map((r) => r.id);
+          if (updatedIds.length) {
+            await tx.query("update boosts set ends_at = now() where listing_id = any($1::text[]) and ends_at > now()", [updatedIds]);
+          }
+          break;
+        }
+        case "move": {
+          if (!data.categoryId) throw new Error("Hedef kategori seçin.");
+          const cat = await tx.query<{ id: string }>("select id from categories where id = $1", [data.categoryId]);
+          if (!cat[0]) throw new Error("Hedef kategori bulunamadı.");
+          const res = await tx.query<{ id: string }>("update listings set category_id=$2, updated_at=now() where id = any($1::text[]) returning id", [ids, data.categoryId]);
+          updatedIds = res.map((r) => r.id);
+          break;
+        }
+        case "delete": {
+          const res = await tx.query<{ id: string }>("delete from listings where id = any($1::text[]) returning id", [ids]);
+          updatedIds = res.map((r) => r.id);
+          break;
+        }
+      }
+
+      const updatedSet = new Set(updatedIds);
+      const actedRows = rows.filter((r) => updatedSet.has(r.id));
+      if (!actedRows.length) throw new Error("Seçili ilanlar bu işleme uygun değil. Başka bir yönetici işlemiş olabilir.");
+      return { found, actedRows };
+    });
+
+    if (data.action === "delete") {
+      const imagesByUser = new Map<string, string[]>();
+      for (const r of actedRows) {
+        const list = imagesByUser.get(r.user_id) ?? [];
+        list.push(...asJson<string[]>(r.images, []));
+        imagesByUser.set(r.user_id, list);
+      }
+      await Promise.all([...imagesByUser.entries()].map(([uid, urls]) => deleteUnusedListingImages(sql, uid, urls)));
     }
 
-    const updatedSet = new Set(updatedIds);
-    const actedRows = rows.filter((r) => updatedSet.has(r.id));
-    if (!actedRows.length) throw new Error("Seçili ilanlar bu işleme uygun değil. Başka bir yönetici işlemiş olabilir.");
     const totalSkipped = found.length - actedRows.length;
-
     const summary =
       (actedRows.length === 1
         ? `#${actedRows[0].listing_no} "${actedRows[0].title}" ${ACTION_LABEL[data.action]}${reason ? ` — ${reason}` : ""}`
         : `${actedRows.length} ilan ${ACTION_LABEL[data.action]}${reason ? ` — ${reason}` : ""}`) + (totalSkipped ? ` (${totalSkipped} ilan uygun olmadığı için atlandı)` : "");
-    for (const r of actedRows) {
-      await audit(sql, context.adminId, `listing.${data.action}`, "listing", r.id, actedRows.length === 1 ? summary : `#${r.listing_no} "${r.title}" ${ACTION_LABEL[data.action]}`, {
-        reason: reason || undefined,
-        days: data.days,
-        categoryId: data.categoryId,
-        from: r.status,
-      });
-    }
-    // The record goes first: a problem while notifying must not leave a change unrecorded.
+
+    await auditMany(
+      sql,
+      context.adminId,
+      actedRows.map((r) => ({
+        action: `listing.${data.action}`,
+        targetType: "listing",
+        targetId: r.id,
+        summary: actedRows.length === 1 ? summary : `#${r.listing_no} "${r.title}" ${ACTION_LABEL[data.action]}`,
+        meta: {
+          reason: reason || undefined,
+          days: data.days,
+          categoryId: data.categoryId,
+          from: r.status,
+        },
+      })),
+    );
+
     if (data.notify) {
-      for (const r of actedRows) {
-        const link = `/ilan/${r.slug}`;
-        if (data.action === "approve") {
-          await notify(r.user_id, "listing", "İlanınız yayında", `"${r.title}" onaylandı ve yayına alındı.`, link);
-        } else if (data.action === "reject") {
-          await notify(
-            r.user_id,
-            "listing",
-            "İlanınız reddedildi",
-            `"${r.title}" şu gerekçeyle reddedildi: ${reason || "Yayın kurallarına uygun bulunmadı"}. Düzenleyip tekrar onaya gönderebilirsiniz.`,
-            link,
-          );
-        } else if (data.action === "delete") {
-          await notify(r.user_id, "listing", "İlanınız silindi", `"${r.title}" yönetim tarafından silindi.${reason ? ` Gerekçe: ${reason}` : ""}`, "/ilanlarim");
-        } else if (data.action === "sold") {
-          await notify(r.user_id, "listing", "İlanınız satıldı olarak işaretlendi", `"${r.title}" yönetim tarafından satıldı olarak işaretlendi.`, link);
-        } else if (data.action === "deactivate") {
-          await notify(
-            r.user_id,
-            "listing",
-            "İlanınız yayından kaldırıldı",
-            `"${r.title}" yönetim tarafından yayından kaldırıldı.${reason ? ` Gerekçe: ${reason}` : ""}`,
-            link,
-          );
-        }
-      }
+      await Promise.all(
+        actedRows.map((r) => {
+          const link = `/ilan/${r.slug}`;
+          if (data.action === "approve") {
+            return notify(r.user_id, "listing", "İlanınız yayında", `"${r.title}" onaylandı ve yayına alındı.`, link);
+          }
+          if (data.action === "reject") {
+            return notify(
+              r.user_id,
+              "listing",
+              "İlanınız reddedildi",
+              `"${r.title}" şu gerekçeyle reddedildi: ${reason || "Yayın kurallarına uygun bulunmadı"}. Düzenleyip tekrar onaya gönderebilirsiniz.`,
+              link,
+            );
+          }
+          if (data.action === "delete") {
+            return notify(r.user_id, "listing", "İlanınız silindi", `"${r.title}" yönetim tarafından silindi.${reason ? ` Gerekçe: ${reason}` : ""}`, "/ilanlarim");
+          }
+          if (data.action === "sold") {
+            return notify(r.user_id, "listing", "İlanınız satıldı olarak işaretlendi", `"${r.title}" yönetim tarafından satıldı olarak işaretlendi.`, link);
+          }
+          if (data.action === "deactivate") {
+            return notify(
+              r.user_id,
+              "listing",
+              "İlanınız yayından kaldırıldı",
+              `"${r.title}" yönetim tarafından yayından kaldırıldı.${reason ? ` Gerekçe: ${reason}` : ""}`,
+              link,
+            );
+          }
+          return Promise.resolve();
+        }),
+      );
     }
 
     return { ok: true as const, count: actedRows.length, summary };
@@ -481,64 +534,69 @@ export const adminUpdateListing = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     const sql = await getSql();
-    const rows = await sql.query<{
-      user_id: string;
-      listing_no: number;
-      price: unknown;
-      currency: string | null;
-      title: string;
-      district: string | null;
-      category_id: string;
-      images: unknown;
-      attrs: unknown;
-    }>(
-      "select user_id, listing_no, price, currency, title, district, category_id, images, attrs from listings where id = $1",
-      [data.id],
-    );
-    const cur = rows[0];
-    if (!cur) throw new Error("İlan bulunamadı.");
-    const slug = listingSlug(data.title, cur.listing_no);
-    const nextDistrict = data.district === undefined ? cur.district : data.district || null;
-    const nextCurrency = data.currency ?? cur.currency ?? "TRY";
-    const curImages = asJson<string[]>(cur.images, []);
-    const nextImages = data.images ?? curImages;
-    if (data.images !== undefined) {
-      for (const img of nextImages) {
-        if (!curImages.includes(img) && !ALLOWED_UPLOAD_IMG.test(img) && !ALLOWED_MOBILE_IMG.test(img)) {
-          throw new Error("Geçersiz görsel.");
+    const { cur, slug, nextCurrency, curImages, nextImages } = await sql.transaction(async (tx) => {
+      const rows = await tx.query<{
+        user_id: string;
+        listing_no: number;
+        price: unknown;
+        currency: string | null;
+        title: string;
+        city: string | null;
+        district: string | null;
+        category_id: string;
+        images: unknown;
+        attrs: unknown;
+      }>(
+        "select user_id, listing_no, price, currency, title, city, district, category_id, images, attrs from listings where id = $1 for update",
+        [data.id],
+      );
+      const cur = rows[0];
+      if (!cur) throw new Error("İlan bulunamadı.");
+      const slug = listingSlug(data.title, cur.listing_no);
+      const cityChanged = Boolean(data.city && data.city !== (cur.city ?? ""));
+      const nextDistrict = data.district === undefined ? (cityChanged ? null : cur.district) : data.district || null;
+      const nextCurrency = data.currency ?? cur.currency ?? "TRY";
+      const curImages = asJson<string[]>(cur.images, []);
+      const nextImages = data.images ?? curImages;
+      if (data.images !== undefined) {
+        for (const img of nextImages) {
+          if (!curImages.includes(img) && !ALLOWED_UPLOAD_IMG.test(img) && !ALLOWED_MOBILE_IMG.test(img)) {
+            throw new Error("Geçersiz görsel.");
+          }
         }
       }
-    }
-    const existingAttrs = asJson<AttrValues>(cur.attrs, {});
-    const nextAttrs =
-      data.attrs !== undefined
-        ? cleanAttrs(normalizeAdminAttrs(data.attrs), await inheritedAttributes(cur.category_id), existingAttrs)
-        : existingAttrs;
+      const existingAttrs = asJson<AttrValues>(cur.attrs, {});
+      const nextAttrs =
+        data.attrs !== undefined
+          ? cleanAttrs(normalizeAdminAttrs(data.attrs), await inheritedAttributes(cur.category_id), existingAttrs)
+          : existingAttrs;
 
-    await sql.query(
-      `update listings set title=$2, description=$3, price=$4, currency=$5, slug=$6,
-         city=coalesce(nullif($7, ''), city), district=$8,
-         images=$9::jsonb, attrs=$10::jsonb, updated_at=now()
-       where id=$1`,
-      [
-        data.id,
-        data.title,
-        data.description,
-        data.price,
-        nextCurrency,
-        slug,
-        data.city ?? "",
-        nextDistrict,
-        JSON.stringify(nextImages),
-        JSON.stringify(nextAttrs),
-      ],
-    );
+      await tx.query(
+        `update listings set title=$2, description=$3, price=$4, currency=$5, slug=$6,
+           city=coalesce(nullif($7, ''), city), district=$8,
+           images=$9::jsonb, attrs=$10::jsonb, updated_at=now()
+         where id=$1`,
+        [
+          data.id,
+          data.title,
+          data.description,
+          data.price,
+          nextCurrency,
+          slug,
+          data.city ?? "",
+          nextDistrict,
+          JSON.stringify(nextImages),
+          JSON.stringify(nextAttrs),
+        ],
+      );
+      if (num(cur.price) !== data.price) {
+        await tx.query("insert into price_history (listing_id, price) values ($1,$2)", [data.id, data.price]);
+      }
+      return { cur, slug, nextCurrency, curImages, nextImages };
+    });
     if (data.images !== undefined) {
       const removed = curImages.filter((img) => !nextImages.includes(img));
       if (removed.length) await deleteUnusedListingImages(sql, cur.user_id, removed);
-    }
-    if (num(cur.price) !== data.price) {
-      await sql.query("insert into price_history (listing_id, price) values ($1,$2)", [data.id, data.price]);
     }
     await audit(sql, context.adminId, "listing.edit", "listing", data.id, `#${cur.listing_no} ilan bilgileri düzenlendi`, {
       title: cur.title !== data.title ? { from: cur.title, to: data.title } : undefined,

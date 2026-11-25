@@ -9,7 +9,7 @@ import { adminDeletePage, adminLegalRevisions, adminListPages, adminSavePage } f
 import { useRunner } from "@/components/admin/hooks";
 import { dateTime, n, relative } from "@/components/admin/format";
 import { str } from "@/components/admin/search";
-import { Card, CardHead, EmptyState, ErrorState, Field, inputClass, PageHeader, Pill, Spinner, textareaClass, useConfirm } from "@/components/admin/ui";
+import { Card, CardHead, EmptyState, ErrorState, Field, inputClass, Modal, PageHeader, Pill, Spinner, textareaClass, useConfirm } from "@/components/admin/ui";
 
 /** Pages linked from the footer and sign-up forms; renaming or deleting them breaks those links. */
 const LINKED = new Set(["hakkimizda", "iletisim", "kvkk", "gizlilik", "cerez", "kullanim", "uyelik"]);
@@ -83,7 +83,16 @@ function PagesPage() {
           {isNew ? (
             <Editor key="__new" page={null} dirtyRef={dirtyRef} onSaved={(slug) => select(slug)} />
           ) : selected ? (
-            <Editor key={selected.slug} page={selected} dirtyRef={dirtyRef} onSaved={(slug) => select(slug)} onDeleted={() => select(undefined)} />
+            <Editor
+              key={selected.slug}
+              page={selected}
+              dirtyRef={dirtyRef}
+              onSaved={(slug) => select(slug)}
+              onDeleted={() => {
+                dirtyRef.current = false;
+                void navigate({ search: { slug: undefined }, replace: true });
+              }}
+            />
           ) : (
             <Card>
               <EmptyState icon={FileText} title="Sayfa seçin" />
@@ -98,8 +107,10 @@ function PagesPage() {
 function Editor({ page, dirtyRef, onSaved, onDeleted }: { page: { slug: string; title: string; body: string } | null; dirtyRef: { current: boolean }; onSaved: (slug: string) => void; onDeleted?: () => void }) {
   const [title, setTitle] = useState(page?.title ?? "");
   const [slug, setSlug] = useState(page?.slug ?? "");
+  const [slugTouched, setSlugTouched] = useState(Boolean(page));
   const [body, setBody] = useState(page?.body ?? "");
   const [preview, setPreview] = useState(false);
+  const [previewRev, setPreviewRev] = useState<{ title: string; body: string; replacedAt: string; replacedBy: string | null } | null>(null);
   const { run, busy } = useRunner();
   const { confirm } = useConfirm();
   const revisions = useQuery({
@@ -109,7 +120,7 @@ function Editor({ page, dirtyRef, onSaved, onDeleted }: { page: { slug: string; 
   });
   // The server trims what it saves, so spaces at the ends are not a change.
   const dirty = page
-    ? title.trim() !== page.title || slug !== page.slug || body.trim() !== page.body
+    ? title.trim() !== page.title || slugify(slug) !== page.slug || body.trim() !== page.body
     : Boolean(title.trim() || slug.trim() || body.trim());
   const linked = page && LINKED.has(page.slug);
   dirtyRef.current = dirty;
@@ -144,14 +155,21 @@ function Editor({ page, dirtyRef, onSaved, onDeleted }: { page: { slug: string; 
               value={title}
               onChange={(e) => {
                 setTitle(e.target.value);
-                if (!page) setSlug(slugify(e.target.value));
+                if (!page && !slugTouched) setSlug(slugify(e.target.value));
               }}
               className={inputClass}
             />
           </Field>
           <Field label="Adres" hint={linked ? undefined : "geldesat.com/sayfa/…"} error={linked && slug !== page?.slug ? "Bu sayfa site altbilgisinden bağlı; adresini değiştirmeyin." : null}>
             <input
-              disabled={Boolean(linked)} value={slug} onChange={(e) => setSlug(e.target.value)} className={cn(inputClass, "font-mono")} />
+              disabled={Boolean(linked)}
+              value={slug}
+              onChange={(e) => {
+                setSlugTouched(true);
+                setSlug(e.target.value);
+              }}
+              className={cn(inputClass, "font-mono")}
+            />
           </Field>
         </div>
         <div className="flex items-center gap-1 border-b border-border px-4 py-2">
@@ -185,7 +203,10 @@ function Editor({ page, dirtyRef, onSaved, onDeleted }: { page: { slug: string; 
                 void confirm({ title: `"${page.title}" silinsin mi?`, body: `/sayfa/${page.slug} adresi 404 verecek.`, confirmLabel: "Sil", danger: true }).then((ok) => {
                   if (ok)
                     void run(() => adminDeletePage({ data: { slug: page.slug } }), "Sayfa silindi.").then((r) => {
-                      if (r) onDeleted?.();
+                      if (r) {
+                        dirtyRef.current = false;
+                        onDeleted?.();
+                      }
                     });
                 })
               }
@@ -245,14 +266,49 @@ function Editor({ page, dirtyRef, onSaved, onDeleted }: { page: { slug: string; 
                       {rev.replacedBy ? ` · ${rev.replacedBy}` : ""} · {n(rev.body.length)} karakter
                     </p>
                   </div>
-                  <Button size="sm" variant="outline" onClick={() => void loadRevision(rev)}>
-                    <RotateCcw className="size-3.5" /> Forma yükle
-                  </Button>
+                  <div className="flex items-center gap-1.5">
+                    <Button size="sm" variant="ghost" onClick={() => setPreviewRev(rev)}>
+                      <Eye className="size-3.5" /> Önizle
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => void loadRevision(rev)}>
+                      <RotateCcw className="size-3.5" /> Forma yükle
+                    </Button>
+                  </div>
                 </li>
               ))}
             </ul>
           )}
         </Card>
+      ) : null}
+      {previewRev ? (
+        <Modal
+          open
+          onOpenChange={(o) => !o && setPreviewRev(null)}
+          title={previewRev.title}
+          description={`${dateTime(previewRev.replacedAt)}${previewRev.replacedBy ? ` · ${previewRev.replacedBy}` : ""}`}
+          size="xl"
+          footer={
+            <>
+              <Button size="sm" variant="outline" onClick={() => setPreviewRev(null)}>
+                Kapat
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => {
+                  const target = previewRev;
+                  setPreviewRev(null);
+                  void loadRevision(target);
+                }}
+              >
+                <RotateCcw className="size-3.5" /> Forma yükle
+              </Button>
+            </>
+          }
+        >
+          <article className="prose-sm max-w-none text-sm leading-relaxed">
+            <LegalPreview body={previewRev.body} />
+          </article>
+        </Modal>
       ) : null}
     </div>
   );

@@ -79,12 +79,19 @@ export async function requestAccountDeletion(userId: string): Promise<string> {
 export async function restoreAccount(userId: string): Promise<void> {
   const sql = await getSql();
   await sql.transaction(async (tx) => {
-    await tx.query("update profiles set deletion_requested_at = null where user_id = $1", [userId]);
-    await tx.query(
-      `update listings set status = status_before_deletion, status_before_deletion = null, updated_at = now()
-       where user_id = $1 and status_before_deletion is not null and status = 'INACTIVE'`,
-      [userId],
-    );
+    const prof = (
+      await tx.query<{ banned_at: unknown }>(
+        "update profiles set deletion_requested_at = null where user_id = $1 returning banned_at",
+        [userId],
+      )
+    )[0];
+    if (prof && !prof.banned_at) {
+      await tx.query(
+        `update listings set status = status_before_deletion, status_before_deletion = null, updated_at = now()
+         where user_id = $1 and status_before_deletion is not null and status = 'INACTIVE'`,
+        [userId],
+      );
+    }
   });
 }
 

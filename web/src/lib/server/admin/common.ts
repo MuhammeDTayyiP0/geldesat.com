@@ -46,6 +46,42 @@ export async function audit(
   }
 }
 
+export type AuditBatchRow = {
+  action: string;
+  targetType: AuditTarget;
+  targetId: string | null;
+  summary: string;
+  meta?: Record<string, unknown>;
+};
+
+/** Record multiple admin writes in a single batch insert. Never throws. */
+export async function auditMany(sql: QuerySql, adminId: string, rows: AuditBatchRow[]): Promise<void> {
+  if (!rows.length) return;
+  if (rows.some((r) => r.targetType === "category")) {
+    clearCategoryCache();
+    setTimeout(clearCategoryCache, 2000);
+  }
+  try {
+    await sql.query(
+      `insert into admin_audit_log (id, admin_id, action, target_type, target_id, summary, meta)
+       select id, $2, action, target_type, target_id, summary, meta::jsonb
+       from unnest($1::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[])
+         as t(id, action, target_type, target_id, summary, meta)`,
+      [
+        rows.map(() => newId("aud")),
+        adminId,
+        rows.map((r) => r.action),
+        rows.map((r) => r.targetType),
+        rows.map((r) => r.targetId),
+        rows.map((r) => r.summary.slice(0, 500)),
+        rows.map((r) => (r.meta ? JSON.stringify(r.meta) : null)),
+      ],
+    );
+  } catch (err) {
+    console.error("[admin] auditMany write failed", err);
+  }
+}
+
 export const PageInput = {
   page: z.number().int().min(1).max(100_000).default(1),
   pageSize: z.number().int().min(5).max(200).default(25),

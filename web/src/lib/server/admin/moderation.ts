@@ -3,13 +3,16 @@ import { z } from "zod";
 import { getSql } from "@/lib/db";
 import { asJson, num } from "@/lib/utils";
 import { notify } from "../helpers";
-import { adminMiddleware, audit, likeTerm, paged, paging, PageInput, strOrNull, ts, tsOrNull, Where } from "./common";
+import { adminMiddleware, auditMany, likeTerm, paged, paging, PageInput, strOrNull, ts, tsOrNull, Where } from "./common";
 
 /* ───────────────────────────── Reports ───────────────────────────── */
 
 const ReportFilter = z.object({
   status: z.enum(["ALL", "OPEN", "CLOSED"]).default("OPEN"),
   kind: z.enum(["all", "listing", "conversation"]).default("all"),
+  sort: z.enum(["newest", "oldest"]).default("newest"),
+  listingId: z.string().max(200).optional(),
+  userId: z.string().max(200).optional(),
   q: z.string().trim().max(120).optional(),
   ...PageInput,
 });
@@ -23,10 +26,20 @@ export const adminListReports = createServerFn({ method: "POST" })
     if (data.status !== "ALL") w.add(`r.status = ${w.param(data.status)}`);
     if (data.kind === "listing") w.add("r.conversation_id is null");
     if (data.kind === "conversation") w.add("r.conversation_id is not null");
-    if (data.q) {
-      const like = w.param(likeTerm(data.q));
-      w.add(`(r.reason ilike ${like} or r.details ilike ${like} or l.title ilike ${like} or rp.display_name ilike ${like} or tp.display_name ilike ${like})`);
+    if (data.listingId) w.add(`r.listing_id = ${w.param(data.listingId)}`);
+    if (data.userId) {
+      const uid = w.param(data.userId);
+      w.add(`(r.reporter_id = ${uid} or tp.user_id = ${uid})`);
     }
+    if (data.q) {
+      const rawNo = data.q.replace(/^#/, "");
+      const like = w.param(likeTerm(data.q));
+      const noLike = w.param(likeTerm(rawNo));
+      w.add(
+        `(r.reason ilike ${like} or r.details ilike ${like} or l.title ilike ${like} or (r.listing_snapshot->>'title') ilike ${like} or l.listing_no::text ilike ${noLike} or (r.listing_snapshot->>'listing_no') ilike ${noLike} or rp.display_name ilike ${like} or tp.display_name ilike ${like})`,
+      );
+    }
+    const orderExpr = data.sort === "oldest" ? "(r.status = 'OPEN') desc, r.created_at asc" : "(r.status = 'OPEN') desc, r.created_at desc";
     const from = `
       from reports r
       left join listings l on l.id = r.listing_id
@@ -49,7 +62,7 @@ export const adminListReports = createServerFn({ method: "POST" })
                 (tp.banned_at is not null) as target_banned, r.evidence,
                 (select count(*) from reports r2 where r2.listing_id = r.listing_id and r.listing_id is not null
                    and r2.conversation_id is null and r2.status = 'OPEN') as same_listing_reports
-         ${from} ${w.sql} order by (r.status = 'OPEN') desc, r.created_at desc limit ${limit} offset ${offset}`,
+         ${from} ${w.sql} order by ${orderExpr} limit ${limit} offset ${offset}`,
         w.params,
       ),
       sql.query<{ n: number }>(`select count(*) as n ${from} ${w.sql}`, w.params),
@@ -62,20 +75,39 @@ export const adminListReports = createServerFn({ method: "POST" })
     // can judge them even if messages are deleted later; the reporter chose to
     // share that chat. Reports filed before the copy existed read the live chat.
     type Evidence = { id: string; sender_id: string; content: string; kind?: string; image_id?: string | null; created_at: unknown };
+    const convRows = rows.filter((x) => x.conversation_id);
+    const needLiveIds = [
+      ...new Set(
+        convRows
+          .filter((r) => !asJson<{ messages?: Evidence[] } | null>(r.evidence, null)?.messages)
+          .map((r) => String(r.conversation_id)),
+      ),
+    ];
+    const liveMsgsByConv = new Map<string, Evidence[]>();
+    if (needLiveIds.length) {
+      const msgRows = await sql.query<Evidence & { conversation_id: string; meta: unknown }>(
+        `select conversation_id, id, sender_id, content, kind, meta, created_at
+         from (
+           select conversation_id, id, sender_id, content, kind, meta, created_at,
+                  row_number() over (partition by conversation_id order by created_at desc) as rn
+           from messages
+           where conversation_id = any($1::text[]) and deleted_at is null
+         ) m
+         where rn <= 12
+         order by created_at asc`,
+        [needLiveIds],
+      );
+      for (const m of msgRows) {
+        const list = liveMsgsByConv.get(m.conversation_id) ?? [];
+        list.push({ ...m, image_id: asJson<{ image_id?: string }>(m.meta, {}).image_id ?? null });
+        liveMsgsByConv.set(m.conversation_id, list);
+      }
+    }
+
     const excerpts = new Map<string, Array<{ who: string; text: string; at: string; reported: boolean; image_id: string | null }>>();
-    for (const r of rows.filter((x) => x.conversation_id)) {
+    for (const r of convRows) {
       const saved = asJson<{ messages?: Evidence[] } | null>(r.evidence, null)?.messages;
-      const msgs: Evidence[] =
-        saved ??
-        (
-          await sql.query<Evidence & { meta: unknown }>(
-            `select * from (
-               select id, sender_id, content, kind, meta, created_at from messages
-               where conversation_id = $1 and deleted_at is null order by created_at desc limit 12
-             ) m order by created_at`,
-            [r.conversation_id],
-          )
-        ).map((m) => ({ ...m, image_id: asJson<{ image_id?: string }>(m.meta, {}).image_id ?? null }));
+      const msgs: Evidence[] = saved ?? liveMsgsByConv.get(String(r.conversation_id)) ?? [];
       excerpts.set(
         String(r.id),
         msgs.map((m) => ({
@@ -149,7 +181,7 @@ export const adminResolveReports = createServerFn({ method: "POST" })
     // overwrite who closed it and when.
     const { rows, listings } = await sql.transaction(async (tx) => {
       const rows = await tx.query<{ id: string; listing_id: string | null; reason: string; conversation_id: string | null }>(
-        "select id, listing_id, reason, conversation_id from reports where id = any($1::text[]) and status <> $2",
+        "select id, listing_id, reason, conversation_id from reports where id = any($1::text[]) and status <> $2 for update",
         [data.ids, data.status],
       );
       const ids = rows.map((r) => r.id);
@@ -160,42 +192,67 @@ export const adminResolveReports = createServerFn({ method: "POST" })
             [ids, context.adminId, note],
           );
         } else {
-          await tx.query("update reports set status = 'OPEN', resolved_at = null, resolved_by = null, resolution_note = null where id = any($1::text[])", [ids]);
+          try {
+            await tx.query(
+              "update reports set status = 'OPEN', resolved_at = null, resolved_by = null, resolution_note = null where id = any($1::text[])",
+              [ids],
+            );
+          } catch (err) {
+            if (typeof err === "object" && err !== null && (err as { code?: string }).code === "23505") {
+              throw new Error("Bu hedef için zaten açık bir şikayet var.");
+            }
+            throw err;
+          }
         }
       }
       let listings: Array<{ id: string; user_id: string; title: string; slug: string; listing_no: number }> = [];
       if (data.takeDownListing && data.status === "CLOSED") {
         // A chat report points at the chat's listing, which may be the reporter's
         // own: only a report about the listing itself can take it down.
-        const listingIds = [...new Set(rows.filter((r) => !r.conversation_id).map((r) => r.listing_id).filter((x): x is string => Boolean(x)))];
-        if (listingIds.length) {
+        const byListing = new Map<string, string>();
+        for (const r of rows) {
+          if (!r.conversation_id && r.listing_id && !byListing.has(r.listing_id)) {
+            byListing.set(r.listing_id, r.reason);
+          }
+        }
+        const listingEntries = [...byListing.entries()];
+        if (listingEntries.length) {
           listings = await tx.query<{ id: string; user_id: string; title: string; slug: string; listing_no: number }>(
-            `update listings set status = 'REJECTED', approved_at = null, status_before_ban = null,
-                rejection_reason = coalesce(nullif($2, ''), rejection_reason), updated_at = now()
-             where id = any($1::text[]) and status <> 'REJECTED'
-             returning id, user_id, title, slug, listing_no`,
-            [listingIds, note ?? ""],
+            `update listings l set status = 'REJECTED', approved_at = null, status_before_ban = null,
+                rejection_reason = coalesce(nullif($2, ''), v.rsn, l.rejection_reason), updated_at = now()
+             from unnest($1::text[], $3::text[]) as v(lid, rsn)
+             where l.id = v.lid and l.status in ('PENDING', 'ACTIVE', 'INACTIVE')
+             returning l.id, l.user_id, l.title, l.slug, l.listing_no`,
+            [listingEntries.map(([id]) => id), note ?? "", listingEntries.map(([, rsn]) => rsn)],
           );
         }
       }
       return { rows, listings };
     });
 
-    for (const l of listings) {
-      const why = note || rows.find((r) => r.listing_id === l.id)?.reason || "Yayın kurallarına aykırılık";
-      await notify(l.user_id, "listing", "İlanınız yayından kaldırıldı", `"${l.title}" şikayet incelemesi sonucunda kaldırıldı. Gerekçe: ${why}`, `/ilan/${l.slug}`);
-      await audit(sql, context.adminId, "listing.reject", "listing", l.id, `#${l.listing_no} "${l.title}" şikayet üzerine kaldırıldı — ${why}`);
-    }
-    for (const r of rows) {
-      await audit(
-        sql,
-        context.adminId,
-        data.status === "CLOSED" ? "report.close" : "report.reopen",
-        "report",
-        r.id,
-        `Şikayet (${r.reason}) ${data.status === "CLOSED" ? "kapatıldı" : "yeniden açıldı"}${note ? ` — ${note}` : ""}`,
-      );
-    }
+    await Promise.all(
+      listings.map((l) => {
+        const why = note || rows.find((r) => r.listing_id === l.id)?.reason || "Yayın kurallarına aykırılık";
+        return notify(l.user_id, "listing", "İlanınız yayından kaldırıldı", `"${l.title}" şikayet incelemesi sonucunda kaldırıldı. Gerekçe: ${why}`, `/ilan/${l.slug}`);
+      }),
+    );
+    await auditMany(sql, context.adminId, [
+      ...listings.map((l) => {
+        const why = note || rows.find((r) => r.listing_id === l.id)?.reason || "Yayın kurallarına aykırılık";
+        return {
+          action: "listing.reject",
+          targetType: "listing" as const,
+          targetId: l.id,
+          summary: `#${l.listing_no} "${l.title}" şikayet üzerine kaldırıldı — ${why}`,
+        };
+      }),
+      ...rows.map((r) => ({
+        action: data.status === "CLOSED" ? "report.close" : "report.reopen",
+        targetType: "report" as const,
+        targetId: r.id,
+        summary: `Şikayet (${r.reason}) ${data.status === "CLOSED" ? "kapatıldı" : "yeniden açıldı"}${note ? ` — ${note}` : ""}`,
+      })),
+    ]);
     return { ok: true as const, count: rows.length, takenDown: listings.length };
   });
 
@@ -216,7 +273,8 @@ export const adminListReviews = createServerFn({ method: "POST" })
     if (data.rating) w.add(`r.rating = ${w.param(data.rating)}`);
     if (data.q) {
       const like = w.param(likeTerm(data.q));
-      w.add(`(r.comment ilike ${like} or sp.display_name ilike ${like} or rp.display_name ilike ${like})`);
+      const noLike = w.param(likeTerm(data.q.replace(/^#/, "")));
+      w.add(`(r.comment ilike ${like} or sp.display_name ilike ${like} or rp.display_name ilike ${like} or l.title ilike ${like} or l.listing_no::text ilike ${noLike})`);
     }
     const from = `
       from reviews r
@@ -226,9 +284,11 @@ export const adminListReviews = createServerFn({ method: "POST" })
     const { limit, offset } = paging(data.page, data.pageSize);
     const [rows, count, dist] = await Promise.all([
       sql.query<Record<string, unknown>>(
-        `select r.id, r.rating, r.comment, r.created_at, r.seller_id, r.reviewer_id,
+        `select r.id, r.rating, r.comment, r.created_at, r.seller_id, r.reviewer_id, r.listing_id,
                 coalesce(sp.display_name, 'Silinmiş kullanıcı') as seller_name,
                 coalesce(rp.display_name, 'Silinmiş kullanıcı') as reviewer_name,
+                (sp.user_id is null) as seller_deleted,
+                (rp.user_id is null) as reviewer_deleted,
                 l.title as listing_title, l.listing_no
          ${from} ${w.sql} order by r.created_at desc limit ${limit} offset ${offset}`,
         w.params,
@@ -247,8 +307,11 @@ export const adminListReviews = createServerFn({ method: "POST" })
           reviewer_id: String(r.reviewer_id),
           seller_name: String(r.seller_name),
           reviewer_name: String(r.reviewer_name),
+          seller_deleted: Boolean(r.seller_deleted),
+          reviewer_deleted: Boolean(r.reviewer_deleted),
+          listing_id: strOrNull(r.listing_id),
           listing_title: strOrNull(r.listing_title),
-          listing_no: num(r.listing_no),
+          listing_no: r.listing_no != null ? num(r.listing_no) : null,
         })),
         num(count[0]?.n),
         data.page,
@@ -267,10 +330,16 @@ export const adminDeleteReviews = createServerFn({ method: "POST" })
       "delete from reviews where id = any($1::text[]) returning id, rating, comment",
       [data.ids],
     );
-    for (const r of rows) {
-      await audit(sql, context.adminId, "review.delete", "review", r.id, `${r.rating}★ yorum silindi${data.reason ? ` — ${data.reason}` : ""}`, {
-        comment: r.comment?.slice(0, 200),
-      });
-    }
+    await auditMany(
+      sql,
+      context.adminId,
+      rows.map((r) => ({
+        action: "review.delete",
+        targetType: "review",
+        targetId: r.id,
+        summary: `${r.rating}★ yorum silindi${data.reason ? ` — ${data.reason}` : ""}`,
+        meta: { comment: r.comment?.slice(0, 200) },
+      })),
+    );
     return { ok: true as const, count: rows.length };
   });

@@ -79,6 +79,9 @@ export function Pill({ tone = "muted", children, className, dot }: { tone?: Tone
 
 export function Avatar({ name, src, size = 32, className }: { name: string | null | undefined; src?: string | null; size?: number; className?: string }) {
   const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    setFailed(false);
+  }, [src]);
   const style = { width: size, height: size, fontSize: Math.max(10, Math.round(size * 0.36)) };
   if (src && !failed) {
     return <img src={src} alt="" style={style} onError={() => setFailed(true)} className={cn("shrink-0 rounded-full border border-border object-cover", className)} />;
@@ -91,10 +94,14 @@ export function Avatar({ name, src, size = 32, className }: { name: string | nul
 }
 
 export function Thumb({ src, className, alt = "" }: { src: string | null | undefined; className?: string; alt?: string }) {
-  if (!src) {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    setFailed(false);
+  }, [src]);
+  if (!src || failed) {
     return <div className={cn("flex shrink-0 items-center justify-center rounded-lg border border-border bg-elevated text-[10px] text-subtle", className)}>Foto yok</div>;
   }
-  return <img src={src} alt={alt} loading="lazy" className={cn("shrink-0 rounded-lg border border-border bg-elevated object-cover", className)} />;
+  return <img src={src} alt={alt} loading="lazy" onError={() => setFailed(true)} className={cn("shrink-0 rounded-lg border border-border bg-elevated object-cover", className)} />;
 }
 
 export function StatCard({
@@ -233,6 +240,8 @@ export function SearchInput({
   const [draft, setDraft] = useState(value);
   const debounced = useDebounced(draft, 350);
   const last = useRef(value);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
   useEffect(() => {
     if (value !== last.current) {
       last.current = value;
@@ -242,9 +251,9 @@ export function SearchInput({
   useEffect(() => {
     if (debounced !== last.current) {
       last.current = debounced;
-      onChange(debounced);
+      onChangeRef.current(debounced);
     }
-  }, [debounced, onChange]);
+  }, [debounced]);
   return (
     <div className={cn("relative", className)}>
       <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle" />
@@ -403,6 +412,7 @@ export function Pagination({
   onPage: (p: number) => void;
   onPageSize?: (s: number) => void;
 }) {
+  const totalPages = Math.max(1, pages);
   const from = total ? (page - 1) * pageSize + 1 : 0;
   const to = Math.min(total, page * pageSize);
   return (
@@ -435,11 +445,11 @@ export function Pagination({
           <ChevronLeft className="size-4" />
         </button>
         <span className="px-2 tabular-nums">
-          <span className="font-semibold text-fg">{page}</span> / {pages}
+          <span className="font-semibold text-fg">{page}</span> / {totalPages}
         </span>
         <button
           type="button"
-          disabled={page >= pages}
+          disabled={page >= totalPages}
           onClick={() => onPage(page + 1)}
           className="flex size-8 items-center justify-center rounded-lg border border-border bg-surface text-fg disabled:opacity-40"
           aria-label="Sonraki sayfa"
@@ -451,7 +461,19 @@ export function Pagination({
   );
 }
 
-export function Checkbox({ checked, indeterminate, onChange, label }: { checked: boolean; indeterminate?: boolean; onChange: (v: boolean) => void; label: string }) {
+export function Checkbox({
+  checked,
+  indeterminate,
+  onChange,
+  label,
+  disabled,
+}: {
+  checked: boolean;
+  indeterminate?: boolean;
+  onChange: (v: boolean) => void;
+  label: string;
+  disabled?: boolean;
+}) {
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (ref.current) ref.current.indeterminate = Boolean(indeterminate);
@@ -462,9 +484,10 @@ export function Checkbox({ checked, indeterminate, onChange, label }: { checked:
       type="checkbox"
       aria-label={label}
       checked={checked}
+      disabled={disabled}
       onChange={(e) => onChange(e.target.checked)}
       onClick={(e) => e.stopPropagation()}
-      className="size-4 cursor-pointer rounded border-border accent-primary"
+      className="size-4 cursor-pointer rounded border-border accent-primary disabled:cursor-not-allowed disabled:opacity-40"
     />
   );
 }
@@ -621,7 +644,11 @@ export function Modal({
           <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
             <div className="min-w-0">
               <DialogPrimitive.Title className="text-base font-semibold">{title}</DialogPrimitive.Title>
-              {description ? <DialogPrimitive.Description className="mt-1 text-sm text-muted">{description}</DialogPrimitive.Description> : <DialogPrimitive.Description className="sr-only">{String(title)}</DialogPrimitive.Description>}
+              {description ? (
+                <DialogPrimitive.Description className="mt-1 text-sm text-muted">{description}</DialogPrimitive.Description>
+              ) : (
+                <DialogPrimitive.Description className="sr-only">{typeof title === "string" ? title : "İletişim penceresi"}</DialogPrimitive.Description>
+              )}
             </div>
             <DialogPrimitive.Close className="-mr-1 rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg" aria-label="Kapat">
               <X className="size-4" />
@@ -711,15 +738,32 @@ const ConfirmContext = createContext<{
 export function ConfirmProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<DialogState | null>(null);
   const [text, setText] = useState("");
+  const stateRef = useRef<DialogState | null>(null);
+  stateRef.current = state;
 
-  const confirm = useCallback((o: ConfirmOptions) => new Promise<boolean>((resolve) => setState({ kind: "confirm", resolve, ...o })), []);
+  const dismissActive = useCallback(() => {
+    const prev = stateRef.current;
+    if (!prev) return;
+    if (prev.kind === "confirm") prev.resolve(false);
+    else prev.resolve(null);
+  }, []);
+
+  const confirm = useCallback(
+    (o: ConfirmOptions) => {
+      dismissActive();
+      return new Promise<boolean>((resolve) => setState({ kind: "confirm", resolve, ...o }));
+    },
+    [dismissActive],
+  );
   const prompt = useCallback(
-    (o: PromptOptions) =>
-      new Promise<string | null>((resolve) => {
+    (o: PromptOptions) => {
+      dismissActive();
+      return new Promise<string | null>((resolve) => {
         setText(o.defaultValue ?? "");
         setState({ kind: "prompt", resolve, ...o });
-      }),
-    [],
+      });
+    },
+    [dismissActive],
   );
   const value = useMemo(() => ({ confirm, prompt }), [confirm, prompt]);
 

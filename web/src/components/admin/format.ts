@@ -16,8 +16,19 @@ export function nCompact(value: number | null | undefined): string {
   return Math.abs(v) < 10_000 ? nf.format(v) : compact.format(v);
 }
 
+const currencyFormatters = new Map<string, Intl.NumberFormat>();
+
 export function money(value: number, currency = "TRY"): string {
-  return new Intl.NumberFormat("tr-TR", { style: "currency", currency, maximumFractionDigits: 0 }).format(value);
+  try {
+    let fmt = currencyFormatters.get(currency);
+    if (!fmt) {
+      fmt = new Intl.NumberFormat("tr-TR", { style: "currency", currency, maximumFractionDigits: 0 });
+      currencyFormatters.set(currency, fmt);
+    }
+    return fmt.format(value);
+  } catch {
+    return `${n(value)} ${currency}`;
+  }
 }
 
 export function bytes(value: number): string {
@@ -69,7 +80,9 @@ export function relative(value: string | null | undefined): string {
 /** Waiting time for queues: "12 dk", "3 sa", "2 gün". */
 export function age(value: string | null | undefined): string {
   if (!value) return "—";
-  const m = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 60_000));
+  const time = new Date(value).getTime();
+  if (Number.isNaN(time)) return "—";
+  const m = Math.max(0, Math.round((Date.now() - time) / 60_000));
   if (m < 60) return `${m} dk`;
   const h = Math.round(m / 60);
   if (h < 48) return `${h} sa`;
@@ -129,8 +142,8 @@ export function actionTone(action: string): Tone {
   // Judge the verb alone: "user.unban" and "listing.deactivate" contain other verbs.
   const verb = action.split(".").pop() ?? action;
   if (/^(approve|activate|unban|paid|create|verify)/.test(verb)) return "ok";
-  if (/delete|reject|ban|sessions/.test(verb)) return "danger";
-  if (/settings|system|broadcast/.test(action)) return "violet";
+  if (/delete|reject|ban|sessions|rollback/.test(verb)) return "danger";
+  if (/settings|system|broadcast|ota\./.test(action)) return "violet";
   return "primary";
 }
 
@@ -149,3 +162,12 @@ export function delta(current: number, previous: number): number | null {
   if (!previous) return current ? null : 0;
   return Math.round(((current - previous) / previous) * 100);
 }
+
+/** Standard ban reason presets shared between UserSheet and ReportsPage. */
+export const BAN_REASONS = [
+  "Dolandırıcılık şüphesi",
+  "Sahte veya yanıltıcı ilanlar",
+  "Taciz / hakaret içeren mesajlar",
+  "Yasaklı ürün satışı",
+  "Çoklu hesap / spam",
+];

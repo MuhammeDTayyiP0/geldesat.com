@@ -8,16 +8,23 @@ import { cn } from "@/lib/utils";
 import { adminListReports, adminResolveReports, type AdminReportRow } from "@/lib/server/admin/moderation";
 import { adminBanUser } from "@/lib/server/admin/users";
 import { useRunner, useSheets } from "@/components/admin/hooks";
-import { dateTime, listingStatus, relative } from "@/components/admin/format";
+import { BAN_REASONS, dateTime, listingStatus, relative } from "@/components/admin/format";
 import { int, oneOf, str } from "@/components/admin/search";
-import { BulkBar, BulkButton, Card, Checkbox, EmptyState, ErrorState, PageHeader, Pagination, Pill, SearchInput, Segmented, SkeletonRows, Thumb, useConfirm } from "@/components/admin/ui";
+import { BulkBar, BulkButton, Card, Checkbox, EmptyState, ErrorState, PageHeader, Pagination, Pill, SearchInput, Segmented, SelectBox, SkeletonRows, Thumb, useConfirm } from "@/components/admin/ui";
 
 const STATUSES = ["OPEN", "CLOSED", "ALL"] as const;
 const KINDS = ["all", "listing", "conversation"] as const;
-type Search = { status?: (typeof STATUSES)[number]; kind?: (typeof KINDS)[number]; q?: string; page?: number };
+const SORTS = ["newest", "oldest"] as const;
+type Search = { status?: (typeof STATUSES)[number]; kind?: (typeof KINDS)[number]; sort?: (typeof SORTS)[number]; q?: string; page?: number };
 
 export const Route = createFileRoute("/admin/sikayetler")({
-  validateSearch: (s: Record<string, unknown>): Search => ({ status: oneOf(s.status, STATUSES), kind: oneOf(s.kind, KINDS), q: str(s.q), page: int(s.page, 1, 100_000) }),
+  validateSearch: (s: Record<string, unknown>): Search => ({
+    status: oneOf(s.status, STATUSES),
+    kind: oneOf(s.kind, KINDS),
+    sort: oneOf(s.sort, SORTS),
+    q: str(s.q),
+    page: int(s.page, 1, 100_000),
+  }),
   component: ReportsPage,
 });
 
@@ -26,10 +33,10 @@ function ReportsPage() {
   const navigate = Route.useNavigate();
   const set = (patch: Partial<Search>, resetPage = true) =>
     void navigate({ search: (prev) => ({ ...prev, ...(resetPage ? { page: undefined } : {}), ...patch }), replace: true });
-  const filter = { status: search.status ?? "OPEN", kind: search.kind ?? "all", q: search.q, page: search.page ?? 1, pageSize: 20 } as const;
+  const filter = { status: search.status ?? "OPEN", kind: search.kind ?? "all", sort: search.sort ?? "newest", q: search.q, page: search.page ?? 1, pageSize: 20 } as const;
   const query = useQuery({ queryKey: ["admin", "reports", filter], queryFn: () => adminListReports({ data: filter }), placeholderData: keepPreviousData });
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  useEffect(() => setSelected(new Set()), [filter.status, filter.kind, filter.q]);
+  useEffect(() => setSelected(new Set()), [filter.status, filter.kind, filter.sort, filter.q, filter.page]);
   // After the last reports of a page are closed, step back to one that has some.
   const lastPage = query.data?.pages;
   useEffect(() => {
@@ -38,15 +45,16 @@ function ReportsPage() {
   const { run } = useRunner();
   const { prompt } = useConfirm();
   const rows = query.data?.rows ?? [];
+  const openRows = rows.filter((r) => r.status === "OPEN");
   const totals = query.data?.totals;
 
   async function closeSelected(takeDown: boolean) {
     const ids = [...selected];
     const note = await prompt({
       title: takeDown ? `${ids.length} şikayet kapatılsın ve ilanlar kaldırılsın mı?` : `${ids.length} şikayet kapatılsın mı?`,
-      label: "Çözüm notu (isteğe bağlı)",
-      required: false,
-      confirmLabel: "Kapat",
+      label: takeDown ? "Kaldırma gerekçesi (satıcılara gider)" : "Çözüm notu (isteğe bağlı)",
+      required: takeDown,
+      confirmLabel: takeDown ? "Kapat ve kaldır" : "Kapat",
       danger: takeDown,
     });
     if (note == null) return;
@@ -76,20 +84,31 @@ function ReportsPage() {
             { value: "conversation", label: "Mesaj şikayetleri" },
           ]}
         />
-        <SearchInput value={search.q ?? ""} onChange={(q) => set({ q: q || undefined })} placeholder="Gerekçe, açıklama, ilan veya üye" className="ml-auto w-full sm:w-72" />
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <SelectBox
+            label="Sıralama"
+            value={filter.sort}
+            onChange={(v) => set({ sort: v === "newest" ? undefined : (v as Search["sort"]) })}
+            options={[
+              { value: "newest", label: "En yeni" },
+              { value: "oldest", label: "En eski (önce bekleyen)" },
+            ]}
+          />
+          <SearchInput value={search.q ?? ""} onChange={(q) => set({ q: q || undefined })} placeholder="Gerekçe, açıklama, ilan veya üye" className="w-full sm:w-72" />
+        </div>
       </div>
 
-      {rows.length ? (
+      {openRows.length ? (
         <div className="mt-3 flex items-center gap-2 px-1">
           <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-medium text-muted hover:text-fg">
             <Checkbox
-              label="Tümünü seç"
-              checked={rows.every((r) => selected.has(r.id))}
-              indeterminate={rows.some((r) => selected.has(r.id)) && !rows.every((r) => selected.has(r.id))}
+              label="Açık şikayetlerin tümünü seç"
+              checked={openRows.every((r) => selected.has(r.id))}
+              indeterminate={openRows.some((r) => selected.has(r.id)) && !openRows.every((r) => selected.has(r.id))}
               onChange={(v) =>
                 setSelected((prev) => {
                   const next = new Set(prev);
-                  for (const r of rows) {
+                  for (const r of openRows) {
                     if (v) next.add(r.id);
                     else next.delete(r.id);
                   }
@@ -97,7 +116,7 @@ function ReportsPage() {
                 })
               }
             />
-            <span>Tümünü seç ({rows.length})</span>
+            <span>Açık olanları seç ({openRows.length})</span>
           </label>
         </div>
       ) : null}
@@ -178,6 +197,7 @@ function ReportCard({ report: r, selected, onSelect }: { report: AdminReportRow;
       title: `${r.reported_user_name ?? "Kullanıcı"} askıya alınsın mı?`,
       body: "Giriş yapamaz, oturumları kapanır, ilanları gizlenir. Şikayet de kapatılır.",
       label: "Gerekçe",
+      presets: BAN_REASONS,
       defaultValue: r.reason,
       confirmLabel: "Askıya al",
       danger: true,
@@ -191,7 +211,7 @@ function ReportCard({ report: r, selected, onSelect }: { report: AdminReportRow;
     <Card className={cn("overflow-hidden", selected && "ring-2 ring-primary/40", !open && "opacity-80")}>
       <div className="flex gap-3 p-4">
         <div className="pt-1">
-          <Checkbox label="Seç" checked={selected} onChange={onSelect} />
+          <Checkbox label="Seç" checked={selected} disabled={!open} onChange={onSelect} />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">

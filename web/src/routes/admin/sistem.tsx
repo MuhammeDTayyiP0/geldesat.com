@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Activity, CheckCircle2, Database, HardDrive, Mail, PlayCircle, RefreshCw, Server, Trash2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { adminRunMaintenance, adminSystemInfo } from "@/lib/server/admin/content";
 import { useRunner } from "@/components/admin/hooks";
 import { bytes, dateTime, n } from "@/components/admin/format";
@@ -50,6 +51,7 @@ function SystemPage() {
 
   if (q.error && !q.data) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;
   const d = q.data;
+  const mailOk = d?.checks.find((c) => c.key === "mail")?.ok ?? false;
 
   return (
     <div className="mx-auto max-w-[1200px]">
@@ -59,7 +61,7 @@ function SystemPage() {
         description="Sunucu, veritabanı ve yapılandırma kontrolleri; bakım görevlerini elle çalıştırma."
         actions={
           <Button size="sm" variant="outline" onClick={() => void q.refetch()} disabled={q.isFetching}>
-            <RefreshCw className="size-4" /> Yenile
+            <RefreshCw className={cn("size-4", q.isFetching && "animate-spin")} /> Yenile
           </Button>
         }
       />
@@ -73,7 +75,7 @@ function SystemPage() {
             <StatCard label="Veritabanı boyutu" value={d.database.size ? bytes(d.database.size) : "—"} icon={Database} hint={d.database.source === "postgres" ? "PostgreSQL" : "PGLite (bellek içi)"} tone={d.database.source === "postgres" ? "primary" : "danger"} />
             <StatCard label="Görsel verisi" value={bytes(d.database.imageBytes)} icon={HardDrive} tone="violet" hint="ilan, sohbet, profil fotoğrafları" />
             <StatCard label="Açık oturum" value={n(d.database.sessions)} icon={Server} tone="ok" />
-            <StatCard label="Çalışma süresi" value={uptime(d.runtime.uptime)} icon={Activity} hint={`Node ${d.runtime.node} · ${d.runtime.env}`} />
+            <StatCard label="Çalışma süresi" value={uptime(d.runtime.uptime)} icon={Activity} hint={`Node ${d.runtime.node} · ${d.runtime.env} · Bellek ${bytes(d.runtime.rss)}`} />
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
@@ -104,7 +106,13 @@ function SystemPage() {
                       <p className="text-sm font-medium">{m.title}</p>
                       <p className="text-xs text-muted">{m.body}</p>
                     </div>
-                    <Button size="sm" variant="outline" disabled={busy} onClick={() => void maintenance(m.task, `${m.title} çalıştırılsın mı?`, m.body)}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={busy || (m.task === "digest" && !mailOk)}
+                      title={m.task === "digest" && !mailOk ? "SMTP yapılandırılmamış" : undefined}
+                      onClick={() => void maintenance(m.task, `${m.title} çalıştırılsın mı?`, m.body)}
+                    >
                       Çalıştır
                     </Button>
                   </li>
@@ -119,9 +127,9 @@ function SystemPage() {
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
             <Card>
               <CardHead title="Kayıt sayıları" />
-              <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-3">
+              <div className="grid grid-cols-2 gap-2.5 p-3 sm:grid-cols-3">
                 {Object.entries(d.counts).map(([table, count]) => (
-                  <div key={table} className="bg-surface px-4 py-3">
+                  <div key={table} className="rounded-lg border border-border bg-elevated/30 px-3 py-2.5">
                     <p className="text-[11px] text-muted">{TABLE_LABEL[table] ?? table}</p>
                     <p className="text-lg font-bold tabular-nums">{count < 0 ? "—" : n(count)}</p>
                   </div>
@@ -130,16 +138,20 @@ function SystemPage() {
             </Card>
             <Card>
               <CardHead title="Son veritabanı geçişleri (migration)" description={d.database.version} />
-              <ul className="divide-y divide-border">
-                {d.migrations.map((m) => (
-                  <li key={m.name} className="flex items-center justify-between gap-3 px-4 py-2 text-xs">
-                    <span className="truncate font-mono">{m.name}</span>
-                    <span className="shrink-0 text-muted">{dateTime(m.applied_at)}</span>
-                  </li>
-                ))}
-              </ul>
+              {!d.migrations.length ? (
+                <p className="p-4 text-xs text-muted">Kayıtlı migration bulunamadı.</p>
+              ) : (
+                <ul className="divide-y divide-border">
+                  {d.migrations.map((m) => (
+                    <li key={m.name} className="flex items-center justify-between gap-3 px-4 py-2 text-xs">
+                      <span className="truncate font-mono">{m.name}</span>
+                      <span className="shrink-0 text-muted">{dateTime(m.applied_at)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
               <p className="border-t border-border px-4 py-2 text-[11px] text-muted">
-                Bellek: {bytes(d.runtime.rss)} (heap {bytes(d.runtime.heapUsed)})
+                Bellek: RSS {bytes(d.runtime.rss)} · Heap {bytes(d.runtime.heapUsed)}
               </p>
             </Card>
           </div>

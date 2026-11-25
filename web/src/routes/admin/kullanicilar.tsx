@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { BadgeCheck, Download, Eye, LayoutList, Users } from "lucide-react";
@@ -67,6 +68,12 @@ function UsersPage() {
     pageSize: search.pageSize ?? 25,
   } as const;
   const query = useQuery({ queryKey: ["admin", "users", filter], queryFn: () => adminListUsers({ data: filter }), placeholderData: keepPreviousData });
+  const lastPage = query.data?.pages;
+  useEffect(() => {
+    if (lastPage && filter.page > lastPage) {
+      void navigate({ search: (prev) => ({ ...prev, page: lastPage > 1 ? lastPage : undefined }), replace: true });
+    }
+  }, [lastPage, filter.page, navigate]);
   const rows = query.data?.rows ?? [];
   const t = query.data?.totals;
 
@@ -151,6 +158,11 @@ function UsersPage() {
               { value: "name", label: "Ada göre (A-Z)" },
             ]}
           />
+          {search.q || search.state || search.role ? (
+            <button type="button" onClick={() => set({ q: undefined, state: undefined, role: undefined })} className="text-xs font-semibold text-primary hover:underline">
+              Filtreleri temizle
+            </button>
+          ) : null}
         </div>
 
         {query.error && !query.data ? (

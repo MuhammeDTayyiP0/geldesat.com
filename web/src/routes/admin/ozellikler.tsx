@@ -208,23 +208,43 @@ function AttributeModal({ attr, onClose }: { attr: AdminAttribute | null; onClos
   const [migrate, setMigrate] = useState(true);
   const optionList = [...new Set(options.split("\n").map((o) => o.trim()).filter(Boolean))];
   const needsOptions = type === "SELECT" || type === "MULTI";
+  const tooManyOptions = needsOptions && optionList.length > 500;
+  const longOptions = needsOptions ? optionList.filter((o) => o.length > 80) : [];
+  const optionsError = tooManyOptions
+    ? "En fazla 500 seçenek eklenebilir."
+    : longOptions.length
+      ? `Seçenekler en fazla 80 karakter olabilir (${longOptions.length} seçenek aşıyor).`
+      : null;
   const renamed = attr && name.trim() !== attr.name;
   const removedOptions = attr?.options && needsOptions ? attr.options.filter((o) => !optionList.includes(o)) : [];
+  const dirty = attr
+    ? name.trim() !== attr.name || type !== attr.type || options !== (attr.options ?? []).join("\n") || unit !== (attr.unit ?? "")
+    : Boolean(name.trim() || options.trim() || unit.trim());
+
+  async function requestClose() {
+    if (dirty) {
+      const ok = await confirm({ title: "Kaydedilmemiş değişiklikler silinsin mi?", confirmLabel: "Kapat", danger: true });
+      if (!ok) return;
+    }
+    onClose();
+  }
 
   return (
     <Modal
       open
-      onOpenChange={(o) => !o && onClose()}
+      onOpenChange={(o) => {
+        if (!o) void requestClose();
+      }}
       title={attr ? `"${attr.name}" özelliğini düzenle` : "Yeni ilan özelliği"}
       size="lg"
       footer={
         <>
-          <Button size="sm" variant="outline" onClick={onClose}>
+          <Button size="sm" variant="outline" onClick={() => void requestClose()}>
             Vazgeç
           </Button>
           <Button
             size="sm"
-            disabled={busy || !name.trim() || (needsOptions && optionList.length < 2)}
+            disabled={busy || !name.trim() || (needsOptions && (optionList.length < 2 || Boolean(optionsError)))}
             onClick={async () => {
               if (attr && attr.type !== type) {
                 const ok = await confirm({
@@ -274,7 +294,7 @@ function AttributeModal({ attr, onClose }: { attr: AdminAttribute | null; onClos
           </div>
         </FieldGroup>
         {needsOptions ? (
-          <Field label={`Seçenekler (${optionList.length})`} hint="Her satıra bir seçenek. Sıralama formdaki sırayı belirler.">
+          <Field label={`Seçenekler (${optionList.length})`} hint="Her satıra bir seçenek (en fazla 500 seçenek, her biri ≤ 80 karakter). Sıralama formdaki sırayı belirler." error={optionsError}>
             <textarea value={options} onChange={(e) => setOptions(e.target.value)} rows={8} className={cn(textareaClass, "font-mono")} placeholder={"1+0\n1+1\n2+1"} />
           </Field>
         ) : null}

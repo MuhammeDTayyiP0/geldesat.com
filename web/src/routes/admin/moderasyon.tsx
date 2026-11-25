@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Check, ChevronDown, ChevronUp, ExternalLink, FolderInput, Keyboard, ListChecks, PanelRightOpen, ShieldAlert, X } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ExternalLink, FolderInput, Keyboard, ListChecks, PanelRightOpen, ShieldAlert, X, ZoomIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { photoSrc } from "@/lib/images";
 import { cn } from "@/lib/utils";
 import { adminListingDetail, adminListingsAction, adminListListings } from "@/lib/server/admin/listings";
 import { REJECT_REASONS, useListingActions, useRunner, useSheets } from "@/components/admin/hooks";
 import { age, dateTime, money, n, relative } from "@/components/admin/format";
-import { Avatar, Card, EmptyState, ErrorState, Kbd, MiniStat, PageHeader, Pill, Spinner, Thumb } from "@/components/admin/ui";
+import { Avatar, Card, EmptyState, ErrorState, Kbd, MiniStat, Modal, PageHeader, Pill, Spinner, Thumb } from "@/components/admin/ui";
 
 export const Route = createFileRoute("/admin/moderasyon")({
   component: ModerationPage,
@@ -23,14 +23,20 @@ function ModerationPage() {
   const rows = useMemo(() => queue.data?.rows ?? [], [queue.data]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [handled, setHandled] = useState(0);
+  const pendingNextIdRef = useRef<string | null>(null);
 
-  // Keep a valid selection as the queue changes.
+  // Keep a valid selection as the queue changes without flickering back to item #1.
   useEffect(() => {
     if (!rows.length) {
+      pendingNextIdRef.current = null;
       setSelectedId(null);
       return;
     }
-    if (!selectedId || !rows.some((r) => r.id === selectedId)) setSelectedId(rows[0].id);
+    if (!selectedId || !rows.some((r) => r.id === selectedId)) {
+      const preferred = pendingNextIdRef.current;
+      pendingNextIdRef.current = null;
+      setSelectedId(preferred && rows.some((r) => r.id === preferred) ? preferred : rows[0].id);
+    }
   }, [rows, selectedId]);
 
   const position = rows.findIndex((r) => r.id === selectedId);
@@ -41,11 +47,28 @@ function ModerationPage() {
     if (next) setSelectedId(next.id);
   }
 
-  /** After a decision the next listing in line opens. */
-  function advanceFrom(id: string) {
+  /** Pre-computes the next listing ID before query invalidation removes `id`. */
+  function prepareAdvanceFrom(id: string) {
     const i = rows.findIndex((r) => r.id === id);
     const next = rows[i + 1] ?? rows[i - 1];
-    setSelectedId(next && next.id !== id ? next.id : null);
+    pendingNextIdRef.current = next && next.id !== id ? next.id : null;
+  }
+
+  function cancelAdvance() {
+    pendingNextIdRef.current = null;
+  }
+
+  /** After a decision the next listing in line opens. */
+  function advanceFrom(id: string) {
+    const preferred = pendingNextIdRef.current;
+    pendingNextIdRef.current = null;
+    if (preferred && rows.some((r) => r.id === preferred)) {
+      setSelectedId(preferred);
+    } else {
+      const i = rows.findIndex((r) => r.id === id);
+      const next = rows[i + 1] ?? rows[i - 1];
+      setSelectedId(next && next.id !== id ? next.id : null);
+    }
     setHandled((h) => h + 1);
   }
 
@@ -101,7 +124,16 @@ function ModerationPage() {
           </Card>
 
           {selectedId ? (
-            <Reviewer key={selectedId} id={selectedId} position={position + 1} total={queue.data?.total ?? rows.length} onStep={step} onDecided={advanceFrom} />
+            <Reviewer
+              key={selectedId}
+              id={selectedId}
+              position={position + 1}
+              total={queue.data?.total ?? rows.length}
+              onStep={step}
+              onPrepareAdvance={prepareAdvanceFrom}
+              onCancelAdvance={cancelAdvance}
+              onDecided={advanceFrom}
+            />
           ) : null}
         </div>
       )}
@@ -109,22 +141,46 @@ function ModerationPage() {
   );
 }
 
-function Reviewer({ id, position, total, onStep, onDecided }: { id: string; position: number; total: number; onStep: (d: 1 | -1) => void; onDecided: (id: string) => void }) {
+function Reviewer({
+  id,
+  position,
+  total,
+  onStep,
+  onPrepareAdvance,
+  onCancelAdvance,
+  onDecided,
+}: {
+  id: string;
+  position: number;
+  total: number;
+  onStep: (d: 1 | -1) => void;
+  onPrepareAdvance: (id: string) => void;
+  onCancelAdvance: () => void;
+  onDecided: (id: string) => void;
+}) {
   const q = useQuery({ queryKey: ["admin", "listing", id], queryFn: () => adminListingDetail({ data: { id } }) });
   const { run, busy } = useRunner();
   const { act } = useListingActions();
   const { openListing, openUser } = useSheets();
   const [photo, setPhoto] = useState(0);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState("");
   const reasonRef = useRef<HTMLInputElement>(null);
 
+  function openReject() {
+    setRejecting(true);
+    setTimeout(() => reasonRef.current?.focus(), 0);
+  }
+
   async function decide(action: "approve" | "reject", why?: string) {
+    onPrepareAdvance(id);
     const r = await run(
       () => adminListingsAction({ data: { ids: [id], action, reason: why, notify: true } }),
       action === "approve" ? "İlan onaylandı ve yayına alındı." : "İlan reddedildi; satıcıya bildirildi.",
     );
     if (r) onDecided(id);
+    else onCancelAdvance();
   }
 
   // Keyboard shortcuts while no text field has focus.
@@ -135,6 +191,8 @@ function Reviewer({ id, position, total, onStep, onDecided }: { id: string; posi
         setRejecting(false);
         return;
       }
+      if (e.ctrlKey || e.metaKey || e.altKey || busy || e.repeat || !q.data) return;
+      if (document.querySelector("[role=dialog]")) return;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) {
         // "R, then 1-7": with the box still empty a digit picks a ready reason.
         const preset = t === reasonRef.current && !reasonRef.current.value && /^[1-7]$/.test(e.key) ? REJECT_REASONS[Number(e.key) - 1] : undefined;
@@ -144,19 +202,14 @@ function Reviewer({ id, position, total, onStep, onDecided }: { id: string; posi
         }
         return;
       }
-      // A held key repeats, and the next listing appears under it: only a fresh press
-      // on a fully loaded listing decides anything.
-      if (e.ctrlKey || e.metaKey || e.altKey || busy || e.repeat || !q.data) return;
-      if (document.querySelector("[role=dialog]")) return;
       const key = e.key.toLowerCase();
       if (key === "a") {
-        if (rejecting) return;
+        if (rejecting || q.data.seller?.banned) return;
         e.preventDefault();
         void decide("approve");
       } else if (key === "r") {
         e.preventDefault();
-        setRejecting(true);
-        setTimeout(() => reasonRef.current?.focus(), 0);
+        openReject();
       } else if (key === "j" || e.key === "ArrowDown") {
         e.preventDefault();
         onStep(1);
@@ -234,9 +287,17 @@ function Reviewer({ id, position, total, onStep, onDecided }: { id: string; posi
           <div className="border-b border-border bg-ink/[0.03] p-4 xl:border-b-0 xl:border-r">
             {current ? (
               <>
-                <a href={photoSrc(current, 800)} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-xl border border-border bg-black/5">
+                <button
+                  type="button"
+                  onClick={() => setLightboxOpen(true)}
+                  className="group relative block w-full overflow-hidden rounded-xl border border-border bg-black/5"
+                  aria-label="Fotoğrafı büyüt"
+                >
                   <img src={photoSrc(current, 800)} alt="" className="mx-auto aspect-[4/3] w-full object-contain" />
-                </a>
+                  <span className="absolute right-2.5 top-2.5 inline-flex items-center gap-1 rounded-lg bg-ink/70 px-2 py-1 text-[11px] font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
+                    <ZoomIn className="size-3.5" /> Büyüt
+                  </span>
+                </button>
                 {images.length > 1 ? (
                   <div className="mt-2 flex gap-1.5 overflow-x-auto pb-1">
                     {images.map((img, i) => (
@@ -365,10 +426,15 @@ function Reviewer({ id, position, total, onStep, onDecided }: { id: string; posi
           </div>
         ) : (
           <div className="flex flex-wrap items-center gap-2">
-            <Button className="bg-ok-solid text-white hover:bg-ok-solid/90" disabled={busy} onClick={() => void decide("approve")}>
+            <Button
+              className="bg-ok-solid text-white hover:bg-ok-solid/90"
+              disabled={busy || Boolean(s?.banned)}
+              title={s?.banned ? "Satıcı askıda olduğu için onaylanamaz" : undefined}
+              onClick={() => void decide("approve")}
+            >
               {busy ? <Spinner /> : <Check className="size-4" />} Onayla <Kbd>A</Kbd>
             </Button>
-            <Button variant="outline" className="text-danger" disabled={busy} onClick={() => setRejecting(true)}>
+            <Button variant="outline" className="text-danger" disabled={busy} onClick={openReject}>
               <X className="size-4" /> Reddet <Kbd>R</Kbd>
             </Button>
             <Button variant="outline" disabled={busy} onClick={() => void act([id], "move")}>
@@ -380,14 +446,56 @@ function Reviewer({ id, position, total, onStep, onDecided }: { id: string; posi
           </div>
         )}
       </div>
+
+      {current ? (
+        <Modal
+          open={lightboxOpen}
+          onOpenChange={setLightboxOpen}
+          title={`${l.title} (${Math.min(photo, images.length - 1) + 1} / ${images.length})`}
+          size="xl"
+          footer={
+            <div className="flex w-full items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5">
+                <Button size="sm" variant="outline" disabled={photo <= 0} onClick={() => setPhoto((p) => Math.max(0, p - 1))}>
+                  <ChevronLeft className="size-4" /> Önceki
+                </Button>
+                <Button size="sm" variant="outline" disabled={photo >= images.length - 1} onClick={() => setPhoto((p) => Math.min(images.length - 1, p + 1))}>
+                  Sonraki <ChevronRight className="size-4" />
+                </Button>
+              </div>
+              <a href={photoSrc(current, 800)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+                Yeni sekmede aç <ExternalLink className="size-3.5" />
+              </a>
+            </div>
+          }
+        >
+          <img src={photoSrc(current, 800)} alt="" className="mx-auto max-h-[70dvh] w-full object-contain" />
+        </Modal>
+      ) : null}
     </div>
   );
 }
 
 function ShortcutHelp() {
   const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    function onDown(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    window.addEventListener("mousedown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
   return (
-    <div className="relative">
+    <div ref={ref} className="relative">
       <Button size="sm" variant="outline" onClick={() => setOpen((o) => !o)}>
         <Keyboard className="size-4" /> Kısayollar
       </Button>

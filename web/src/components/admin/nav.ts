@@ -40,7 +40,7 @@ export type AdminNavItem = {
   to: AdminPath;
   label: string;
   icon: LucideIcon;
-  badge?: "pending" | "reports" | "orders";
+  badge?: "pending" | "reports" | "orders" | "storeApplications";
   keywords?: string;
 };
 
@@ -69,7 +69,7 @@ export const ADMIN_NAV: Array<{ group: string; items: AdminNavItem[] }> = [
     group: "Üyeler",
     items: [
       { to: "/admin/kullanicilar", label: "Kullanıcılar", icon: Users, keywords: "üye hesap" },
-      { to: "/admin/magazalar", label: "Mağazalar", icon: Store, keywords: "kurumsal mağaza" },
+      { to: "/admin/magazalar", label: "Mağazalar", icon: Store, badge: "storeApplications", keywords: "kurumsal mağaza başvuru" },
     ],
   },
   {

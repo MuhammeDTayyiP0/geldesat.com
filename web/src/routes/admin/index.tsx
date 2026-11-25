@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
@@ -38,9 +38,18 @@ const SERIES = {
 type SeriesKey = keyof typeof SERIES;
 
 const BAR = "var(--color-primary)";
+const STATUS_BAR: Record<string, string> = {
+  PENDING: "bg-warn",
+  ACTIVE: "bg-ok-solid",
+  INACTIVE: "bg-subtle",
+  SOLD: "bg-primary-solid",
+  REJECTED: "bg-danger-solid",
+};
 
 function Dashboard() {
-  const q = useQuery({ queryKey: ["admin", "dashboard"], queryFn: () => adminDashboard(), refetchInterval: 120_000 });
+  const navigate = useNavigate();
+  const [days, setDays] = useState<7 | 30 | 90>(30);
+  const q = useQuery({ queryKey: ["admin", "dashboard", days], queryFn: () => adminDashboard({ data: { days } }), refetchInterval: 120_000 });
   const { openListing, openUser } = useSheets();
   const { act, busy } = useListingActions();
   const [series, setSeries] = useState<SeriesKey>("listings");
@@ -49,7 +58,7 @@ function Dashboard() {
     () =>
       (q.data?.series ?? []).map((d) => ({
         ...d,
-        label: new Date(`${d.day}T12:00:00`).toLocaleDateString("tr-TR", { day: "numeric", month: "short" }),
+        label: new Date(`${d.day}T12:00:00Z`).toLocaleDateString("tr-TR", { day: "numeric", month: "short", timeZone: "Europe/Istanbul" }),
       })),
     [q.data],
   );
@@ -78,7 +87,7 @@ function Dashboard() {
       <PageHeader
         icon={BarChart3}
         title="Kontrol paneli"
-        description={`Platformun anlık durumu · ${new Date().toLocaleDateString("tr-TR", { weekday: "long", day: "numeric", month: "long" })}`}
+        description={`Platformun anlık durumu · ${new Date().toLocaleDateString("tr-TR", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Istanbul" })}`}
         actions={
           <Button size="sm" variant="outline" onClick={() => void q.refetch()} disabled={q.isFetching}>
             {q.isFetching ? "Yenileniyor…" : "Yenile"}
@@ -109,38 +118,80 @@ function Dashboard() {
       ) : null}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <StatCard label="Yayındaki ilan" value={d ? n(k.listings_live) : "—"} icon={LayoutList} tone="ok" hint={`${n(k.listings_total)} toplam`} />
+        <StatCard
+          label="Yayındaki ilan"
+          value={d ? n(k.listings_live) : <span className="inline-block h-7 w-14 animate-pulse rounded bg-elevated" />}
+          icon={LayoutList}
+          tone="ok"
+          hint={d ? `${n(k.listings_total)} toplam` : undefined}
+          onClick={() => void navigate({ to: "/admin/ilanlar", search: { status: "ACTIVE" } })}
+        />
         <StatCard
           label="Bugün eklenen ilan"
-          value={d ? n(k.listings_today) : "—"}
+          value={d ? n(k.listings_today) : <span className="inline-block h-7 w-12 animate-pulse rounded bg-elevated" />}
           icon={BarChart3}
           trend={d ? delta(k.listings_7d, k.listings_prev_7d) : null}
           hint="7 günlük değişim"
+          onClick={() => void navigate({ to: "/admin/ilanlar" })}
         />
-        <StatCard label="Onay bekleyen" value={d ? n(k.listings_pending) : "—"} icon={Clock} tone="warn" hint={d?.oldestPendingAt ? `en eski ${age(d.oldestPendingAt)}` : "kuyruk boş"} />
-        <StatCard label="Kayıtlı üye" value={d ? n(k.users_total) : "—"} icon={Users} tone="primary" trend={d ? delta(k.users_7d, k.users_prev_7d) : null} hint={`bugün +${n(k.users_today)}`} />
-        <StatCard label="Son 24 saatte aktif" value={d ? n(k.users_active_24h) : "—"} icon={UserPlus} tone="violet" hint={`${n(k.users_banned)} askıda`} />
+        <StatCard
+          label="Onay bekleyen"
+          value={d ? n(k.listings_pending) : <span className="inline-block h-7 w-12 animate-pulse rounded bg-elevated" />}
+          icon={Clock}
+          tone="warn"
+          hint={d ? (d.oldestPendingAt ? `en eski ${age(d.oldestPendingAt)}` : "kuyruk boş") : undefined}
+          onClick={() => void navigate({ to: "/admin/moderasyon" })}
+        />
+        <StatCard
+          label="Kayıtlı üye"
+          value={d ? n(k.users_total) : <span className="inline-block h-7 w-14 animate-pulse rounded bg-elevated" />}
+          icon={Users}
+          tone="primary"
+          trend={d ? delta(k.users_7d, k.users_prev_7d) : null}
+          hint={d ? `bugün +${n(k.users_today)}` : undefined}
+          onClick={() => void navigate({ to: "/admin/kullanicilar" })}
+        />
+        <StatCard
+          label="Son 24 saatte aktif"
+          value={d ? n(k.users_active_24h) : <span className="inline-block h-7 w-12 animate-pulse rounded bg-elevated" />}
+          icon={UserPlus}
+          tone="violet"
+          hint={d ? `${n(k.users_banned)} askıda` : undefined}
+          onClick={() => void navigate({ to: "/admin/kullanicilar", search: { sort: "last_seen" } })}
+        />
         <StatCard
           label="Bugünkü mesaj"
-          value={d ? n(k.messages_today) : "—"}
+          value={d ? n(k.messages_today) : <span className="inline-block h-7 w-12 animate-pulse rounded bg-elevated" />}
           icon={MessageCircle}
           tone="primary"
           trend={d ? delta(k.messages_7d, k.messages_prev_7d) : null}
           hint="7 günlük değişim"
+          onClick={() => void navigate({ to: "/admin/sikayetler" })}
         />
       </div>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-3">
         <Card className="xl:col-span-2">
           <CardHead
-            title={`Son 30 gün · ${SERIES[series].label}`}
+            title={`Son ${days} gün · ${SERIES[series].label}`}
             description={`Toplam ${n(seriesTotal)} · günlük ortalama ${n(Math.round(seriesTotal / Math.max(1, chart.length)))}`}
             actions={
-              <Segmented
-                value={series}
-                onChange={setSeries}
-                items={(Object.keys(SERIES) as SeriesKey[]).map((key) => ({ value: key, label: SERIES[key].label }))}
-              />
+              <div className="flex flex-wrap items-center gap-2">
+                <Segmented
+                  value={String(days) as "7" | "30" | "90"}
+                  onChange={(v) => setDays(Number(v) as 7 | 30 | 90)}
+                  items={[
+                    { value: "7", label: "7g" },
+                    { value: "30", label: "30g" },
+                    { value: "90", label: "90g" },
+                  ]}
+                />
+                <Segmented
+                  value={series}
+                  onChange={setSeries}
+                  items={(Object.keys(SERIES) as SeriesKey[]).map((key) => ({ value: key, label: SERIES[key].label }))}
+                />
+              </div>
             }
           />
           <div className="h-72 px-2 pb-3 pt-4">
@@ -148,12 +199,13 @@ function Dashboard() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chart} margin={{ top: 4, right: 12, left: -12, bottom: 0 }} barCategoryGap={2}>
                   <CartesianGrid vertical={false} stroke="var(--color-border)" />
-                  <XAxis dataKey="label" tickLine={false} axisLine={{ stroke: "var(--color-border)" }} tick={{ fontSize: 11, fill: "#8a929e" }} interval="preserveStartEnd" minTickGap={18} />
-                  <YAxis allowDecimals={false} tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#8a929e" }} width={40} />
+                  <XAxis dataKey="label" tickLine={false} axisLine={{ stroke: "var(--color-border)" }} tick={{ fontSize: 11, fill: "var(--color-muted)" }} interval="preserveStartEnd" minTickGap={18} />
+                  <YAxis allowDecimals={false} tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "var(--color-muted)" }} width={40} />
                   <Tooltip
                     cursor={{ fill: "rgba(42,120,214,0.08)" }}
                     contentStyle={{ borderRadius: 10, border: "1px solid var(--color-border)", background: "var(--color-surface)", fontSize: 12, boxShadow: "0 8px 24px -12px rgba(13,17,23,.25)" }}
                     labelStyle={{ fontWeight: 600, color: "var(--color-fg)" }}
+                    itemStyle={{ color: "var(--color-fg)" }}
                     formatter={(value) => [n(Number(value)), SERIES[series].label]}
                   />
                   <Bar dataKey={series} fill={BAR} radius={[4, 4, 0, 0]} maxBarSize={22} />
@@ -179,18 +231,20 @@ function Dashboard() {
                         <Pill tone={meta.tone} dot>
                           {meta.label}
                         </Pill>
-                        <span className="font-semibold tabular-nums group-hover:text-primary">{n(value)}</span>
+                        <span className="font-semibold tabular-nums group-hover:text-primary">{d ? n(value) : "—"}</span>
                       </div>
                       <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-elevated">
-                        <div className="h-full rounded-full bg-primary-solid" style={{ width: `${(value / statusTotal) * 100}%` }} />
+                        <div className={`h-full rounded-full ${STATUS_BAR[key] ?? "bg-primary-solid"}`} style={{ width: `${(value / statusTotal) * 100}%` }} />
                       </div>
                     </Link>
                   </li>
                 );
               })}
-            <li className="flex items-center justify-between border-t border-border pt-3 text-xs text-muted">
-              <span>Süresi dolmuş (yayında görünmeyen)</span>
-              <span className="font-semibold tabular-nums text-fg">{n(k.listings_expired)}</span>
+            <li className="border-t border-border pt-3 text-xs text-muted">
+              <Link to="/admin/ilanlar" search={{ status: "EXPIRED" }} className="flex items-center justify-between hover:text-primary">
+                <span>Süresi dolmuş (yayında görünmeyen)</span>
+                <span className="font-semibold tabular-nums text-fg">{d ? n(k.listings_expired) : "—"}</span>
+              </Link>
             </li>
           </ul>
         </Card>
@@ -207,11 +261,17 @@ function Dashboard() {
               </Link>
             }
           />
-          {d && !d.pending.length ? (
+          {!d ? (
+            <div className="space-y-2 p-4">
+              {Array.from({ length: 4 }, (_, i) => (
+                <div key={i} className="h-12 animate-pulse rounded-lg bg-elevated" />
+              ))}
+            </div>
+          ) : !d.pending.length ? (
             <EmptyState icon={Check} title="Kuyruk boş" description="Onay bekleyen ilan yok." />
           ) : (
             <ul className="divide-y divide-border">
-              {(d?.pending ?? []).map((l) => (
+              {d.pending.map((l) => (
                 <li key={l.id} className="flex items-center gap-3 px-4 py-2.5">
                   <button type="button" onClick={() => openListing(l.id)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
                     <Thumb src={l.cover ? photoSrc(l.cover, 240) : null} className="size-11" />
@@ -237,22 +297,21 @@ function Dashboard() {
         </Card>
 
         <Card>
-          <CardHead title="Haftalık etkileşim" />
+          <CardHead title="Platform özeti" description="Son 7 günlük etkileşim ve güncel durum" />
           <div className="grid grid-cols-2 gap-px bg-border">
             {[
-              // Conversations have no creation date: this counts chats with activity this week.
-              { label: "Aktif sohbet", value: k.conversations_7d, icon: MessageCircle },
-              { label: "Telefon gösterimi", value: k.phone_reveals_7d, icon: Eye },
-              { label: "Favoriye ekleme", value: k.favorites_7d, icon: Check },
-              { label: "Yeni şikayet", value: k.reports_7d, icon: MessageSquareWarning },
-              { label: "Mağaza", value: k.stores_total, icon: Store },
-              { label: "Bekleyen havale", value: k.orders_pending, icon: CreditCard },
+              { label: "Aktif sohbet (7g)", value: k.conversations_7d, icon: MessageCircle, to: "/admin/sikayetler" as const },
+              { label: "Telefon gösterimi (7g)", value: k.phone_reveals_7d, icon: Eye, to: "/admin/ilanlar" as const },
+              { label: "Favoriye ekleme (7g)", value: k.favorites_7d, icon: Check, to: "/admin/ilanlar" as const },
+              { label: "Yeni şikayet (7g)", value: k.reports_7d, icon: MessageSquareWarning, to: "/admin/sikayetler" as const },
+              { label: "Toplam mağaza", value: k.stores_total, icon: Store, to: "/admin/magazalar" as const },
+              { label: "Bekleyen havale", value: k.orders_pending, icon: CreditCard, to: "/admin/finans" as const },
             ].map((item) => (
-              <div key={item.label} className="bg-surface p-4">
+              <Link key={item.label} to={item.to} className="bg-surface p-4 transition-colors hover:bg-elevated/50">
                 <item.icon className="size-4 text-muted" />
                 <div className="mt-2 text-xl font-bold tabular-nums">{d ? nCompact(item.value) : "—"}</div>
                 <div className="text-[11px] text-muted">{item.label}</div>
-              </div>
+              </Link>
             ))}
           </div>
         </Card>
@@ -261,32 +320,48 @@ function Dashboard() {
       <div className="mt-4 grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
         <Card>
           <CardHead title="Ana kategoriler" description="Yayındaki ilan sayısına göre" />
-          <ul className="space-y-2.5 p-4">
-            {(d?.byRoot ?? []).map((r) => (
-              <li key={r.id} title={`${r.name}: ${n(r.active)} yayında, ${n(r.total)} toplam`}>
-                <Link to="/admin/ilanlar" search={{ categoryId: r.id }} className="group block">
-                  <div className="flex items-baseline justify-between gap-2 text-sm">
-                    <span className="truncate group-hover:text-primary">{r.name}</span>
-                    <span className="shrink-0 tabular-nums text-muted">
-                      <span className="font-semibold text-fg">{n(r.active)}</span> / {n(r.total)}
-                    </span>
-                  </div>
-                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-elevated">
-                    <div className="h-full rounded-full bg-primary-solid" style={{ width: `${(r.active / maxRoot) * 100}%` }} />
-                  </div>
-                </Link>
-              </li>
-            ))}
-          </ul>
+          {!d ? (
+            <div className="space-y-3 p-4">
+              {Array.from({ length: 4 }, (_, i) => (
+                <div key={i} className="h-6 animate-pulse rounded bg-elevated" />
+              ))}
+            </div>
+          ) : !d.byRoot.length ? (
+            <EmptyState title="Henüz kategori yok" />
+          ) : (
+            <ul className="space-y-2.5 p-4">
+              {d.byRoot.map((r) => (
+                <li key={r.id} title={`${r.name}: ${n(r.active)} yayında, ${n(r.total)} toplam`}>
+                  <Link to="/admin/ilanlar" search={{ categoryId: r.id }} className="group block">
+                    <div className="flex items-baseline justify-between gap-2 text-sm">
+                      <span className="truncate group-hover:text-primary">{r.name}</span>
+                      <span className="shrink-0 tabular-nums text-muted">
+                        <span className="font-semibold text-fg">{n(r.active)}</span> / {n(r.total)}
+                      </span>
+                    </div>
+                    <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-elevated">
+                      <div className="h-full rounded-full bg-primary-solid" style={{ width: `${(r.active / maxRoot) * 100}%` }} />
+                    </div>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
 
         <Card>
           <CardHead title="En çok ilan olan iller" description="Yayındaki ilanlar" />
-          {d && !d.byCity.length ? (
+          {!d ? (
+            <div className="space-y-3 p-4">
+              {Array.from({ length: 4 }, (_, i) => (
+                <div key={i} className="h-6 animate-pulse rounded bg-elevated" />
+              ))}
+            </div>
+          ) : !d.byCity.length ? (
             <EmptyState title="Henüz veri yok" />
           ) : (
             <ul className="space-y-2.5 p-4">
-              {(d?.byCity ?? []).map((c, i) => (
+              {d.byCity.map((c, i) => (
                 <li key={c.city} title={`${c.city}: ${n(c.n)} ilan`}>
                   <Link to="/admin/ilanlar" search={{ city: c.city }} className="group block">
                     <div className="flex items-baseline justify-between text-sm">
@@ -315,20 +390,30 @@ function Dashboard() {
               </Link>
             }
           />
-          <ul className="divide-y divide-border">
-            {(d?.recentUsers ?? []).map((u) => (
-              <li key={u.user_id}>
-                <button type="button" onClick={() => openUser(u.user_id)} className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-elevated/60">
-                  <Avatar name={u.display_name} src={u.avatar_url} size={32} />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{u.display_name}</p>
-                    <p className="truncate text-xs text-muted">{u.email ?? u.city ?? "—"}</p>
-                  </div>
-                  <span className="shrink-0 text-[11px] text-muted">{relative(u.created_at)}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
+          {!d ? (
+            <div className="space-y-2 p-4">
+              {Array.from({ length: 4 }, (_, i) => (
+                <div key={i} className="h-10 animate-pulse rounded-lg bg-elevated" />
+              ))}
+            </div>
+          ) : !d.recentUsers.length ? (
+            <EmptyState title="Henüz üye yok" />
+          ) : (
+            <ul className="divide-y divide-border">
+              {d.recentUsers.map((u) => (
+                <li key={u.user_id}>
+                  <button type="button" onClick={() => openUser(u.user_id)} className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-elevated/60">
+                    <Avatar name={u.display_name} src={u.avatar_url} size={32} />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{u.display_name}</p>
+                      <p className="truncate text-xs text-muted">{u.email ?? u.city ?? "—"}</p>
+                    </div>
+                    <span className="shrink-0 text-[11px] text-muted">{relative(u.created_at)}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
       </div>
 

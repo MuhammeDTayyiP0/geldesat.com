@@ -110,9 +110,15 @@ function ListingsPage() {
   const { act, busy } = useListingActions();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   // Listings out of sight must not stay selected for a bulk action.
-  const { page: _page, ...filterOnly } = filter;
-  const filterKey = JSON.stringify(filterOnly);
+  const filterKey = JSON.stringify(filter);
   useEffect(() => setSelected(new Set()), [filterKey]);
+
+  const lastPage = query.data?.pages;
+  useEffect(() => {
+    if (lastPage && filter.page > lastPage) {
+      void navigate({ search: (prev) => ({ ...prev, page: lastPage > 1 ? lastPage : undefined }), replace: true });
+    }
+  }, [lastPage, filter.page, navigate]);
 
   const rows = query.data?.rows ?? [];
   const counts = query.data?.statusCounts;
@@ -128,12 +134,13 @@ function ListingsPage() {
   function exportCsv() {
     downloadCsv(
       `ilanlar-${new Date().toISOString().slice(0, 10)}.csv`,
-      ["İlan No", "Başlık", "Durum", "Fiyat", "Kategori", "İl", "İlçe", "Satıcı", "Görüntülenme", "Favori", "Oluşturulma", "Bitiş"],
+      ["İlan No", "Başlık", "Durum", "Fiyat", "Para Birimi", "Kategori", "İl", "İlçe", "Satıcı", "Görüntülenme", "Favori", "Oluşturulma", "Bitiş"],
       rows.map((r) => [
         r.listing_no,
         r.title,
         listingStatus(r.status, r.expires_at).label,
         r.price,
+        r.currency,
         r.category_name,
         r.city,
         r.district,
@@ -451,35 +458,42 @@ function ListingRow({
           </MenuItem>
           <MenuSeparator />
           {r.status === "PENDING" || r.status === "REJECTED" || r.status === "INACTIVE" ? (
-            <MenuItem icon={Check} onSelect={() => void act(ids, r.status === "PENDING" ? "approve" : "activate", r.title)}>
+            <MenuItem
+              icon={Check}
+              disabled={r.seller_banned}
+              onSelect={() => void act(ids, r.status === "PENDING" ? "approve" : "activate", r.title)}
+            >
               {r.status === "PENDING" ? "Onayla" : "Yayına al"}
+              {r.seller_banned ? " (satıcı askıda)" : ""}
             </MenuItem>
           ) : r.status === "ACTIVE" ? (
             <MenuItem icon={Ban} onSelect={() => void act(ids, "deactivate", r.title)}>
               Yayından kaldır
             </MenuItem>
           ) : null}
-          {r.status !== "REJECTED" ? (
+          {r.status === "PENDING" || r.status === "ACTIVE" || r.status === "INACTIVE" ? (
             <MenuItem icon={X} onSelect={() => void act(ids, "reject", r.title)}>
               Reddet
             </MenuItem>
           ) : null}
-          <MenuItem icon={CalendarPlus} onSelect={() => void act(ids, "extend", r.title)}>
-            Süre uzat
-          </MenuItem>
+          {r.status === "ACTIVE" || r.status === "INACTIVE" ? (
+            <MenuItem icon={CalendarPlus} onSelect={() => void act(ids, "extend", r.title)}>
+              Süre uzat
+            </MenuItem>
+          ) : null}
           {featured ? (
             <MenuItem icon={Undo2} onSelect={() => void act(ids, "unfeature", r.title)}>
               Vitrinden çıkar
             </MenuItem>
-          ) : (
+          ) : r.status === "ACTIVE" || r.status === "INACTIVE" ? (
             <MenuItem icon={Sparkles} onSelect={() => void act(ids, "feature", r.title)}>
               Vitrine al
             </MenuItem>
-          )}
+          ) : null}
           <MenuItem icon={FolderInput} onSelect={() => void act(ids, "move", r.title)}>
             Kategori değiştir
           </MenuItem>
-          {r.status !== "SOLD" ? (
+          {r.status === "ACTIVE" || r.status === "INACTIVE" ? (
             <MenuItem icon={Tag} onSelect={() => void act(ids, "sold", r.title)}>
               Satıldı işaretle
             </MenuItem>

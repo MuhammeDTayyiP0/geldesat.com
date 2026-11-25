@@ -62,6 +62,15 @@ export const CategoryTree = forwardRef<CategoryTreeHandle, Props>(function Categ
   const [drop, setDrop] = useState<{ id: string; pos: DropPos } | null>(null);
   const hoverTimer = useRef<{ id: string; t: ReturnType<typeof setTimeout> } | null>(null);
 
+  const clearHover = useCallback(() => {
+    if (hoverTimer.current) {
+      clearTimeout(hoverTimer.current.t);
+      hoverTimer.current = null;
+    }
+  }, []);
+
+  useEffect(() => () => clearHover(), [clearHover]);
+
   /* ── search ── */
   const needle = search.trim().toLocaleLowerCase("tr");
   const { matches, visibleInSearch } = useMemo(() => {
@@ -212,10 +221,20 @@ export const CategoryTree = forwardRef<CategoryTreeHandle, Props>(function Categ
       const names = value
         .split(/[\n;]/)
         .map((s) => s.trim())
-        .filter(Boolean);
-      const r = await run(() => adminCreateCategories({ data: { parentId: editing.parentId, names } }), (res) => (res.created.length > 1 ? `${res.created.length} kategori eklendi.` : `"${res.created[0]?.name}" eklendi.`));
-      // Keep the input open for quick consecutive entries.
-      if (r) setEditValue("");
+        .filter(Boolean)
+        .slice(0, 500);
+      if (!names.length) return;
+      committing.current = true;
+      try {
+        const r = await run(
+          () => adminCreateCategories({ data: { parentId: editing.parentId, names } }),
+          (res) => (res.created.length > 1 ? `${res.created.length} kategori eklendi.` : `"${res.created[0]?.name}" eklendi.`),
+        );
+        // Keep the input open for quick consecutive entries.
+        if (r) setEditValue("");
+      } finally {
+        committing.current = false;
+      }
     }
   }
 
@@ -338,6 +357,12 @@ export const CategoryTree = forwardRef<CategoryTreeHandle, Props>(function Categ
         if (e.clientY < rect.top + 48) el.scrollTop -= 14;
         else if (e.clientY > rect.bottom - 48) el.scrollTop += 14;
       }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+          clearHover();
+          setDrop(null);
+        }
+      }}
       style={{ height }}
       className="relative overflow-y-auto overscroll-contain outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30"
     >
@@ -355,9 +380,14 @@ export const CategoryTree = forwardRef<CategoryTreeHandle, Props>(function Categ
                   onChange={(e) => setEditValue(e.target.value)}
                   onPaste={(e) => {
                     const text = e.clipboardData.getData("text");
-                    if (text.includes("\n")) {
+                    if (/[\r\n]/.test(text)) {
                       e.preventDefault();
-                      setEditValue(text);
+                      const joined = text
+                        .split(/\r?\n/)
+                        .map((s) => s.trim())
+                        .filter(Boolean)
+                        .join("; ");
+                      setEditValue((prev) => (prev.trim() ? `${prev.trim()}; ${joined}` : joined));
                     }
                   }}
                   onKeyDown={(e) => {
@@ -404,6 +434,7 @@ export const CategoryTree = forwardRef<CategoryTreeHandle, Props>(function Categ
                 e.dataTransfer.setData("text/plain", c.id);
               }}
               onDragEnd={() => {
+                clearHover();
                 setDragId(null);
                 setDrop(null);
               }}
@@ -418,19 +449,17 @@ export const CategoryTree = forwardRef<CategoryTreeHandle, Props>(function Categ
                 // Hovering "inside" a closed branch opens it.
                 if (pos === "inside" && kids && !expanded.has(c.id)) {
                   if (hoverTimer.current?.id !== c.id) {
-                    if (hoverTimer.current) clearTimeout(hoverTimer.current.t);
+                    clearHover();
                     hoverTimer.current = { id: c.id, t: setTimeout(() => setExpanded((p) => new Set(p).add(c.id)), 650) };
                   }
                 }
               }}
               onDragLeave={() => {
-                if (hoverTimer.current?.id === c.id) {
-                  clearTimeout(hoverTimer.current.t);
-                  hoverTimer.current = null;
-                }
+                if (hoverTimer.current?.id === c.id) clearHover();
               }}
               onDrop={(e) => {
                 e.preventDefault();
+                clearHover();
                 if (drop?.id === c.id) void performDrop(c.id, drop.pos);
               }}
               onClick={() => onSelect(c.id)}
@@ -544,8 +573,9 @@ export const CategoryTree = forwardRef<CategoryTreeHandle, Props>(function Categ
                         icon={FolderInput}
                         onSelect={() =>
                           void pick({ title: `"${c.name}" nereye taşınsın?`, description: "Kategori tüm alt dallarıyla birlikte taşınır.", excludeSubtreeOf: c.id, allowRoot: true, confirmLabel: "Buraya taşı" }).then((p) => {
-                            if (p === undefined) return;
-                            const parent = p === "root" ? null : p ? p.id : null;
+                            if (p === undefined || p === null) return;
+                            const parent = p === "root" ? null : p.id;
+                            if (parent === c.parent_id) return;
                             void moveTo(c.id, parent, (index.children.get(parent) ?? []).filter((x) => x !== c.id).length);
                           })
                         }

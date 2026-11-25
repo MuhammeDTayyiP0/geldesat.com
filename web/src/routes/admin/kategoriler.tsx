@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { ChevronsDownUp, ChevronsUpDown, Download, FileJson, FileSpreadsheet, FolderPlus, FolderTree, Keyboard, MousePointerClick } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -27,9 +27,20 @@ function CategoriesPage() {
   const pick = usePickCategory();
   const [help, setHelp] = useState(false);
   const dirtyRef = useRef(false);
+  const [dirty, setDirty] = useState(false);
   const handleDirtyChange = useCallback((d: boolean) => {
     dirtyRef.current = d;
+    setDirty(d);
   }, []);
+  useEffect(() => {
+    if (!dirty) return;
+    const onUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onUnload);
+    return () => window.removeEventListener("beforeunload", onUnload);
+  }, [dirty]);
 
   const select = useCallback(
     (id: string) => {
@@ -93,9 +104,20 @@ function CategoriesPage() {
     if (!ok) return;
     const r = await run(() => adminDeleteCategory({ data: { id, moveListingsTo: moveTo?.id } }), (res) => `${res.removed} kategori silindi${res.movedListings ? `, ${res.movedListings} ilan taşındı` : ""}.`);
     if (r) {
-      dirtyRef.current = false;
-      if (c.parent_id) select(c.parent_id);
-      else void navigate({ search: (prev) => ({ ...prev, id: undefined }), replace: true });
+      let deletedSelectedBranch = false;
+      if (selectedId) {
+        for (let cur = index.byId.get(selectedId); cur; cur = cur.parent_id ? index.byId.get(cur.parent_id) : undefined) {
+          if (cur.id === id) {
+            deletedSelectedBranch = true;
+            break;
+          }
+        }
+      }
+      if (deletedSelectedBranch) {
+        dirtyRef.current = false;
+        setDirty(false);
+        void navigate({ search: (prev) => ({ ...prev, id: c.parent_id || undefined }), replace: true });
+      }
     }
   }
 
@@ -132,7 +154,14 @@ function CategoriesPage() {
   }
 
   const roots = index?.children.get(null)?.length ?? 0;
-  const maxDepth = index ? Math.max(0, ...index.depth.values()) + 1 : 0;
+  let maxDepth = 0;
+  if (index) {
+    let maxVal = 0;
+    for (const d of index.depth.values()) {
+      if (d > maxVal) maxVal = d;
+    }
+    maxDepth = maxVal + 1;
+  }
 
   return (
     <div className="mx-auto max-w-[1600px]">

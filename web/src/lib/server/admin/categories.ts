@@ -210,23 +210,25 @@ export const adminCreateCategories = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     const sql = await getSql();
-    const parentName = await nameOf(sql, data.parentId);
-    const existing = await siblings(sql, data.parentId);
-    const known = new Set(existing.map((s) => s.name.toLocaleLowerCase("tr")));
-    const names = [...new Set(data.names.map((n) => n.trim()).filter(Boolean))].filter((n) => !known.has(n.toLocaleLowerCase("tr")));
-    if (!names.length) throw new Error("Bu adlarla zaten alt kategori var.");
-    const created = await sql.transaction(async (tx) => {
+    const { parentName, created } = await sql.transaction(async (tx) => {
+      await tx.query("select pg_advisory_xact_lock(hashtext('category-move'))");
+      const parentName = await nameOf(tx, data.parentId);
+      const existing = await siblings(tx, data.parentId);
+      const known = new Set(existing.map((s) => s.name.toLocaleLowerCase("tr")));
+      const names = [...new Set(data.names.map((n) => n.trim()).filter(Boolean))].filter((n) => !known.has(n.toLocaleLowerCase("tr")));
+      if (!names.length) throw new Error("Bu adlarla zaten alt kategori var.");
       const max = await tx.query<{ m: number }>(
         "select coalesce(max(sort_order), 0) as m from categories where parent_id is not distinct from $1",
         [data.parentId],
       );
       let order = num(max[0]?.m);
       const taken = new Set<string>();
-      const out: Array<{ id: string; name: string }> = [];
+      const created: Array<{ id: string; name: string }> = [];
       for (const name of names) {
         const id = await uniqueId(tx, slugify(data.parentId ? `${data.parentId}-${name}` : name), taken);
         taken.add(id);
         order += 1;
+        await tx.query("delete from category_old_slugs where slug = $1", [id]);
         await tx.query("insert into categories (id, name, slug, parent_id, icon, sort_order) values ($1,$2,$1,$3,$4,$5)", [
           id,
           name,
@@ -234,9 +236,9 @@ export const adminCreateCategories = createServerFn({ method: "POST" })
           data.parentId ? null : data.icon || null,
           order,
         ]);
-        out.push({ id, name });
+        created.push({ id, name });
       }
-      return out;
+      return { parentName, created };
     });
     await audit(
       sql,
@@ -312,23 +314,24 @@ export const adminMoveCategory = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     const sql = await getSql();
-    const rows = await sql.query<{ name: string; parent_id: string | null }>("select name, parent_id from categories where id = $1", [data.id]);
-    const cur = rows[0];
-    if (!cur) throw new Error("Kategori bulunamadı.");
-    const newParentName = await nameOf(sql, data.parentId);
-    await sql.transaction(async (tx) => {
+    const { cur, newParentName, oldParentName } = await sql.transaction(async (tx) => {
       // Under the lock: two admins moving A into B and B into A at once would make a loop.
       await tx.query("select pg_advisory_xact_lock(hashtext('category-move'))");
+      const rows = await tx.query<{ name: string; parent_id: string | null }>("select name, parent_id from categories where id = $1", [data.id]);
+      const cur = rows[0];
+      if (!cur) throw new Error("Kategori bulunamadı.");
+      const newParentName = await nameOf(tx, data.parentId);
+      const oldParentName = cur.parent_id !== data.parentId ? await nameOf(tx, cur.parent_id).catch(() => "?") : null;
       if (data.parentId && (await subtree(tx, data.id)).includes(data.parentId)) throw new Error("Bir kategori kendi alt dalına taşınamaz.");
       const sibs = (await siblings(tx, data.parentId)).map((s) => s.id).filter((id) => id !== data.id);
       const at = Math.min(Math.max(data.index ?? sibs.length, 0), sibs.length);
       sibs.splice(at, 0, data.id);
       await tx.query("update categories set parent_id = $2 where id = $1", [data.id, data.parentId]);
       await renumber(tx, sibs);
+      return { cur, newParentName, oldParentName };
     });
     if (cur.parent_id !== data.parentId) {
-      const oldParentName = await nameOf(sql, cur.parent_id).catch(() => "?");
-      await audit(sql, context.adminId, "category.move", "category", data.id, `"${cur.name}" ${oldParentName} → ${newParentName} altına taşındı`, {
+      await audit(sql, context.adminId, "category.move", "category", data.id, `"${cur.name}" ${oldParentName ?? "?"} → ${newParentName} altına taşındı`, {
         from: cur.parent_id,
         to: data.parentId,
       });
@@ -350,31 +353,40 @@ export const adminReorderCategories = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     const sql = await getSql();
-    const parentName = await nameOf(sql, data.parentId);
-    const sibs = await sql.query<{ id: string; name: string; n: number }>(
-      // Counts the whole branch, like the numbers shown next to each category.
-      `select c.id, c.name,
-              (with recursive branch as (
-                 select c.id as id
-                 union all
-                 select k.id from categories k join branch b on k.parent_id = b.id
-               ) select count(*) from listings l where l.category_id in (select id from branch)) as n
-       from categories c where c.parent_id is not distinct from $1 order by c.sort_order, c.name`,
-      [data.parentId],
-    );
-    let ordered: string[];
-    if (data.mode === "manual") {
-      const ids = new Set(sibs.map((s) => s.id));
-      const given = (data.orderedIds ?? []).filter((id) => ids.has(id));
-      // Anything the client did not list keeps its relative order at the end.
-      ordered = [...given, ...sibs.map((s) => s.id).filter((id) => !given.includes(id))];
-    } else if (data.mode === "listings") {
-      ordered = [...sibs].sort((a, b) => num(b.n) - num(a.n) || a.name.localeCompare(b.name, "tr")).map((s) => s.id);
-    } else {
-      const dir = data.mode === "alpha_desc" ? -1 : 1;
-      ordered = [...sibs].sort((a, b) => dir * a.name.localeCompare(b.name, "tr", { numeric: true })).map((s) => s.id);
-    }
-    await renumber(sql, ordered);
+    const parentName = await sql.transaction(async (tx) => {
+      await tx.query("select pg_advisory_xact_lock(hashtext('category-move'))");
+      const name = await nameOf(tx, data.parentId);
+      const sibs =
+        data.mode === "listings"
+          ? await tx.query<{ id: string; name: string; n: number }>(
+              `select c.id, c.name,
+                      (with recursive branch as (
+                         select c.id as id
+                         union all
+                         select k.id from categories k join branch b on k.parent_id = b.id
+                       ) select count(*) from listings l where l.category_id in (select id from branch)) as n
+               from categories c where c.parent_id is not distinct from $1 order by c.sort_order, c.name`,
+              [data.parentId],
+            )
+          : await tx.query<{ id: string; name: string; n: number }>(
+              "select id, name, 0 as n from categories where parent_id is not distinct from $1 order by sort_order, name",
+              [data.parentId],
+            );
+      let ordered: string[];
+      if (data.mode === "manual") {
+        const ids = new Set(sibs.map((s) => s.id));
+        const given = [...new Set((data.orderedIds ?? []).filter((id) => ids.has(id)))];
+        const givenSet = new Set(given);
+        ordered = [...given, ...sibs.map((s) => s.id).filter((id) => !givenSet.has(id))];
+      } else if (data.mode === "listings") {
+        ordered = [...sibs].sort((a, b) => num(b.n) - num(a.n) || a.name.localeCompare(b.name, "tr")).map((s) => s.id);
+      } else {
+        const dir = data.mode === "alpha_desc" ? -1 : 1;
+        ordered = [...sibs].sort((a, b) => dir * a.name.localeCompare(b.name, "tr", { numeric: true })).map((s) => s.id);
+      }
+      await renumber(tx, ordered);
+      return name;
+    });
     const label = { manual: "elle sıralandı", alpha: "A→Z sıralandı", alpha_desc: "Z→A sıralandı", listings: "ilan sayısına göre sıralandı" }[data.mode];
     await audit(sql, context.adminId, "category.reorder", "category", data.parentId, `${parentName} alt kategorileri ${label}`);
     return { ok: true as const };
@@ -428,15 +440,19 @@ export const adminMoveCategoryListings = createServerFn({ method: "POST" })
   .validator(z.object({ fromId: z.string().max(200), toId: z.string().max(200), includeSubtree: z.boolean().default(true) }))
   .handler(async ({ context, data }) => {
     const sql = await getSql();
-    const [fromName, toName] = [await nameOf(sql, data.fromId), await nameOf(sql, data.toId)];
-    const ids = data.includeSubtree ? await subtree(sql, data.fromId) : [data.fromId];
-    if (ids.includes(data.toId)) throw new Error("Hedef, kaynak dalın içinde olamaz.");
-    const rows = await sql.query<{ id: string }>(
-      "update listings set category_id = $2, updated_at = now() where category_id = any($1::text[]) returning id",
-      [ids, data.toId],
-    );
-    await audit(sql, context.adminId, "category.move_listings", "category", data.fromId, `${rows.length} ilan "${fromName}" → "${toName}" taşındı`);
-    return { ok: true as const, moved: rows.length };
+    const { fromName, toName, moved } = await sql.transaction(async (tx) => {
+      await tx.query("select pg_advisory_xact_lock(hashtext('category-move'))");
+      const [fromName, toName] = [await nameOf(tx, data.fromId), await nameOf(tx, data.toId)];
+      const ids = data.includeSubtree ? await subtree(tx, data.fromId) : [data.fromId];
+      if (ids.includes(data.toId)) throw new Error("Hedef, kaynak dalın içinde olamaz.");
+      const rows = await tx.query<{ id: string }>(
+        "update listings set category_id = $2, updated_at = now() where category_id = any($1::text[]) returning id",
+        [ids, data.toId],
+      );
+      return { fromName, toName, moved: rows.length };
+    });
+    await audit(sql, context.adminId, "category.move_listings", "category", data.fromId, `${moved} ilan "${fromName}" → "${toName}" taşındı`);
+    return { ok: true as const, moved };
   });
 
 /** Replaces the attributes attached directly to a category. */

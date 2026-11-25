@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import {
@@ -56,6 +56,7 @@ export function CategoryPanel({
   const q = useQuery({ queryKey: ["admin", "category", id], queryFn: () => adminCategoryDetail({ data: { id } }) });
   const [tab, setTab] = useState<Tab>("info");
   const [dirty, setDirty] = useState(false);
+  const { confirm } = useConfirm();
   useEffect(() => {
     onDirtyChange?.(dirty);
   }, [dirty, onDirtyChange]);
@@ -63,6 +64,20 @@ export function CategoryPanel({
   const node = index.byId.get(id);
   const Icon = categoryIcon(node?.icon);
   const path = index.path(id);
+
+  function switchTab(next: Tab) {
+    if (next === tab) return;
+    if (!dirty) {
+      setTab(next);
+      return;
+    }
+    void confirm({ title: "Kaydedilmemiş değişiklikler silinsin mi?", confirmLabel: "Sil ve geç", danger: true }).then((ok) => {
+      if (ok) {
+        setDirty(false);
+        setTab(next);
+      }
+    });
+  }
 
   if (!node) return null;
   const kids = index.children.get(id) ?? [];
@@ -132,7 +147,7 @@ export function CategoryPanel({
 
       <TabBar
         value={tab}
-        onChange={setTab}
+        onChange={switchTab}
         items={[
           { value: "info", label: "Bilgiler" },
           { value: "children", label: "Alt kategoriler", count: kids.length },
@@ -149,9 +164,9 @@ export function CategoryPanel({
             <Spinner /> Yükleniyor…
           </div>
         ) : tab === "info" ? (
-          <InfoTab key={`${id}:${node.name}:${node.slug}:${node.icon}`} detail={q.data} isRoot={!node.parent_id} onDirtyChange={setDirty} />
+          <InfoTab key={id} detail={q.data} isRoot={!node.parent_id} onDirtyChange={setDirty} />
         ) : tab === "children" ? (
-          <ChildrenTab id={id} index={index} onSelect={onSelect} />
+          <ChildrenTab key={id} id={id} index={index} onSelect={onSelect} onDirtyChange={setDirty} />
         ) : tab === "attributes" ? (
           <AttributesTab key={id} detail={q.data} onSelect={onSelect} onDirtyChange={setDirty} />
         ) : (
@@ -171,7 +186,17 @@ function InfoTab({ detail, isRoot, onDirtyChange }: { detail: AdminCategoryDetai
   const [slug, setSlug] = useState(c.slug);
   const [icon, setIcon] = useState(c.icon ?? "");
   const dirty = name.trim() !== c.name || slugify(slug) !== c.slug || (icon || null) !== (c.icon || null);
+  const dirtyRef = useRef(dirty);
+  dirtyRef.current = dirty;
   const slugChanged = slugify(slug) !== c.slug;
+
+  useEffect(() => {
+    if (!dirtyRef.current) {
+      setName(c.name);
+      setSlug(c.slug);
+      setIcon(c.icon ?? "");
+    }
+  }, [c.name, c.slug, c.icon]);
 
   useEffect(() => {
     onDirtyChange?.(dirty);
@@ -219,10 +244,10 @@ function InfoTab({ detail, isRoot, onDirtyChange }: { detail: AdminCategoryDetai
               type="button"
               title={i.label}
               onClick={() => setIcon(i.key)}
-              className={cn("flex h-14 flex-col items-center justify-center gap-1 rounded-lg border text-[10px]", icon === i.key ? "border-primary bg-primary/8 text-primary" : "border-border text-muted hover:border-primary/40")}
+              className={cn("flex h-14 flex-col items-center justify-center gap-1 rounded-lg border px-1 text-[10px]", icon === i.key ? "border-primary bg-primary/8 text-primary" : "border-border text-muted hover:border-primary/40")}
             >
-              <i.icon className="size-4" />
-              {i.key}
+              <i.icon className="size-4 shrink-0" />
+              <span className="max-w-full truncate">{i.label.replace(/\s*\(.*\)$/, "")}</span>
             </button>
           ))}
         </div>
@@ -252,7 +277,7 @@ function InfoTab({ detail, isRoot, onDirtyChange }: { detail: AdminCategoryDetai
 
 /* ───────────────────────────── Children ───────────────────────────── */
 
-function ChildrenTab({ id, index, onSelect }: { id: string; index: CategoryIndex; onSelect: (id: string) => void }) {
+function ChildrenTab({ id, index, onSelect, onDirtyChange }: { id: string; index: CategoryIndex; onSelect: (id: string) => void; onDirtyChange?: (dirty: boolean) => void }) {
   const { run, busy } = useRunner();
   const kids = index.children.get(id) ?? [];
   const [bulk, setBulk] = useState("");
@@ -260,6 +285,10 @@ function ChildrenTab({ id, index, onSelect }: { id: string; index: CategoryIndex
     .split("\n")
     .map((l) => l.trim())
     .filter(Boolean);
+  useEffect(() => {
+    onDirtyChange?.(lines.length > 0);
+    return () => onDirtyChange?.(false);
+  }, [lines.length, onDirtyChange]);
 
   async function move(childId: string, dir: -1 | 1) {
     const i = kids.indexOf(childId);
@@ -345,9 +374,13 @@ function AttributesTab({ detail, onSelect, onDirtyChange }: { detail: AdminCateg
   const initial = useMemo<OwnItem[]>(() => detail.ownAttributes.map((a) => ({ ...a })), [detail.ownAttributes]);
   const [items, setItems] = useState<OwnItem[]>(initial);
   const [adding, setAdding] = useState("");
-  useEffect(() => setItems(initial), [initial]);
 
   const dirty = JSON.stringify(items.map((i) => [i.id, i.required])) !== JSON.stringify(initial.map((i) => [i.id, i.required]));
+  const dirtyRef = useRef(dirty);
+  dirtyRef.current = dirty;
+  useEffect(() => {
+    if (!dirtyRef.current) setItems(initial);
+  }, [initial]);
   useEffect(() => {
     onDirtyChange?.(dirty);
     return () => onDirtyChange?.(false);

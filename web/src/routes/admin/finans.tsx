@@ -4,7 +4,7 @@ import { keepPreviousData, useQuery, type UseQueryResult } from "@tanstack/react
 import { Check, Coins, CreditCard, Download, Plus, TrendingUp, Wallet, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { adminCreditLedger, adminListCreditOrders, adminResolveCreditOrder } from "@/lib/server/admin/business";
-import { adminGrantCredits, adminListUsers } from "@/lib/server/admin/users";
+import { adminGrantCredits, adminListUsers, adminUserDetail } from "@/lib/server/admin/users";
 import { useRunner, useSheets } from "@/components/admin/hooks";
 import { dateTime, money, n, ORDER_STATUS, relative } from "@/components/admin/format";
 import { downloadCsv, int, oneOf, str } from "@/components/admin/search";
@@ -52,9 +52,15 @@ function FinancePage() {
     void navigate({ search: (prev) => ({ ...prev, ...(resetPage ? { page: undefined } : {}), ...patch }), replace: true });
   const tab = search.tab ?? "orders";
   const [granting, setGranting] = useState(false);
+  const ordersQueryParams = {
+    status: tab === "orders" ? (search.status ?? "ALL") : ("ALL" as const),
+    q: tab === "orders" ? search.q : undefined,
+    page: tab === "orders" ? (search.page ?? 1) : 1,
+    pageSize: tab === "orders" ? 25 : 5,
+  };
   const orders = useQuery({
-    queryKey: ["admin", "orders", { status: search.status ?? "ALL", q: search.q, page: tab === "orders" ? (search.page ?? 1) : 1 }],
-    queryFn: () => adminListCreditOrders({ data: { status: search.status ?? "ALL", q: search.q, page: tab === "orders" ? (search.page ?? 1) : 1, pageSize: 25 } }),
+    queryKey: ["admin", "orders", ordersQueryParams],
+    queryFn: () => adminListCreditOrders({ data: ordersQueryParams }),
     placeholderData: keepPreviousData,
   });
   const t = orders.data?.totals;
@@ -105,21 +111,38 @@ function Orders({
   set: (patch: Partial<Search>, resetPage?: boolean) => void;
 }) {
   const { run, busy } = useRunner();
-  const { confirm } = useConfirm();
+  const { confirm, prompt } = useConfirm();
   const { openUser } = useSheets();
   const rows = query.data?.rows ?? [];
 
+  function exportCsv() {
+    downloadCsv(
+      `havale-talepleri-${new Date().toISOString().slice(0, 10)}.csv`,
+      ["Talep ID", "Üye", "E-posta", "Paket", "Kredi", "Tutar", "Durum", "Oluşturulma", "Sonuçlanma"],
+      rows.map((o) => [o.id, o.buyer_name, o.buyer_email, o.sku, o.credits, o.price, ORDER_STATUS[o.status]?.label ?? o.status, o.created_at, o.resolved_at]),
+    );
+  }
+
   async function resolve(id: string, status: "PAID" | "REJECTED", credits: number, price: number) {
-    const ok = await confirm({
-      title: status === "PAID" ? "Havale onaylansın mı?" : "Talep reddedilsin mi?",
-      body:
-        status === "PAID"
-          ? `Banka hesabına ${money(price)} geldiğini doğruladıysanız onaylayın; üyeye ${credits} kredi yüklenir.`
-          : "Üyeye havalenin bulunamadığı bildirilir.",
-      confirmLabel: status === "PAID" ? "Onayla ve krediyi yükle" : "Reddet",
-      danger: status === "REJECTED",
+    if (status === "PAID") {
+      const ok = await confirm({
+        title: "Havale onaylansın mı?",
+        body: `Banka hesabına ${money(price)} geldiğini doğruladıysanız onaylayın; üyeye ${credits} kredi yüklenir.`,
+        confirmLabel: "Onayla ve krediyi yükle",
+      });
+      if (ok) await run(() => adminResolveCreditOrder({ data: { id, status } }), "Kredi yüklendi.");
+      return;
+    }
+    const reason = await prompt({
+      title: "Talep reddedilsin mi?",
+      body: "Üyeye havalenin bulunamadığı veya girilen gerekçeyle reddedildiği bildirilir.",
+      label: "Ret gerekçesi (isteğe bağlı)",
+      required: false,
+      confirmLabel: "Reddet",
+      danger: true,
     });
-    if (ok) await run(() => adminResolveCreditOrder({ data: { id, status } }), status === "PAID" ? "Kredi yüklendi." : "Talep reddedildi.");
+    if (reason == null) return;
+    await run(() => adminResolveCreditOrder({ data: { id, status, reason: reason || undefined } }), "Talep reddedildi.");
   }
 
   return (
@@ -131,13 +154,20 @@ function Orders({
           items={STATUSES.map((s) => ({ value: s, label: s === "ALL" ? "Tümü" : ORDER_STATUS[s].label }))}
         />
         <SearchInput value={search.q ?? ""} onChange={(q) => set({ q: q || undefined })} placeholder="Üye, e-posta, paket veya talep no" className="ml-auto w-full sm:w-72" />
+        <Button size="sm" variant="outline" onClick={exportCsv} disabled={!rows.length}>
+          <Download className="size-4" /> CSV (bu sayfa)
+        </Button>
       </div>
       {query.error && !query.data ? (
         <ErrorState error={query.error} onRetry={() => void query.refetch()} />
       ) : query.isLoading ? (
         <SkeletonRows rows={5} />
       ) : !rows.length ? (
-        <EmptyState icon={Wallet} title={search.q || search.status ? "Bu filtreyle eşleşen talep yok" : "Talep yok"} description="Kredi satışı şu an kapalı. Açıldığında havale bildirimleri burada listelenir." />
+        <EmptyState
+          icon={Wallet}
+          title={search.q || search.status ? "Bu filtreyle eşleşen talep yok" : "Henüz havale talebi yok"}
+          description={search.q || search.status ? "Arama veya durum filtresini değiştirerek tekrar deneyin." : "Üyeler havale ile kredi talebi oluşturduğunda burada listelenir."}
+        />
       ) : (
         <Table>
           <thead>
@@ -186,7 +216,15 @@ function Orders({
                         <Button size="sm" className="h-8 bg-ok-solid px-2.5 text-white hover:bg-ok-solid/90" disabled={busy} onClick={() => void resolve(o.id, "PAID", o.credits, o.price)}>
                           <Check className="size-4" /> Onayla
                         </Button>
-                        <Button size="sm" variant="outline" className="h-8 px-2.5 text-danger" disabled={busy} onClick={() => void resolve(o.id, "REJECTED", o.credits, o.price)}>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          aria-label="Talebi reddet"
+                          title="Talebi reddet"
+                          className="h-8 px-2.5 text-danger"
+                          disabled={busy}
+                          onClick={() => void resolve(o.id, "REJECTED", o.credits, o.price)}
+                        >
                           <X className="size-4" />
                         </Button>
                       </div>
@@ -303,7 +341,15 @@ function GrantModal({ onClose }: { onClose: () => void }) {
     queryFn: () => adminListUsers({ data: { q, role: "ALL", state: "all", sort: "newest", page: 1, pageSize: 8 } }),
     enabled: q.trim().length >= 2 && !user,
   });
-  const value = Number.parseInt(amount, 10) || 0;
+  const detail = useQuery({
+    queryKey: ["admin", "grant-user-detail", user?.user_id],
+    queryFn: () => adminUserDetail({ data: { userId: user!.user_id } }),
+    enabled: Boolean(user),
+  });
+  const trimmedAmount = amount.trim();
+  const parsed = /^-?\d+$/.test(trimmedAmount) ? Number(trimmedAmount) : 0;
+  const validAmount = Number.isInteger(parsed) && parsed !== 0 && parsed >= -100_000 && parsed <= 100_000;
+  const value = validAmount ? parsed : 0;
 
   return (
     <Modal
@@ -318,7 +364,7 @@ function GrantModal({ onClose }: { onClose: () => void }) {
           </Button>
           <Button
             size="sm"
-            disabled={busy || !user || !value || reason.trim().length < 3}
+            disabled={busy || !user || !validAmount || reason.trim().length < 3}
             onClick={() =>
               user &&
               void confirm({
@@ -345,7 +391,9 @@ function GrantModal({ onClose }: { onClose: () => void }) {
             <Avatar name={user.display_name} size={32} />
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold">{user.display_name}</p>
-              <p className="text-xs text-muted">{user.email}</p>
+              <p className="text-xs text-muted">
+                {user.email} · Mevcut bakiye: <strong className="text-fg">{detail.data ? `${n(detail.data.credits)} kredi` : "…"}</strong>
+              </p>
             </div>
             <Button size="sm" variant="ghost" onClick={() => setUser(null)}>
               Değiştir
@@ -354,7 +402,11 @@ function GrantModal({ onClose }: { onClose: () => void }) {
         ) : (
           <Field label="Üye">
             <SearchInput value={q} onChange={setQ} placeholder="Ad veya e-posta ile arayın" autoFocus />
-            {users.data?.rows.length ? (
+            {users.isFetching ? (
+              <p className="mt-1.5 text-xs text-muted">Üyeler aranıyor…</p>
+            ) : q.trim().length >= 2 && users.data && !users.data.rows.length ? (
+              <p className="mt-1.5 text-xs text-muted">Eşleşen üye bulunamadı.</p>
+            ) : users.data?.rows.length ? (
               <ul className="mt-1 divide-y divide-border overflow-hidden rounded-lg border border-border">
                 {users.data.rows.map((u) => (
                   <li key={u.user_id}>
@@ -369,11 +421,11 @@ function GrantModal({ onClose }: { onClose: () => void }) {
             ) : null}
           </Field>
         )}
-        <Field label="Miktar" hint="Eksi değer bakiyeden düşer.">
-          <input value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^\d-]/g, ""))} inputMode="numeric" className={inputClass} />
+        <Field label="Miktar" hint="Eksi değer bakiyeden düşer." error={trimmedAmount && trimmedAmount !== "-" && !validAmount ? "±100.000 arasında sıfır dışı tam sayı girin." : null}>
+          <input value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9-]/g, ""))} inputMode="numeric" className={inputClass} />
         </Field>
         <Field label="Gerekçe">
-          <input value={reason} onChange={(e) => setReason(e.target.value)} className={inputClass} placeholder="Ör. açılış kampanyası" />
+          <input value={reason} onChange={(e) => setReason(e.target.value)} maxLength={200} className={inputClass} placeholder="Ör. açılış kampanyası" />
         </Field>
       </div>
     </Modal>
