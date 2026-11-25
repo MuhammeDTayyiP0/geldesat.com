@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -15,7 +15,7 @@ import type { MapBounds, MapEvent, MapMarker } from '@/features/map/mapHtml';
 import { TURKEY_CENTER } from '@/features/map/tiles';
 import { mediaUrl } from '@/lib/config';
 import { useFlag } from '@/lib/flags';
-import { formatNumber, formatPrice, locationLabel } from '@/lib/format';
+import { formatNumber, formatPrice, locationLabel, maskThousands, parseMasked } from '@/lib/format';
 import { Button, Card, Chip, Header, IconButton, Input, Text, hairline, radius, space, useTheme } from '@/ui';
 
 const CITY_COORDS: Record<string, { lat: number; lng: number }> = {
@@ -122,11 +122,15 @@ export default function MapExploreScreen() {
   const [bounds, setBounds] = useState<MapBounds>(DEFAULT_BOUNDS);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [pricePreset, setPricePreset] = useState('all');
+  const [minPriceInput, setMinPriceInput] = useState('');
+  const [maxPriceInput, setMaxPriceInput] = useState('');
   const [selectedListing, setSelectedListing] = useState<Listing | null>(null);
 
   const countsQuery = useQuery({ queryKey: keys.cityCounts, queryFn: catalog.cityCounts, staleTime: 60_000 });
 
-  const priceRange = useMemo(() => PRICE_PRESETS.find((p) => p.key === pricePreset) ?? PRICE_PRESETS[0], [pricePreset]);
+  const minPriceVal = useMemo(() => parseMasked(minPriceInput), [minPriceInput]);
+  const maxPriceVal = useMemo(() => parseMasked(maxPriceInput), [maxPriceInput]);
+  const hasActiveFilter = Boolean(filter.trim() || selectedCategory || pricePreset !== 'all' || minPriceInput || maxPriceInput);
 
   const inBoundsParams = useMemo(
     () => ({
@@ -135,16 +139,22 @@ export default function MapExploreScreen() {
       east: Number(bounds.east.toFixed(4)),
       west: Number(bounds.west.toFixed(4)),
       category: selectedCategory ?? undefined,
-      minPrice: priceRange.minPrice,
-      maxPrice: priceRange.maxPrice,
+      minPrice: minPriceVal,
+      maxPrice: maxPriceVal && maxPriceVal > 0 ? maxPriceVal : undefined,
       q: mapSearchOn && filter.trim() ? filter.trim() : undefined,
     }),
-    [bounds, selectedCategory, priceRange, mapSearchOn, filter],
+    [bounds, selectedCategory, minPriceVal, maxPriceVal, mapSearchOn, filter],
   );
 
+  const [debouncedParams, setDebouncedParams] = useState(inBoundsParams);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedParams(inBoundsParams), 250);
+    return () => clearTimeout(timer);
+  }, [inBoundsParams]);
+
   const inBoundsQuery = useQuery({
-    queryKey: keys.mapListings(inBoundsParams),
-    queryFn: () => catalog.inBounds(inBoundsParams),
+    queryKey: keys.mapListings(debouncedParams),
+    queryFn: () => catalog.inBounds(debouncedParams),
     enabled: mapSearchOn,
     placeholderData: (prev) => prev,
     staleTime: 20_000,
@@ -162,11 +172,17 @@ export default function MapExploreScreen() {
     if (mapSearchOn) {
       const list: MapMarker[] = [];
       for (const l of inBoundsQuery.data ?? []) {
-        if (l.lat == null || l.lng == null) continue;
+        const coords =
+          l.lat != null && l.lng != null
+            ? { lat: l.lat, lng: l.lng }
+            : l.city
+              ? CITY_COORDS[l.city]
+              : undefined;
+        if (!coords) continue;
         list.push({
           id: l.id,
-          lat: l.lat,
-          lng: l.lng,
+          lat: coords.lat,
+          lng: coords.lng,
           label: l.title,
           badge: formatPrice(l.price, l.currency),
         });
@@ -182,6 +198,20 @@ export default function MapExploreScreen() {
     }
     return list;
   }, [mapSearchOn, inBoundsQuery.data, countsQuery.data]);
+
+  const selectPreset = (preset: { key: string; minPrice?: number; maxPrice?: number }) => {
+    setPricePreset(preset.key);
+    setMinPriceInput(preset.minPrice ? maskThousands(String(preset.minPrice)) : '');
+    setMaxPriceInput(preset.maxPrice ? maskThousands(String(preset.maxPrice)) : '');
+  };
+
+  const clearFilters = () => {
+    setFilter('');
+    setSelectedCategory(null);
+    setPricePreset('all');
+    setMinPriceInput('');
+    setMaxPriceInput('');
+  };
 
   const cities = useMemo(() => {
     const q = filter.trim().toLocaleLowerCase('tr');
@@ -266,10 +296,39 @@ export default function MapExploreScreen() {
                       key={preset.key}
                       label={preset.label}
                       selected={pricePreset === preset.key}
-                      onPress={() => setPricePreset(preset.key)}
+                      onPress={() => selectPreset(preset)}
                     />
                   ))}
                 </ScrollView>
+                <View style={styles.priceInputs}>
+                  <View style={styles.flex}>
+                    <Input
+                      placeholder="Min TL"
+                      keyboardType="number-pad"
+                      value={minPriceInput}
+                      onChangeText={(txt) => {
+                        const formatted = maskThousands(txt);
+                        setMinPriceInput(formatted);
+                        setPricePreset(formatted || maxPriceInput ? 'custom' : 'all');
+                      }}
+                    />
+                  </View>
+                  <View style={styles.flex}>
+                    <Input
+                      placeholder="Max TL"
+                      keyboardType="number-pad"
+                      value={maxPriceInput}
+                      onChangeText={(txt) => {
+                        const formatted = maskThousands(txt);
+                        setMaxPriceInput(formatted);
+                        setPricePreset(minPriceInput || formatted ? 'custom' : 'all');
+                      }}
+                    />
+                  </View>
+                  {hasActiveFilter ? (
+                    <Button title="Temizle" size="sm" variant="outline" onPress={clearFilters} />
+                  ) : null}
+                </View>
               </View>
             ) : null}
             <View style={[styles.mapWrap, { borderColor: c.border, backgroundColor: c.surface }]}>
@@ -277,6 +336,8 @@ export default function MapExploreScreen() {
                 initial={{ lat: TURKEY_CENTER.lat, lng: TURKEY_CENTER.lng, zoom: 5 }}
                 dark={dark}
                 markers={markers}
+                cluster={mapSearchOn}
+                selectedId={selectedListing?.id ?? null}
                 onEvent={handleMapEvent}
                 onMarkerPress={handleMarkerPress}
               />
@@ -372,6 +433,7 @@ const styles = StyleSheet.create({
   mapWrap: { height: 280, borderRadius: radius.lg, borderWidth: hairline, overflow: 'hidden' },
   filterRows: { gap: space.xs },
   chips: { gap: space.xs },
+  priceInputs: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   pinPreview: { overflow: 'hidden' },
   pinBody: { flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.md, paddingRight: 40 },
   pinThumb: { width: 72, height: 72, borderRadius: radius.md, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },

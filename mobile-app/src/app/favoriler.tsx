@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { View } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -6,6 +5,7 @@ import { Heart, LayoutGrid, List } from 'lucide-react-native';
 import { useSession } from '@/auth/session';
 import { useFavorites } from '@/features/listing/favorites';
 import { ListingGrid } from '@/features/listing/ListingGrid';
+import { useViewLayout } from '@/lib/storage';
 import { Button, EmptyState, ErrorState, Header, IconButton, useTheme } from '@/ui';
 
 export default function FavoritesScreen() {
@@ -14,7 +14,7 @@ export default function FavoritesScreen() {
   const router = useRouter();
   const session = useSession();
   const favorites = useFavorites();
-  const [layout, setLayout] = useState<'grid' | 'list'>('grid');
+  const [layout, setLayout] = useViewLayout();
 
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
@@ -43,6 +43,7 @@ export default function FavoritesScreen() {
           bottomInset={insets.bottom}
           listings={favorites.data ?? []}
           layout={layout}
+          showInactiveStatus
           loading={favorites.isLoading}
           refreshing={favorites.isRefetching}
           onRefresh={() => void favorites.refetch()}

@@ -4,7 +4,7 @@ import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import { Camera, Clock, ExternalLink, FileText, MapPin, Phone, Store, Trash2, UserRound } from 'lucide-react-native';
+import { BadgeCheck, Camera, Clock, ExternalLink, FileText, MapPin, Phone, Store, Trash2, UserRound } from 'lucide-react-native';
 import { errorMessage } from '@/api/client';
 import { account, storeApplications, uploads } from '@/api/endpoints';
 import { keys, queryClient, useMe } from '@/api/queries';
@@ -170,6 +170,28 @@ function StoreSettings() {
                 {application.notes ? <DetailLine label="Not" value={application.notes} /> : null}
                 <DetailLine label="Başvuru tarihi" value={formatDate(application.created_at)} />
               </View>
+            </Card>
+          </KeyboardAwareScrollView>
+        ) : application && application.status === 'APPROVED' ? (
+          <KeyboardAwareScrollView contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + space.xxxl }]}>
+            <Card style={styles.statusCard}>
+              <View style={styles.statusHead}>
+                <View style={[styles.statusIcon, { backgroundColor: c.okSoft }]}>
+                  <BadgeCheck size={22} color={c.ok} />
+                </View>
+                <View style={styles.flex}>
+                  <Text variant="subheading">Başvurunuz onaylandı</Text>
+                  <Badge label="Onaylandı" tone="ok" style={styles.statusBadge} />
+                </View>
+              </View>
+              <Text variant="caption" tone="muted">
+                Mağazanız aktif edildi. Mağaza ayarlarınızı görmek için sayfayı yenileyin.
+              </Text>
+              <Button
+                title="Sayfayı yenile"
+                variant="outline"
+                onPress={() => void queryClient.invalidateQueries({ queryKey: keys.me })}
+              />
             </Card>
           </KeyboardAwareScrollView>
         ) : (

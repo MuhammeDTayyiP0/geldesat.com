@@ -3,7 +3,7 @@ import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import { Lock, Mail, UserRound, X } from 'lucide-react-native';
+import { Check, Lock, Mail, UserRound, X } from 'lucide-react-native';
 import Svg, { Path } from 'react-native-svg';
 import { errorMessage } from '@/api/client';
 import { keys, queryClient, useConfig } from '@/api/queries';
@@ -29,6 +29,7 @@ export default function SignInScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState<'email' | 'google' | null>(null);
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const passwordRef = useRef<TextInputRef>(null);
@@ -47,6 +48,9 @@ export default function SignInScreen() {
     const mail = email.trim();
     if (!EMAIL_RE.test(mail)) return setError('Geçerli bir e-posta adresi girin.');
     if (mode === 'signup' && name.trim().length < 2) return setError('Adınızı ve soyadınızı girin.');
+    if (mode === 'signup' && !termsAccepted) {
+      return setError('Üyelik sözleşmesini, gizlilik politikasını ve KVKK aydınlatma metnini kabul etmeden üye olunamaz.');
+    }
     if (mode !== 'forgot' && password.length < 8) return setError('Şifre en az 8 karakter olmalı.');
     setBusy('email');
     try {
@@ -172,6 +176,43 @@ export default function SignInScreen() {
               hint={mode === 'signup' ? 'En az 8 karakter' : undefined}
             />
           ) : null}
+          {mode === 'signup' ? (
+            <View style={styles.termsRow}>
+              <Pressable
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: termsAccepted }}
+                accessibilityLabel="Üyelik sözleşmesini, gizlilik politikasını ve KVKK aydınlatma metnini kabul ediyorum"
+                hitSlop={8}
+                onPress={() => {
+                  setTermsAccepted((prev) => !prev);
+                  if (error) setError(null);
+                }}
+                style={[
+                  styles.checkbox,
+                  {
+                    borderColor: termsAccepted ? c.primarySolid : c.borderStrong,
+                    backgroundColor: termsAccepted ? c.primarySolid : c.surface,
+                  },
+                ]}
+              >
+                {termsAccepted ? <Check size={14} color={c.onPrimary} strokeWidth={3} /> : null}
+              </Pressable>
+              <Text variant="caption" tone="muted" style={styles.flex}>
+                <Text variant="caption" tone="primary" onPress={() => void WebBrowser.openBrowserAsync(webUrl('/sayfa/uyelik'))}>
+                  Üyelik Sözleşmesi
+                </Text>
+                ,{' '}
+                <Text variant="caption" tone="primary" onPress={() => void WebBrowser.openBrowserAsync(webUrl('/sayfa/gizlilik'))}>
+                  Gizlilik Politikası
+                </Text>{' '}
+                ve{' '}
+                <Text variant="caption" tone="primary" onPress={() => void WebBrowser.openBrowserAsync(webUrl('/sayfa/kvkk'))}>
+                  KVKK Aydınlatma Metni
+                </Text>
+                ’ni okudum, kabul ediyorum.
+              </Text>
+            </View>
+          ) : null}
           {error ? (
             <Text variant="caption" tone="danger">
               {error}
@@ -217,22 +258,23 @@ export default function SignInScreen() {
               <GoogleMark />
               <Text variant="bodyStrong">{busy === 'google' ? 'Bağlanıyor…' : 'Google ile devam et'}</Text>
             </Pressable>
-          </>
-        ) : null}
-
-        {mode === 'signup' ? (
-          <Text variant="caption" tone="subtle" center>
-            Üye olarak{' '}
-            {/* In the browser: a page pushed from this modal would open underneath it on iOS. */}
-            <Text variant="caption" tone="primary" onPress={() => void WebBrowser.openBrowserAsync(webUrl('/sayfa/uyelik'))}>
-              Üyelik Sözleşmesi
-            </Text>{' '}
-            ve{' '}
-            <Text variant="caption" tone="primary" onPress={() => void WebBrowser.openBrowserAsync(webUrl('/sayfa/kvkk'))}>
-              KVKK Aydınlatma Metni
+            <Text variant="caption" tone="subtle" center>
+              Google ile devam ederek{' '}
+              {/* In the browser: a page pushed from this modal would open underneath it on iOS. */}
+              <Text variant="caption" tone="primary" onPress={() => void WebBrowser.openBrowserAsync(webUrl('/sayfa/uyelik'))}>
+                Üyelik Sözleşmesi
+              </Text>
+              ,{' '}
+              <Text variant="caption" tone="primary" onPress={() => void WebBrowser.openBrowserAsync(webUrl('/sayfa/gizlilik'))}>
+                Gizlilik Politikası
+              </Text>{' '}
+              ve{' '}
+              <Text variant="caption" tone="primary" onPress={() => void WebBrowser.openBrowserAsync(webUrl('/sayfa/kvkk'))}>
+                KVKK Aydınlatma Metni
+              </Text>
+              ’ni kabul etmiş olursunuz.
             </Text>
-            ’ni kabul etmiş olursunuz.
-          </Text>
+          </>
         ) : null}
       </KeyboardAwareScrollView>
     </View>
@@ -258,6 +300,16 @@ const styles = StyleSheet.create({
   logo: { borderRadius: 16, borderWidth: hairline, overflow: 'hidden', alignSelf: 'center', marginBottom: space.sm },
   notice: { padding: space.md, borderRadius: radius.md },
   form: { gap: space.lg },
+  termsRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm },
+  checkbox: {
+    width: 22,
+    height: 22,
+    marginTop: 1,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   link: { alignSelf: 'center' },
   dividerRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   line: { flex: 1, height: hairline },

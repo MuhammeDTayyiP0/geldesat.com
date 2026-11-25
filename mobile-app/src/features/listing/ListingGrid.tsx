@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import type { Listing } from '@/api/types';
 import { useSession } from '@/auth/session';
 import { Button, Skeleton, Text, space, useTheme } from '@/ui';
+import { isListingExpired, isListingLive, listingStatusLabel } from '@/lib/format';
 import { ListingCard } from './ListingCard';
 import { useFavoriteIds, useToggleFavorite } from './favorites';
 
@@ -24,6 +25,7 @@ type Props = {
   onRetryMore?: () => void;
   /** For scroll-to-top when the tab is tapped again. */
   listRef?: Ref<FlashListRef<Listing>>;
+  showInactiveStatus?: boolean;
 };
 
 export function ListingGrid({
@@ -40,6 +42,7 @@ export function ListingGrid({
   loadMoreError,
   onRetryMore,
   listRef,
+  showInactiveStatus = false,
 }: Props) {
   const { c } = useTheme();
   const router = useRouter();
@@ -77,17 +80,24 @@ export function ListingGrid({
           </View>
         ) : null
       }
-      renderItem={({ item }) => (
-        <View style={grid ? styles.gridCell : styles.listCell}>
-          <ListingCard
-            layout={grid ? 'grid' : 'row'}
-            listing={item}
-            favorite={favoriteIds.has(item.id)}
-            onFavorite={item.user_id === me ? undefined : favorite}
-            onPress={open}
-          />
-        </View>
-      )}
+      renderItem={({ item }) => {
+        const statusLabel =
+          showInactiveStatus && !isListingLive(item)
+            ? listingStatusLabel(item.status ?? 'ACTIVE', isListingExpired(item))
+            : undefined;
+        return (
+          <View style={grid ? styles.gridCell : styles.listCell}>
+            <ListingCard
+              layout={grid ? 'grid' : 'row'}
+              listing={item}
+              statusLabel={statusLabel}
+              favorite={favoriteIds.has(item.id)}
+              onFavorite={item.user_id === me ? undefined : favorite}
+              onPress={open}
+            />
+          </View>
+        );
+      }}
     />
   );
 }

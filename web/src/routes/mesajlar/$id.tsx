@@ -118,6 +118,7 @@ function Thread() {
   const [blockedByOther, setBlockedByOther] = useState(false);
   const [online, setOnline] = useState(false);
   const [lastSeen, setLastSeen] = useState<string | null>(null);
+  const [showReads, setShowReads] = useState(true);
   const [typingUntil, setTypingUntil] = useState(0);
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(true);
@@ -160,6 +161,7 @@ function Thread() {
   const box = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const lastRef = useRef<string | undefined>(undefined);
+  const syncedFromRef = useRef<string | null>(null);
   const stickRef = useRef(true);
   const lastTypingSent = useRef(0);
   const prependAnchor = useRef<{ height: number; top: number } | null>(null);
@@ -218,7 +220,7 @@ function Thread() {
       const settled = new Set<string>();
       for (const m of incoming) {
         if (m.sender_id !== userId) continue;
-        const twin = pending.find((p) => p.content === m.content && !settled.has(p.id));
+        const twin = pending.find((p) => (m.client_id && p.id === m.client_id) || (p.content === m.content && !settled.has(p.id)));
         if (twin && !prev.some((x) => x.id === m.id)) settled.add(twin.id);
       }
       const known = new Set(prev.map((m) => m.id));
@@ -258,6 +260,7 @@ function Thread() {
     setDetached(false);
     setNewWhileDetached(false);
     setHasMore(false);
+    setShowReads(true);
     setText("");
     setReplyTo(null);
     setStaged((prev) => {
@@ -265,6 +268,7 @@ function Thread() {
       return [];
     });
     lastRef.current = undefined;
+    syncedFromRef.current = null;
 
     getThread({ data: { conversationId: id } })
       .then((t) => {
@@ -273,11 +277,13 @@ function Thread() {
         setMessages(t.messages);
         setHasMore(t.hasMore);
         setFirstUnreadId(t.firstUnreadId);
+        setShowReads(Boolean(t.showReads));
         setBlockedByMe(t.blockedByMe);
         setBlockedByOther(t.blockedByOther);
         setOnline(t.conversation.other_online);
         setLastSeen(t.conversation.other_last_seen);
         lastRef.current = t.messages.at(-1)?.created_at ?? new Date().toISOString();
+        syncedFromRef.current = new Date(Date.now() - 2 * 60_000).toISOString();
         const startAtUnread = Boolean(t.firstUnreadId && t.firstUnreadId !== t.messages[0]?.id);
         stickRef.current = !startAtUnread;
         setLoading(false);
@@ -331,10 +337,13 @@ function Thread() {
 
     // Catch up first, so "Görüldü" only goes out for messages that are really on screen.
     const catchUp = () => {
-      if (!visible() || !lastRef.current || detachedRef.current) return Promise.resolve();
-      return pollThread({ data: { conversationId: id, after: lastRef.current } })
+      const after = syncedFromRef.current ?? lastRef.current;
+      if (!visible() || !after || detachedRef.current) return Promise.resolve();
+      const startedAt = new Date(Date.now() - 2 * 60_000).toISOString();
+      return pollThread({ data: { conversationId: id, after } })
         .then((extra) => {
           if (stop) return;
+          syncedFromRef.current = startedAt;
           merge(extra.messages);
           if (extra.reads.length) {
             const map = new Map(extra.reads.map((r) => [r.id, r.read_at]));
@@ -486,13 +495,14 @@ function Thread() {
   /** Optimistic send; several messages can be in flight at once. */
   async function send(
     content: string,
-    tempId = `tmp_${crypto.randomUUID().slice(0, 12)}`,
+    tempId = `tmp_${crypto.randomUUID().replace(/-/g, "").slice(0, 20)}`,
     quoted: Msg | null = null,
   ) {
     if (!user || !canMessage) return;
     if (detached) backToLatest();
     const optimistic: Msg = {
       id: tempId,
+      client_id: tempId,
       sender_id: user.id,
       content,
       kind: "text",
@@ -510,7 +520,7 @@ function Thread() {
     setMessages((prev) => [...prev.filter((m) => m.id !== tempId), optimistic]);
     try {
       const sent = await sendMessage({
-        data: { conversationId: id, content, replyTo: quoted?.id },
+        data: { conversationId: id, content, replyTo: quoted?.id, clientId: tempId },
       });
       setMessages((prev) => {
         const without = prev.filter((m) => m.id !== tempId && m.id !== sent.id);
@@ -957,6 +967,7 @@ function Thread() {
                 <MessageBubble
                   m={m}
                   mine={mine}
+                  showReads={showReads}
                   currency={info?.listing_currency}
                   pending={m.localState === "pending"}
                   failed={m.localState === "failed"}

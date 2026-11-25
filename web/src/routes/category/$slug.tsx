@@ -1,7 +1,7 @@
 import { Pagination } from "@/components/listing/Pagination";
 import { useModalPanel } from "@/lib/use-modal-panel";
 import { createFileRoute, Link, useNavigate, notFound } from "@tanstack/react-router";
-import { ArrowUpDown, Check, ChevronRight, LayoutGrid, List as ListIcon, SlidersHorizontal, X } from "lucide-react";
+import { ArrowUpDown, Check, ChevronRight, LayoutGrid, List as ListIcon, MapPin, SlidersHorizontal, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useViewPreference } from "@/lib/use-view-pref";
 import { getCategory, searchCatalog } from "@/lib/server/catalog";
@@ -12,6 +12,7 @@ import { ListingCard } from "@/components/listing/ListingCard";
 import { Filters, type FilterState } from "@/components/listing/Filters";
 import { SubcategoryGrid } from "@/components/listing/CategoryPicker";
 import { ListingGridSkeleton } from "@/components/listing/ListingGridSkeleton";
+import { SaveSearchButton } from "@/components/search/SaveSearchButton";
 import { Button } from "@/components/ui/button";
 import { NotFound } from "@/components/common/NotFound";
 
@@ -183,6 +184,8 @@ function CategoryPage() {
       maxKm: search.maxKm,
       minM2: search.minM2,
       maxM2: search.maxM2,
+      urgent: search.urgent,
+      featured: search.featured,
       postedWithin: search.postedWithin,
       withPhotos: search.withPhotos,
       sellerType: search.sellerType,
@@ -215,6 +218,8 @@ function CategoryPage() {
         maxKm: filters.maxKm,
         minM2: filters.minM2,
         maxM2: filters.maxM2,
+        urgent: filters.urgent,
+        featured: filters.featured,
         postedWithin: filters.postedWithin,
         withPhotos: filters.withPhotos,
         sellerType: filters.sellerType,
@@ -280,6 +285,12 @@ function CategoryPage() {
       onRemove: () => removeFromSearch({ minM2: undefined, maxM2: undefined }),
     });
   }
+  if (search.urgent) {
+    activeChips.push({ id: "urgent", label: "Acil satılık", onRemove: () => removeFromSearch({ urgent: undefined }) });
+  }
+  if (search.featured) {
+    activeChips.push({ id: "featured", label: "Vitrin ilanları", onRemove: () => removeFromSearch({ featured: undefined }) });
+  }
   if (search.sort && search.sort !== "date_desc") {
     const opt = SORT_OPTIONS.find((s) => s.value === search.sort);
     if (opt) activeChips.push({ id: "sort", label: opt.label, onRemove: () => removeFromSearch({ sort: "date_desc" }) });
@@ -337,6 +348,7 @@ function CategoryPage() {
       <div className="mt-2 mb-4 flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted">{result.total} ilan</p>
         <div className="flex items-center gap-2">
+          <SaveSearchButton search={{ ...search, category: slug }} categoryName={cat.category.name} />
           <button
             type="button"
             className="flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-2 text-sm font-medium lg:hidden"
@@ -434,6 +446,35 @@ function CategoryPage() {
           <Pagination page={result.page} pages={result.pages} search={search} slug={slug} />
         </div>
       </div>
+      {/* Mobil Kayan / Yapışkan Eylem Çubuğu (Floating Sticky Bar) */}
+      <div className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] md:bottom-4 left-1/2 z-30 flex -translate-x-1/2 items-center gap-1 rounded-full border border-border bg-surface/95 p-1.5 shadow-2xl backdrop-blur-md lg:hidden">
+        <button
+          type="button"
+          onClick={openMobile}
+          className="flex items-center gap-1.5 rounded-full bg-primary-solid px-3.5 py-2 text-xs font-semibold text-primary-fg shadow-sm transition-transform active:scale-95"
+        >
+          <SlidersHorizontal className="size-3.5" />
+          <span>Filtrele {activeChips.length > 0 ? `(${activeChips.length})` : ""}</span>
+        </button>
+        <div className="h-4 w-px bg-border" />
+        <button
+          type="button"
+          onClick={() => setSortOpen(true)}
+          className="flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-semibold text-fg hover:bg-elevated transition-transform active:scale-95"
+        >
+          <ArrowUpDown className="size-3.5 text-muted" />
+          <span>Sırala</span>
+        </button>
+        <div className="h-4 w-px bg-border" />
+        <Link
+          to="/harita"
+          className="flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-semibold text-fg hover:bg-elevated transition-transform active:scale-95"
+        >
+          <MapPin className="size-3.5 text-primary" />
+          <span>Harita</span>
+        </Link>
+      </div>
+
       {/* Mobile filtre — modern alt çekmece */}
       {mobile ? (
         <div

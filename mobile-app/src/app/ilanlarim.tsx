@@ -257,7 +257,7 @@ export default function MyListingsScreen() {
             {menuActions.has('renew') ? (
               <ListRow icon={RefreshCw} label="Süreyi 30 gün uzat" onPress={() => void run(menu, { action: 'renew' })} />
             ) : null}
-            {menu.status === 'ACTIVE' && dopingOn ? (
+            {menu.status === 'ACTIVE' && !isExpired(menu) && dopingOn ? (
               <ListRow
                 icon={Rocket}
                 label="Öne çıkar (doping)"

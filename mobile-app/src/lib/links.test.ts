@@ -39,7 +39,9 @@ describe('appRouteForWebPath', () => {
     assert.equal(appRouteForWebPath('/category'), null);
 
     assert.deepEqual(
-      appRouteForWebPath('/search?q=laptop&category=elektronik&city=istanbul&district=besiktas&sort=price_asc&extra=ignored'),
+      appRouteForWebPath(
+        '/search?q=laptop&category=elektronik&city=istanbul&district=besiktas&neighborhood=levent&minPrice=5000&maxPrice=25000&minYear=2020&maxYear=2024&minKm=10000&maxKm=80000&minM2=80&maxM2=140&urgent=1&featured=1&postedWithin=7&withPhotos=1&sellerType=store&priceDropped=1&attrs=%7B%22Renk%22%3A%5B%22Siyah%22%5D%7D&sort=price_asc&extra=ignored',
+      ),
       {
         pathname: '/sonuclar',
         params: {
@@ -47,6 +49,22 @@ describe('appRouteForWebPath', () => {
           category: 'elektronik',
           city: 'istanbul',
           district: 'besiktas',
+          neighborhood: 'levent',
+          minPrice: '5000',
+          maxPrice: '25000',
+          minYear: '2020',
+          maxYear: '2024',
+          minKm: '10000',
+          maxKm: '80000',
+          minM2: '80',
+          maxM2: '140',
+          urgent: '1',
+          featured: '1',
+          postedWithin: '7',
+          withPhotos: '1',
+          sellerType: 'store',
+          priceDropped: '1',
+          attrs: '{"Renk":["Siyah"]}',
           sort: 'price_asc',
         },
       },
@@ -55,11 +73,18 @@ describe('appRouteForWebPath', () => {
       pathname: '/sonuclar',
       params: {},
     });
+    assert.equal(appRouteForWebPath('/karsilastir'), '/karsilastir');
+    assert.equal(appRouteForWebPath('/kategoriler'), '/kategoriler');
+    assert.equal(appRouteForWebPath('/kayitli-aramalar'), '/kayitli-aramalar');
   });
 
   it('maps settings, account, seller, store, and static pages', () => {
     assert.equal(appRouteForWebPath('/ayarlar/hesap'), '/ayarlar/guvenlik');
     assert.equal(appRouteForWebPath('/ayarlar/gizlilik'), '/ayarlar/gizlilik');
+    assert.equal(appRouteForWebPath('/ayarlar/sablonlar'), '/ayarlar/sablonlar');
+    assert.equal(appRouteForWebPath('/ayarlar/yasal'), '/ayarlar/yasal');
+    assert.equal(appRouteForWebPath('/ayarlar/guncelleme'), '/ayarlar/guncelleme');
+    assert.equal(appRouteForWebPath('/ayarlar/kayitli-aramalar'), '/kayitli-aramalar');
     assert.equal(appRouteForWebPath('/ayarlar/bilinmeyen'), '/ayarlar');
     assert.equal(appRouteForWebPath('/ayarlar'), '/ayarlar');
 

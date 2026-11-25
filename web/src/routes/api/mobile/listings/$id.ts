@@ -2,7 +2,8 @@ import { asIso, listingNoFromSlug } from "@/lib/utils";
 import { createFileRoute } from "@tanstack/react-router";
 import { getSql } from "@/lib/db";
 import { auth } from "@/lib/auth/server";
-import { canReviewSeller, firstInWindow, mapListing, rateLimit, revealListingPhone, viewerKey } from "@/lib/server/helpers";
+import { isExpired, ownerActions } from "@/lib/listing-status";
+import { canReviewSeller, firstInWindow, inheritedAttributes, mapListing, rateLimit, revealListingPhone, viewerKey } from "@/lib/server/helpers";
 import { getSellerResponseStats } from "@/lib/server/chat";
 import { errorStatus, publicErrorMessage } from "@/lib/server/errors";
 import { assertMobileJsonWrite } from "@/lib/server/mobile-auth";
@@ -47,15 +48,23 @@ export const Route = createFileRoute("/api/mobile/listings/$id")({
           const favoriteRows = userId
             ? await sql.query<{ listing_id: string }>("select listing_id from favorites where user_id=$1 and listing_id=$2", [userId, listing.id])
             : [];
-          const [history, similarRows, reviews, stats, responseStats] = await Promise.all([
-            sql.query<{ price: number | string; recorded_at: string }>("select price,recorded_at from price_history where listing_id=$1 order by recorded_at asc", [listing.id]),
-            sql.query<Record<string, unknown>>(
+          const fetchSimilar = (narrow: boolean) => {
+            const hasPriceBand = narrow && listing.price > 0;
+            const queryParams: (string | number)[] = hasPriceBand
+              ? [listing.category_id, listing.id, listing.price * 0.7, listing.price * 1.3]
+              : [listing.category_id, listing.id];
+            return sql.query<Record<string, unknown>>(
               `select l.*,c.name as category_name,c.slug as category_slug,p.display_name as seller_name,
                       coalesce((select json_agg(b.kind) from boosts b where b.listing_id=l.id and b.ends_at>now()),'[]'::json) as boosts
                from listings l join categories c on c.id=l.category_id left join profiles p on p.user_id=l.user_id
-               where l.category_id=$1 and l.id<>$2 and l.status='ACTIVE' and (l.expires_at is null or l.expires_at>now())
-               order by l.created_at desc limit 4`, [listing.category_id, listing.id],
-            ),
+               where l.category_id=$1 and l.id<>$2 and l.status='ACTIVE' and (l.expires_at is null or l.expires_at>now())${hasPriceBand ? " and l.price between $3 and $4" : ""}
+               order by l.created_at desc limit 4`,
+              queryParams,
+            );
+          };
+          const [history, similarNarrow, reviews, stats, responseStats, catAttrs] = await Promise.all([
+            sql.query<{ price: number | string; recorded_at: string }>("select price,recorded_at from price_history where listing_id=$1 order by recorded_at asc", [listing.id]),
+            fetchSimilar(listing.price > 0),
             sql.query<Record<string, unknown>>(
               `select r.id,r.rating,r.comment,r.created_at,p.display_name as reviewer
                from reviews r left join profiles p on p.user_id=r.reviewer_id where r.seller_id=$1 order by r.created_at desc limit 6`, [listing.user_id],
@@ -68,7 +77,12 @@ export const Route = createFileRoute("/api/mobile/listings/$id")({
                 (select count(*)::int from reviews where seller_id=$2) as rating_count`, [listing.id, listing.user_id],
             ),
             getSellerResponseStats(sql, listing.user_id),
+            inheritedAttributes(listing.category_id),
           ]);
+          const similarRows = similarNarrow.length > 0 || listing.price <= 0 ? similarNarrow : await fetchSimilar(false);
+          const attrUnits = Object.fromEntries(
+            catAttrs.flatMap((a) => (a.unit ? [[a.name, a.unit] as const] : [])),
+          ) as Record<string, string>;
           const sellerReviewEligible = Boolean(userId && userId !== listing.user_id && (await canReviewSeller(sql, userId, listing.user_id)));
           const existingReview = userId && userId !== listing.user_id
             ? await sql.query<{ rating: number; comment: string | null }>(
@@ -84,6 +98,9 @@ export const Route = createFileRoute("/api/mobile/listings/$id")({
             view_count: Number(listing.view_count || 0) + (countView ? 1 : 0),
           };
           if (countView) await sql.query("update listings set view_count=view_count+1 where id=$1", [listing.id]);
+          const actions = userId === listing.user_id
+            ? ownerActions({ status: listing.status, approved: Boolean(rows[0].approved), expired: isExpired(listing.expires_at) })
+            : undefined;
           return Response.json(
             {
               success: true,
@@ -93,6 +110,8 @@ export const Route = createFileRoute("/api/mobile/listings/$id")({
               hasPhone: Boolean(rows[0].has_phone) && rows[0].phone_visibility !== "hidden",
               phoneVisibility: String(rows[0].phone_visibility),
               showWhatsapp: Boolean(rows[0].show_whatsapp),
+              attrUnits,
+              ownerActions: actions,
               history: history.map((row) => ({ price: Number(row.price), at: asIso(row.recorded_at) })),
               similar: similarRows.map(mapListing),
               reviews: reviews.map((row) => ({ id: String(row.id), rating: Number(row.rating), comment: String(row.comment ?? ''), reviewer: String(row.reviewer ?? 'Üye'), at: asIso(row.created_at) })),

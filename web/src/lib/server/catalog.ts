@@ -600,7 +600,7 @@ export const getListing = createServerFn({ method: "POST" })
         page: 1,
         skipCount: true,
       }).then((r) => r.listings.filter((x) => x.id !== listing.id));
-    const [tree, history, similarNarrow, seller, responseStats] = await Promise.all([
+    const [tree, history, similarNarrow, seller, responseStats, reviewRows] = await Promise.all([
       getCategoryTree(),
       sql.query<{ price: string | number; recorded_at: string }>(
         "select price, recorded_at from price_history where listing_id = $1 order by recorded_at asc",
@@ -616,6 +616,12 @@ export const getListing = createServerFn({ method: "POST" })
         [listing.user_id],
       ),
       getSellerResponseStats(sql, listing.user_id),
+      sql.query<Record<string, unknown>>(
+        `select r.id, r.rating, r.comment, r.created_at, p.display_name as reviewer
+         from reviews r left join profiles p on p.user_id = r.reviewer_id
+         where r.seller_id = $1 order by r.created_at desc limit 3`,
+        [listing.user_id],
+      ),
     ]);
     const path = categoryPath(tree, listing.category_id) as CategoryRow[];
     const filteredSimilar = similarNarrow.length > 0 || listing.price <= 0 ? similarNarrow : await similarOf(false);
@@ -665,6 +671,13 @@ export const getListing = createServerFn({ method: "POST" })
       approved: Boolean(rows[0].approved),
       fav_count: num(rows[0].fav_count),
       phone_reveal_count: num(rows[0].phone_reveal_count),
+      reviews: reviewRows.map((r) => ({
+        id: String(r.id),
+        rating: Number(r.rating),
+        comment: String(r.comment ?? ""),
+        reviewer: String(r.reviewer ?? "Üye"),
+        at: asIso(r.created_at),
+      })),
     };
   });
 

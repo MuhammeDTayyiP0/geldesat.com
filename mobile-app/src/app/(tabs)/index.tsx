@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { useRouter, useScrollToTop } from 'expo-router';
+import { useRouter, useScrollToTop, type Href } from 'expo-router';
 import type { FlashListRef } from '@shopify/flash-list';
 import type { Listing } from '@/api/types';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,7 +16,7 @@ import { useNearbyCity } from '@/features/location/nearby';
 import { OptionPicker } from '@/features/location/OptionPicker';
 import { useFlag } from '@/lib/flags';
 import { formatNumber, uniqueById } from '@/lib/format';
-import { CountDot, EmptyState, ErrorState, IconButton, Skeleton, Text, Wordmark, hairline, radius, space, toast, useTheme } from '@/ui';
+import { Button, CountDot, EmptyState, ErrorState, IconButton, Skeleton, Text, Wordmark, hairline, radius, space, toast, useTheme } from '@/ui';
 
 const PAGE = 20;
 
@@ -174,39 +174,68 @@ export default function DiscoverScreen() {
       ) : null}
 
       {nearby.city ? (
-        <View>
-          <ListingRail
-            title={`${nearby.city} civarında`}
-            items={near.data?.listings}
-            loading={near.isLoading}
-            onSeeAll={() => router.push({ pathname: '/sonuclar', params: { city: nearby.city ?? '' } })}
-          />
-          {near.isLoading || (near.data?.listings?.length ?? 0) > 0 ? (
+        !near.isLoading && (near.data?.listings?.length ?? 0) === 0 ? (
+          <View style={[styles.nearbyCard, { backgroundColor: c.surface, borderColor: c.border }]}>
+            <View style={[styles.nearbyIcon, { backgroundColor: c.elevated }]}>
+              <MapPin size={20} color={c.subtle} />
+            </View>
+            <View style={styles.flex}>
+              <Text variant="bodyStrong">{nearby.city} civarında</Text>
+              <Text variant="caption" tone="muted">
+                {nearby.city} için henüz ilan yok.
+              </Text>
+            </View>
+            <Button title="Şehri değiştir" size="sm" variant="outline" onPress={() => setCityPicker(true)} />
+          </View>
+        ) : (
+          <View>
+            <ListingRail
+              title={`${nearby.city} civarında`}
+              items={near.data?.listings}
+              loading={near.isLoading}
+              onSeeAll={() => router.push({ pathname: '/sonuclar', params: { city: nearby.city ?? '' } })}
+            />
             <Pressable onPress={() => setCityPicker(true)} style={styles.changeCity} hitSlop={6}>
               <MapPin size={13} color={c.subtle} />
               <Text variant="small" tone="subtle">
                 Şehri değiştir
               </Text>
             </Pressable>
-          ) : null}
-        </View>
+          </View>
+        )
       ) : (
-        <Pressable
-          accessibilityRole="button"
-          onPress={askLocation}
-          style={[styles.nearbyCard, { backgroundColor: c.surface, borderColor: c.border }]}
-        >
-          <View style={[styles.nearbyIcon, { backgroundColor: c.primarySoft }]}>
-            <LocateFixed size={20} color={c.primary} />
+        <View style={[styles.nearbyPromptCard, { backgroundColor: c.surface, borderColor: c.border }]}>
+          <View style={styles.nearbyPromptHead}>
+            <View style={[styles.nearbyIcon, { backgroundColor: c.primarySoft }]}>
+              <LocateFixed size={20} color={c.primary} />
+            </View>
+            <View style={styles.flex}>
+              <Text variant="bodyStrong">Yakınınızdaki ilanlar</Text>
+              <Text variant="caption" tone="muted">
+                Konumunuzu kullanın veya şehrinizi seçin
+              </Text>
+            </View>
           </View>
-          <View style={styles.flex}>
-            <Text variant="bodyStrong">Yakınınızdaki ilanlar</Text>
-            <Text variant="caption" tone="muted">
-              {nearby.locating ? 'Konumunuz alınıyor…' : 'Konumunuzu kullanın veya şehrinizi seçin'}
-            </Text>
+          <View style={styles.nearbyActions}>
+            <Button
+              title={nearby.locating ? 'Konum alınıyor…' : 'Konumumu kullan'}
+              icon={LocateFixed}
+              size="sm"
+              variant="outline"
+              loading={nearby.locating}
+              onPress={askLocation}
+              style={styles.flex}
+            />
+            <Button
+              title="Şehir seç"
+              icon={MapPin}
+              size="sm"
+              variant="soft"
+              onPress={() => setCityPicker(true)}
+              style={styles.flex}
+            />
           </View>
-          <ChevronRight size={18} color={c.subtle} />
-        </Pressable>
+        </View>
       )}
 
       {recent.length ? (
@@ -226,6 +255,7 @@ export default function DiscoverScreen() {
       <View style={[styles.topBar, { paddingTop: insets.top, backgroundColor: c.surface, borderBottomColor: c.border }]}>
         <Wordmark />
         <View style={styles.topActions}>
+          <IconButton icon={MapPin} label="Haritada ara" onPress={() => router.push('/harita' as Href)} />
           <IconButton icon={Heart} label="Favoriler" onPress={() => router.push('/favoriler')} />
           <IconButton
             icon={Bell}
@@ -384,6 +414,15 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     borderWidth: hairline,
   },
+  nearbyPromptCard: {
+    marginHorizontal: space.lg,
+    gap: space.md,
+    padding: space.md,
+    borderRadius: radius.lg,
+    borderWidth: hairline,
+  },
+  nearbyPromptHead: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  nearbyActions: { flexDirection: 'row', gap: space.sm },
   nearbyIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   changeCity: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: space.lg, marginTop: space.sm },
   feedTitle: { paddingHorizontal: space.lg },

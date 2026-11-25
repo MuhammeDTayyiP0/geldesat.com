@@ -64,6 +64,8 @@ export type ListingDetail = {
   sellerStats: { rating_avg: number; rating_count: number; responseStats?: SellerResponseStats | null };
   favoriteCount: number;
   phoneRevealCount: number;
+  attrUnits?: Record<string, string>;
+  ownerActions?: OwnerAction[];
   /** Whether "Ara" can show a number; missing from servers before 2026-11. */
   hasPhone?: boolean;
   phoneVisibility?: 'everyone' | 'members' | 'hidden';
@@ -127,11 +129,19 @@ export type SearchFilters = {
   withPhotos?: boolean;
   sellerType?: 'owner' | 'store';
   priceDropped?: boolean;
+  userId?: string;
+  storeId?: string;
 };
 
 export type SortKey = 'date_desc' | 'date_asc' | 'price_asc' | 'price_desc' | 'views_desc';
 
 export type SearchResult = { result: ListingPage; inferredCategorySlug: string | null };
+
+export type AutocompleteResult = {
+  categories: { name: string; slug: string }[];
+  cities: string[];
+  listing: { listing_no: number; title: string; slug: string } | null;
+};
 
 export type Me = {
   userId: string;
@@ -311,7 +321,7 @@ export type Thread = {
 };
 
 export type PhoneVisibility = 'everyone' | 'members' | 'hidden';
-export type NotifyType = 'message' | 'favorite' | 'listing' | 'expiry';
+export type NotifyType = 'message' | 'favorite' | 'listing' | 'expiry' | 'system';
 export type NotifyPrefs = Record<NotifyType, { inapp: boolean; push: boolean }>;
 
 export type AccountSettings = {

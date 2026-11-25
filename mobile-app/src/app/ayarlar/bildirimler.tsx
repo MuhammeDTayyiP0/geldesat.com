@@ -16,6 +16,7 @@ const TYPES: { type: NotifyType; label: string; hint: string; inappLocked?: bool
   { type: 'favorite', label: 'Favoriler', hint: 'İlanınız favorilere eklendiğinde' },
   { type: 'listing', label: 'İlan durumu', hint: 'Onay, ret ve tekrar inceleme', inappLocked: true },
   { type: 'expiry', label: 'Süre hatırlatması', hint: 'İlanınızın süresi dolmak üzereyken' },
+  { type: 'system', label: 'Duyurular', hint: 'GeldeSat’tan genel duyurular' },
 ];
 
 export default function NotificationSettingsScreen() {
@@ -62,7 +63,8 @@ function NotificationSettings() {
 
   const toggle = (type: NotifyType, channel: 'inapp' | 'push', value: boolean) => {
     if (!prefs) return;
-    const next = { ...prefs, [type]: { ...prefs[type], [channel]: value } };
+    const prev = prefs[type] ?? { inapp: true, push: true };
+    const next = { ...prefs, [type]: { ...prev, [channel]: value } };
     setPrefs(next);
     savePrefs.mutate({ next, seq: ++saveSeq.current });
   };
@@ -106,18 +108,21 @@ function NotificationSettings() {
             </Card>
           ) : null}
 
-          {TYPES.map((t) => (
-            <RowGroup key={t.type} title={t.label}>
-              <ListRow label="Telefon bildirimi" detail={t.hint} switchValue={prefs[t.type].push} onSwitch={(v) => toggle(t.type, 'push', v)} />
-              <ListRow
-                label="Uygulama içi"
-                detail={t.inappLocked ? 'Bu bildirim kapatılamaz' : undefined}
-                switchValue={prefs[t.type].inapp}
-                disabled={t.inappLocked}
-                onSwitch={(v) => toggle(t.type, 'inapp', v)}
-              />
-            </RowGroup>
-          ))}
+          {TYPES.map((t) => {
+            const ch = prefs[t.type] ?? { inapp: true, push: true };
+            return (
+              <RowGroup key={t.type} title={t.label}>
+                <ListRow label="Telefon bildirimi" detail={t.hint} switchValue={ch.push} onSwitch={(v) => toggle(t.type, 'push', v)} />
+                <ListRow
+                  label="Uygulama içi"
+                  detail={t.inappLocked ? 'Bu bildirim kapatılamaz' : undefined}
+                  switchValue={ch.inapp}
+                  disabled={t.inappLocked}
+                  onSwitch={(v) => toggle(t.type, 'inapp', v)}
+                />
+              </RowGroup>
+            );
+          })}
 
           <RowGroup title="E-posta">
             <ListRow

@@ -6,11 +6,39 @@ import { Bell, BellOff, Bookmark, ChevronRight, Trash2 } from 'lucide-react-nati
 import { errorMessage } from '@/api/client';
 import { savedSearches } from '@/api/endpoints';
 import { keys, queryClient } from '@/api/queries';
-import type { SavedSearch } from '@/api/types';
+import type { SavedSearch, SavedSearchFilters } from '@/api/types';
 import { useSession } from '@/auth/session';
 import { POSTED_WITHIN_OPTIONS, SELLER_TYPE_OPTIONS } from '@/features/search/filters';
-import { formatPrice, timeAgo } from '@/lib/format';
+import { formatNumber, formatPrice, timeAgo } from '@/lib/format';
 import { Button, Card, Divider, EmptyState, ErrorState, Header, IconButton, Loading, Text, confirm, space, toast, useTheme } from '@/ui';
+
+function filterStr(filters: SavedSearchFilters, key: string): string | undefined {
+  const val = filters[key];
+  if (typeof val === 'string' && val) return val;
+  if (typeof val === 'number' && Number.isFinite(val)) return String(val);
+  return undefined;
+}
+
+function parseAttrsSummary(raw: unknown): [string, string[]][] {
+  let obj: Record<string, unknown> | null = null;
+  if (typeof raw === 'string' && raw) {
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) obj = parsed as Record<string, unknown>;
+    } catch {
+      return [];
+    }
+  } else if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    obj = raw as Record<string, unknown>;
+  }
+  if (!obj) return [];
+  const out: [string, string[]][] = [];
+  for (const [k, v] of Object.entries(obj)) {
+    const vals = Array.isArray(v) ? v.map(String).filter(Boolean) : typeof v === 'string' && v ? [v] : [];
+    if (vals.length) out.push([k, vals]);
+  }
+  return out;
+}
 
 function summarizeSearch(item: SavedSearch): string {
   const parts: string[] = [];
@@ -26,17 +54,30 @@ function summarizeSearch(item: SavedSearch): string {
   } else if (item.max_price != null) {
     parts.push(`${formatPrice(item.max_price)} altı`);
   }
+  const minYear = filterStr(f, 'minYear');
+  const maxYear = filterStr(f, 'maxYear');
+  if (minYear || maxYear) parts.push(`Yıl: ${minYear ?? 'Min'} – ${maxYear ?? 'Max'}`);
+  const minKm = filterStr(f, 'minKm');
+  const maxKm = filterStr(f, 'maxKm');
+  if (minKm || maxKm) parts.push(`KM: ${minKm ? formatNumber(Number(minKm)) : '0'} – ${maxKm ? formatNumber(Number(maxKm)) : '∞'}`);
+  const minM2 = filterStr(f, 'minM2');
+  const maxM2 = filterStr(f, 'maxM2');
+  if (minM2 || maxM2) parts.push(`m²: ${minM2 ?? '0'} – ${maxM2 ?? '∞'}`);
   if (f.urgent === true || f.urgent === '1') parts.push('Acil');
   if (f.featured === true || f.featured === '1') parts.push('Vitrin');
   if (f.withPhotos === true || f.withPhotos === '1') parts.push('Fotoğraflı');
   if (f.priceDropped === true || f.priceDropped === '1') parts.push('Fiyatı düşen');
-  if (typeof f.postedWithin === 'string') {
-    const label = POSTED_WITHIN_OPTIONS.find((o) => o.value === f.postedWithin)?.label;
+  const postedWithin = filterStr(f, 'postedWithin');
+  if (postedWithin) {
+    const label = POSTED_WITHIN_OPTIONS.find((o) => o.value === postedWithin)?.label;
     if (label) parts.push(label);
   }
   if (typeof f.sellerType === 'string') {
     const label = SELLER_TYPE_OPTIONS.find((o) => o.value === f.sellerType)?.label;
     if (label) parts.push(label);
+  }
+  for (const [k, vals] of parseAttrsSummary((f as Record<string, unknown>).attrs)) {
+    parts.push(`${k}: ${vals.join(', ')}`);
   }
   return parts.length ? parts.join(' · ') : 'Tüm ilanlar';
 }
@@ -51,11 +92,22 @@ function searchParamsFor(item: SavedSearch): Record<string, string> {
   if (item.max_price != null) params.maxPrice = String(item.max_price);
   const f = item.filters ?? {};
   if (typeof f.neighborhood === 'string' && f.neighborhood) params.neighborhood = f.neighborhood;
+  for (const key of ['minYear', 'maxYear', 'minKm', 'maxKm', 'minM2', 'maxM2'] as const) {
+    const val = filterStr(f, key);
+    if (val) params[key] = val;
+  }
+  const rawAttrs = (f as Record<string, unknown>).attrs;
+  if (typeof rawAttrs === 'string' && rawAttrs) {
+    params.attrs = rawAttrs;
+  } else if (rawAttrs && typeof rawAttrs === 'object' && !Array.isArray(rawAttrs)) {
+    params.attrs = JSON.stringify(rawAttrs);
+  }
   if (f.urgent === true || f.urgent === '1') params.urgent = '1';
   if (f.featured === true || f.featured === '1') params.featured = '1';
   if (f.withPhotos === true || f.withPhotos === '1') params.withPhotos = '1';
   if (f.priceDropped === true || f.priceDropped === '1') params.priceDropped = '1';
-  if (typeof f.postedWithin === 'string' && f.postedWithin) params.postedWithin = f.postedWithin;
+  const postedWithin = filterStr(f, 'postedWithin');
+  if (postedWithin) params.postedWithin = postedWithin;
   if (typeof f.sellerType === 'string' && f.sellerType) params.sellerType = f.sellerType;
   if (typeof f.sort === 'string' && f.sort) params.sort = f.sort;
   return params;

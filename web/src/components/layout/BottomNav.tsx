@@ -1,6 +1,6 @@
 import { signedInLink } from "@/lib/auth/login-link";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Home, LayoutGrid, MessageCircle, Plus, User } from "lucide-react";
+import { Compass, MessageCircle, Plus, Search, UserRound } from "lucide-react";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { useUnread } from "@/lib/unread-store";
 import { cn } from "@/lib/utils";
@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 export function BottomNav() {
   const { user } = useCurrentUserState();
   // Loaded and kept fresh by the header (always mounted alongside this bar).
-  const msgUnread = useUnread().messages;
+  const { messages: msgUnread, notifications: noteUnread } = useUnread();
 
   const pathname = useRouterState({
     select: (s) => s.location.pathname,
@@ -27,7 +27,7 @@ export function BottomNav() {
       style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
     >
       <div className="grid h-16 grid-cols-5 items-center px-1">
-        {/* 1. Ana Sayfa */}
+        {/* 1. Keşfet */}
         <Link
           to="/"
           className={cn(
@@ -35,11 +35,11 @@ export function BottomNav() {
             isHome ? "text-primary font-bold" : "text-muted hover:text-fg",
           )}
         >
-          <Home className={cn("size-5 transition-transform", isHome && "scale-110")} />
-          <span>Ana Sayfa</span>
+          <Compass className={cn("size-5 transition-transform", isHome && "scale-110")} />
+          <span>Keşfet</span>
         </Link>
 
-        {/* 2. Kategoriler */}
+        {/* 2. Ara */}
         <Link
           to="/search"
           className={cn(
@@ -47,11 +47,11 @@ export function BottomNav() {
             isCategories ? "text-primary font-bold" : "text-muted hover:text-fg",
           )}
         >
-          <LayoutGrid className={cn("size-5 transition-transform", isCategories && "scale-110")} />
-          <span>Kategoriler</span>
+          <Search className={cn("size-5 transition-transform", isCategories && "scale-110")} />
+          <span>Ara</span>
         </Link>
 
-        {/* 3. İlan Ver (Ortadaki Özel Yuvarlak Havada Buton - Sahibinden Standartlarında) */}
+        {/* 3. İlan Ver (Ortadaki Özel Yuvarlak Havada Buton) */}
         {/* The label is part of the link, so tapping the text works too. */}
         <Link to="/ilan-ver" aria-label="İlan Ver" className="group flex flex-col items-center justify-center">
           <span
@@ -92,7 +92,14 @@ export function BottomNav() {
             isProfile ? "text-primary font-bold" : "text-muted hover:text-fg",
           )}
         >
-          <User className={cn("size-5 transition-transform", isProfile && "scale-110")} />
+          <div className="relative">
+            <UserRound className={cn("size-5 transition-transform", isProfile && "scale-110")} />
+            {user && noteUnread > 0 ? (
+              <span className="absolute -right-2.5 -top-1.5 flex min-w-4 h-4 items-center justify-center rounded-full bg-primary-solid px-1 text-[9px] font-bold text-primary-fg">
+                {noteUnread > 99 ? "99+" : noteUnread}
+              </span>
+            ) : null}
+          </div>
           <span>{user ? "Hesabım" : "Giriş"}</span>
         </Link>
       </div>

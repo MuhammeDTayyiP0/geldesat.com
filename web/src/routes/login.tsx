@@ -103,10 +103,14 @@ function Login() {
               İlk kez Google ile devam ederek{" "}
               <Link to="/sayfa/$slug" params={{ slug: "uyelik" }} className="text-primary hover:underline">
                 üyelik sözleşmesini
-              </Link>{" "}
-              ve{" "}
+              </Link>
+              ,{" "}
               <Link to="/sayfa/$slug" params={{ slug: "gizlilik" }} className="text-primary hover:underline">
                 gizlilik politikasını
+              </Link>{" "}
+              ve{" "}
+              <Link to="/sayfa/$slug" params={{ slug: "kvkk" }} className="text-primary hover:underline">
+                KVKK aydınlatma metnini
               </Link>{" "}
               kabul etmiş olursunuz.
             </p>
@@ -171,10 +175,14 @@ function Login() {
               <span>
                 <Link to="/sayfa/$slug" params={{ slug: "uyelik" }} className="text-primary hover:underline">
                   Üyelik sözleşmesini
-                </Link>{" "}
-                ve{" "}
+                </Link>
+                ,{" "}
                 <Link to="/sayfa/$slug" params={{ slug: "gizlilik" }} className="text-primary hover:underline">
                   gizlilik politikasını
+                </Link>{" "}
+                ve{" "}
+                <Link to="/sayfa/$slug" params={{ slug: "kvkk" }} className="text-primary hover:underline">
+                  KVKK aydınlatma metnini
                 </Link>{" "}
                 okudum, kabul ediyorum.
               </span>

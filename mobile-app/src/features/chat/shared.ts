@@ -24,7 +24,7 @@ export const SELLER_QUICK_REPLIES = [
 
 export const REPORT_REASONS = ['Sahte / dolandırıcılık', 'Yanlış kategori', 'Yasaklı ürün', 'Mükerrer ilan', 'Küfür / hakaret', 'Diğer'];
 
-export const CHAT_REPORT_REASONS = ['Dolandırıcılık şüphesi', 'Taciz / hakaret', 'Spam', 'Diğer'];
+export const CHAT_REPORT_REASONS = ['Dolandırıcılık şüphesi', 'Hakaret veya taciz', 'Spam / reklam', 'Uygunsuz içerik', 'Diğer'];
 
 const RISK_PATTERNS: { re: RegExp; warning: string }[] = [
   { re: /(?<![\p{L}\p{N}])TR\s?\d{2}(?:\s?\d{4}){5}\s?\d{2}(?![\p{L}\p{N}])/iu, warning: 'IBAN paylaşıldı. Ürünü görmeden para göndermeyin.' },

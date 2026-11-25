@@ -121,6 +121,14 @@ export function isListingLive(listing: { status?: string | null; expires_at?: st
   return listing.status === 'ACTIVE' && !isListingExpired(listing);
 }
 
+/** True when listing has an active showcase boost or future featured date. */
+export function isListingFeatured(listing: { boosts?: string[]; featured_until?: string | null }): boolean {
+  return Boolean(
+    listing.boosts?.includes('VITRIN') ||
+      (listing.featured_until && new Date(listing.featured_until).getTime() > Date.now()),
+  );
+}
+
 /** Whole days until `iso` (negative once passed), or null without a date. */
 export function daysUntil(iso: string | null | undefined): number | null {
   if (!iso) return null;

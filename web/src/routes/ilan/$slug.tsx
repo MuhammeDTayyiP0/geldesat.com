@@ -179,12 +179,13 @@ function ListingPage() {
   const nav = useNavigate();
   const router = useRouter();
   const { user, isPending } = useCurrentUserState();
-  const { listing, path, similar, seller, store, history, has_phone, phone_visibility, show_whatsapp, approved, fav_count, phone_reveal_count } = data;
+  const { listing, path, similar, seller, store, history, reviews, has_phone, phone_visibility, show_whatsapp, approved, fav_count, phone_reveal_count } = data;
 
   const [fav, setFav] = useState(false);
   const [favBusy, setFavBusy] = useState(false);
   const [phone, setPhone] = useState<string | null>(null);
   const [phoneBusy, setPhoneBusy] = useState(false);
+  const [phoneDialogOpen, setPhoneDialogOpen] = useState(false);
   const [msg, setMsg] = useState(QUICK_QUESTIONS[0]);
   const [msgBusy, setMsgBusy] = useState(false);
   const [messageOpen, setMessageOpen] = useState(false);
@@ -321,12 +322,13 @@ function ListingPage() {
     }
   }
 
-  async function onRevealPhone() {
+  async function onRevealPhone(opts?: { openDialog?: boolean }) {
     // Sellers who show their phone to everyone don't make buyers sign in first.
     if ((phone_visibility !== "everyone" && !requireUser()) || phoneBusy) return;
     setPhoneBusy(true);
     try {
       setPhone((await revealPhone({ data: { listingId: listing.id } })).phone);
+      if (opts?.openDialog) setPhoneDialogOpen(true);
     } catch (err) {
       toast.error(errorText(err, "Telefon numarası alınamadı"));
     } finally {
@@ -705,6 +707,39 @@ function ListingPage() {
                   </span>
                 </p>
               ) : null}
+              {reviews.length > 0 ? (
+                <div className="rounded-xl border border-border bg-surface p-4 shadow-card">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-sm font-semibold">Satıcı yorumları</h3>
+                    {seller.rating_count > 3 ? (
+                      <Link to="/satici/$id" params={{ id: seller.id }} className="text-xs font-medium text-primary hover:underline">
+                        Tümünü gör ({seller.rating_count})
+                      </Link>
+                    ) : null}
+                  </div>
+                  <ul className="mt-3 space-y-2.5">
+                    {reviews.slice(0, 3).map((r) => (
+                      <li key={r.id} className="rounded-lg bg-elevated/60 p-2.5 text-xs">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-0.5" aria-label={`${r.rating} yıldız`}>
+                            {[1, 2, 3, 4, 5].map((n) => (
+                              <Star
+                                key={n}
+                                className={cn("size-3", n <= r.rating ? "fill-warn text-warn" : "text-border")}
+                                aria-hidden="true"
+                              />
+                            ))}
+                          </div>
+                          <span className="truncate text-muted">
+                            {r.reviewer} · {formatDate(r.at)}
+                          </span>
+                        </div>
+                        {r.comment ? <p className="mt-1.5 text-fg">{r.comment}</p> : null}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
             </div>
           ) : null}
 
@@ -798,11 +833,11 @@ function ListingPage() {
               </Button>
               {has_phone ? (
                 phone ? (
-                  <a href={`tel:${cleanPhone(phone)}`} className={buttonVariants({ variant: "outline", className: "flex-1 w-full" })}>
-                      <Phone className="size-4 text-ok" /> Ara
-                    </a>
+                  <Button type="button" variant="outline" className="flex-1" onClick={() => setPhoneDialogOpen(true)}>
+                    <Phone className="size-4 text-ok" /> Ara
+                  </Button>
                 ) : (
-                  <Button variant="outline" className="flex-1" disabled={phoneBusy} onClick={() => void onRevealPhone()}>
+                  <Button type="button" variant="outline" className="flex-1" disabled={phoneBusy} onClick={() => void onRevealPhone({ openDialog: true })}>
                     <Phone className="size-4 text-ok" /> {phoneBusy ? "…" : "Telefon"}
                   </Button>
                 )
@@ -889,6 +924,48 @@ function ListingPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={phoneDialogOpen && Boolean(phone)} onOpenChange={setPhoneDialogOpen}>
+        <DialogContent className="border-border bg-surface sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{store?.name ?? seller?.name ?? "Satıcı"}</DialogTitle>
+            <DialogDescription>İletişim bilgisi</DialogDescription>
+          </DialogHeader>
+          {phone ? (
+            <div className="space-y-4">
+              <p className="select-all rounded-xl bg-elevated/70 py-3 text-center text-2xl font-bold tracking-tight text-fg tabular-nums">
+                {formatPhone(phone)}
+              </p>
+              <div className="space-y-2">
+                <a href={`tel:${cleanPhone(phone)}`} className={buttonVariants({ className: "h-11 w-full gap-2" })}>
+                  <Phone className="size-4" /> Ara
+                </a>
+                {whatsapp ? (
+                  <a
+                    href={whatsapp}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex h-11 w-full items-center justify-center gap-2 rounded-md bg-[#25D366] text-sm font-semibold text-white hover:bg-[#1EBE5D]"
+                  >
+                    <WhatsAppIcon className="size-4" /> WhatsApp ile yaz
+                  </a>
+                ) : null}
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-11 w-full gap-2"
+                  onClick={() => void copyText(formatPhone(phone), "Numara kopyalandı")}
+                >
+                  <Copy className="size-4" /> Numarayı kopyala
+                </Button>
+              </div>
+              <p className="text-center text-xs leading-relaxed text-muted">
+                Aradığınızda GeldeSat’ta gördüğünüzü belirtin. Kapora veya ön ödeme istenirse dikkatli olun.
+              </p>
+            </div>
+          ) : null}
         </DialogContent>
       </Dialog>
 

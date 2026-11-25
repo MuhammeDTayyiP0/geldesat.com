@@ -5,6 +5,7 @@ import type {
   AccountSettings,
   AppNotification,
   AttrDef,
+  AutocompleteResult,
   BlockedUser,
   BrowseResult,
   Category,
@@ -43,6 +44,7 @@ export const catalog = {
   category: (slug: string) => rpc<CategoryInfo>('getCategory', { slug }),
   attributes: (categoryId: string) =>
     request<{ attributes: AttrDef[] }>(`/api/mobile/category-attributes${toQuery({ categoryId })}`, { auth: false }).then((r) => r.attributes),
+  autocomplete: (q: string) => rpc<AutocompleteResult>('autocompleteSuggestions', { q }),
   search: (filters: SearchFilters) => rpc<SearchResult>('searchCatalogWithContext', filters),
   /** Same visibility and sort rules as search; used for home rails. */
   listings: (params: SearchFilters & { offset?: number }) =>

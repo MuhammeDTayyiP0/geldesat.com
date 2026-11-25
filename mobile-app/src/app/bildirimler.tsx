@@ -3,7 +3,7 @@ import { FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-nat
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Bell, CheckCheck, Clock, Heart, LayoutGrid, MessageCircle, type LucideIcon } from 'lucide-react-native';
+import { Bell, CheckCheck, Clock, Heart, LayoutGrid, MessageCircle, Settings, Store, Wallet, type LucideIcon } from 'lucide-react-native';
 import { account } from '@/api/endpoints';
 import { keys, queryClient } from '@/api/queries';
 import type { AppNotification } from '@/api/types';
@@ -14,7 +14,14 @@ import { appRouteForWebPath } from '@/lib/links';
 import { timeAgo } from '@/lib/format';
 import { Button, Divider, EmptyState, ErrorState, Header, IconButton, Loading, Text, space, useTheme } from '@/ui';
 
-const ICONS: Record<string, LucideIcon> = { message: MessageCircle, favorite: Heart, listing: LayoutGrid, expiry: Clock };
+const ICONS: Record<string, LucideIcon> = {
+  message: MessageCircle,
+  favorite: Heart,
+  listing: LayoutGrid,
+  expiry: Clock,
+  credit: Wallet,
+  system: Store,
+};
 
 export default function NotificationsScreen() {
   const { c } = useTheme();
@@ -55,7 +62,14 @@ export default function NotificationsScreen() {
     <View style={[styles.flex, { backgroundColor: c.bg }]}>
       <Header
         title="Bildirimler"
-        right={unread ? <IconButton icon={CheckCheck} label="Tümünü okundu işaretle" onPress={() => markAll.mutate()} /> : undefined}
+        right={
+          session.status === 'signedIn' ? (
+            <>
+              {unread ? <IconButton icon={CheckCheck} label="Tümünü okundu işaretle" onPress={() => markAll.mutate()} /> : null}
+              <IconButton icon={Settings} label="Bildirim tercihleri" onPress={() => router.push('/ayarlar/bildirimler')} />
+            </>
+          ) : undefined
+        }
       />
       {session.status !== 'signedIn' ? (
         <EmptyState icon={Bell} title="Giriş yapın" action={<Button title="Giriş yap" onPress={() => router.push('/giris')} />} />

@@ -20,6 +20,8 @@ export type FilterState = {
   maxKm?: string;
   minM2?: string;
   maxM2?: string;
+  urgent?: string;
+  featured?: string;
   postedWithin?: "1" | "3" | "7" | "30";
   withPhotos?: string;
   sellerType?: "owner" | "store";
@@ -372,6 +374,24 @@ export function Filters({
 
       <div className="space-y-1.5 rounded-xl border border-border p-3">
         <p className="text-xs font-semibold uppercase tracking-wider text-muted">Hızlı Seçenekler</p>
+        <label className="flex min-h-8 cursor-pointer items-center gap-2 text-sm text-fg transition-colors hover:text-primary">
+          <input
+            type="checkbox"
+            className="size-4 rounded border-border accent-primary"
+            checked={value.urgent === "1"}
+            onChange={(e) => set("urgent", e.target.checked ? "1" : undefined)}
+          />
+          <span>Yalnızca acil ilanlar</span>
+        </label>
+        <label className="flex min-h-8 cursor-pointer items-center gap-2 text-sm text-fg transition-colors hover:text-primary">
+          <input
+            type="checkbox"
+            className="size-4 rounded border-border accent-primary"
+            checked={value.featured === "1"}
+            onChange={(e) => set("featured", e.target.checked ? "1" : undefined)}
+          />
+          <span>Yalnızca vitrin ilanları</span>
+        </label>
         <label className="flex min-h-8 cursor-pointer items-center gap-2 text-sm text-fg transition-colors hover:text-primary">
           <input
             type="checkbox"

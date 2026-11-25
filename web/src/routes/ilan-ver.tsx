@@ -224,6 +224,11 @@ function PostForm() {
   const [profilePhone, setProfilePhone] = useState("");
   const [offeredDraft, setOfferedDraft] = useState<ListingDraft | null>(null);
   const saved = useRef(false);
+  const clientKeyRef = useRef(
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `w-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`,
+  );
   const [loaded, setLoaded] = useState(!editId && !copyId);
   const keepValuesFor = useRef<string | null>(null);
   const photoOriginals = useRef(new Map<string, PhotoOriginal>());
@@ -436,6 +441,7 @@ function PostForm() {
           images,
           attrs: values,
           storeId,
+          clientKey: editId ? undefined : clientKeyRef.current,
         },
       });
       saved.current = true;

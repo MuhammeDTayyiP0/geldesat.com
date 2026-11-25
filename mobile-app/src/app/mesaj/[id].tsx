@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, FlatList, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIsFocused, useLocalSearchParams, useRouter } from 'expo-router';
 import * as Crypto from 'expo-crypto';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,22 +10,26 @@ import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { useQuery } from '@tanstack/react-query';
 import {
+  Archive,
   Ban,
   Check,
   CheckCheck,
   ChevronDown,
   ChevronLeft,
   Copy,
+  ExternalLink,
   Flag,
   HandCoins,
   ImageIcon,
   ImagePlus,
+  MailOpen,
   MapPin,
   MoreVertical,
   Plus,
   Reply,
   Search,
   Send,
+  ShieldAlert,
   Trash2,
   X,
   Zap,
@@ -42,6 +47,7 @@ import { onStreamResume, subscribeChatStream } from '@/features/chat/stream';
 import { PhotoViewer } from '@/features/listing/Gallery';
 import { PhotoReview } from '@/features/photos/PhotoReview';
 import { mediaUrl } from '@/lib/config';
+import { useFlag } from '@/lib/flags';
 import { dayLabel, formatPrice, formatTime, lastSeenLabel, maskThousands, parseMasked } from '@/lib/format';
 import { pickPhotos, preparePhoto, type PickedPhoto } from '@/lib/photos';
 import {
@@ -72,6 +78,7 @@ type SheetName = 'attach' | 'offer' | 'location' | 'menu' | 'report' | 'search' 
 
 /** Photos per send; the server allows 20 chat photos per 10 minutes. */
 const MAX_CHAT_PHOTOS = 5;
+const SAFETY_KEY = 'geldesat.chatSafetyDismissed.v1';
 
 function sortMessages(list: ChatMessage[]): ChatMessage[] {
   const byId = new Map<string, ChatMessage>();
@@ -107,6 +114,7 @@ export default function ChatScreen() {
   // The keyboard covers the home indicator, so the composer drops that inset while it is up.
   const keyboardUp = useKeyboardState((k) => k.isVisible);
   const router = useRouter();
+  const offerOn = useFlag('ilan_teklif_ver');
   const session = useSession();
   const me = session.status === 'signedIn' ? session.user.id : '';
   const token = session.status === 'signedIn' ? session.token : '';
@@ -136,6 +144,24 @@ export default function ChatScreen() {
   const [review, setReview] = useState<PickedPhoto[] | null>(null);
   const [quick, setQuick] = useState(false);
   const [typing, setTyping] = useState(false);
+  const [safetyHidden, setSafetyHidden] = useState(true);
+  useEffect(() => {
+    let alive = true;
+    void AsyncStorage.getItem(SAFETY_KEY)
+      .then((val) => {
+        if (alive) setSafetyHidden(val === '1');
+      })
+      .catch(() => {
+        if (alive) setSafetyHidden(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const dismissSafety = () => {
+    setSafetyHidden(true);
+    void AsyncStorage.setItem(SAFETY_KEY, '1').catch(() => undefined);
+  };
   const [presence, setPresence] = useState<{ online: boolean; lastSeen: string | null }>({ online: false, lastSeen: null });
   const [sheet, setSheet] = useState<SheetName>(null);
   // Next step chosen in a sheet (photo picker, another sheet, a confirm), run
@@ -687,7 +713,7 @@ export default function ChatScreen() {
               ) : null}
             </Text>
           </View>
-          {buying && conv.listing_status === 'ACTIVE' && !blocked ? (
+          {offerOn && buying && conv.listing_status === 'ACTIVE' && !blocked ? (
             <Button
               title="Teklif"
               icon={HandCoins}
@@ -701,6 +727,18 @@ export default function ChatScreen() {
           ) : null}
         </Pressable>
       </View>
+
+      {!safetyHidden ? (
+        <View style={[styles.safetyBanner, { backgroundColor: c.warnSoft, borderBottomColor: c.border }]}>
+          <ShieldAlert size={16} color={c.warn} />
+          <Text variant="small" tone="warn" style={styles.flex}>
+            Ürünü görmeden kapora göndermeyin, ödemeyi ve yazışmayı GeldeSat dışına taşımayın.
+          </Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="Uyarıyı kapat" hitSlop={8} onPress={dismissSafety}>
+            <X size={15} color={c.warn} />
+          </Pressable>
+        </View>
+      ) : null}
 
       <KeyboardAvoidingView behavior="padding" style={styles.flex}>
         {/* The floating buttons are placed in here, so they stay above the composer as it grows. */}
@@ -736,6 +774,17 @@ export default function ChatScreen() {
                 if (!isAway) setUnseen(0);
               }
             }}
+            ListHeaderComponent={
+              typing ? (
+                <View style={styles.typingWrap}>
+                  <View style={[styles.typingPill, { backgroundColor: c.surface, borderColor: c.border }]}>
+                    <Text variant="caption" tone="muted">
+                      yazıyor…
+                    </Text>
+                  </View>
+                </View>
+              ) : undefined
+            }
             ListFooterComponent={loadingOlder ? <ActivityIndicator color={c.primary} style={styles.older} /> : undefined}
             ListEmptyComponent={
               <View style={styles.emptyChat}>
@@ -885,7 +934,7 @@ export default function ChatScreen() {
           <ListRow icon={ImagePlus} label="Galeriden fotoğraf" onPress={() => thenClose(() => void sendPhoto('library'))} />
           <ListRow icon={ImagePlus} label="Fotoğraf çek" onPress={() => thenClose(() => void sendPhoto('camera'))} />
           <ListRow icon={MapPin} label="Buluşma noktası paylaş" onPress={() => thenClose(() => setSheet('location'))} />
-          {buying && conv.listing_status === 'ACTIVE' ? (
+          {offerOn && buying && conv.listing_status === 'ACTIVE' ? (
             <ListRow
               icon={HandCoins}
               label="Teklif ver"
@@ -1000,6 +1049,46 @@ export default function ChatScreen() {
 
       <Sheet visible={sheet === 'menu'} onClose={() => setSheet(null)} onDismissed={runAfterClose} title={conv.other_name}>
         <RowGroup>
+          {conv.listing_id ? (
+            <ListRow
+              icon={ExternalLink}
+              label="İlanı gör"
+              onPress={() => thenClose(() => router.push({ pathname: '/ilan/[id]', params: { id: conv.listing_id ?? '' } }))}
+            />
+          ) : null}
+          <ListRow
+            icon={MailOpen}
+            label="Okunmadı olarak işaretle"
+            onPress={() =>
+              thenClose(async () => {
+                try {
+                  await chat.markUnread(id, true);
+                  void queryClient.invalidateQueries({ queryKey: keys.inbox });
+                  void queryClient.invalidateQueries({ queryKey: keys.counts });
+                  router.back();
+                } catch (e) {
+                  toast.error(errorMessage(e));
+                }
+              })
+            }
+          />
+          <ListRow
+            icon={Archive}
+            label="Arşivle"
+            onPress={() =>
+              thenClose(async () => {
+                try {
+                  await chat.archive(id, true);
+                  toast.success('Sohbet arşivlendi');
+                  void queryClient.invalidateQueries({ queryKey: keys.inbox });
+                  void queryClient.invalidateQueries({ queryKey: keys.counts });
+                  router.back();
+                } catch (e) {
+                  toast.error(errorMessage(e));
+                }
+              })
+            }
+          />
           <ListRow
             icon={Ban}
             label={data.blockedByMe ? 'Engeli kaldır' : 'Kullanıcıyı engelle'}
@@ -1170,10 +1259,19 @@ function OfferComposer({
   const value = parseMasked(amount) ?? 0;
   const currencySymbol = currency === 'TRY' ? '₺' : currency === 'USD' ? '$' : currency === 'EUR' ? '€' : currency;
   const step = listingPrice && listingPrice >= 1000 ? 100 : listingPrice && listingPrice >= 100 ? 10 : 1;
-  const suggestions =
-    !counterTo && listingPrice && listingPrice > 0
-      ? [...new Set([0.9, 0.85, 0.8].map((r) => Math.round((listingPrice * r) / step) * step).filter((n) => n > 0 && n < listingPrice))]
-      : [];
+  const suggestions = (() => {
+    if (counterTo || !listingPrice || listingPrice <= 0) return [];
+    const seen = new Set<number>();
+    const chips: { percent: number; amount: number }[] = [];
+    for (const percent of [5, 10, 15]) {
+      const rounded = Math.round(((listingPrice * (100 - percent)) / 100) / step) * step;
+      if (rounded > 0 && rounded < listingPrice && !seen.has(rounded)) {
+        seen.add(rounded);
+        chips.push({ percent, amount: rounded });
+      }
+    }
+    return chips;
+  })();
   return (
     <Sheet
       visible={visible}
@@ -1211,8 +1309,8 @@ function OfferComposer({
       <Input label="Tutar" keyboardType="number-pad" value={amount} onChangeText={(t) => setAmount(maskThousands(t))} suffix={currencySymbol} autoFocus placeholder="0" />
       {suggestions.length ? (
         <View style={styles.chips}>
-          {suggestions.map((n) => (
-            <Chip key={n} label={formatPrice(n, currency)} selected={value === n} onPress={() => setAmount(maskThousands(String(n)))} />
+          {suggestions.map((s) => (
+            <Chip key={s.amount} label={`%${s.percent} · ${formatPrice(s.amount, currency)}`} selected={value === s.amount} onPress={() => setAmount(maskThousands(String(s.amount)))} />
           ))}
         </View>
       ) : null}
@@ -1320,6 +1418,22 @@ const styles = StyleSheet.create({
   listing: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginHorizontal: space.md, padding: space.sm, borderRadius: radius.md },
   listingThumb: { width: 40, height: 40, borderRadius: 8, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   list: { paddingVertical: space.md },
+  typingWrap: { paddingHorizontal: space.md, paddingTop: space.xs },
+  typingPill: {
+    alignSelf: 'flex-start',
+    borderWidth: hairline,
+    borderRadius: radius.pill,
+    paddingHorizontal: space.md,
+    paddingVertical: 6,
+  },
+  safetyBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+    borderBottomWidth: hairline,
+  },
   older: { padding: space.md },
   emptyChat: { padding: space.xxl, transform: [{ scaleY: -1 }] },
   day: { alignItems: 'center', marginVertical: space.md },

@@ -1,14 +1,14 @@
 import { memo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
-import { Heart, ImageOff, MapPin } from 'lucide-react-native';
+import { Heart, ImageOff, Images, MapPin, Store } from 'lucide-react-native';
 import type { Listing } from '@/api/types';
 import { mediaUrl } from '@/lib/config';
 import { formatNumber, formatPrice, timeAgo } from '@/lib/format';
 import { Badge, Text, radius, space, useTheme } from '@/ui';
 
 type CardListing = Pick<Listing, 'id' | 'title' | 'price' | 'currency' | 'images' | 'city' | 'district' | 'created_at' | 'attrs'> &
-  Partial<Pick<Listing, 'boosts' | 'category_name' | 'featured_until' | 'user_id'>>;
+  Partial<Pick<Listing, 'boosts' | 'category_name' | 'featured_until' | 'user_id' | 'store_name' | 'status' | 'expires_at'>>;
 
 type Props = {
   listing: CardListing;
@@ -17,6 +17,7 @@ type Props = {
   favorite?: boolean;
   onFavorite?: (listing: CardListing) => void;
   layout?: 'grid' | 'row' | 'rail';
+  statusLabel?: string | null;
 };
 
 /** Up to two highlight attributes (year, km, m², rooms) shown under the title. */
@@ -26,7 +27,7 @@ function highlights(attrs: Record<string, string | number>): string[] {
     for (const key of keys) {
       const v = attrs[key];
       if (v !== undefined && v !== '' && out.length < 2) {
-        out.push(typeof v === 'number' ? `${formatNumber(v)}${suffix}` : `${v}${suffix}`);
+        out.push(typeof v === 'number' && key !== 'Yıl' ? `${formatNumber(v)}${suffix}` : `${v}${suffix}`);
         return;
       }
     }
@@ -45,7 +46,7 @@ function isFeatured(listing: Pick<Listing, 'boosts' | 'featured_until'>): boolea
   return !!listing.featured_until && new Date(listing.featured_until).getTime() > Date.now();
 }
 
-export const ListingCard = memo(function ListingCard({ listing, onPress, favorite, onFavorite, layout = 'grid' }: Props) {
+export const ListingCard = memo(function ListingCard({ listing, onPress, favorite, onFavorite, layout = 'grid', statusLabel }: Props) {
   const { c } = useTheme();
   const cover = mediaUrl(listing.images[0], layout === 'row' ? 240 : 480);
   const urgent = listing.boosts?.includes('ACIL');
@@ -67,6 +68,19 @@ export const ListingCard = memo(function ListingCard({ listing, onPress, favorit
         <View style={styles.badges}>
           {urgent ? <Badge label="ACİL" tone="urgent" /> : null}
           {featured && layout !== 'row' ? <Badge label="VİTRİN" tone="primary" /> : null}
+        </View>
+      ) : null}
+      {statusLabel ? (
+        <View style={styles.statusBadge}>
+          <Badge label={statusLabel} tone="warn" />
+        </View>
+      ) : null}
+      {listing.images.length > 1 ? (
+        <View style={styles.photoCount}>
+          <Images size={11} color="#ffffff" />
+          <Text variant="small" style={styles.photoCountText}>
+            1/{listing.images.length}
+          </Text>
         </View>
       ) : null}
     </View>
@@ -99,6 +113,14 @@ export const ListingCard = memo(function ListingCard({ listing, onPress, favorit
           {extra.join(' · ')}
         </Text>
       ) : null}
+      {listing.store_name ? (
+        <View style={styles.storeRow}>
+          <Store size={11} color={c.primary} />
+          <Text variant="small" tone="primary" numberOfLines={1} style={styles.flex}>
+            {listing.store_name}
+          </Text>
+        </View>
+      ) : null}
       <View style={styles.meta}>
         {place ? <MapPin size={11} color={c.subtle} /> : null}
         <Text variant="small" tone="subtle" numberOfLines={1} style={styles.flex}>
@@ -120,6 +142,7 @@ export const ListingCard = memo(function ListingCard({ listing, onPress, favorit
         layout === 'rail' && styles.rail,
         { backgroundColor: c.surface, borderColor: c.border },
         urgent && layout === 'row' && { borderColor: c.urgent },
+        statusLabel && styles.inactiveCard,
       ]}
     >
       <Pressable
@@ -143,6 +166,22 @@ const styles = StyleSheet.create({
   image: { width: '100%', aspectRatio: 4 / 3 },
   noImage: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   badges: { position: 'absolute', left: space.sm, top: space.sm, flexDirection: 'row', gap: space.xs },
+  statusBadge: { position: 'absolute', left: space.sm, bottom: space.sm },
+  photoCount: {
+    position: 'absolute',
+    right: space.sm,
+    bottom: space.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(13,17,23,0.68)',
+  },
+  photoCountText: { color: '#ffffff', fontSize: 10, lineHeight: 13, fontWeight: '600' },
+  inactiveCard: { opacity: 0.72 },
+  storeRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 1 },
   heart: {
     position: 'absolute',
     right: space.xs,

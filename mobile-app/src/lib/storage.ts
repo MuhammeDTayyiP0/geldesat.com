@@ -67,6 +67,45 @@ export function useRecentSearches() {
   return useStoredList<string>(SEARCH_KEY)[0];
 }
 
+// ─── View layout preference (grid / list) ────────────────────────────────────
+
+export type ViewLayout = 'grid' | 'list';
+const VIEW_LAYOUT_KEY = 'geldesat.viewLayout.v1';
+let cachedLayout: ViewLayout = 'grid';
+
+export function useViewLayout(): [ViewLayout, (next: ViewLayout | ((prev: ViewLayout) => ViewLayout)) => void] {
+  const [layout, setLayoutState] = useState<ViewLayout>(cachedLayout);
+  useEffect(() => {
+    let alive = true;
+    const sync = () => {
+      if (alive) setLayoutState(cachedLayout);
+    };
+    const set = listeners.get(VIEW_LAYOUT_KEY) ?? new Set();
+    set.add(sync);
+    listeners.set(VIEW_LAYOUT_KEY, set);
+    void AsyncStorage.getItem(VIEW_LAYOUT_KEY)
+      .then((raw) => {
+        if (raw === 'list' || raw === 'grid') {
+          cachedLayout = raw;
+          if (alive) setLayoutState(raw);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+      set.delete(sync);
+    };
+  }, []);
+  const setLayout = useCallback((next: ViewLayout | ((prev: ViewLayout) => ViewLayout)) => {
+    const resolved = typeof next === 'function' ? next(cachedLayout) : next;
+    cachedLayout = resolved;
+    setLayoutState(resolved);
+    notify(VIEW_LAYOUT_KEY);
+    void AsyncStorage.setItem(VIEW_LAYOUT_KEY, resolved).catch(() => undefined);
+  }, []);
+  return [layout, setLayout];
+}
+
 // ─── Listing draft (post wizard) ────────────────────────────────────────────
 
 const DRAFT_KEY = 'geldesat.listingDraft.v2';

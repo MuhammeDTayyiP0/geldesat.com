@@ -14,7 +14,7 @@ function decode(part: string): string {
   }
 }
 
-const SETTINGS_PAGES = new Set(['profil', 'guvenlik', 'gizlilik', 'bildirimler', 'engellenenler', 'magaza', 'gorunum']);
+const SETTINGS_PAGES = new Set(['profil', 'guvenlik', 'gizlilik', 'bildirimler', 'engellenenler', 'magaza', 'gorunum', 'sablonlar', 'yasal', 'guncelleme']);
 
 export function appRouteForWebPath(path: string): Href | null {
   let clean = path.trim();
@@ -54,10 +54,38 @@ export function appRouteForWebPath(path: string): Href | null {
       return '/harita' as Href;
     case 'doping':
       return '/doping';
+    case 'karsilastir':
+      return '/karsilastir' as Href;
+    case 'kategoriler':
+      return '/kategoriler' as Href;
+    case 'kayitli-aramalar':
+      return '/kayitli-aramalar' as Href;
     case 'search': {
       // The site's search filters that the results screen understands.
       const params: Record<string, string> = {};
-      for (const key of ['q', 'category', 'city', 'district', 'sort']) {
+      for (const key of [
+        'q',
+        'category',
+        'city',
+        'district',
+        'neighborhood',
+        'minPrice',
+        'maxPrice',
+        'minYear',
+        'maxYear',
+        'minKm',
+        'maxKm',
+        'minM2',
+        'maxM2',
+        'urgent',
+        'featured',
+        'postedWithin',
+        'withPhotos',
+        'sellerType',
+        'priceDropped',
+        'attrs',
+        'sort',
+      ]) {
         const value = query.get(key);
         if (value) params[key] = value;
       }
@@ -67,6 +95,7 @@ export function appRouteForWebPath(path: string): Href | null {
       return '/son-bakilanlar';
     case 'ayarlar':
       if (second === 'hesap') return '/ayarlar/guvenlik';
+      if (second === 'kayitli-aramalar') return '/kayitli-aramalar' as Href;
       return second && SETTINGS_PAGES.has(second) ? (`/ayarlar/${second}` as Href) : ('/ayarlar' as Href);
     case 'profil':
       return '/hesap';

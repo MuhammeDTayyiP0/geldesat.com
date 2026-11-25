@@ -55,6 +55,7 @@ function PickerBody({ onClose, onSend }: Omit<Props, 'visible'>) {
   const [busy, setBusy] = useState<'pin' | 'mine' | null>(null);
   const lookup = useRef(0);
   const ready = useRef(false);
+  const keepPickedName = useRef(false);
 
   const locate = async (fly: boolean) => {
     setLocating(true);
@@ -96,6 +97,10 @@ function PickerBody({ onClose, onSend }: Omit<Props, 'visible'>) {
   // Address under the pin once the map settles.
   useEffect(() => {
     if (!center || center.zoom < MIN_PLACE_ZOOM) return;
+    if (keepPickedName.current) {
+      keepPickedName.current = false;
+      return;
+    }
     const id = ++lookup.current;
     const t = setTimeout(() => {
       setResolving(true);
@@ -129,6 +134,7 @@ function PickerBody({ onClose, onSend }: Omit<Props, 'visible'>) {
     setQ('');
     setResults([]);
     lookup.current++;
+    keepPickedName.current = true;
     setLabel(p.label);
     map.current?.flyTo(p.lat, p.lng, 17);
   };

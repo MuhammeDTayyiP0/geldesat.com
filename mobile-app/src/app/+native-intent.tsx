@@ -7,9 +7,8 @@ function serializeHref(href: Href): string {
   const query = new URLSearchParams();
   for (const [key, raw] of Object.entries(href.params ?? {})) {
     if (raw === undefined || raw === null) continue;
-    const picked = Array.isArray(raw) ? raw[0] : raw;
-    if (picked === undefined || picked === null) continue;
-    const value = String(picked);
+    const value = Array.isArray(raw) ? (raw[0] === undefined ? undefined : String(raw[0])) : String(raw);
+    if (value === undefined) continue;
     const token = `[${key}]`;
     if (pathname.includes(token)) {
       pathname = pathname.replace(token, encodeURIComponent(value));

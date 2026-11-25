@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Linking, Platform, Pressable, ScrollView, Share, StyleSheet, View, useWindowDimensions } from 'react-native';
+import Svg, { Path as SvgPath, Rect as SvgRect } from 'react-native-svg';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,28 +8,40 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import {
   BadgeCheck,
+  Calendar,
   CarFront,
   ChevronLeft,
   ChevronRight,
+  CircleCheck,
   Clock,
   Copy,
   Eye,
+  EyeOff,
   Flag,
+  Fuel,
+  Gauge,
   Hash,
   Heart,
   HandCoins,
+  Home,
+  Layers,
   MapPin,
   MessageCircle,
   Navigation,
   Pencil,
   RefreshCw,
+  Ruler,
   Phone,
   Scale,
+  Settings2,
   Share2,
+  ShieldAlert,
   ShieldCheck,
   Star,
   Store,
+  Trash2,
   TrendingDown,
+  TrendingUp,
   UserCheck,
   UserPlus,
   Users,
@@ -43,10 +56,17 @@ import { useToggleFavorite } from '@/features/listing/favorites';
 import { Gallery } from '@/features/listing/Gallery';
 import { ListingRail } from '@/features/listing/ListingRail';
 import { MessageSheet, OfferSheet, PhoneSheet, ReportSheet, ReviewSheet } from '@/features/listing/ListingSheets';
+import {
+  VehicleDamageSvg,
+  createEmptyDamageData,
+  hasDamageData,
+  parseDamageValue,
+} from '@/features/listing/VehicleDamageSvg';
 import { toggleCompare, useCompareList } from '@/lib/compare';
 import { mediaUrl, webUrl } from '@/lib/config';
 import { useFlag } from '@/lib/flags';
-import { daysUntil, formatDate, formatNumber, formatPrice, isListingExpired, isListingLive, listingStatusLabel, locationLabel, timeAgo } from '@/lib/format';
+import { daysUntil, formatDate, formatNumber, formatPrice, isListingExpired, isListingFeatured, isListingLive, listingStatusLabel, locationLabel, timeAgo } from '@/lib/format';
+import { generateQrMatrix } from '@/lib/qr';
 import {
   Avatar,
   Badge,
@@ -61,6 +81,7 @@ import {
   Stars,
   Text,
   Wordmark,
+  confirm,
   hairline,
   radius,
   shadow,
@@ -92,6 +113,7 @@ export default function ListingScreen() {
   const followOn = useFlag('satici_takip');
   const copyListingOn = useFlag('benzer_ilan_ver');
   const damageOn = useFlag('arac_hasar_semasi');
+  const offerOn = useFlag('ilan_teklif_ver');
   const compareList = useCompareList();
   const [sheet, setSheet] = useState<SheetName>(null);
   const [phone, setPhone] = useState<string | null>(null);
@@ -133,13 +155,44 @@ export default function ListingScreen() {
     if (listingId && session.status === 'signedIn') void queryClient.invalidateQueries({ queryKey: keys.recent });
   }, [listingId, session.status]);
 
+  const invalidateListing = () => {
+    void queryClient.invalidateQueries({ queryKey: keys.listing(id) });
+    void queryClient.invalidateQueries({ queryKey: keys.myListings });
+    void queryClient.invalidateQueries({ queryKey: keys.me });
+  };
+
   const renew = useMutation({
-    mutationFn: (listingId: string) => myListings.action(listingId, { action: 'renew' }),
+    mutationFn: (targetId: string) => myListings.action(targetId, { action: 'renew' }),
     onSuccess: () => {
       toast.success('İlan süresi 30 gün uzatıldı');
-      void queryClient.invalidateQueries({ queryKey: keys.listing(id) });
+      invalidateListing();
+    },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+
+  const setOwnerStatus = useMutation({
+    mutationFn: ({ targetId, status }: { targetId: string; status: 'ACTIVE' | 'INACTIVE' | 'SOLD' }) =>
+      myListings.action(targetId, { action: 'status', status }),
+    onSuccess: (_res, vars) => {
+      toast.success(
+        vars.status === 'SOLD'
+          ? 'İlan satıldı olarak işaretlendi'
+          : vars.status === 'INACTIVE'
+            ? 'İlan yayından kaldırıldı'
+            : 'İlan tekrar yayında',
+      );
+      invalidateListing();
+    },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+
+  const removeListing = useMutation({
+    mutationFn: (targetId: string) => myListings.action(targetId, { action: 'delete' }),
+    onSuccess: () => {
+      toast.success('İlan silindi');
       void queryClient.invalidateQueries({ queryKey: keys.myListings });
       void queryClient.invalidateQueries({ queryKey: keys.me });
+      router.replace('/ilanlarim');
     },
     onError: (e) => toast.error(errorMessage(e)),
   });
@@ -170,12 +223,37 @@ export default function ListingScreen() {
   const live = isListingLive(listing);
   const daysLeft = daysUntil(listing.expires_at);
   const priceDrop = data.history.length > 1 ? data.history[0].price - listing.price : 0;
-  const damageSummary = damageOn ? parseVehicleDamage(listing.attrs ?? {}) : null;
+  const ownerBusy = renew.isPending || setOwnerStatus.isPending || removeListing.isPending;
+  const allowedActions = data.ownerActions;
+  const canPublish = allowedActions
+    ? allowedActions.includes('publish')
+    : listing.status === 'INACTIVE' && !expired;
+  const canRenew = allowedActions
+    ? expired && allowedActions.includes('renew')
+    : expired && (listing.status === 'ACTIVE' || listing.status === 'INACTIVE' || listing.status === 'PENDING');
+  const featured = isListingFeatured(listing);
+  const sold = listing.status === 'SOLD';
+  const hasStructuredDamage = damageOn && hasDamageData(listing.attrs?._damage);
+  const hasOriginalOnlyVehicleDamage =
+    damageOn && !hasStructuredDamage && listing.attrs?.['Boya-Değişen'] === 'Tamamı Orijinal';
+  const showSvgDamage = hasStructuredDamage || hasOriginalOnlyVehicleDamage;
+  const damageSummary = damageOn && !showSvgDamage ? parseVehicleDamage(listing.attrs ?? {}) : null;
   const attrs = Object.entries(listing.attrs ?? {}).filter(([k, v]) => {
     if (v === '' || v == null || k.startsWith('_')) return false;
     if (damageSummary && isDamageAttrKey(k)) return false;
     return true;
   });
+  const historyTotal =
+    data.history.length > 1 ? data.history[data.history.length - 1].price - data.history[0].price : 0;
+  const historyRows =
+    data.history.length > 1
+      ? data.history
+          .map((h, i) => ({
+            ...h,
+            diff: i > 0 ? h.price - data.history[i - 1].price : 0,
+          }))
+          .reverse()
+      : [];
   const inCompare = compareList.some((x) => x.id === listing.id);
   const description = listing.description ?? '';
   const longDescription = description.length > 320;
@@ -221,6 +299,17 @@ export default function ListingScreen() {
         <Gallery images={listing.images} height={galleryHeight} />
 
         <View style={styles.body}>
+          <StatusBanner
+            status={listing.status ?? ''}
+            expired={expired}
+            isOwner={isOwner}
+            rejectionReason={listing.rejection_reason}
+            canRenew={canRenew}
+            busy={ownerBusy}
+            onRenew={() => renew.mutate(listing.id)}
+            onNotifications={() => router.push('/bildirimler')}
+          />
+
           {isOwner ? (
             <Card style={[styles.ownerCard, { borderColor: c.primary }]}>
               <View style={styles.row}>
@@ -234,19 +323,48 @@ export default function ListingScreen() {
                 <OwnerStat label="Favori" value={data.favoriteCount} />
                 <OwnerStat label="Telefon" value={data.phoneRevealCount} />
               </View>
-              {expired && listing.status === 'ACTIVE' ? (
-                <View style={[styles.expired, { backgroundColor: c.warnSoft }]}>
-                  <Text variant="caption" tone="warn">
-                    Yayın süresi {formatDate(listing.expires_at)} tarihinde doldu; ilan alıcılara görünmüyor. Yenileyerek 30 gün daha yayında tutabilirsiniz.
-                  </Text>
+              {live ? (
+                <View style={styles.inlineActions}>
                   <Button
-                    title="Yenile ve yayına al"
-                    icon={RefreshCw}
+                    title="Satıldı"
+                    icon={CircleCheck}
                     size="sm"
-                    loading={renew.isPending}
-                    onPress={() => renew.mutate(listing.id)}
+                    variant="outline"
+                    disabled={ownerBusy}
+                    style={styles.flex}
+                    onPress={() => setOwnerStatus.mutate({ targetId: listing.id, status: 'SOLD' })}
+                  />
+                  <Button
+                    title="Yayından kaldır"
+                    icon={EyeOff}
+                    size="sm"
+                    variant="outline"
+                    disabled={ownerBusy}
+                    style={styles.flex}
+                    onPress={() => setOwnerStatus.mutate({ targetId: listing.id, status: 'INACTIVE' })}
                   />
                 </View>
+              ) : null}
+              {canPublish ? (
+                <Button
+                  title="Tekrar yayına al"
+                  icon={RefreshCw}
+                  size="sm"
+                  variant="outline"
+                  loading={setOwnerStatus.isPending}
+                  disabled={ownerBusy}
+                  onPress={() => setOwnerStatus.mutate({ targetId: listing.id, status: 'ACTIVE' })}
+                />
+              ) : null}
+              {canRenew ? (
+                <Button
+                  title="Süreyi 30 gün uzat"
+                  icon={RefreshCw}
+                  size="sm"
+                  loading={renew.isPending}
+                  disabled={ownerBusy}
+                  onPress={() => renew.mutate(listing.id)}
+                />
               ) : null}
               <View style={styles.ownerActions}>
                 <Button
@@ -254,6 +372,7 @@ export default function ListingScreen() {
                   icon={Pencil}
                   size="sm"
                   variant="soft"
+                  disabled={ownerBusy}
                   onPress={() => router.push({ pathname: '/ilan-ver', params: { id: listing.id } })}
                 />
                 {copyListingOn ? (
@@ -262,20 +381,42 @@ export default function ListingScreen() {
                     icon={Copy}
                     size="sm"
                     variant="outline"
+                    disabled={ownerBusy}
                     onPress={() => router.push({ pathname: '/ilan-ver', params: { copyFrom: listing.id } })}
                   />
                 ) : null}
                 <Button title="İlanlarım" size="sm" variant="outline" onPress={() => router.push('/ilanlarim')} />
+                <Button
+                  title="Sil"
+                  icon={Trash2}
+                  size="sm"
+                  variant="ghost"
+                  disabled={ownerBusy}
+                  onPress={() =>
+                    void confirm({
+                      title: 'İlan silinsin mi?',
+                      message: 'Bu işlem geri alınamaz.',
+                      confirmText: 'Sil',
+                      destructive: true,
+                    }).then((ok) => ok && removeListing.mutate(listing.id))
+                  }
+                />
               </View>
             </Card>
           ) : null}
 
           <View style={styles.titleBlock}>
             <View style={styles.row}>
-              <Text variant="display" tone="primary" style={styles.flex}>
+              <Text
+                variant="display"
+                tone={sold ? 'muted' : 'primary'}
+                style={[styles.flex, sold && styles.soldPrice]}
+              >
                 {formatPrice(listing.price, listing.currency)}
               </Text>
+              {sold ? <Badge label="SATILDI" tone="warn" /> : null}
               {listing.boosts?.includes('ACIL') ? <Badge label="ACİL" tone="urgent" /> : null}
+              {featured ? <Badge label="VİTRİN" tone="primary" /> : null}
             </View>
             {priceDrop > 0 ? (
               <View style={[styles.drop, { backgroundColor: c.okSoft }]}>
@@ -299,6 +440,8 @@ export default function ListingScreen() {
             </View>
           </View>
 
+          <KeyFacts attrs={listing.attrs ?? {}} />
+
           <Card padded={false}>
             <InfoRow label="İlan No" value={String(listing.listing_no ?? '—')} icon={Hash} />
             <Divider inset={space.lg} />
@@ -312,12 +455,27 @@ export default function ListingScreen() {
             {attrs.map(([key, value]) => (
               <View key={key}>
                 <Divider inset={space.lg} />
-                <InfoRow label={key} value={attrText(value)} />
+                <InfoRow label={key} value={attrText(key, value, data.attrUnits?.[key])} />
               </View>
             ))}
           </Card>
 
-          {damageSummary ? <VehicleDamageCard summary={damageSummary} /> : null}
+          {showSvgDamage ? (
+            <Card style={styles.damageCard}>
+              <View style={styles.row}>
+                <CarFront size={18} color={c.primary} />
+                <Text variant="subheading" style={styles.flex}>
+                  Boya / Değişen & Hasar Şeması
+                </Text>
+              </View>
+              <VehicleDamageSvg
+                value={hasStructuredDamage ? parseDamageValue(listing.attrs?._damage) : createEmptyDamageData()}
+                readOnly
+              />
+            </Card>
+          ) : damageSummary ? (
+            <VehicleDamageCard summary={damageSummary} />
+          ) : null}
 
           {description ? (
             <View style={styles.section}>
@@ -335,14 +493,42 @@ export default function ListingScreen() {
             </View>
           ) : null}
 
-          {data.history.length > 1 ? (
+          {historyRows.length ? (
             <View style={styles.section}>
-              <Text variant="subheading">Fiyat geçmişi</Text>
+              <View style={styles.row}>
+                <Text variant="subheading" style={styles.flex}>
+                  Fiyat geçmişi
+                </Text>
+                {historyTotal !== 0 ? (
+                  <View style={[styles.drop, { backgroundColor: historyTotal < 0 ? c.okSoft : c.warnSoft }]}>
+                    {historyTotal < 0 ? (
+                      <TrendingDown size={13} color={c.ok} />
+                    ) : (
+                      <TrendingUp size={13} color={c.warn} />
+                    )}
+                    <Text variant="label" tone={historyTotal < 0 ? 'ok' : 'warn'}>
+                      {historyTotal > 0 ? `+${formatPrice(historyTotal, listing.currency)}` : formatPrice(historyTotal, listing.currency)}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
               <Card padded={false}>
-                {data.history.map((h, i) => (
+                {historyRows.map((h, i) => (
                   <View key={`${h.at}-${i}`}>
                     {i > 0 ? <Divider inset={space.lg} /> : null}
-                    <InfoRow label={formatDate(h.at)} value={formatPrice(h.price, listing.currency)} />
+                    <View style={[styles.historyRow, i === 0 && { backgroundColor: c.primarySoft }]}>
+                      <Text variant="caption" tone="muted" style={styles.flex}>
+                        {formatDate(h.at)}
+                      </Text>
+                      {h.diff !== 0 ? (
+                        <Text variant="label" tone={h.diff < 0 ? 'ok' : 'warn'}>
+                          {h.diff < 0 ? '↓' : '↑'} {formatPrice(Math.abs(h.diff), listing.currency)}
+                        </Text>
+                      ) : null}
+                      <Text variant={i === 0 ? 'bodyStrong' : 'caption'}>
+                        {formatPrice(h.price, listing.currency)}
+                      </Text>
+                    </View>
                   </View>
                 ))}
               </Card>
@@ -484,7 +670,19 @@ export default function ListingScreen() {
 
         {data.similar.length ? (
           <View style={styles.similar}>
-            <ListingRail title="Benzer ilanlar" items={data.similar} />
+            <ListingRail
+              title="Benzer ilanlar"
+              items={data.similar}
+              onSeeAll={
+                listing.category_slug
+                  ? () =>
+                      router.push({
+                        pathname: '/sonuclar',
+                        params: { category: listing.category_slug ?? '', title: listing.category_name ?? '' },
+                      })
+                  : undefined
+              }
+            />
           </View>
         ) : null}
       </ScrollView>
@@ -516,13 +714,15 @@ export default function ListingScreen() {
       {!isOwner && live ? (
         <View style={[styles.actionBar, { backgroundColor: c.surface, borderTopColor: c.border, paddingBottom: insets.bottom + space.sm }, shadow(2)]}>
           {canCall ? <Button title="Ara" icon={Phone} variant="outline" loading={phoneBusy} onPress={revealPhone} style={styles.flex} /> : null}
-          <Button
-            title="Teklif"
-            icon={HandCoins}
-            variant="soft"
-            onPress={() => requireAuth('Teklif vermek için giriş yapın.') && setSheet('offer')}
-            style={styles.flex}
-          />
+          {offerOn ? (
+            <Button
+              title="Teklif"
+              icon={HandCoins}
+              variant="soft"
+              onPress={() => requireAuth('Teklif vermek için giriş yapın.') && setSheet('offer')}
+              style={styles.flex}
+            />
+          ) : null}
           <Button
             title="Mesaj"
             icon={MessageCircle}
@@ -536,7 +736,7 @@ export default function ListingScreen() {
       {session.status === 'signedIn' ? (
         <>
           <MessageSheet listing={listing} visible={sheet === 'message'} onClose={() => setSheet(null)} />
-          <OfferSheet listing={listing} visible={sheet === 'offer'} onClose={() => setSheet(null)} />
+          {offerOn ? <OfferSheet listing={listing} visible={sheet === 'offer'} onClose={() => setSheet(null)} /> : null}
           <ReportSheet listingId={listing.id} visible={sheet === 'report'} onClose={() => setSheet(null)} />
           <ReviewSheet listingId={listing.id} sellerId={listing.user_id} existing={data.reviewEligibility.existing} visible={sheet === 'review'} onClose={() => setSheet(null)} />
         </>
@@ -544,6 +744,7 @@ export default function ListingScreen() {
       <PhoneSheet
         phone={phone}
         sellerName={listing.store_name ?? listing.seller_name}
+        listingTitle={listing.title}
         whatsapp={data.showWhatsapp !== false}
         visible={sheet === 'phone'}
         onClose={() => setSheet(null)}
@@ -562,12 +763,137 @@ export default function ListingScreen() {
   );
 }
 
-/** Attribute values as people read them: yes/no, grouped numbers. */
-function attrText(value: unknown): string {
-  if (value === true || value === 'true') return 'Evet';
-  if (value === false || value === 'false') return 'Hayır';
-  if (Array.isArray(value)) return value.join(', ');
-  return typeof value === 'number' ? formatNumber(value) : String(value);
+/** Attribute values as people read them: yes/no, grouped numbers (never years), with optional unit. */
+function attrText(key: string, value: unknown, unit?: string): string {
+  let out: string;
+  if (value === true || value === 'true') out = 'Evet';
+  else if (value === false || value === 'false') out = 'Hayır';
+  else if (Array.isArray(value)) out = value.join(', ');
+  else if (key !== 'Yıl' && key !== 'Model Yılı' && (typeof value === 'number' || /^\d+$/.test(String(value)))) {
+    out = formatNumber(Number(value));
+  } else {
+    out = String(value);
+  }
+  return unit && !out.endsWith(unit) ? `${out} ${unit}` : out;
+}
+
+const KEY_FACTS: readonly { keys: readonly string[]; label: string; icon: typeof Calendar; unit?: string }[] = [
+  { keys: ['Yıl'], label: 'Yıl', icon: Calendar },
+  { keys: ['KM', 'Kilometre'], label: 'Kilometre', icon: Gauge, unit: 'km' },
+  { keys: ['Yakıt', 'Yakıt Tipi'], label: 'Yakıt', icon: Fuel },
+  { keys: ['Vites', 'Vites Tipi'], label: 'Vites', icon: Settings2 },
+  { keys: ['m² (Net)', 'm²', 'm² (Brüt)'], label: 'Alan', icon: Ruler, unit: 'm²' },
+  { keys: ['Oda Sayısı'], label: 'Oda', icon: Home },
+  { keys: ['Bulunduğu Kat', 'Kat'], label: 'Kat', icon: Layers },
+];
+
+function KeyFacts({ attrs }: { attrs: Record<string, string | number> }) {
+  const { c } = useTheme();
+  const facts = KEY_FACTS.flatMap((f) => {
+    const key = f.keys.find((k) => attrs[k] !== undefined && attrs[k] !== '');
+    if (!key) return [];
+    const raw = attrs[key];
+    const formatted =
+      key !== 'Yıl' && (typeof raw === 'number' || /^\d+$/.test(String(raw)))
+        ? formatNumber(Number(raw))
+        : String(raw);
+    return [{ label: f.label, icon: f.icon, value: f.unit && !formatted.includes(f.unit) ? `${formatted} ${f.unit}` : formatted }];
+  }).slice(0, 4);
+  if (facts.length < 2) return null;
+  return (
+    <View style={styles.factsGrid}>
+      {facts.map(({ label, icon: Icon, value }) => (
+        <View key={label} style={[styles.factCard, { borderColor: c.border, backgroundColor: c.surface }]}>
+          <View style={styles.factTop}>
+            <Icon size={13} color={c.muted} />
+            <Text variant="caption" tone="muted">
+              {label}
+            </Text>
+          </View>
+          <Text variant="bodyStrong" numberOfLines={1}>
+            {value}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function StatusBanner({
+  status,
+  expired,
+  isOwner,
+  rejectionReason,
+  canRenew,
+  busy,
+  onRenew,
+  onNotifications,
+}: {
+  status: string;
+  expired: boolean;
+  isOwner: boolean;
+  rejectionReason?: string | null;
+  canRenew: boolean;
+  busy: boolean;
+  onRenew: () => void;
+  onNotifications: () => void;
+}) {
+  const { c } = useTheme();
+  let title: string | null = null;
+  let body: string | null = null;
+  let isRejected = false;
+
+  if (status === 'PENDING') {
+    title = 'Bu ilan onay bekliyor.';
+    body = 'Kontrol edildikten sonra yayına alınacak ve alıcılara görünecek.';
+  } else if (status === 'REJECTED') {
+    isRejected = true;
+    title = 'Bu ilan yayına uygun bulunmadı.';
+    body = rejectionReason
+      ? `Gerekçe: ${rejectionReason}`
+      : 'Gerekçeyi bildirimlerinizde görebilirsiniz. İlanı düzenleyip tekrar onaya gönderebilirsiniz.';
+  } else if (status === 'SOLD') {
+    title = 'Bu ürün satıldı.';
+    body = isOwner
+      ? 'İlan alıcılara "Satıldı" olarak görünür; mesaj alınmaz. Yeniden satışa çıkarmak için aşağıdaki paneli kullanabilirsiniz.'
+      : 'Benzer ilanlara aşağıdan göz atabilirsiniz.';
+  } else if (status === 'INACTIVE') {
+    title = 'Bu ilan yayında değil.';
+    if (isOwner) {
+      body = expired
+        ? 'Yalnızca siz görüyorsunuz. Süresi de dolmuş: önce süresini uzatın, sonra yayına alın.'
+        : 'Yalnızca siz görüyorsunuz. Aşağıdaki panelden tekrar yayına alabilirsiniz.';
+    }
+  } else if (expired) {
+    title = 'Bu ilanın yayın süresi doldu.';
+    body = isOwner
+      ? 'Süreyi uzatarak ilanı tekrar yayına alabilirsiniz.'
+      : 'Bu ilanın süresi dolduğu için satıcıyla iletişim kapalı.';
+  }
+
+  if (!title) return null;
+
+  return (
+    <View style={[styles.banner, { backgroundColor: isRejected ? c.dangerSoft : c.warnSoft, borderColor: isRejected ? c.danger : c.warn }]}>
+      <View style={styles.row}>
+        <ShieldAlert size={18} color={isRejected ? c.danger : c.warn} />
+        <Text variant="label" tone={isRejected ? 'danger' : 'warn'} style={styles.flex}>
+          {title}
+        </Text>
+      </View>
+      {body ? (
+        <Text variant="caption" tone={isRejected ? 'danger' : 'warn'}>
+          {body}
+        </Text>
+      ) : null}
+      {isOwner && isRejected ? (
+        <Button title="Bildirimleri aç" size="sm" variant="outline" onPress={onNotifications} />
+      ) : null}
+      {isOwner && canRenew ? (
+        <Button title="30 gün uzat" icon={RefreshCw} size="sm" loading={busy} onPress={onRenew} />
+      ) : null}
+    </View>
+  );
 }
 
 function OwnerStat({ label, value }: { label: string; value: number }) {
@@ -890,6 +1216,20 @@ function ShareCardSheet({
   const { c } = useTheme();
   const cover = mediaUrl(listing.images[0], 800);
   const loc = locationLabel(listing.city, listing.district, listing.neighborhood);
+  const shareUrl = webUrl(`/ilan/${listing.slug}`);
+  const qr = useMemo(() => (visible ? generateQrMatrix(shareUrl) : []), [visible, shareUrl]);
+  const qrSize = qr.length;
+  const qrPath = useMemo(() => {
+    if (!qr.length) return '';
+    let path = '';
+    for (let r = 0; r < qr.length; r += 1) {
+      for (let col = 0; col < qr.length; col += 1) {
+        if (qr[r][col]) path += `M${col},${r}h1v1h-1z`;
+      }
+    }
+    return path;
+  }, [qr]);
+
   return (
     <Sheet visible={visible} onClose={onClose} title="Paylaşım kartı">
       <Card padded={false} style={[styles.shareCard, { borderColor: c.primary }]}>
@@ -899,23 +1239,35 @@ function ShareCardSheet({
         </View>
         {cover ? <Image source={cover} style={styles.shareImage} contentFit="cover" /> : null}
         <View style={styles.shareBody}>
-          <Text variant="display" tone="primary">
-            {formatPrice(listing.price, listing.currency)}
-          </Text>
-          <Text variant="subheading" numberOfLines={2}>
-            {listing.title}
-          </Text>
-          {loc ? (
-            <View style={styles.metaRow}>
-              <MapPin size={14} color={c.muted} />
-              <Text variant="caption" tone="muted">
-                {loc}
+          <View style={styles.shareFooter}>
+            <View style={styles.shareMeta}>
+              <Text variant="display" tone="primary">
+                {formatPrice(listing.price, listing.currency)}
+              </Text>
+              <Text variant="subheading" numberOfLines={2}>
+                {listing.title}
+              </Text>
+              {loc ? (
+                <View style={styles.metaRow}>
+                  <MapPin size={14} color={c.muted} />
+                  <Text variant="caption" tone="muted" numberOfLines={1} style={styles.flex}>
+                    {loc}
+                  </Text>
+                </View>
+              ) : null}
+              <Text variant="small" tone="subtle" numberOfLines={1}>
+                {shareUrl}
               </Text>
             </View>
-          ) : null}
-          <Text variant="small" tone="subtle" numberOfLines={1}>
-            {webUrl(`/ilan/${listing.slug}`)}
-          </Text>
+            {qrSize > 0 && qrPath ? (
+              <View style={[styles.qrBox, { borderColor: c.border }]}>
+                <Svg width={78} height={78} viewBox={`0 0 ${qrSize} ${qrSize}`} accessibilityLabel="İlan QR kodu">
+                  <SvgRect x={0} y={0} width={qrSize} height={qrSize} fill="#ffffff" />
+                  <SvgPath d={qrPath} fill="#0d1117" />
+                </Svg>
+              </View>
+            ) : null}
+          </View>
         </View>
       </Card>
       <Button title="Paylaş" icon={Share2} block haptic onPress={onShare} />
@@ -945,7 +1297,7 @@ function DetailSkeleton({ height }: { height: number }) {
 }
 
 const styles = StyleSheet.create({
-  expired: { borderRadius: radius.md, padding: space.md, gap: space.sm },
+  banner: { borderRadius: radius.lg, borderWidth: 1, padding: space.md, gap: space.sm },
   flex: { flex: 1 },
   grow: { flex: 1.4 },
   shrink: { flexShrink: 1 },
@@ -957,12 +1309,17 @@ const styles = StyleSheet.create({
   ownerStat: { flex: 1, alignItems: 'center', gap: 2 },
   ownerActions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: space.sm },
   titleBlock: { gap: space.sm },
+  soldPrice: { textDecorationLine: 'line-through' },
   drop: { flexDirection: 'row', alignItems: 'center', gap: space.xs, alignSelf: 'flex-start', paddingHorizontal: space.sm, paddingVertical: 4, borderRadius: radius.sm },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   stats: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md },
+  factsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  factCard: { flexGrow: 1, flexBasis: '47%', borderWidth: 1, borderRadius: radius.lg, padding: space.md, gap: 4 },
+  factTop: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   infoRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.lg, minHeight: 48, paddingVertical: space.sm },
   infoLabel: { flex: 1 },
   infoValue: { flex: 1.2, textAlign: 'right' },
+  historyRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.lg, minHeight: 44, paddingVertical: space.sm },
   section: { gap: space.sm },
   description: { lineHeight: 23 },
   review: { gap: space.xs, padding: space.md },
@@ -978,7 +1335,10 @@ const styles = StyleSheet.create({
   shareCard: { overflow: 'hidden', borderWidth: 1 },
   shareHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space.lg, paddingVertical: space.md },
   shareImage: { width: '100%', aspectRatio: 16 / 9 },
-  shareBody: { padding: space.lg, gap: space.xs },
+  shareBody: { padding: space.lg },
+  shareFooter: { flexDirection: 'row', alignItems: 'flex-end', gap: space.md },
+  shareMeta: { flex: 1, gap: space.xs },
+  qrBox: { padding: 6, backgroundColor: '#ffffff', borderRadius: radius.md, borderWidth: 1 },
   similar: { paddingBottom: space.lg },
   topBar: {
     position: 'absolute',

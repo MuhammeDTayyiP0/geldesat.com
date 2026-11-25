@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useInfiniteQuery, useMutation, useQuery } from '@tanstack/react-query';
-import { ArrowUpDown, Bell, Bookmark, ChevronLeft, LayoutGrid, List, Search, SearchX, SlidersHorizontal, X } from 'lucide-react-native';
+import { ArrowUpDown, Bell, Bookmark, ChevronLeft, LayoutGrid, List, MapPin, Search, SearchX, SlidersHorizontal, X } from 'lucide-react-native';
 import { errorMessage } from '@/api/client';
 import { catalog, savedSearches } from '@/api/endpoints';
 import { keys, queryClient } from '@/api/queries';
@@ -21,8 +21,8 @@ import {
   type FilterState,
 } from '@/features/search/filters';
 import { useFlag } from '@/lib/flags';
-import { formatNumber, uniqueById } from '@/lib/format';
-import { rememberSearch } from '@/lib/storage';
+import { formatNumber, formatPrice, uniqueById } from '@/lib/format';
+import { rememberSearch, useViewLayout } from '@/lib/storage';
 import { Button, Chip, EmptyState, ErrorState, IconButton, Input, ListRow, RowGroup, Sheet, Text, font, hairline, radius, space, toast, useTheme } from '@/ui';
 
 const LIMIT = 24;
@@ -35,6 +35,13 @@ type Params = {
   neighborhood?: string;
   minPrice?: string;
   maxPrice?: string;
+  minYear?: string;
+  maxYear?: string;
+  minKm?: string;
+  maxKm?: string;
+  minM2?: string;
+  maxM2?: string;
+  attrs?: string;
   urgent?: string;
   featured?: string;
   postedWithin?: string;
@@ -44,6 +51,26 @@ type Params = {
   title?: string;
   sort?: string;
 };
+
+function parseAttrsParam(raw?: string): Record<string, string[]> {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    const out: Record<string, string[]> = {};
+    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+      if (Array.isArray(v)) {
+        const vals = v.map(String).filter(Boolean);
+        if (vals.length) out[k] = vals;
+      } else if (typeof v === 'string' && v) {
+        out[k] = [v];
+      }
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
 
 function filtersFromParams(params: Params): FilterState {
   const postedWithin = POSTED_WITHIN_OPTIONS.some((o) => o.value === params.postedWithin)
@@ -60,6 +87,12 @@ function filtersFromParams(params: Params): FilterState {
     neighborhood: params.neighborhood,
     minPrice: params.minPrice?.replace(/\D/g, '') || undefined,
     maxPrice: params.maxPrice?.replace(/\D/g, '') || undefined,
+    minYear: params.minYear?.replace(/\D/g, '') || undefined,
+    maxYear: params.maxYear?.replace(/\D/g, '') || undefined,
+    minKm: params.minKm?.replace(/\D/g, '') || undefined,
+    maxKm: params.maxKm?.replace(/\D/g, '') || undefined,
+    minM2: params.minM2?.replace(/\D/g, '') || undefined,
+    maxM2: params.maxM2?.replace(/\D/g, '') || undefined,
     urgent: params.urgent === '1',
     featured: params.featured === '1',
     postedWithin,
@@ -67,7 +100,7 @@ function filtersFromParams(params: Params): FilterState {
     sellerType,
     priceDropped: params.priceDropped === '1',
     sort: (SORTS.some((s) => s.value === params.sort) ? params.sort : 'date_desc') as SortKey,
-    attrs: {},
+    attrs: parseAttrsParam(params.attrs),
   };
 }
 
@@ -79,7 +112,7 @@ export default function ResultsScreen() {
   const kayitliAramalar = useFlag('kayitli_aramalar');
   const params = useLocalSearchParams<Params>();
   const [filters, setFilters] = useState<FilterState>(() => filtersFromParams(params));
-  const [layout, setLayout] = useState<'grid' | 'list'>('grid');
+  const [layout, setLayout] = useViewLayout();
   const [sheet, setSheet] = useState<'filters' | 'sort' | 'save' | null>(null);
   const [query, setQuery] = useState(params.q ?? '');
   const [saveName, setSaveName] = useState('');
@@ -100,6 +133,13 @@ export default function ResultsScreen() {
         neighborhood: params.neighborhood,
         minPrice: params.minPrice,
         maxPrice: params.maxPrice,
+        minYear: params.minYear,
+        maxYear: params.maxYear,
+        minKm: params.minKm,
+        maxKm: params.maxKm,
+        minM2: params.minM2,
+        maxM2: params.maxM2,
+        attrs: params.attrs,
         urgent: params.urgent,
         featured: params.featured,
         postedWithin: params.postedWithin,
@@ -118,6 +158,13 @@ export default function ResultsScreen() {
     params.neighborhood,
     params.minPrice,
     params.maxPrice,
+    params.minYear,
+    params.maxYear,
+    params.minKm,
+    params.maxKm,
+    params.minM2,
+    params.maxM2,
+    params.attrs,
     params.urgent,
     params.featured,
     params.postedWithin,
@@ -174,12 +221,13 @@ export default function ResultsScreen() {
       if (searchKey.minM2 != null) extraFilters.minM2 = searchKey.minM2;
       if (searchKey.maxM2 != null) extraFilters.maxM2 = searchKey.maxM2;
       if (searchKey.sort && searchKey.sort !== 'date_desc') extraFilters.sort = searchKey.sort;
-      if (searchKey.urgent) extraFilters.urgent = true;
-      if (searchKey.featured) extraFilters.featured = true;
+      if (searchKey.urgent) extraFilters.urgent = '1';
+      if (searchKey.featured) extraFilters.featured = '1';
       if (searchKey.postedWithin) extraFilters.postedWithin = searchKey.postedWithin;
-      if (searchKey.withPhotos) extraFilters.withPhotos = true;
+      if (searchKey.withPhotos) extraFilters.withPhotos = '1';
       if (searchKey.sellerType) extraFilters.sellerType = searchKey.sellerType;
-      if (searchKey.priceDropped) extraFilters.priceDropped = true;
+      if (searchKey.priceDropped) extraFilters.priceDropped = '1';
+      if (searchKey.attrs && Object.keys(searchKey.attrs).length) extraFilters.attrs = JSON.stringify(searchKey.attrs);
 
       return savedSearches.create({
         name: saveName.trim(),
@@ -292,6 +340,7 @@ export default function ResultsScreen() {
             label={SORTS.find((s) => s.value === filters.sort)?.label ?? 'Sırala'}
             onPress={() => setSheet('sort')}
           />
+          <Chip icon={MapPin} label="Harita" onPress={() => router.push('/harita' as Href)} />
           {kayitliAramalar ? <Chip icon={Bookmark} label="Aramayı kaydet" onPress={openSaveSheet} /> : null}
           {filters.category ? (
             <Chip
@@ -310,6 +359,56 @@ export default function ResultsScreen() {
           {filters.neighborhood ? (
             <Chip label={filters.neighborhood} selected onRemove={() => setFilters((f) => ({ ...f, neighborhood: undefined }))} />
           ) : null}
+          {filters.minPrice || filters.maxPrice ? (
+            <Chip
+              label={
+                filters.minPrice && filters.maxPrice
+                  ? `${formatPrice(Number(filters.minPrice))} – ${formatPrice(Number(filters.maxPrice))}`
+                  : filters.minPrice
+                    ? `En az ${formatPrice(Number(filters.minPrice))}`
+                    : `En fazla ${formatPrice(Number(filters.maxPrice))}`
+              }
+              selected
+              onRemove={() => setFilters((f) => ({ ...f, minPrice: undefined, maxPrice: undefined }))}
+            />
+          ) : null}
+          {filters.minYear || filters.maxYear ? (
+            <Chip
+              label={`Yıl: ${filters.minYear ?? '…'} – ${filters.maxYear ?? '…'}`}
+              selected
+              onRemove={() => setFilters((f) => ({ ...f, minYear: undefined, maxYear: undefined }))}
+            />
+          ) : null}
+          {filters.minKm || filters.maxKm ? (
+            <Chip
+              label={`KM: ${filters.minKm ? formatNumber(Number(filters.minKm)) : '0'} – ${filters.maxKm ? formatNumber(Number(filters.maxKm)) : '∞'}`}
+              selected
+              onRemove={() => setFilters((f) => ({ ...f, minKm: undefined, maxKm: undefined }))}
+            />
+          ) : null}
+          {filters.minM2 || filters.maxM2 ? (
+            <Chip
+              label={`m²: ${filters.minM2 ?? '0'} – ${filters.maxM2 ?? '∞'}`}
+              selected
+              onRemove={() => setFilters((f) => ({ ...f, minM2: undefined, maxM2: undefined }))}
+            />
+          ) : null}
+          {Object.entries(filters.attrs)
+            .filter(([, vals]) => vals.length > 0)
+            .map(([key, vals]) => (
+              <Chip
+                key={`attr:${key}`}
+                label={`${key}: ${vals.join(', ')}`}
+                selected
+                onRemove={() =>
+                  setFilters((f) => {
+                    const nextAttrs = { ...f.attrs };
+                    delete nextAttrs[key];
+                    return { ...f, attrs: nextAttrs };
+                  })
+                }
+              />
+            ))}
           {filters.postedWithin ? (
             <Chip
               label={POSTED_WITHIN_OPTIONS.find((o) => o.value === filters.postedWithin)?.label ?? filters.postedWithin}

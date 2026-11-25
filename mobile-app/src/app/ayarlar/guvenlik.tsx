@@ -1,10 +1,10 @@
 import { useRef, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { StyleSheet, View } from 'react-native';
+import { Platform, Share, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useQuery } from '@tanstack/react-query';
-import { KeyRound, Laptop, LogOut, Mail, Pencil, Smartphone, UserX } from 'lucide-react-native';
+import { Download, KeyRound, Laptop, LogOut, Mail, Pencil, Smartphone, UserX } from 'lucide-react-native';
 import { ApiError, errorMessage, timedFetch } from '@/api/client';
 import { account } from '@/api/endpoints';
 import { keys, queryClient } from '@/api/queries';
@@ -99,6 +99,7 @@ function SecuritySettings() {
   const [revokingToken, setRevokingToken] = useState<string | null>(null);
   const [emailSheetOpen, setEmailSheetOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const deletion = useQuery({ queryKey: keys.deletion, queryFn: account.deletionStatus });
   const authSession = useQuery({
     queryKey: ['auth', 'session'],
@@ -150,6 +151,45 @@ function SecuritySettings() {
   };
 
   const purgeAt = deletion.data?.purgeAt;
+
+  const downloadMyData = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const token = getToken();
+      const res = await timedFetch(`${API_BASE_URL}/api/hesap/verilerim`, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(
+          body?.error ||
+            (res.status === 429
+              ? 'Çok sık indirme denediniz. Biraz sonra tekrar deneyin.'
+              : 'Verileriniz hazırlanamadı.'),
+        );
+      }
+      const text = await res.text();
+      if (Platform.OS === 'web' && typeof document !== 'undefined') {
+        const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'geldesat-verilerim.json';
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } else {
+        await Share.share({ title: 'geldesat-verilerim.json', message: text });
+      }
+    } catch (e) {
+      toast.error(errorMessage(e, 'Verileriniz indirilemedi.'));
+    } finally {
+      setExporting(false);
+    }
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
@@ -314,6 +354,13 @@ function SecuritySettings() {
               }
             }}
           />
+          <ListRow
+            icon={Download}
+            label={exporting ? 'Verileriniz hazırlanıyor…' : 'Verilerimi indir (KVKK)'}
+            detail="Profil, ilan, mesaj ve favorileriniz (JSON)"
+            disabled={exporting}
+            onPress={() => void downloadMyData()}
+          />
           {!purgeAt ? <ListRow icon={UserX} label="Hesabımı sil" danger onPress={() => setDeleteOpen(true)} /> : null}
         </RowGroup>
       </KeyboardAwareScrollView>
@@ -322,6 +369,7 @@ function SecuritySettings() {
 
       <DeleteAccountSheet
         visible={deleteOpen}
+        hasPassword={hasPassword}
         onClose={() => setDeleteOpen(false)}
         onDeleted={async () => {
           await signOut();
@@ -383,15 +431,32 @@ function ChangeEmailSheet({ visible, onClose }: { visible: boolean; onClose: () 
   );
 }
 
-function DeleteAccountSheet({ visible, onClose, onDeleted }: { visible: boolean; onClose: () => void; onDeleted: () => Promise<void> }) {
+const CONFIRM_WORD = 'SİL';
+
+function DeleteAccountSheet({
+  visible,
+  hasPassword,
+  onClose,
+  onDeleted,
+}: {
+  visible: boolean;
+  hasPassword: boolean;
+  onClose: () => void;
+  onDeleted: () => Promise<void>;
+}) {
   const [password, setPassword] = useState('');
+  const [word, setWord] = useState('');
   const [busy, setBusy] = useState(false);
   const deletedRef = useRef(false);
+  const wordOk = word.trim().toLocaleUpperCase('tr').replace(/I/g, 'İ') === CONFIRM_WORD;
+  const ready = wordOk && (!hasPassword || password.length > 0);
   return (
     <Sheet
       visible={visible}
       onClose={onClose}
       onDismissed={() => {
+        setPassword('');
+        setWord('');
         if (!deletedRef.current) return;
         deletedRef.current = false;
         void onDeleted();
@@ -403,8 +468,10 @@ function DeleteAccountSheet({ visible, onClose, onDeleted }: { visible: boolean;
           variant="danger"
           block
           style={styles.flex}
+          disabled={!ready || busy}
           loading={busy}
           onPress={async () => {
+            if (!ready) return;
             const ok = await confirm({
               title: 'Emin misiniz?',
               message: 'İlanlarınız hemen gizlenir ve hesabınız 30 gün sonra kalıcı olarak silinir.',
@@ -414,8 +481,9 @@ function DeleteAccountSheet({ visible, onClose, onDeleted }: { visible: boolean;
             if (!ok) return;
             setBusy(true);
             try {
-              await account.requestDeletion(password || undefined);
+              await account.requestDeletion(hasPassword ? password : undefined);
               setPassword('');
+              setWord('');
               deletedRef.current = true;
               onClose();
             } catch (e) {
@@ -431,12 +499,25 @@ function DeleteAccountSheet({ visible, onClose, onDeleted }: { visible: boolean;
         İlanlarınız hemen gizlenir ve tüm oturumlarınız kapanır. 30 gün içinde vazgeçerseniz giriş yapıp Ayarlar → Şifre ve güvenlik bölümünden
         hesabınızı geri alabilirsiniz; giriş yapmak tek başına geri almaz. Bu sürenin sonunda verileriniz kalıcı olarak silinir.
       </Text>
+      {hasPassword ? (
+        <Input
+          label="Şifreniz"
+          secureTextEntry
+          value={password}
+          onChangeText={setPassword}
+        />
+      ) : (
+        <Text variant="caption" tone="muted">
+          Google ile giriş yaptıysanız şifre gerekmez (son 24 saatte giriş yapmış olmalısınız).
+        </Text>
+      )}
       <Input
-        label="Şifreniz"
-        secureTextEntry
-        value={password}
-        onChangeText={setPassword}
-        hint="Google ile giriş yaptıysanız boş bırakın (son 24 saatte giriş yapmış olmalısınız)."
+        label="Onaylamak için SİL yazın"
+        placeholder="SİL"
+        autoCapitalize="characters"
+        autoCorrect={false}
+        value={word}
+        onChangeText={setWord}
       />
     </Sheet>
   );

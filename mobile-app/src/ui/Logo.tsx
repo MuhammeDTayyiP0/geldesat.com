@@ -9,8 +9,8 @@ export const BRAND_LIGHT = '#F7F8FC';
 
 /** GeldeSat mark, same paths as web/public/favicon.svg. */
 export function LogoMark({ size = 28, color }: { size?: number; color?: string }) {
-  const { dark } = useTheme();
-  const stroke = color ?? (dark ? BRAND_LIGHT : BRAND_NAVY);
+  const { c } = useTheme();
+  const stroke = color ?? c.brand;
   return (
     <Svg width={size} height={size} viewBox="0 0 64 64" fill="none">
       <Path
@@ -47,8 +47,8 @@ export function Wordmark({ size = 26 }: { size?: number }) {
   return (
     <View style={styles.row} accessibilityRole="header" accessibilityLabel="GeldeSat">
       <LogoMark size={size} />
-      <Text style={[styles.word, { fontSize: size * 0.78, color: c.fg }]}>
-        Gelde<Text style={[styles.word, { fontSize: size * 0.78, color: c.primary }]}>Sat</Text>
+      <Text style={[styles.word, { fontSize: size * 0.78, color: c.brand }]}>
+        GeldeSat
       </Text>
     </View>
   );

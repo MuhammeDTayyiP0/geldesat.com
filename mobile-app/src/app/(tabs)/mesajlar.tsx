@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react';
-import { FlatList, Pressable, RefreshControl, StyleSheet, TextInput, View } from 'react-native';
+import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useRouter, useScrollToTop } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery } from '@tanstack/react-query';
@@ -18,13 +18,13 @@ import { formatPrice, inboxTime } from '@/lib/format';
 import {
   Avatar,
   Button,
+  Chip,
   Divider,
   EmptyState,
   ErrorState,
   ListRow,
   Loading,
   RowGroup,
-  Segmented,
   Sheet,
   Text,
   confirm,
@@ -36,7 +36,7 @@ import {
   useTheme,
 } from '@/ui';
 
-type Filter = 'all' | 'buying' | 'selling' | 'archived';
+type Filter = 'all' | 'buying' | 'selling' | 'unread' | 'archived';
 
 export default function InboxScreen() {
   const { c } = useTheme();
@@ -50,14 +50,30 @@ export default function InboxScreen() {
   const [menu, setMenu] = useState<Conversation | null>(null);
   const inbox = useQuery({ queryKey: keys.inbox, queryFn: chat.inbox, enabled: session.status === 'signedIn', refetchInterval: 60_000 });
 
+  const tabCounts = useMemo(() => {
+    const all = (inbox.data ?? []).filter((cv) => !cv.archived);
+    return {
+      all: all.length,
+      buying: all.filter((cv) => cv.role === 'buying').length,
+      selling: all.filter((cv) => cv.role === 'selling').length,
+      unread: all.filter((cv) => cv.unread > 0 || cv.marked_unread).length,
+      archived: (inbox.data ?? []).length - all.length,
+    };
+  }, [inbox.data]);
+
   const rows = useMemo(() => {
     const term = q.trim().toLocaleLowerCase('tr');
     return (inbox.data ?? []).filter((cv) => {
       if (filter === 'archived' ? !cv.archived : cv.archived) return false;
       if (filter === 'buying' && cv.role !== 'buying') return false;
       if (filter === 'selling' && cv.role !== 'selling') return false;
+      if (filter === 'unread' && !(cv.unread > 0 || cv.marked_unread)) return false;
       if (!term) return true;
-      return cv.other_name.toLocaleLowerCase('tr').includes(term) || cv.listing_title.toLocaleLowerCase('tr').includes(term);
+      return (
+        cv.other_name.toLocaleLowerCase('tr').includes(term) ||
+        cv.listing_title.toLocaleLowerCase('tr').includes(term) ||
+        (cv.last_content ?? '').toLocaleLowerCase('tr').includes(term)
+      );
     });
   }, [inbox.data, filter, q]);
 
@@ -124,22 +140,39 @@ export default function InboxScreen() {
           <TextInput
             value={q}
             onChangeText={setQ}
-            placeholder="Kişi veya ilan ara"
+            placeholder="Kişi, ilan veya mesaj ara"
             placeholderTextColor={c.subtle}
             style={[styles.input, { color: c.fg }]}
             accessibilityLabel="Sohbetlerde ara"
           />
         </View>
-        <Segmented
-          value={filter}
-          onChange={setFilter}
-          options={[
-            { value: 'all', label: 'Tümü' },
-            { value: 'buying', label: 'Alıyorum' },
-            { value: 'selling', label: 'Satıyorum' },
-            { value: 'archived', label: 'Arşiv' },
-          ]}
-        />
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChips}>
+          <Chip label="Tümü" selected={filter === 'all'} onPress={() => setFilter('all')} />
+          <Chip
+            label="Alıyorum"
+            count={tabCounts.buying || undefined}
+            selected={filter === 'buying'}
+            onPress={() => setFilter('buying')}
+          />
+          <Chip
+            label="Satıyorum"
+            count={tabCounts.selling || undefined}
+            selected={filter === 'selling'}
+            onPress={() => setFilter('selling')}
+          />
+          <Chip
+            label="Okunmamış"
+            count={tabCounts.unread || undefined}
+            selected={filter === 'unread'}
+            onPress={() => setFilter('unread')}
+          />
+          <Chip
+            label="Arşiv"
+            count={tabCounts.archived || undefined}
+            selected={filter === 'archived'}
+            onPress={() => setFilter('archived')}
+          />
+        </ScrollView>
       </View>
 
       {inbox.isLoading ? (
@@ -158,8 +191,16 @@ export default function InboxScreen() {
           ListEmptyComponent={
             <EmptyState
               icon={MessageCircle}
-              title={q ? 'Sonuç yok' : filter === 'archived' ? 'Arşiv boş' : 'Henüz mesajınız yok'}
-              message={q || filter === 'archived' ? undefined : 'Beğendiğiniz bir ilanda “Mesaj” ile satıcıya yazabilirsiniz.'}
+              title={
+                q
+                  ? 'Sonuç yok'
+                  : filter === 'unread'
+                    ? 'Okunmamış mesaj yok'
+                    : filter === 'archived'
+                      ? 'Arşiv boş'
+                      : 'Henüz mesajınız yok'
+              }
+              message={q || filter === 'archived' || filter === 'unread' ? undefined : 'Beğendiğiniz bir ilanda “Mesaj” ile satıcıya yazabilirsiniz.'}
             />
           }
           renderItem={({ item }) => (
@@ -359,6 +400,7 @@ const styles = StyleSheet.create({
   top: { paddingHorizontal: space.lg, paddingBottom: space.md, gap: space.md, borderBottomWidth: hairline },
   search: { flexDirection: 'row', alignItems: 'center', gap: space.sm, height: 42, borderRadius: radius.md, paddingHorizontal: space.md },
   input: { flex: 1, fontSize: font.md, height: 42 },
+  filterChips: { flexDirection: 'row', gap: space.xs },
   emptyWrap: { flexGrow: 1 },
   row: { flexDirection: 'row', gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.md },
   thumb: { width: 58, height: 58, borderRadius: radius.md, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },

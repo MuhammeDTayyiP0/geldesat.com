@@ -15,7 +15,9 @@ import { restoreSession } from '@/auth/auth';
 import { useSession } from '@/auth/session';
 import { clearPrivateQueries, queryClient, useConfig, useCounts } from '@/api/queries';
 import { ForceUpdate } from '@/features/app/ForceUpdate';
+import { DeletionBanner } from '@/features/account/DeletionBanner';
 import { onStreamResume, resetChatStream, subscribeChatStream } from '@/features/chat/stream';
+import { ComparePill } from '@/features/listing/ComparePill';
 import { appRouteForWebPath } from '@/lib/links';
 import { ensurePushRegistered, notificationLink, registerForPush } from '@/lib/push';
 import { loadCachedConfig } from '@/lib/configCache';
@@ -82,6 +84,7 @@ export default function RootLayout() {
               {ready ? (
                 <UpdateGate>
                   <SessionEffects />
+                  <DeletionBanner />
                   <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.bg } }}>
                     <Stack.Screen name="(tabs)" />
                     <Stack.Screen name="ilan-ver" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
@@ -90,6 +93,7 @@ export default function RootLayout() {
                         strip on the left (not just the thin screen edge, not the whole screen). */}
                     <Stack.Screen name="mesaj/[id]" options={{ fullScreenGestureEnabled: true, gestureResponseDistance: { end: BACK_SWIPE_END } }} />
                   </Stack>
+                  <ComparePill />
                 </UpdateGate>
               ) : null}
               <ToastHost />

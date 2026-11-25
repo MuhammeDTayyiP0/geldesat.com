@@ -69,13 +69,18 @@ function roundOfferSuggestion(raw: number): number {
   return Math.round(raw);
 }
 
-function suggestedOffers(price: number): number[] {
-  const unique = new Set<number>();
-  for (const ratio of [0.9, 0.85, 0.8]) {
-    const n = roundOfferSuggestion(price * ratio);
-    if (n > 0 && n < price) unique.add(n);
+function suggestedOffers(price: number): { percent: number; amount: number }[] {
+  if (!price || price <= 0) return [];
+  const seen = new Set<number>();
+  const chips: { percent: number; amount: number }[] = [];
+  for (const percent of [5, 10, 15]) {
+    const amount = roundOfferSuggestion((price * (100 - percent)) / 100);
+    if (amount > 0 && amount < price && !seen.has(amount)) {
+      seen.add(amount);
+      chips.push({ percent, amount });
+    }
   }
-  return [...unique];
+  return chips;
 }
 
 /** Opening price offer: starts the chat (if needed) and sends an offer card. */
@@ -122,8 +127,8 @@ export function OfferSheet({ listing, visible, onClose }: { listing: Listing; vi
         style={styles.amount}
       />
       <View style={styles.chips}>
-        {suggestions.map((n) => (
-          <Chip key={n} label={formatPrice(n, listing.currency)} selected={value === n} onPress={() => setAmount(maskThousands(String(n)))} />
+        {suggestions.map((s) => (
+          <Chip key={s.amount} label={`%${s.percent} · ${formatPrice(s.amount, listing.currency)}`} selected={value === s.amount} onPress={() => setAmount(maskThousands(String(s.amount)))} />
         ))}
       </View>
       <Text variant="caption" tone="subtle">
@@ -139,17 +144,25 @@ export function PhoneSheet({
   visible,
   onClose,
   sellerName,
+  listingTitle,
   whatsapp = true,
 }: {
   phone: string | null;
   visible: boolean;
   onClose: () => void;
   sellerName?: string;
+  listingTitle?: string;
   /** The seller's "WhatsApp'tan yazılabilsin" setting. */
   whatsapp?: boolean;
 }) {
   const digits = cleanPhone(phone);
-  const intl = digits.startsWith('0') ? `90${digits.slice(1)}` : digits;
+  const ten = digits.replace(/^0/, '');
+  const canWhatsapp = whatsapp && /^5\d{9}$/.test(ten);
+  const whatsappUrl = canWhatsapp
+    ? listingTitle
+      ? `https://wa.me/90${ten}?text=${encodeURIComponent(`Merhaba, GeldeSat'taki “${listingTitle}” ilanınız hakkında yazıyorum.`)}`
+      : `https://wa.me/90${ten}`
+    : null;
   return (
     <Sheet visible={visible} onClose={onClose} title={sellerName ?? 'Satıcı'} subtitle="İletişim bilgisi">
       <Text variant="title" center selectable>
@@ -157,7 +170,7 @@ export function PhoneSheet({
       </Text>
       <RowGroup>
         <ListRow icon={Phone} label="Ara" onPress={() => void Linking.openURL(`tel:${digits}`)} />
-        {whatsapp ? <ListRow icon={MessageCircle} label="WhatsApp ile yaz" onPress={() => void Linking.openURL(`https://wa.me/${intl}`)} /> : null}
+        {whatsappUrl ? <ListRow icon={MessageCircle} label="WhatsApp ile yaz" onPress={() => void Linking.openURL(whatsappUrl)} /> : null}
         <ListRow
           icon={Copy}
           label="Numarayı kopyala"

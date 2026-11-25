@@ -26,6 +26,7 @@ export const Route = createFileRoute("/ayarlar/kayitli-aramalar")({
 
 function filterString(filters: SavedSearch["filters"], key: string): string | undefined {
   const val = filters[key];
+  if (val === true) return "1";
   if (typeof val === "string" && val) return val;
   if (typeof val === "number" && Number.isFinite(val)) return String(val);
   return undefined;

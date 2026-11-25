@@ -76,6 +76,7 @@ function useSwipeToReply(onReply: () => void, enabled: boolean) {
 export function MessageBubble({
   m,
   mine,
+  showReads = true,
   currency,
   pending,
   failed,
@@ -93,6 +94,7 @@ export function MessageBubble({
 }: {
   m: ChatMessage;
   mine: boolean;
+  showReads?: boolean;
   currency?: string;
   pending?: boolean;
   failed?: boolean;
@@ -253,10 +255,10 @@ export function MessageBubble({
                 <span className="text-white">Gönderilemedi</span>
               ) : pending ? (
                 <Clock3 className="size-3" aria-label="Gönderiliyor" />
-              ) : m.read_at ? (
+              ) : showReads && m.read_at ? (
                 <CheckCheck className="size-4 text-white" aria-label="Görüldü" />
               ) : (
-                <Check className="size-3.5 opacity-80" aria-label="İletildi" />
+                <Check className="size-3.5 opacity-80" aria-label={showReads ? "İletildi" : "Gönderildi"} />
               )
             ) : null}
           </div>

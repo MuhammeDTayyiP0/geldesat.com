@@ -16,6 +16,12 @@ import { TURKEY_CITIES } from '@/data/locations';
 import { categoryIcon } from '@/features/catalog/categoryIcon';
 import { OptionPicker } from '@/features/location/OptionPicker';
 import { AttrField } from '@/features/post/AttrField';
+import {
+  VehicleDamageSvg,
+  parseDamageValue,
+  summarizeDamage,
+  syncDamageAttrs,
+} from '@/features/listing/VehicleDamageSvg';
 import { PhotoReview } from '@/features/photos/PhotoReview';
 import { PhotoViewer } from '@/features/listing/Gallery';
 import { PhotoStep } from '@/features/post/PhotoStep';
@@ -67,6 +73,7 @@ function PostForm({ editId, copyFrom, owner }: { editId?: string; copyFrom?: str
   const [draft, setDraft] = useState<Draft>(() => (editId ? emptyDraft : { ...emptyDraft, clientKey: Crypto.randomUUID() }));
   const [currency, setCurrency] = useState<Currency>('TRY');
   const [rejectionReason, setRejectionReason] = useState<string | null>(null);
+  const [copiedBanner, setCopiedBanner] = useState(false);
   const [step, setStep] = useState<StepKey>('category');
   const [ready, setReady] = useState(!(editId || (copyFrom && copyAndQualityOn)));
   // New listing: nothing is saved until the "continue the draft?" question is answered,
@@ -121,24 +128,26 @@ function PostForm({ editId, copyFrom, owner }: { editId?: string; copyFrom?: str
   // Edit: load the listing; copyFrom: prefill new listing; new: offer the saved draft and prefill from the profile.
   useEffect(() => {
     let cancelled = false;
-    const sourceId = editId ?? (copyFrom && copyAndQualityOn ? copyFrom : undefined);
+    const isCopy = !editId && Boolean(copyFrom && copyAndQualityOn);
+    const sourceId = editId ?? (isCopy ? copyFrom : undefined);
     if (sourceId) {
-      if (!editId && copiedRef.current) return;
-      if (!editId) copiedRef.current = true;
+      if (isCopy && copiedRef.current) return;
+      if (isCopy) copiedRef.current = true;
       void (async () => {
         try {
           const r = await myListings.forEdit(sourceId);
           const browse = await catalog.browse(r.path);
           if (cancelled) return;
-          originalImages.current = r.listing.images;
+          originalImages.current = isCopy ? [] : r.listing.images;
           if (editId && r.listing.status === 'REJECTED' && r.listing.rejection_reason) {
             setRejectionReason(r.listing.rejection_reason);
           }
+          if (isCopy) setCopiedBanner(true);
           const cur: Currency = r.listing.currency === 'USD' || r.listing.currency === 'EUR' ? r.listing.currency : 'TRY';
           setCurrency(cur);
-          setDraft({
+          setDraft((prev) => ({
             path: browse.pathRows.map((row, i) => (i === browse.pathRows.length - 1 ? { ...row, has_children: false } : row)),
-            photos: r.listing.images.map((url) => ({ key: url, url, status: 'done' })),
+            photos: isCopy ? [] : r.listing.images.map((url) => ({ key: url, url, status: 'done' })),
             title: r.listing.title,
             price: maskThousands(String(Math.round(r.listing.price))),
             description: r.listing.description ?? '',
@@ -146,10 +155,10 @@ function PostForm({ editId, copyFrom, owner }: { editId?: string; copyFrom?: str
             city: r.listing.city ?? '',
             district: r.listing.district ?? '',
             neighborhood: r.listing.neighborhood ?? '',
-            phone: r.phone ? maskPhoneInput(r.phone) : '',
+            phone: isCopy ? prev.phone : (r.phone ? maskPhoneInput(r.phone) : ''),
             clientKey: editId ? undefined : Crypto.randomUUID(),
-          });
-          setStep('details');
+          }));
+          setStep(isCopy ? 'photos' : 'details');
           setHydrated(true);
           setReady(true);
         } catch (e) {
@@ -442,6 +451,23 @@ function PostForm({ editId, copyFrom, owner }: { editId?: string; copyFrom?: str
           </Card>
         ) : null}
 
+        {copiedBanner ? (
+          <Card style={[styles.rejectBanner, { backgroundColor: c.primarySoft, borderColor: c.primary }]}>
+            <View style={styles.rejectHead}>
+              <Sparkles size={16} color={c.primary} />
+              <Text variant="label" tone="primary" style={styles.flex}>
+                Önceki ilanınızdan kopyalandı
+              </Text>
+              <Pressable accessibilityRole="button" accessibilityLabel="Kapat" hitSlop={8} onPress={() => setCopiedBanner(false)}>
+                <X size={16} color={c.primary} />
+              </Pressable>
+            </View>
+            <Text variant="caption" tone="muted">
+              Önceki ilanınızdan kopyalandı. Yeni fotoğraflar ekleyip başlık, fiyat ve detayları gözden geçirebilirsiniz.
+            </Text>
+          </Card>
+        ) : null}
+
         {copyAndQualityOn && step !== 'category' ? <QualityScoreCard score={quality.score} tip={quality.tip} /> : null}
 
         {step === 'category' ? <CategoryStep path={draft.path} onPath={(path) => update({ path, attrs: path[path.length - 1]?.id === leaf?.id ? draft.attrs : {} })} onLeaf={() => setStep('photos')} /> : null}
@@ -528,19 +554,23 @@ function PostForm({ editId, copyFrom, owner }: { editId?: string; copyFrom?: str
                 />
               ))}
             {damageOn && isVehicleCategory ? (
-              <VehicleDamageEditor
-                attrs={draft.attrs}
-                onPatch={(patch) =>
-                  setDraft((d) => {
-                    const attrs = { ...d.attrs };
-                    for (const [k, v] of Object.entries(patch)) {
-                      if (v === undefined || v === '') delete attrs[k];
-                      else attrs[k] = v;
-                    }
-                    return { ...d, attrs };
-                  })
-                }
-              />
+              <Card style={styles.damageCard}>
+                <View style={styles.damageHead}>
+                  <CarFront size={18} color={c.primary} />
+                  <Text variant="label" style={styles.flex}>
+                    Araç Boya / Değişen & Hasar Şeması
+                  </Text>
+                </View>
+                <VehicleDamageSvg
+                  value={parseDamageValue(draft.attrs['_damage'])}
+                  onChange={(nextDamage) =>
+                    setDraft((d) => ({
+                      ...d,
+                      attrs: syncDamageAttrs(d.attrs, nextDamage, attributes),
+                    }))
+                  }
+                />
+              </Card>
             ) : null}
           </View>
         ) : null}
@@ -851,60 +881,28 @@ function PreviewRow({ label, value, onEdit }: { label: string; value: string; on
 }
 
 function computeListingQuality(draft: Draft, attributes: AttrDef[]): { score: number; tip: string | null } {
-  let score = 0;
-  const tips: string[] = [];
-
-  const photoCount = draft.photos.filter((p) => p.status === 'done' || p.localUri).length;
-  if (photoCount >= 4) score += 30;
-  else if (photoCount >= 2) {
-    score += 22;
-    tips.push('4+ fotoğraf ekleyerek puanınızı artırın');
-  } else if (photoCount === 1) {
-    score += 12;
-    tips.push('Birden fazla açıdan fotoğraf ekleyin');
-  } else {
-    tips.push('En az 1 fotoğraf ekleyin');
-  }
-
   const titleLen = draft.title.trim().length;
-  if (titleLen >= 20) score += 20;
-  else if (titleLen >= 5) {
-    score += 10;
-    tips.push('Başlığa marka/model detayı ekleyin');
-  } else {
-    tips.push('Açıklayıcı bir başlık yazın');
-  }
-
-  if ((parseMasked(draft.price) ?? 0) > 0) score += 10;
-  else tips.push('Fiyat girin');
-
   const descLen = draft.description.trim().length;
-  if (descLen >= 150) score += 20;
-  else if (descLen >= 60) {
-    score += 14;
-    tips.push('Açıklamayı biraz daha detaylandırın');
-  } else if (descLen >= 10) {
-    score += 8;
-    tips.push('Ürünün durumunu detaylı açıklayın');
-  } else {
-    tips.push('En az 10 karakterlik açıklama yazın');
-  }
+  const photoCount = draft.photos.filter((p) => p.status === 'done' || p.localUri).length;
+  const leaf = draft.path[draft.path.length - 1];
+  const isLeaf = Boolean(leaf && leaf.has_children === false);
 
-  if (attributes.length > 0) {
-    const filled = attributes.filter((a) => draft.attrs[a.name] !== undefined && draft.attrs[a.name] !== '').length;
-    score += Math.round((filled / attributes.length) * 10);
-    if (filled < attributes.length) tips.push('Tüm özellikleri doldurun');
-  } else {
-    score += 10;
-  }
+  const titlePts = titleLen >= 25 ? 20 : titleLen >= 12 ? 12 : titleLen >= 5 ? 6 : 0;
+  const descPts = descLen >= 200 ? 25 : descLen >= 80 ? 18 : descLen >= 30 ? 10 : descLen >= 10 ? 5 : 0;
+  const photoPts = photoCount >= 5 ? 30 : photoCount >= 3 ? 22 : photoCount >= 1 ? 12 : 0;
+  const filledAttrs = attributes.filter((a) => draft.attrs[a.name] !== undefined && draft.attrs[a.name] !== '').length;
+  const attrPts = !isLeaf ? 0 : attributes.length === 0 ? 15 : Math.round((15 * filledAttrs) / attributes.length);
+  const locPts = draft.city && draft.district && draft.neighborhood ? 10 : draft.city && draft.district ? 6 : 0;
+  const score = Math.min(100, titlePts + descPts + photoPts + attrPts + locPts);
 
-  if (draft.city && draft.district) {
-    score += draft.neighborhood ? 10 : 7;
-  } else {
-    tips.push('İl ve ilçe seçin');
-  }
+  let tip: string | null = null;
+  if (photoCount < 3) tip = 'En az 3 net fotoğraf eklemek etkileşimi artırır.';
+  else if (descLen < 80) tip = 'Açıklamayı biraz daha detaylandırın.';
+  else if (titleLen < 20) tip = 'Başlıkta marka, model veya önemli özellikleri belirtin.';
+  else if (attributes.length > 0 && filledAttrs < attributes.length) tip = 'Kalan özellikleri doldurarak aramalarda öne çıkın.';
+  else if (!draft.neighborhood && draft.district) tip = 'Mahalle bilgisi ekleyerek konumu netleştirin.';
 
-  return { score: Math.min(100, Math.max(0, score)), tip: tips[0] ?? null };
+  return { score, tip };
 }
 
 function QualityScoreCard({ score, tip }: { score: number; tip: string | null }) {
@@ -936,180 +934,20 @@ function QualityScoreCard({ score, tip }: { score: number; tip: string | null })
   );
 }
 
-const VEHICLE_PARTS: readonly { id: string; label: string }[] = [
-  { id: 'on_tampon', label: 'Ön Tampon' },
-  { id: 'kaput', label: 'Kaput' },
-  { id: 'tavan', label: 'Tavan' },
-  { id: 'bagaj', label: 'Bagaj' },
-  { id: 'arka_tampon', label: 'Arka Tampon' },
-  { id: 'sol_on_camurluk', label: 'Sol Ön Çamurluk' },
-  { id: 'sol_on_kapi', label: 'Sol Ön Kapı' },
-  { id: 'sol_arka_kapi', label: 'Sol Arka Kapı' },
-  { id: 'sol_arka_camurluk', label: 'Sol Arka Çamurluk' },
-  { id: 'sag_on_camurluk', label: 'Sağ Ön Çamurluk' },
-  { id: 'sag_on_kapi', label: 'Sağ Ön Kapı' },
-  { id: 'sag_arka_kapi', label: 'Sağ Arka Kapı' },
-  { id: 'sag_arka_camurluk', label: 'Sağ Arka Çamurluk' },
-];
-
-type PartStatus = 'orijinal' | 'lokal' | 'boyali' | 'degisen';
-const NEXT_STATUS: Record<PartStatus, PartStatus> = {
-  orijinal: 'lokal',
-  lokal: 'boyali',
-  boyali: 'degisen',
-  degisen: 'orijinal',
-};
-const STATUS_CODE: Record<PartStatus, string> = {
-  orijinal: '0',
-  lokal: '1',
-  boyali: '2',
-  degisen: '3',
-};
-const CODE_STATUS: Record<string, PartStatus> = {
-  '0': 'orijinal',
-  '1': 'lokal',
-  '2': 'boyali',
-  '3': 'degisen',
-};
-const STATUS_LABEL: Record<PartStatus, string> = {
-  orijinal: 'Orijinal',
-  lokal: 'Lokal',
-  boyali: 'Boyalı',
-  degisen: 'Değişen',
-};
-
 const DAMAGE_MANAGED_KEYS = new Set(['_damage']);
 
-function parseDamageState(raw: string | number | undefined): { statuses: PartStatus[]; tramer: number | null } {
-  const statuses: PartStatus[] = VEHICLE_PARTS.map(() => 'orijinal');
-  let tramer: number | null = null;
-  if (typeof raw !== 'string' || !raw.trim()) return { statuses, tramer };
-  try {
-    const parsed = JSON.parse(raw) as { p?: unknown; t?: unknown; parts?: Record<string, string>; tramer?: unknown };
-    if (typeof parsed.p === 'string') {
-      VEHICLE_PARTS.forEach((_, idx) => {
-        const s = CODE_STATUS[parsed.p?.toString().charAt(idx) ?? '0'];
-        if (s) statuses[idx] = s;
-      });
-    } else if (parsed.parts && typeof parsed.parts === 'object') {
-      VEHICLE_PARTS.forEach((part, idx) => {
-        const s = parsed.parts?.[part.id];
-        if (s === 'orijinal' || s === 'lokal' || s === 'boyali' || s === 'degisen') statuses[idx] = s;
-      });
-    }
-    const rawTramer = parsed.t !== undefined ? parsed.t : parsed.tramer;
-    if (typeof rawTramer === 'number' && Number.isFinite(rawTramer) && rawTramer >= 0) {
-      tramer = Math.round(rawTramer);
-    }
-  } catch {
-    // ignore malformed damage payload
-  }
-  return { statuses, tramer };
-}
-
-function serializeDamageState(statuses: PartStatus[], tramer: number | null): string | undefined {
-  const hasNonOriginal = statuses.some((s) => s !== 'orijinal');
-  const hasTramer = tramer !== null && Number.isFinite(tramer) && tramer >= 0;
-  if (!hasNonOriginal && !hasTramer) return undefined;
-  const p = statuses.map((s) => STATUS_CODE[s]).join('');
-  const payload: { p: string; t?: number } = { p };
-  if (hasTramer) payload.t = Math.round(tramer as number);
-  return JSON.stringify(payload);
-}
-
 function summarizeDamageForPreview(raw: string | number | undefined): string | null {
-  const { statuses, tramer } = parseDamageState(raw);
-  const counts = { lokal: 0, boyali: 0, degisen: 0 };
-  for (const s of statuses) {
-    if (s !== 'orijinal') counts[s] += 1;
-  }
+  if (typeof raw !== 'string' || !raw.trim()) return null;
+  const parsed = parseDamageValue(raw);
+  const counts = summarizeDamage(parsed);
   const parts: string[] = [];
   if (counts.degisen) parts.push(`${counts.degisen} Değişen`);
   if (counts.boyali) parts.push(`${counts.boyali} Boyalı`);
   if (counts.lokal) parts.push(`${counts.lokal} Lokal`);
-  if (!parts.length && tramer === null) return null;
+  if (!parts.length && parsed.tramer === null) return null;
   if (!parts.length) parts.push('Boyasız / Değişensiz');
-  if (tramer !== null) parts.push(`Tramer: ${tramer === 0 ? 'Yok' : formatPrice(tramer, 'TRY')}`);
+  if (parsed.tramer !== null) parts.push(`Tramer: ${parsed.tramer === 0 ? 'Yok' : formatPrice(parsed.tramer, 'TRY')}`);
   return parts.join(' · ');
-}
-
-function VehicleDamageEditor({
-  attrs,
-  onPatch,
-}: {
-  attrs: Record<string, string | number>;
-  onPatch: (patch: Record<string, string | number | undefined>) => void;
-}) {
-  const { c } = useTheme();
-  const { statuses, tramer } = parseDamageState(attrs['_damage']);
-
-  const cyclePart = (idx: number) => {
-    const next = [...statuses];
-    next[idx] = NEXT_STATUS[statuses[idx]];
-    onPatch({ _damage: serializeDamageState(next, tramer) });
-  };
-
-  return (
-    <Card style={styles.damageCard}>
-      <View style={styles.damageHead}>
-        <CarFront size={18} color={c.primary} />
-        <Text variant="label" style={styles.flex}>
-          Araç Hasar & Tramer Durumu
-        </Text>
-      </View>
-      <Text variant="caption" tone="muted">
-        Parçaya dokunarak durumunu değiştirin: Orijinal → Lokal → Boyalı → Değişen.
-      </Text>
-      <View style={styles.partsGrid}>
-        {VEHICLE_PARTS.map((part, idx) => {
-          const st = statuses[idx];
-          const bg =
-            st === 'degisen'
-              ? c.dangerSoft
-              : st === 'boyali'
-                ? c.warnSoft
-                : st === 'lokal'
-                  ? c.primarySoft
-                  : c.elevated;
-          const fg =
-            st === 'degisen'
-              ? c.danger
-              : st === 'boyali'
-                ? c.warn
-                : st === 'lokal'
-                  ? c.primary
-                  : c.muted;
-          const border = st === 'orijinal' ? c.border : fg;
-          return (
-            <Pressable
-              key={part.id}
-              accessibilityRole="button"
-              accessibilityLabel={`${part.label}: ${STATUS_LABEL[st]}`}
-              onPress={() => cyclePart(idx)}
-              style={[styles.partChip, { backgroundColor: bg, borderColor: border }]}
-            >
-              <Text variant="small" style={{ color: fg, fontWeight: st === 'orijinal' ? '500' : '700' }}>
-                {part.label}
-                {st !== 'orijinal' ? ` · ${STATUS_LABEL[st]}` : ''}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-      <Input
-        label="Tramer Kaydı (TL)"
-        placeholder="Örn. 15.000 veya 0"
-        keyboardType="number-pad"
-        value={tramer !== null ? maskThousands(String(tramer)) : ''}
-        onChangeText={(t) => {
-          const digits = t.replace(/\D/g, '').slice(0, 9);
-          const nextTramer = digits === '' ? null : Number(digits);
-          onPatch({ _damage: serializeDamageState(statuses, nextTramer) });
-        }}
-        suffix="₺"
-      />
-    </Card>
-  );
 }
 
 const styles = StyleSheet.create({
@@ -1132,8 +970,6 @@ const styles = StyleSheet.create({
   currencyLabel: { marginLeft: 2 },
   damageCard: { gap: space.md },
   damageHead: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  partsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs },
-  partChip: { paddingHorizontal: space.sm + 2, paddingVertical: space.xs + 2, borderRadius: radius.pill, borderWidth: 1 },
   form: { gap: space.lg },
   price: { fontSize: 20, fontWeight: '700' },
   description: { minHeight: 160 },

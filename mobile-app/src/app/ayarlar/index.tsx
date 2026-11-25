@@ -81,7 +81,7 @@ export default function SettingsScreen() {
     {
       title: 'Destek',
       items: [
-        { label: 'Yardım merkezi', icon: HelpCircle, to: { pathname: '/sayfa/[slug]', params: { slug: 'yardim' } } },
+        { label: 'Yardım merkezi', detail: 'Sık sorulanlar ve iletişim', icon: HelpCircle, to: { pathname: '/sayfa/[slug]', params: { slug: 'iletisim' } } },
         { label: 'Bize yazın', icon: Mail, value: SUPPORT_EMAIL, onPress: () => void Linking.openURL(`mailto:${SUPPORT_EMAIL}`) },
         { label: 'Yasal bilgiler', detail: 'Sözleşmeler ve politikalar', icon: FileText, to: '/ayarlar/yasal' },
         {

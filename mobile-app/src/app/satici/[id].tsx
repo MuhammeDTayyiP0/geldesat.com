@@ -1,11 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScrollView, Share, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useInfiniteQuery, useMutation, useQuery } from '@tanstack/react-query';
 import { BadgeCheck, CalendarDays, Eye, LayoutGrid, MapPin, MessageCircle, Pencil, Search, Share2, Store, UserCheck, UserPlus, Users, UserX, X } from 'lucide-react-native';
 import { ApiError, errorMessage } from '@/api/client';
-import { follows, listings } from '@/api/endpoints';
+import { catalog, follows, listings } from '@/api/endpoints';
 import { keys, queryClient } from '@/api/queries';
 import type { Review, SellerResponseStats } from '@/api/types';
 import { useSession } from '@/auth/session';
@@ -48,6 +48,7 @@ export default function SellerScreen() {
   const [loadingReviews, setLoadingReviews] = useState(false);
   const [reviewsExhausted, setReviewsExhausted] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   if (id !== prevId) {
@@ -57,8 +58,21 @@ export default function SellerScreen() {
     setExpandedReviews(false);
     setReviewsExhausted(false);
     setSearchQuery('');
+    setDebouncedQuery('');
     setSelectedCategory(null);
   }
+
+  const onChangeSearch = (text: string) => {
+    setSearchQuery(text);
+    if (!text.trim()) setDebouncedQuery('');
+  };
+
+  useEffect(() => {
+    const trimmed = searchQuery.trim();
+    if (!trimmed) return;
+    const timer = setTimeout(() => setDebouncedQuery(trimmed), 250);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   const followQuery = useQuery({
     queryKey: keys.followStatus(id),
@@ -119,29 +133,43 @@ export default function SellerScreen() {
     const map = new Map<string, { key: string; name: string; count: number }>();
     for (const item of allListings) {
       if (!item.category_name) continue;
-      const key = item.category_slug ?? item.category_id ?? item.category_name;
+      const key = item.category_slug ?? item.category_id;
+      if (!key) continue;
       const prev = map.get(key);
       if (prev) prev.count += 1;
       else map.set(key, { key, name: item.category_name, count: 1 });
     }
     return [...map.values()];
   }, [allListings]);
-  const filteredListings = useMemo(() => {
-    const q = searchQuery.trim().toLocaleLowerCase('tr');
-    return allListings.filter((item) => {
-      if (selectedCategory) {
-        const key = item.category_slug ?? item.category_id ?? item.category_name;
-        if (key !== selectedCategory) return false;
-      }
-      if (q) {
-        const hay = `${item.title} ${item.category_name ?? ''} ${item.city ?? ''} ${item.district ?? ''}`.toLocaleLowerCase('tr');
-        if (!hay.includes(q)) return false;
-      }
-      return true;
-    });
-  }, [allListings, searchQuery, selectedCategory]);
-  const hasMore = !!seller && (firstPage?.length ?? 0) === PAGE && (more.data ? more.hasNextPage : true);
+
+  const isFiltering = Boolean(debouncedQuery || selectedCategory);
+  const filtered = useInfiniteQuery({
+    queryKey: [...keys.seller(id), 'filter', debouncedQuery, selectedCategory],
+    initialPageParam: 1,
+    queryFn: ({ pageParam }) =>
+      catalog.search({
+        userId: id,
+        q: debouncedQuery || undefined,
+        category: selectedCategory || undefined,
+        page: pageParam,
+        limit: PAGE,
+      }),
+    getNextPageParam: (last) => (last.result.page < last.result.pages ? last.result.page + 1 : undefined),
+    enabled: isFiltering && Boolean(id),
+  });
+  const filteredListings = useMemo(
+    () => uniqueById(filtered.data?.pages.flatMap((p) => p.result.listings) ?? []),
+    [filtered.data],
+  );
+  const displayedListings = isFiltering ? filteredListings : allListings;
+  const hasMore = isFiltering
+    ? Boolean(filtered.hasNextPage)
+    : !!seller && (firstPage?.length ?? 0) === PAGE && (more.data ? more.hasNextPage : true);
   const loadMore = () => {
+    if (isFiltering) {
+      if (filtered.hasNextPage && !filtered.isFetchingNextPage) void filtered.fetchNextPage();
+      return;
+    }
     if (!hasMore || more.isFetching) return;
     void (more.data ? more.fetchNextPage() : more.refetch());
   };
@@ -170,7 +198,8 @@ export default function SellerScreen() {
       ) : (
         <ListingGrid
           bottomInset={insets.bottom}
-          listings={filteredListings}
+          listings={displayedListings}
+          loading={isFiltering && filtered.isLoading}
           refreshing={query.isRefetching}
           onRefresh={() => {
             setReviewsPage(1);
@@ -178,11 +207,12 @@ export default function SellerScreen() {
             setExpandedReviews(false);
             setReviewsExhausted(false);
             queryClient.removeQueries({ queryKey: [...keys.seller(id), 'more'] });
+            void queryClient.invalidateQueries({ queryKey: [...keys.seller(id), 'filter'] });
             void query.refetch();
           }}
           onEndReached={loadMore}
-          loadingMore={more.isFetching}
-          loadMoreError={more.isError}
+          loadingMore={isFiltering ? filtered.isFetchingNextPage : more.isFetching}
+          loadMoreError={isFiltering ? filtered.isFetchNextPageError : more.isError}
           onRetryMore={loadMore}
           header={
             <View style={styles.header}>
@@ -298,8 +328,8 @@ export default function SellerScreen() {
                     icon={Search}
                     placeholder="İlanlarında ara…"
                     value={searchQuery}
-                    onChangeText={setSearchQuery}
-                    right={searchQuery ? <IconButton icon={X} label="Temizle" size={32} onPress={() => setSearchQuery('')} /> : undefined}
+                    onChangeText={onChangeSearch}
+                    right={searchQuery ? <IconButton icon={X} label="Temizle" size={32} onPress={() => onChangeSearch('')} /> : undefined}
                   />
                   {categories.length > 1 ? (
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
@@ -320,7 +350,9 @@ export default function SellerScreen() {
             </View>
           }
           empty={
-            allListings.length > 0 && (searchQuery.trim() || selectedCategory) ? (
+            isFiltering && filtered.isError && !filtered.data ? (
+              <ErrorState compact error={filtered.error} onRetry={() => void filtered.refetch()} />
+            ) : allListings.length > 0 && isFiltering ? (
               <EmptyState
                 compact
                 icon={Search}
@@ -332,6 +364,7 @@ export default function SellerScreen() {
                     variant="outline"
                     onPress={() => {
                       setSearchQuery('');
+                      setDebouncedQuery('');
                       setSelectedCategory(null);
                     }}
                   />
