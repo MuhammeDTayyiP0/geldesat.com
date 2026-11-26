@@ -38,12 +38,33 @@ export function PhotoStep({ photos, onAdd, onRemove, onRetry, onMove, onCover, o
       <Text tone="muted">
         {required ? 'Bu kategoride en az 1 fotoğraf zorunlu. ' : ''}En fazla {MAX_PHOTOS} fotoğraf ekleyebilirsiniz. İlk fotoğraf kapak olur.
       </Text>
-      <View style={styles.actions}>
-        <Button title="Galeriden seç" icon={ImagePlus} variant="soft" disabled={left < 1} onPress={() => onAdd('library')} style={styles.flex} />
-        <Button title="Fotoğraf çek" icon={Camera} variant="outline" disabled={left < 1} onPress={() => onAdd('camera')} style={styles.flex} />
-      </View>
+      {photos.length === 0 ? (
+        <View style={[styles.emptyBox, { borderColor: c.borderStrong, backgroundColor: c.elevated }]}>
+          <View style={[styles.emptyIconWrap, { backgroundColor: c.primarySoft }]}>
+            <ImagePlus size={30} color={c.primary} />
+          </View>
+          <Text variant="subheading" center>
+            Fotoğraflarınızı ekleyin
+          </Text>
+          <Text variant="caption" tone="muted" center style={styles.emptySub}>
+            Kameranızla çekin veya galeriden birden fazla fotoğraf seçin.
+          </Text>
+          <View style={styles.emptyActions}>
+            <Button title="Galeriden seç" icon={ImagePlus} onPress={() => onAdd('library')} style={styles.flex} />
+            <Button title="Fotoğraf çek" icon={Camera} variant="outline" onPress={() => onAdd('camera')} style={styles.flex} />
+          </View>
+          <Text variant="small" tone="subtle" center>
+            JPEG, PNG, WebP veya HEIC · en fazla {MAX_PHOTOS} fotoğraf
+          </Text>
+        </View>
+      ) : (
+        <>
+          <View style={styles.actions}>
+            <Button title="Galeriden seç" icon={ImagePlus} variant="soft" disabled={left < 1} onPress={() => onAdd('library')} style={styles.flex} />
+            <Button title="Fotoğraf çek" icon={Camera} variant="outline" disabled={left < 1} onPress={() => onAdd('camera')} style={styles.flex} />
+          </View>
 
-      <View style={styles.grid}>
+          <View style={styles.grid}>
         {photos.map((p, i) => {
           // The uploaded copy once there is one: the local file may be gone after a restart.
           const uri = (p.status === 'done' ? mediaUrl(p.url, 480) : undefined) ?? p.localUri ?? mediaUrl(p.url, 480);
@@ -109,7 +130,9 @@ export function PhotoStep({ photos, onAdd, onRemove, onRetry, onMove, onCover, o
             </Text>
           </Pressable>
         ) : null}
-      </View>
+          </View>
+        </>
+      )}
 
       {failed.length ? (
         <View style={[styles.errors, { backgroundColor: c.dangerSoft }]}>
@@ -143,6 +166,25 @@ function Tool({ children, label, onPress }: { children: React.ReactNode; label: 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   wrap: { gap: space.lg },
+  emptyBox: {
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderRadius: radius.lg,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.xxl,
+    alignItems: 'center',
+    gap: space.sm,
+  },
+  emptyIconWrap: {
+    width: 60,
+    height: 60,
+    borderRadius: radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: space.xs,
+  },
+  emptySub: { maxWidth: 280 },
+  emptyActions: { flexDirection: 'row', gap: space.sm, width: '100%', marginTop: space.sm },
   actions: { flexDirection: 'row', gap: space.sm },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   tile: { borderRadius: radius.md, overflow: 'hidden' },

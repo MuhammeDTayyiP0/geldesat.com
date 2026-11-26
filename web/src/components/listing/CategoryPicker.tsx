@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { ChevronRight, Search } from "lucide-react";
+import { categoryVisual } from "@/components/admin/categories/icons";
 import { Input } from "@/components/ui/input";
 import { formatNumber } from "@/lib/utils";
 import type { CategoryRow } from "@/lib/server/helpers";
@@ -62,9 +63,10 @@ type DirectoryProps = {
   counts?: Record<string, number>;
   onPick?: (c: CategoryRow) => void;
   placeholder?: string;
+  showIcons?: boolean;
 };
 
-function CategoryDirectory({ items, counts, onPick, placeholder }: DirectoryProps) {
+function CategoryDirectory({ items, counts, onPick, placeholder, showIcons }: DirectoryProps) {
   const [q, setQ] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
   const headingRefs = useRef<Record<string, HTMLElement | null>>({});
@@ -114,18 +116,35 @@ function CategoryDirectory({ items, counts, onPick, placeholder }: DirectoryProp
     );
   }
 
+  function rowLabel(c: CategoryRow) {
+    if (!showIcons) return <span className="truncate font-medium">{c.name}</span>;
+    const { icon: Icon, tint } = categoryVisual(c.icon);
+    return (
+      <span className="flex min-w-0 items-center gap-3">
+        <span
+          className="grid size-9 shrink-0 place-items-center rounded-xl"
+          style={{ backgroundColor: `${tint}1a`, color: tint }}
+          aria-hidden="true"
+        >
+          <Icon className="size-5" />
+        </span>
+        <span className="truncate font-medium">{c.name}</span>
+      </span>
+    );
+  }
+
   function row(c: CategoryRow) {
     if (onPick) {
       return (
         <button key={c.id} type="button" className={ROW} onClick={() => onPick(c)}>
-          <span className="truncate font-medium">{c.name}</span>
+          {rowLabel(c)}
           {meta(c)}
         </button>
       );
     }
     return (
       <Link key={c.id} to="/category/$slug" params={{ slug: c.slug }} className={ROW}>
-        <span className="truncate font-medium">{c.name}</span>
+        {rowLabel(c)}
         {meta(c)}
       </Link>
     );
@@ -241,16 +260,19 @@ export function CategoryButtons({
   items,
   counts,
   onPick,
+  showIcons,
 }: {
   items: CategoryRow[];
   counts?: Record<string, number>;
   onPick: (c: CategoryRow) => void;
+  showIcons?: boolean;
 }) {
   return (
     <CategoryDirectory
       items={items}
       counts={counts}
       onPick={onPick}
+      showIcons={showIcons}
       placeholder="Ara (ör. BMW, Civic, Satılık Daire)"
     />
   );

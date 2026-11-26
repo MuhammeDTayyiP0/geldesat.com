@@ -145,6 +145,8 @@ function computeQualityScore(input: {
   return { score, hint };
 }
 
+type StepKey = "category" | "photos" | "details" | "attributes" | "location" | "preview";
+
 type ListingDraft = {
   path: string[];
   title: string;
@@ -157,7 +159,7 @@ type ListingDraft = {
   phone: string;
   images: string[];
   values: Record<string, string | number>;
-  step: number;
+  step: StepKey | number;
   savedAt: number;
 };
 
@@ -179,27 +181,41 @@ export const Route = createFileRoute("/ilan-ver")({
   component: PostPage,
 });
 
-const STEPS = [
-  { label: "Kategori", hint: "Ne satıyorsunuz?" },
-  { label: "Fotoğraflar", hint: "En fazla 10 fotoğraf" },
-  { label: "Detaylar", hint: "Başlık, fiyat ve konum" },
-  { label: "Önizleme", hint: "Kontrol edip yayınlayın" },
-] as const;
+const STEP_META: Record<StepKey, { label: string; hint: string }> = {
+  category: { label: "Kategori", hint: "Ne satıyorsunuz?" },
+  photos: { label: "Fotoğraflar", hint: "En fazla 10 fotoğraf" },
+  details: { label: "İlan bilgileri", hint: "Başlık, fiyat ve açıklama" },
+  attributes: { label: "Özellikler", hint: "Kategoriye özel detaylar" },
+  location: { label: "Konum & İletişim", hint: "Adres ve telefon" },
+  preview: { label: "Önizleme", hint: "Kontrol edip yayınlayın" },
+};
 
-const TIPS: Record<number, string[]> = {
-  0: ["En alt kategoriye kadar inin; alıcılar ilanınızı filtrelerle bu şekilde bulur.", "Arama kutusuna marka veya model yazarak hızlıca bulabilirsiniz."],
-  1: [
+const TIPS: Record<StepKey, string[]> = {
+  category: ["En alt kategoriye kadar inin; alıcılar ilanınızı filtrelerle bu şekilde bulur.", "Arama kutusuna marka veya model yazarak hızlıca bulabilirsiniz."],
+  photos: [
     "Gün ışığında, ürünün tamamını gösteren fotoğraflar çekin.",
     "Kapak fotoğrafı ilk izlenimdir; en net fotoğrafı kapak yapın.",
     "Fotoğraflar oranları korunarak küçültülür ve filigran eklenir.",
   ],
-  2: [
+  details: [
     "Başlıkta marka, model ve en önemli özelliği belirtin.",
     "Açıklamada kusurları da dürüstçe yazın; güven satışı hızlandırır.",
     "Piyasa fiyatına yakın ilanlar daha çok mesaj alır.",
   ],
-  3: ["Yayınlamadan önce fiyat ve konumu son kez kontrol edin.", "İlanınızı daha sonra “İlanlarım” sayfasından düzenleyebilirsiniz."],
+  attributes: ["Özellikleri eksiksiz doldurmak ilanınızın filtrelerde öne çıkmasını sağlar."],
+  location: ["Mahalle bilgisi ekleyerek alıcıların konumu daha net görmesini sağlayın."],
+  preview: ["Yayınlamadan önce fiyat ve konumu son kez kontrol edin.", "İlanınızı daha sonra “İlanlarım” sayfasından düzenleyebilirsiniz."],
 };
+
+function normalizeDraftStep(raw: StepKey | number | undefined, validSteps: StepKey[]): StepKey {
+  if (typeof raw === "number") {
+    const legacy: StepKey[] = ["category", "photos", "details", "preview"];
+    const mapped = legacy[raw] ?? "category";
+    return validSteps.includes(mapped) ? mapped : "category";
+  }
+  if (raw && validSteps.includes(raw)) return raw;
+  return "category";
+}
 
 function PostPage() {
   const { id, copyFrom } = Route.useSearch();
@@ -214,7 +230,7 @@ function PostForm() {
   const { id: editId, copyFrom } = Route.useSearch();
   const copyId = !editId && benzerIlanAcik ? copyFrom : undefined;
   const nav = useNavigate();
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState<StepKey>("category");
   const [path, setPath] = useState<string[]>([]);
   const [attrs, setAttrs] = useState<AttrDef[]>([]);
   const [values, setValues] = useState<Record<string, string | number>>({});
@@ -368,7 +384,7 @@ function PostForm() {
           setOfferedDraft(null);
           setCopiedBanner(true);
         }
-        setStep(editId ? 2 : 1);
+        setStep(editId ? "details" : "photos");
         setLoaded(true);
       })
       .catch((e) => {
@@ -430,19 +446,79 @@ function PostForm() {
     enableBeforeUnload: editChanged,
   });
 
+  const location = [neighborhood, district, city].filter(Boolean).join(", ");
+  const isVehicleCategory =
+    path.includes("vasita") ||
+    path.includes("otomobil") ||
+    pathRows.some((c) => c.slug === "vasita" || c.slug === "otomobil" || c.name === "Vasıta" || c.name === "Otomobil");
+  const showAttributes =
+    attrs.length > 0 || (hasarSemasiAcik && isVehicleCategory && leaf) || (Boolean(selected) && leaf && (attrsLoading || attrsError));
+  const steps: StepKey[] = ["category", "photos", "details", ...(showAttributes ? (["attributes"] as const) : []), "location", "preview"];
+
   if (isPending || (user && !loaded)) return <BrandSpinner fullPage text="İlan formu hazırlanıyor…" />;
   if (!user) return <RedirectToSignIn />;
 
-  function goTo(next: number) {
+  function goTo(next: StepKey) {
     if (uploading || busy) return;
     setStep(next);
+  }
+
+  function detailsStepProblem(): string | null {
+    if (title.trim().length < 5) return "İlan başlığı en az 5 karakter olmalı.";
+    if (priceNumber < 1) return "Geçerli bir fiyat girin.";
+    if (priceNumber > 1_000_000_000) return "Fiyat en fazla 1 milyar olabilir.";
+    if (description.trim().length < 10) return "Açıklama en az 10 karakter olmalı.";
+    return null;
+  }
+
+  function attributesStepProblem(): string | null {
+    if (attrsLoading) return "Kategori özellikleri yükleniyor, lütfen bekleyin.";
+    if (attrsError) return "Kategori özellikleri yüklenemedi. Sayfadaki “Tekrar dene”ye basın.";
+    const missing = attrs.find((a) => a.required && (values[a.name] === undefined || values[a.name] === ""));
+    if (missing) return `Zorunlu alan: ${missing.name}`;
+    const maxYear = new Date().getFullYear() + 1;
+    for (const yearKey of ["Yıl", "Model Yılı"] as const) {
+      const y = values[yearKey];
+      if (y !== undefined && y !== "" && (Number(y) < 1950 || Number(y) > maxYear)) {
+        return `${yearKey} 1950 ile ${maxYear} arasında olmalı.`;
+      }
+    }
+    return null;
+  }
+
+  function locationStepProblem(): string | null {
+    if (!city || !district) return "İl ve ilçe seçin.";
+    const digits = cleanPhone(phone);
+    if (!digits && !profilePhone) return "İlan için bir telefon numarası girin.";
+    if (digits && !/^0?5\d{9}$/.test(digits)) return "Geçerli bir cep telefonu girin (5xx xxx xx xx).";
+    return null;
   }
 
   async function publish() {
     if (!selected || uploading) return;
     if (needsPhoto && images.length < 1) {
       toast.error("Emlak ve vasıta ilanlarında en az 1 fotoğraf zorunludur.");
-      setStep(1);
+      setStep("photos");
+      return;
+    }
+    const detailsErr = detailsStepProblem();
+    if (detailsErr) {
+      toast.error(detailsErr);
+      setStep("details");
+      return;
+    }
+    if (showAttributes) {
+      const attrsErr = attributesStepProblem();
+      if (attrsErr) {
+        toast.error(attrsErr);
+        setStep("attributes");
+        return;
+      }
+    }
+    const locErr = locationStepProblem();
+    if (locErr) {
+      toast.error(locErr);
+      setStep("location");
       return;
     }
     setBusy(true);
@@ -501,7 +577,7 @@ function PostForm() {
     setPhone(d.phone);
     setImages(photosGone ? [] : d.images);
     setValues(d.values);
-    setStep(d.step);
+    setStep(normalizeDraftStep(d.step, steps));
     setOfferedDraft(null);
     if (photosGone && d.images.length) toast.warning("Taslaktaki fotoğrafların süresi doldu; lütfen yeniden ekleyin.");
   }
@@ -515,35 +591,6 @@ function PostForm() {
     }
   }
 
-  /** Everything the server would refuse, found while the person is still on this step. */
-  function detailsProblem(): string | null {
-    if (title.trim().length < 5) return "İlan başlığı en az 5 karakter olmalı.";
-    if (description.trim().length < 10) return "Açıklama en az 10 karakter olmalı.";
-    if (priceNumber < 1) return "Geçerli bir fiyat girin.";
-    if (priceNumber > 1_000_000_000) return "Fiyat en fazla 1 milyar olabilir.";
-    if (!city || !district) return "İl ve ilçe seçin.";
-    const digits = cleanPhone(phone);
-    if (!digits && !profilePhone) return "İlan için bir telefon numarası girin.";
-    if (digits && !/^0?5\d{9}$/.test(digits)) return "Geçerli bir cep telefonu girin (5xx xxx xx xx).";
-    if (attrsLoading) return "Kategori özellikleri yükleniyor, lütfen bekleyin.";
-    if (attrsError) return "Kategori özellikleri yüklenemedi. Sayfadaki “Tekrar dene”ye basın.";
-    const missing = attrs.find((a) => a.required && (values[a.name] === undefined || values[a.name] === ""));
-    if (missing) return `Zorunlu alan: ${missing.name}`;
-    const maxYear = new Date().getFullYear() + 1;
-    for (const yearKey of ["Yıl", "Model Yılı"] as const) {
-      const y = values[yearKey];
-      if (y !== undefined && y !== "" && (Number(y) < 1950 || Number(y) > maxYear)) {
-        return `${yearKey} 1950 ile ${maxYear} arasında olmalı.`;
-      }
-    }
-    return null;
-  }
-
-  const location = [neighborhood, district, city].filter(Boolean).join(", ");
-  const isVehicleCategory =
-    path.includes("vasita") ||
-    path.includes("otomobil") ||
-    pathRows.some((c) => c.slug === "vasita" || c.slug === "otomobil" || c.name === "Vasıta" || c.name === "Otomobil");
   const quality = computeQualityScore({
     title,
     description,
@@ -614,7 +661,7 @@ function PostForm() {
         <div>
           <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">{editId ? "İlanı düzenle" : "Ücretsiz ilan ver"}</h1>
           <p className="mt-1 text-sm text-muted">
-            {editId ? "Değişikliklerinizi yapın ve kaydedin." : "4 adımda ilanınızı oluşturun, binlerce alıcıya ulaşın."}
+            {editId ? "Değişikliklerinizi yapın ve kaydedin." : `${steps.length} adımda ilanınızı oluşturun, binlerce alıcıya ulaşın.`}
           </p>
         </div>
       </header>
@@ -637,7 +684,7 @@ function PostForm() {
         </div>
       ) : null}
 
-      <Stepper step={step} onPick={(i) => i < step && goTo(i)} locked={uploading || busy} />
+      <Stepper steps={steps} step={step} onPick={goTo} locked={uploading || busy} />
 
       {benzerIlanAcik ? (
         <div className="mt-4 rounded-xl border border-border bg-surface p-3 lg:hidden">
@@ -662,7 +709,7 @@ function PostForm() {
 
       <div className="mt-5 lg:mt-8 lg:grid lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start lg:gap-8">
         <div className="min-w-0 rounded-2xl border border-border bg-surface p-4 shadow-card sm:p-6">
-          {step === 0 ? (
+          {step === "category" ? (
             <section aria-labelledby="step-category">
               <SectionHeading id="step-category" title="Kategori seçin" hint="Önce ana kategori, sonra marka / model veya alt tür." />
               {pathRows.length > 0 ? (
@@ -710,9 +757,10 @@ function PostForm() {
                 <CategoryButtons
                   items={currentCats}
                   counts={level.counts}
+                  showIcons={path.length === 0}
                   onPick={(c) => {
                     setPath([...path, c.id]);
-                    if (!c.has_children) setStep(1);
+                    if (!c.has_children) setStep("photos");
                   }}
                 />
               )}
@@ -724,14 +772,14 @@ function PostForm() {
                 ) : (
                   <span />
                 )}
-                <Button type="button" className="flex-1 md:flex-none" disabled={!leaf} onClick={() => setStep(1)}>
+                <Button type="button" className="flex-1 md:flex-none" disabled={!leaf} onClick={() => setStep("photos")}>
                   Devam <ArrowRight className="size-4" />
                 </Button>
               </StepActions>
             </section>
           ) : null}
 
-          {step === 1 ? (
+          {step === "photos" ? (
             <section aria-label="Fotoğraflar">
               <PhotoUploader
                 images={images}
@@ -742,7 +790,7 @@ function PostForm() {
                 editing={Boolean(editId)}
               />
               <StepActions note={uploading ? "Yüklemeler bitince devam edebilirsiniz…" : undefined}>
-                <Button type="button" variant="ghost" disabled={uploading} onClick={() => goTo(0)}>
+                <Button type="button" variant="ghost" disabled={uploading} onClick={() => goTo("category")}>
                   <ArrowLeft className="size-4" /> Geri
                 </Button>
                 <Button
@@ -754,168 +802,128 @@ function PostForm() {
                       toast.error("Emlak ve vasıta ilanlarında en az 1 fotoğraf zorunludur.");
                       return;
                     }
-                    setStep(2);
+                    setStep("details");
                   }}
                 >
-                  {images.length ? "Detaylara geç" : "Fotoğrafsız devam et"} <ArrowRight className="size-4" />
+                  {images.length ? "İlan bilgilerine geç" : "Fotoğrafsız devam et"} <ArrowRight className="size-4" />
                 </Button>
               </StepActions>
             </section>
           ) : null}
 
-          {step === 2 ? (
+          {step === "details" ? (
             <form
               aria-labelledby="step-details"
               onSubmit={(e) => {
                 e.preventDefault();
-                const problem = detailsProblem();
+                const problem = detailsStepProblem();
                 if (problem) {
                   toast.error(problem);
                   return;
                 }
-                setStep(3);
+                setStep(showAttributes ? "attributes" : "location");
               }}
             >
-              <SectionHeading id="step-details" title="İlan detayları" hint="Alıcıların ilk göreceği bilgiler." />
+              <SectionHeading id="step-details" title="İlan bilgileri" hint="Alıcıların ilk göreceği bilgiler." />
 
-              <CategorySummary rows={pathRows} onChange={() => goTo(0)} />
+              <CategorySummary rows={pathRows} onChange={() => goTo("category")} />
 
               {editId ? (
                 <p className="mb-4 rounded-lg border border-warn/30 bg-warn/8 px-3 py-2 text-sm text-warn">
                   Başlık, açıklama, kategori, özellik değişirse veya yeni fotoğraf eklerseniz ilan yeniden onaya gider ve o sırada yayında görünmez.
                 </p>
               ) : null}
+
+              <div className="space-y-4">
+                <div>
+                  <FieldLabel htmlFor="listing-title" count={`${title.length}/100`}>
+                    İlan başlığı
+                  </FieldLabel>
+                  <Input
+                    id="listing-title"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value.slice(0, 100))}
+                    placeholder="Örn. Sahibinden temiz 2018 Renault Clio 1.5 dCi"
+                    minLength={5}
+                    maxLength={100}
+                    required
+                  />
+                </div>
+                <div>
+                  <FieldLabel htmlFor="listing-price">Fiyat</FieldLabel>
+                  <div className="flex gap-2">
+                    <Input
+                      id="listing-price"
+                      inputMode="numeric"
+                      autoComplete="off"
+                      value={price ? formatNumber(price) : ""}
+                      onChange={(e) => setPrice(e.target.value.replace(/\D/g, "").replace(/^0+/, "").slice(0, 10))}
+                      placeholder="0"
+                      className="flex-1 text-lg font-semibold tabular-nums md:text-base"
+                      required
+                    />
+                    <Select
+                      id="listing-currency"
+                      aria-label="Para birimi"
+                      value={currency}
+                      onChange={(e) => setCurrency(normalizeCurrency(e.target.value))}
+                      className="w-28 shrink-0 font-semibold"
+                    >
+                      <option value="TRY">TRY (₺)</option>
+                      <option value="USD">USD ($)</option>
+                      <option value="EUR">EUR (€)</option>
+                    </Select>
+                  </div>
+                </div>
+                <div>
+                  <FieldLabel htmlFor="listing-desc" count={`${description.length}/5000`}>
+                    Açıklama
+                  </FieldLabel>
+                  <Textarea
+                    id="listing-desc"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value.slice(0, 5000))}
+                    placeholder="Ürünün durumu, kullanım süresi, varsa kusurları, teslimat bilgisi…"
+                    rows={6}
+                    minLength={10}
+                    maxLength={5000}
+                    required
+                  />
+                </div>
+              </div>
+
+              <StepActions>
+                <Button type="button" variant="ghost" onClick={() => goTo("photos")}>
+                  <ArrowLeft className="size-4" /> Geri
+                </Button>
+                <Button type="submit" className="flex-1 md:flex-none">
+                  {showAttributes ? "Özelliklere geç" : "Konuma geç"} <ArrowRight className="size-4" />
+                </Button>
+              </StepActions>
+            </form>
+          ) : null}
+
+          {step === "attributes" ? (
+            <form
+              aria-labelledby="step-attributes"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const problem = attributesStepProblem();
+                if (problem) {
+                  toast.error(problem);
+                  return;
+                }
+                setStep("location");
+              }}
+            >
+              <SectionHeading id="step-attributes" title="Özellikler" hint="Alıcılar ilanınızı bu bilgilerle filtreleyerek bulur." />
+
               {attrsError ? <ErrorState message="Kategori özellikleri yüklenemedi." onRetry={() => setAttrAttempt((n) => n + 1)} /> : null}
+              {attrsLoading ? <p className="py-6 text-center text-sm text-muted">Kategori özellikleri yükleniyor…</p> : null}
 
               <div className="space-y-5">
-                <FieldGroup title="Temel bilgiler">
-                  <div>
-                    <FieldLabel htmlFor="listing-title" count={`${title.length}/100`}>
-                      İlan başlığı
-                    </FieldLabel>
-                    <Input
-                      id="listing-title"
-                      value={title}
-                      onChange={(e) => setTitle(e.target.value.slice(0, 100))}
-                      placeholder="Örn. Sahibinden temiz 2018 Renault Clio 1.5 dCi"
-                      minLength={5}
-                      maxLength={100}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <FieldLabel htmlFor="listing-price">Fiyat</FieldLabel>
-                    <div className="flex gap-2">
-                      <Input
-                        id="listing-price"
-                        inputMode="numeric"
-                        autoComplete="off"
-                        value={price ? formatNumber(price) : ""}
-                        onChange={(e) => setPrice(e.target.value.replace(/\D/g, "").replace(/^0+/, "").slice(0, 10))}
-                        placeholder="0"
-                        className="flex-1 text-lg font-semibold tabular-nums md:text-base"
-                        required
-                      />
-                      <Select
-                        id="listing-currency"
-                        aria-label="Para birimi"
-                        value={currency}
-                        onChange={(e) => setCurrency(normalizeCurrency(e.target.value))}
-                        className="w-28 shrink-0 font-semibold"
-                      >
-                        <option value="TRY">TRY (₺)</option>
-                        <option value="USD">USD ($)</option>
-                        <option value="EUR">EUR (€)</option>
-                      </Select>
-                    </div>
-                  </div>
-                  <div>
-                    <FieldLabel htmlFor="listing-desc" count={`${description.length}/5000`}>
-                      Açıklama
-                    </FieldLabel>
-                    <Textarea
-                      id="listing-desc"
-                      value={description}
-                      onChange={(e) => setDescription(e.target.value.slice(0, 5000))}
-                      placeholder="Ürünün durumu, kullanım süresi, varsa kusurları, teslimat bilgisi…"
-                      rows={6}
-                      minLength={10}
-                      maxLength={5000}
-                      required
-                    />
-                  </div>
-                </FieldGroup>
-
-                <FieldGroup title="Konum">
-                  <div className="grid gap-4 sm:grid-cols-3">
-                    <div>
-                      <Label htmlFor="listing-city">İl</Label>
-                      <Select
-                        id="listing-city"
-                        value={city}
-                        onChange={(e) => {
-                          setCity(e.target.value);
-                          setDistrict("");
-                          setNeighborhood("");
-                        }}
-                        required
-                      >
-                        <option value="">Seçin</option>
-                        {TURKEY_CITIES.map((c) => (
-                          <option key={c.name}>{c.name}</option>
-                        ))}
-                      </Select>
-                    </div>
-                    <div>
-                      <Label htmlFor="listing-district">İlçe</Label>
-                      <Select
-                        id="listing-district"
-                        value={district}
-                        disabled={!city}
-                        onChange={(e) => {
-                          setDistrict(e.target.value);
-                          setNeighborhood("");
-                        }}
-                        required
-                      >
-                        <option value="">{city ? "Seçin" : "Önce il seçin"}</option>
-                        {(cityData?.districts ?? []).map((d) => (
-                          <option key={d}>{d}</option>
-                        ))}
-                      </Select>
-                    </div>
-                    <div>
-                      <Label htmlFor="listing-hood">Mahalle</Label>
-                      <Select
-                        id="listing-hood"
-                        value={neighborhood}
-                        disabled={!hoods.length}
-                        onChange={(e) => setNeighborhood(e.target.value)}
-                      >
-                        <option value="">{hoods.length ? "İsteğe bağlı" : "—"}</option>
-                        {hoods.map((h) => (
-                          <option key={h}>{h}</option>
-                        ))}
-                      </Select>
-                    </div>
-                  </div>
-                </FieldGroup>
-
-                <FieldGroup title="İletişim">
-                  <div className="sm:max-w-sm">
-                    <Label htmlFor="listing-phone">Telefon</Label>
-                    <PhoneInput id="listing-phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
-                    <p className="mt-1.5 text-xs text-muted">Alıcılar “Telefonu göster” ile bu numarayı görür.</p>
-                  </div>
-                  {storeId && storeName ? (
-                    <p className="rounded-xl border border-primary/25 bg-primary/8 px-3.5 py-2.5 text-xs font-medium text-primary">
-                      İlan “{storeName}” mağazanız adına yayınlanacak.
-                    </p>
-                  ) : null}
-                </FieldGroup>
-
                 {attrs.length ? (
-                  <FieldGroup title="Özellikler">
+                  <FieldGroup title="Kategori özellikleri">
                     {attrs.some((a) => a.type !== "MULTI" && a.type !== "BOOLEAN") ? (
                       <div className="grid gap-4 sm:grid-cols-2">
                         {attrs
@@ -1012,7 +1020,103 @@ function PostForm() {
               </div>
 
               <StepActions>
-                <Button type="button" variant="ghost" onClick={() => goTo(1)}>
+                <Button type="button" variant="ghost" onClick={() => goTo("details")}>
+                  <ArrowLeft className="size-4" /> Geri
+                </Button>
+                <Button type="submit" className="flex-1 md:flex-none">
+                  Konuma geç <ArrowRight className="size-4" />
+                </Button>
+              </StepActions>
+            </form>
+          ) : null}
+
+          {step === "location" ? (
+            <form
+              aria-labelledby="step-location"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const problem = locationStepProblem();
+                if (problem) {
+                  toast.error(problem);
+                  return;
+                }
+                setStep("preview");
+              }}
+            >
+              <SectionHeading id="step-location" title="Konum ve iletişim" hint="Alıcıların size ulaşacağı bilgiler." />
+
+              <div className="space-y-5">
+                <FieldGroup title="Konum">
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <div>
+                      <Label htmlFor="listing-city">İl</Label>
+                      <Select
+                        id="listing-city"
+                        value={city}
+                        onChange={(e) => {
+                          setCity(e.target.value);
+                          setDistrict("");
+                          setNeighborhood("");
+                        }}
+                        required
+                      >
+                        <option value="">Seçin</option>
+                        {TURKEY_CITIES.map((c) => (
+                          <option key={c.name}>{c.name}</option>
+                        ))}
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="listing-district">İlçe</Label>
+                      <Select
+                        id="listing-district"
+                        value={district}
+                        disabled={!city}
+                        onChange={(e) => {
+                          setDistrict(e.target.value);
+                          setNeighborhood("");
+                        }}
+                        required
+                      >
+                        <option value="">{city ? "Seçin" : "Önce il seçin"}</option>
+                        {(cityData?.districts ?? []).map((d) => (
+                          <option key={d}>{d}</option>
+                        ))}
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="listing-hood">Mahalle</Label>
+                      <Select
+                        id="listing-hood"
+                        value={neighborhood}
+                        disabled={!hoods.length}
+                        onChange={(e) => setNeighborhood(e.target.value)}
+                      >
+                        <option value="">{hoods.length ? "İsteğe bağlı" : "—"}</option>
+                        {hoods.map((h) => (
+                          <option key={h}>{h}</option>
+                        ))}
+                      </Select>
+                    </div>
+                  </div>
+                </FieldGroup>
+
+                <FieldGroup title="İletişim">
+                  <div className="sm:max-w-sm">
+                    <Label htmlFor="listing-phone">Telefon</Label>
+                    <PhoneInput id="listing-phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
+                    <p className="mt-1.5 text-xs text-muted">Alıcılar “Telefonu göster” ile bu numarayı görür.</p>
+                  </div>
+                  {storeId && storeName ? (
+                    <p className="rounded-xl border border-primary/25 bg-primary/8 px-3.5 py-2.5 text-xs font-medium text-primary">
+                      İlan “{storeName}” mağazanız adına yayınlanacak.
+                    </p>
+                  ) : null}
+                </FieldGroup>
+              </div>
+
+              <StepActions>
+                <Button type="button" variant="ghost" onClick={() => goTo(showAttributes ? "attributes" : "details")}>
                   <ArrowLeft className="size-4" /> Geri
                 </Button>
                 <Button type="submit" className="flex-1 md:flex-none">
@@ -1022,13 +1126,13 @@ function PostForm() {
             </form>
           ) : null}
 
-          {step === 3 ? (
+          {step === "preview" ? (
             <section aria-labelledby="step-preview" className="space-y-6">
               <SectionHeading id="step-preview" title="Önizleme" hint="İlanınız alıcılara böyle görünecek." />
 
               <div className="relative">
                 <ListingImageGallery images={images} title={title} categoryName={pathRows[pathRows.length - 1]?.name} />
-                <EditLink onClick={() => goTo(1)} className="absolute bottom-3 right-3 z-10 hidden sm:inline-flex" floating>
+                <EditLink onClick={() => goTo("photos")} className="absolute bottom-3 right-3 z-10 hidden sm:inline-flex" floating>
                   Fotoğrafları düzenle
                 </EditLink>
               </div>
@@ -1042,12 +1146,22 @@ function PostForm() {
                   </p>
                   <p className="mt-1 text-xs text-subtle">{pathRows.map((c) => c.name).join(" › ")}</p>
                 </div>
-                <EditLink onClick={() => goTo(2)}>Bilgileri düzenle</EditLink>
+                <div className="flex flex-wrap gap-2">
+                  <EditLink onClick={() => goTo("details")}>Bilgileri düzenle</EditLink>
+                  <EditLink onClick={() => goTo("location")}>Konumu düzenle</EditLink>
+                </div>
               </div>
 
               {Object.entries(values).some(([k, v]) => !k.startsWith("_") && v !== "" && v != null) ? (
                 <div>
-                  <h3 className="mb-2 text-sm font-semibold">Özellikler</h3>
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <h3 className="text-sm font-semibold">Özellikler</h3>
+                    {showAttributes ? (
+                      <button type="button" onClick={() => goTo("attributes")} className="text-xs font-medium text-primary hover:underline">
+                        Düzenle
+                      </button>
+                    ) : null}
+                  </div>
                   <dl className="grid grid-cols-1 overflow-hidden rounded-xl border border-border sm:grid-cols-2">
                     {Object.entries(values)
                       .filter(([k, v]) => !k.startsWith("_") && v !== "" && v != null)
@@ -1067,7 +1181,14 @@ function PostForm() {
 
               {hasarSemasiAcik && isVehicleCategory && hasDamageData(values["_damage"]) ? (
                 <div>
-                  <h3 className="mb-2 text-sm font-semibold">Boya, Değişen ve Tramer</h3>
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <h3 className="text-sm font-semibold">Boya, Değişen ve Tramer</h3>
+                    {showAttributes ? (
+                      <button type="button" onClick={() => goTo("attributes")} className="text-xs font-medium text-primary hover:underline">
+                        Düzenle
+                      </button>
+                    ) : null}
+                  </div>
                   <VehicleDamageDiagram readOnly value={parseDamageValue(values["_damage"])} />
                 </div>
               ) : null}
@@ -1082,7 +1203,7 @@ function PostForm() {
               </p>
 
               <StepActions>
-                <Button type="button" variant="ghost" disabled={busy} onClick={() => goTo(2)}>
+                <Button type="button" variant="ghost" disabled={busy} onClick={() => goTo("location")}>
                   <ArrowLeft className="size-4" /> Geri
                 </Button>
                 <Button type="button" className="flex-1 md:flex-none md:px-8" disabled={busy || uploading} onClick={() => void publish()}>
@@ -1187,34 +1308,71 @@ function PostForm() {
   );
 }
 
-/** Desktop: labelled steps with connectors. Mobile: compact "Adım n/4" with a segmented bar. */
-function Stepper({ step, onPick, locked }: { step: number; onPick: (i: number) => void; locked: boolean }) {
+/** Desktop: labelled steps with connectors. Mobile: compact "Adım n/total" + clickable completed pills. */
+function Stepper({
+  steps,
+  step,
+  onPick,
+  locked,
+}: {
+  steps: StepKey[];
+  step: StepKey;
+  onPick: (s: StepKey) => void;
+  locked: boolean;
+}) {
+  const activeIdx = steps.indexOf(step);
   return (
     <>
       <div className="mt-5 md:hidden">
         <div className="flex items-baseline justify-between text-sm">
-          <p className="font-semibold">{STEPS[step].label}</p>
+          <p className="font-semibold">{STEP_META[step].label}</p>
           <p className="text-xs text-muted">
-            Adım {step + 1}/{STEPS.length}
+            Adım {activeIdx + 1}/{steps.length}
           </p>
         </div>
-        <div className="mt-2 grid grid-cols-4 gap-1.5" aria-hidden="true">
-          {STEPS.map((s, i) => (
-            <span key={s.label} className={cn("h-1.5 rounded-full", i <= step ? "bg-primary-solid" : "bg-elevated")} />
+        <div className="mt-2 flex gap-1.5" aria-hidden="true">
+          {steps.map((s, i) => (
+            <span key={s} className={cn("h-1.5 flex-1 rounded-full", i <= activeIdx ? "bg-primary-solid" : "bg-elevated")} />
           ))}
+        </div>
+        <div className="mt-2.5 flex gap-1.5 overflow-x-auto pb-0.5">
+          {steps.map((s, i) => {
+            const done = i < activeIdx;
+            const current = s === step;
+            return (
+              <button
+                key={s}
+                type="button"
+                disabled={!done || locked}
+                onClick={() => onPick(s)}
+                className={cn(
+                  "inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors disabled:cursor-default",
+                  current
+                    ? "border-primary bg-primary/10 text-primary"
+                    : done
+                      ? "border-border bg-surface text-fg hover:border-primary/40"
+                      : "border-border/60 bg-elevated/50 text-subtle",
+                )}
+              >
+                {done ? <Check className="size-3 text-primary" /> : null}
+                {STEP_META[s].label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
       <ol className="mt-8 hidden items-center md:flex" aria-label="İlan adımları">
-        {STEPS.map((s, i) => {
-          const done = i < step;
-          const current = i === step;
+        {steps.map((s, i) => {
+          const done = i < activeIdx;
+          const current = s === step;
+          const meta = STEP_META[s];
           return (
-            <li key={s.label} className={cn("flex items-center", i < STEPS.length - 1 && "flex-1")}>
+            <li key={s} className={cn("flex items-center", i < steps.length - 1 && "flex-1")}>
               <button
                 type="button"
                 disabled={!done || locked}
-                onClick={() => onPick(i)}
+                onClick={() => onPick(s)}
                 aria-current={current ? "step" : undefined}
                 className="group flex items-center gap-3 rounded-lg text-left disabled:cursor-default"
               >
@@ -1229,12 +1387,12 @@ function Stepper({ step, onPick, locked }: { step: number; onPick: (i: number) =
                   {done ? <Check className="size-4" /> : i + 1}
                 </span>
                 <span className="hidden lg:block">
-                  <span className={cn("block text-sm font-medium", current || done ? "text-fg" : "text-muted")}>{s.label}</span>
-                  <span className="block text-xs text-subtle">{s.hint}</span>
+                  <span className={cn("block text-sm font-medium", current || done ? "text-fg" : "text-muted")}>{meta.label}</span>
+                  <span className="block text-xs text-subtle">{meta.hint}</span>
                 </span>
-                <span className={cn("text-sm font-medium lg:hidden", current || done ? "text-fg" : "text-muted")}>{s.label}</span>
+                <span className={cn("text-sm font-medium lg:hidden", current || done ? "text-fg" : "text-muted")}>{meta.label}</span>
               </button>
-              {i < STEPS.length - 1 ? (
+              {i < steps.length - 1 ? (
                 <span className={cn("mx-4 h-0.5 flex-1 rounded-full", done ? "bg-primary-solid" : "bg-border")} aria-hidden="true" />
               ) : null}
             </li>
