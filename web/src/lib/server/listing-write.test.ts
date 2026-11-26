@@ -47,3 +47,29 @@ test("without a key, or with another key, each publish is a new listing", async 
   const b = await saveListingRecord("yazan", input("baska-anahtar-1234"));
   assert.notEqual(a.id, b.id);
 });
+
+test("omitting lat/lng stores null instead of province center", async () => {
+  const created = await saveListingRecord("yazan", input("no-pin-12345678"));
+  const sql = await getSql();
+  const rows = await sql.query<{ lat: number | null; lng: number | null }>(
+    "select lat, lng from listings where id=$1",
+    [created.id],
+  );
+  assert.equal(rows[0]?.lat, null);
+  assert.equal(rows[0]?.lng, null);
+});
+
+test("explicit lat/lng pin is persisted with 6-decimal precision", async () => {
+  const created = await saveListingRecord("yazan", {
+    ...input("with-pin-12345678"),
+    lat: 40.9876543,
+    lng: 29.0234561,
+  });
+  const sql = await getSql();
+  const rows = await sql.query<{ lat: string | number | null; lng: string | number | null }>(
+    "select lat, lng from listings where id=$1",
+    [created.id],
+  );
+  assert.equal(Number(rows[0]?.lat), 40.987654);
+  assert.equal(Number(rows[0]?.lng), 29.023456);
+});

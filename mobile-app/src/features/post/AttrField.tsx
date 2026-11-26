@@ -12,10 +12,14 @@ export function AttrField({
   attr,
   value,
   onChange,
+  error,
+  hint,
 }: {
   attr: AttrDef;
   value: string | number | undefined;
   onChange: (value: string | number | undefined) => void;
+  error?: string;
+  hint?: string;
 }) {
   const [open, setOpen] = useState(false);
   const label = attr.unit ? `${attr.name} (${attr.unit})` : attr.name;
@@ -23,7 +27,19 @@ export function AttrField({
   if (attr.type === 'SELECT') {
     return (
       <>
-        <SelectField label={label} required={attr.required} placeholder="Seçin" value={value ? String(value) : null} onPress={() => setOpen(true)} />
+        <SelectField
+          label={label}
+          required={attr.required}
+          placeholder="Seçin"
+          value={value ? String(value) : null}
+          error={error}
+          onPress={() => setOpen(true)}
+        />
+        {!error && hint ? (
+          <Text variant="caption" tone="muted">
+            {hint}
+          </Text>
+        ) : null}
         <OptionPicker
           visible={open}
           onClose={() => setOpen(false)}
@@ -51,6 +67,15 @@ export function AttrField({
           onChange={(v) => onChange(v === current ? undefined : v)}
           options={options.map((o) => ({ value: o, label: o }))}
         />
+        {error ? (
+          <Text variant="caption" tone="danger">
+            {error}
+          </Text>
+        ) : hint ? (
+          <Text variant="caption" tone="muted">
+            {hint}
+          </Text>
+        ) : null}
       </View>
     );
   }
@@ -84,18 +109,25 @@ export function AttrField({
             );
           })}
         </View>
+        {error ? (
+          <Text variant="caption" tone="danger">
+            {error}
+          </Text>
+        ) : null}
       </View>
     );
   }
 
   if (attr.type === 'NUMBER') {
-    const isYear = attr.name === 'Yıl';
+    const isYear = attr.name === 'Yıl' || attr.name === 'Model Yılı';
     return (
       <Input
         label={label}
         required={attr.required}
         keyboardType="number-pad"
         placeholder={isYear ? `Örn. ${new Date().getFullYear() - 3}` : '0'}
+        error={error}
+        hint={hint}
         value={value === undefined || value === '' ? '' : isYear ? String(value) : maskThousands(String(value))}
         onChangeText={(t) => {
           if (isYear) {
@@ -111,6 +143,8 @@ export function AttrField({
     <Input
       label={label}
       required={attr.required}
+      error={error}
+      hint={hint}
       value={value === undefined ? '' : String(value)}
       onChangeText={(t) => onChange(t ? t.slice(0, 120) : undefined)}
       maxLength={120}

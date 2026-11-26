@@ -53,6 +53,7 @@ type Props = {
   /** Source files of photos uploaded in this session, by URL; owned by the form so they survive step changes. */
   originals: Map<string, PhotoOriginal>;
   onBusyChange: (busy: boolean) => void;
+  onErrorCountChange?: (count: number) => void;
   required?: boolean;
   /** Editing a published listing: adding photos sends it back to moderation. */
   editing?: boolean;
@@ -69,7 +70,7 @@ function reorder<T>(list: T[], from: number, to: number): T[] {
   return next;
 }
 
-export function PhotoUploader({ images, setImages, originals, onBusyChange, required, editing }: Props) {
+export function PhotoUploader({ images, setImages, originals, onBusyChange, onErrorCountChange, required, editing }: Props) {
   const [pending, setPending] = useState<Pending[]>([]);
   const [dropActive, setDropActive] = useState(false);
   const [drag, setDrag] = useState<Drag | null>(null);
@@ -77,6 +78,7 @@ export function PhotoUploader({ images, setImages, originals, onBusyChange, requ
   const inputRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
   const controllers = useRef(new Map<string, AbortController>());
+  const pendingDiscards = useRef(new Map<string, { timer: ReturnType<typeof setTimeout>; original?: PhotoOriginal }>());
   const batch = useRef({ added: 0, failed: 0 });
   const pendingRef = useRef(pending);
   pendingRef.current = pending;
@@ -84,8 +86,10 @@ export function PhotoUploader({ images, setImages, originals, onBusyChange, requ
   const used = images.length + pending.length;
   const slotsLeft = MAX_PHOTOS - used;
   const busy = pending.some((p) => p.status !== "error");
+  const errorCount = pending.filter((p) => p.status === "error").length;
 
   useEffect(() => onBusyChange(busy || rotating !== null), [busy, rotating, onBusyChange]);
+  useEffect(() => onErrorCountChange?.(errorCount), [errorCount, onErrorCountChange]);
 
   // Photos dropped just outside the box must not make the browser leave the form.
   useEffect(() => {
@@ -100,12 +104,18 @@ export function PhotoUploader({ images, setImages, originals, onBusyChange, requ
     };
   }, []);
 
-  // Cancel in-flight work and free previews if the step unmounts.
+  // Cancel in-flight work, flush pending photo discards, and free previews if the step unmounts.
   useEffect(() => {
     const ctrls = controllers.current;
+    const discards = pendingDiscards.current;
     return () => {
       for (const c of ctrls.values()) c.abort();
       for (const p of pendingRef.current) URL.revokeObjectURL(p.preview);
+      for (const [url, entry] of discards.entries()) {
+        clearTimeout(entry.timer);
+        if (entry.original) discardPhoto(url);
+      }
+      discards.clear();
     };
   }, []);
 
@@ -186,21 +196,53 @@ export function PhotoUploader({ images, setImages, originals, onBusyChange, requ
     if (accepted.length) setPending((prev) => [...prev, ...accepted]);
   }
 
+  const addFilesRef = useRef(addFiles);
+  addFilesRef.current = addFiles;
+
   // Paste photos straight from the clipboard (screenshots, copied images).
   useEffect(() => {
     function onPaste(e: ClipboardEvent) {
       const files = Array.from(e.clipboardData?.files ?? []).filter((f) => f.type.startsWith("image/"));
       if (!files.length) return;
       e.preventDefault();
-      addFiles(files);
+      addFilesRef.current(files);
     }
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
-  });
+  }, []);
 
   function removeImage(url: string) {
+    const prevIndex = images.indexOf(url);
+    const hadOriginal = originals.get(url);
+    if (hadOriginal) originals.delete(url);
     setImages((prev) => prev.filter((u) => u !== url));
-    if (originals.delete(url)) discardPhoto(url);
+
+    const timer = setTimeout(() => {
+      pendingDiscards.current.delete(url);
+      if (hadOriginal) discardPhoto(url);
+    }, 5000);
+    pendingDiscards.current.set(url, { timer, original: hadOriginal });
+
+    toast("Fotoğraf kaldırıldı", {
+      duration: 5000,
+      action: {
+        label: "Geri al",
+        onClick: () => {
+          const entry = pendingDiscards.current.get(url);
+          if (!entry) return;
+          clearTimeout(entry.timer);
+          pendingDiscards.current.delete(url);
+          if (entry.original) originals.set(url, entry.original);
+          setImages((prev) => {
+            if (prev.includes(url)) return prev;
+            const next = [...prev];
+            const insertAt = prevIndex >= 0 && prevIndex <= next.length ? prevIndex : next.length;
+            next.splice(insertAt, 0, url);
+            return next;
+          });
+        },
+      },
+    });
   }
 
   function removePending(key: string) {
@@ -332,7 +374,7 @@ export function PhotoUploader({ images, setImages, originals, onBusyChange, requ
         </p>
       ) : null}
       {editing ? (
-        <p className="mt-4 flex items-start gap-2 rounded-lg bg-elevated px-3 py-2 text-sm text-muted">
+        <p className="mt-4 flex items-start gap-2 rounded-lg border border-warn/30 bg-warn/8 px-3 py-2 text-sm text-warn">
           <Info className="mt-0.5 size-4 shrink-0" />
           Yeni fotoğraf eklemek ilanı tekrar onaya gönderir. Sıralamak ve silmek onay gerektirmez.
         </p>

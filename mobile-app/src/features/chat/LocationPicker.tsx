@@ -12,26 +12,36 @@ import { TURKEY_CENTER } from '@/features/map/tiles';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { Button, IconButton, Text, ToastHost, font, hairline, radius, shadow, space, toast, useTheme } from '@/ui';
 
+type AddressParts = { city?: string | null; district?: string | null; neighborhood?: string | null };
+
 type Props = {
   visible: boolean;
   onClose: () => void;
-  onSend: (label: string, lat: number, lng: number) => Promise<void>;
+  onSend: (label: string, lat: number, lng: number, address?: AddressParts) => void | Promise<void>;
+  title?: string;
+  subtitle?: string;
+  confirmLabel?: string;
+  footnote?: string;
+  initialCenter?: { lat: number; lng: number; zoom?: number } | null;
+  initialQuery?: string;
+  autoLocate?: boolean;
+  showMineShortcut?: boolean;
 };
 
 /** Zoomed out further than this, the pin is not a meaningful place. */
 const MIN_PLACE_ZOOM = 12;
 
 /**
- * WhatsApp-style meeting-point picker: the map pans under a fixed pin, places
- * can be searched, and "send my current location" is one tap. The address
+ * WhatsApp-style meeting-point / listing-pin picker: the map pans under a fixed pin,
+ * places can be searched, and "send my current location" is one tap. The address
  * under the pin is looked up when the map stops.
  */
-export function LocationPicker({ visible, onClose, onSend }: Props) {
+export function LocationPicker({ visible, onClose, onSend, ...rest }: Props) {
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose} statusBarTranslucent>
       {/* The place name field sits at the bottom: the keyboard pushes it up instead of covering it. */}
       <KeyboardAvoidingView behavior="padding" style={styles.flex}>
-        {visible ? <PickerBody onClose={onClose} onSend={onSend} /> : null}
+        {visible ? <PickerBody onClose={onClose} onSend={onSend} {...rest} /> : null}
       </KeyboardAvoidingView>
       {/* Errors from here would otherwise show behind the modal. */}
       <ToastHost active={visible} />
@@ -39,13 +49,27 @@ export function LocationPicker({ visible, onClose, onSend }: Props) {
   );
 }
 
-function PickerBody({ onClose, onSend }: Omit<Props, 'visible'>) {
+function PickerBody({
+  onClose,
+  onSend,
+  title = 'Konum gönder',
+  subtitle = 'Haritayı kaydırarak buluşma noktasını seçin',
+  confirmLabel = 'Bu konumu gönder',
+  footnote = 'Kalabalık ve herkese açık bir yer seçin; ev adresinizi paylaşmayın.',
+  initialCenter = null,
+  initialQuery,
+  autoLocate = true,
+  showMineShortcut = true,
+}: Omit<Props, 'visible'>) {
   const { c, dark } = useTheme();
   const insets = useSafeAreaInsets();
   const map = useRef<MapCanvasHandle>(null);
-  const [center, setCenter] = useState<{ lat: number; lng: number; zoom: number } | null>(null);
+  const [center, setCenter] = useState<{ lat: number; lng: number; zoom: number } | null>(
+    initialCenter ? { lat: initialCenter.lat, lng: initialCenter.lng, zoom: initialCenter.zoom ?? 16 } : null,
+  );
   const [moving, setMoving] = useState(false);
   const [label, setLabel] = useState('');
+  const [address, setAddress] = useState<AddressParts>({});
   const [resolving, setResolving] = useState(false);
   const [mine, setMine] = useState<{ lat: number; lng: number; accuracy: number | null } | null>(null);
   const [locating, setLocating] = useState(false);
@@ -72,7 +96,7 @@ function PickerBody({ onClose, onSend }: Omit<Props, 'visible'>) {
       ]);
       const here = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy ?? null };
       setMine(here);
-      map.current?.flyTo(here.lat, here.lng, 17);
+      if (fly) map.current?.flyTo(here.lat, here.lng, 17);
     } catch {
       if (fly) toast.error('Konumunuz alınamadı.');
     } finally {
@@ -84,7 +108,20 @@ function PickerBody({ onClose, onSend }: Omit<Props, 'visible'>) {
     if (event.type === 'ready') {
       if (!ready.current) {
         ready.current = true;
-        void locate(false);
+        if (initialCenter) {
+          // Positioned on initialCenter; optionally fetch mine silently if shortcut is enabled.
+          if (showMineShortcut && autoLocate) void locate(false);
+        } else if (initialQuery && initialQuery.trim().length >= 2) {
+          void geo
+            .search(initialQuery.trim())
+            .then((found) => {
+              if (found[0]) map.current?.flyTo(found[0].lat, found[0].lng, 14);
+            })
+            .catch(() => undefined);
+          if (showMineShortcut && autoLocate) void locate(false);
+        } else if (autoLocate) {
+          void locate(true);
+        }
       }
     } else if (event.type === 'movestart') {
       setMoving(true);
@@ -105,9 +142,17 @@ function PickerBody({ onClose, onSend }: Omit<Props, 'visible'>) {
     const t = setTimeout(() => {
       setResolving(true);
       geo
-        .reverse(center.lat, center.lng)
-        .then((text) => id === lookup.current && setLabel(text || 'Seçilen konum'))
-        .catch(() => id === lookup.current && setLabel('Seçilen konum'))
+        .reverseFull(center.lat, center.lng)
+        .then((res) => {
+          if (id !== lookup.current) return;
+          setLabel(res.label || 'Seçilen konum');
+          setAddress({ city: res.city, district: res.district, neighborhood: res.neighborhood });
+        })
+        .catch(() => {
+          if (id !== lookup.current) return;
+          setLabel('Seçilen konum');
+          setAddress({});
+        })
         .finally(() => id === lookup.current && setResolving(false));
     }, 450);
     return () => clearTimeout(t);
@@ -145,8 +190,15 @@ function PickerBody({ onClose, onSend }: Omit<Props, 'visible'>) {
     setBusy(kind);
     try {
       let text = kind === 'pin' ? label : '';
-      if (!text) text = (await geo.reverse(point.lat, point.lng).catch(() => '')) || 'Bulunduğum konum';
-      await onSend(text.slice(0, 120), point.lat, point.lng);
+      let addr = kind === 'pin' ? address : {};
+      if (!text) {
+        const res = await geo
+          .reverseFull(point.lat, point.lng)
+          .catch(() => ({ label: '', city: null, district: null, neighborhood: null }));
+        text = res.label || 'Bulunduğum konum';
+        addr = { city: res.city, district: res.district, neighborhood: res.neighborhood };
+      }
+      await onSend(text.slice(0, 120), point.lat, point.lng, addr);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       onClose();
     } catch (e) {
@@ -159,6 +211,9 @@ function PickerBody({ onClose, onSend }: Omit<Props, 'visible'>) {
   const zoomedIn = (center?.zoom ?? 0) >= MIN_PLACE_ZOOM;
   const canSendPin = Boolean(center && zoomedIn && !moving && !resolving && label);
   const showResults = q.trim().length >= 2;
+  const startPos = initialCenter
+    ? { lat: initialCenter.lat, lng: initialCenter.lng, zoom: initialCenter.zoom ?? 16 }
+    : TURKEY_CENTER;
 
   return (
     <View style={[styles.flex, { backgroundColor: c.bg }]}>
@@ -166,9 +221,9 @@ function PickerBody({ onClose, onSend }: Omit<Props, 'visible'>) {
         <View style={styles.titleRow}>
           <IconButton icon={X} label="Kapat" onPress={onClose} />
           <View style={styles.flex}>
-            <Text variant="subheading">Konum gönder</Text>
+            <Text variant="subheading">{title}</Text>
             <Text variant="small" tone="muted">
-              Haritayı kaydırarak buluşma noktasını seçin
+              {subtitle}
             </Text>
           </View>
         </View>
@@ -191,7 +246,7 @@ function PickerBody({ onClose, onSend }: Omit<Props, 'visible'>) {
       </View>
 
       <View style={styles.flex}>
-        <MapCanvas ref={map} initial={TURKEY_CENTER} dark={dark} onEvent={onEvent} />
+        <MapCanvas ref={map} initial={startPos} dark={dark} onEvent={onEvent} />
         {/* Fixed pin: the map moves underneath it. */}
         <View pointerEvents="none" style={styles.pinWrap}>
           <View style={{ transform: [{ translateY: moving ? -10 : 0 }] }}>
@@ -233,7 +288,7 @@ function PickerBody({ onClose, onSend }: Omit<Props, 'visible'>) {
       </View>
 
       <View style={[styles.bottom, { backgroundColor: c.surface, borderTopColor: c.border, paddingBottom: insets.bottom + space.md }]}>
-        {mine ? (
+        {showMineShortcut && mine ? (
           <Pressable
             accessibilityRole="button"
             disabled={busy !== null}
@@ -273,10 +328,12 @@ function PickerBody({ onClose, onSend }: Omit<Props, 'visible'>) {
             ) : null}
           </View>
         </View>
-        <Button title="Bu konumu gönder" icon={Send} loading={busy === 'pin'} disabled={!canSendPin || busy !== null} onPress={() => void send('pin')} />
-        <Text variant="small" tone="subtle" center>
-          Kalabalık ve herkese açık bir yer seçin; ev adresinizi paylaşmayın.
-        </Text>
+        <Button title={confirmLabel} icon={Send} loading={busy === 'pin'} disabled={!canSendPin || busy !== null} onPress={() => void send('pin')} />
+        {footnote ? (
+          <Text variant="small" tone="subtle" center>
+            {footnote}
+          </Text>
+        ) : null}
       </View>
     </View>
   );

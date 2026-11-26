@@ -1,6 +1,6 @@
 import { forwardRef, useState, type ComponentRef, type ReactNode } from 'react';
 import { Pressable, StyleSheet, TextInput, View, type TextInputProps } from 'react-native';
-import { Eye, EyeOff, type LucideIcon } from 'lucide-react-native';
+import { ChevronDown, Eye, EyeOff, type LucideIcon } from 'lucide-react-native';
 import { Text } from './Text';
 import { FONT_FAMILY } from './fonts';
 import { font, radius, space, useTheme } from './theme';
@@ -124,6 +124,7 @@ export function SelectField({
             borderColor: error ? c.danger : c.border,
             backgroundColor: pressed ? c.elevated : c.surface,
             minHeight: 48,
+            alignItems: 'center',
             opacity: disabled ? 0.5 : 1,
           },
         ]}
@@ -132,7 +133,7 @@ export function SelectField({
         <Text style={styles.selectText} tone={value ? 'default' : 'subtle'} numberOfLines={1}>
           {value || placeholder}
         </Text>
-        <Text tone="subtle">▾</Text>
+        <ChevronDown size={18} color={c.subtle} />
       </Pressable>
       {error ? (
         <Text variant="caption" tone="danger" style={styles.below}>
@@ -153,8 +154,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     paddingHorizontal: space.md,
   },
-  input: { flex: 1, fontFamily: FONT_FAMILY.regular, fontSize: font.md, minHeight: 46 },
+  input: { flex: 1, fontFamily: FONT_FAMILY.regular, fontSize: font.md, minHeight: 46, includeFontPadding: false },
   iconTop: { marginTop: 14 },
   below: { marginLeft: 2 },
-  selectText: { flex: 1 },
+  selectText: { flex: 1, includeFontPadding: false },
 });

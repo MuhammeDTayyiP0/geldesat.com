@@ -59,6 +59,7 @@ import {
   mapCityCounts,
   mapListingsInBounds,
   searchCatalogWithContext,
+  searchCategoryPaths,
   statsHome,
 } from "@/lib/server/catalog";
 import {
@@ -88,6 +89,7 @@ const FUNCTIONS: Record<string, ServerFn> = {
   mapCityCounts,
   mapListingsInBounds,
   searchCatalogWithContext,
+  searchCategoryPaths,
   statsHome,
   // Account
   bulkImportListings,

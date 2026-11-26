@@ -55,6 +55,8 @@ import { useRequireAuth } from '@/auth/useRequireAuth';
 import { useToggleFavorite } from '@/features/listing/favorites';
 import { Gallery } from '@/features/listing/Gallery';
 import { ListingRail } from '@/features/listing/ListingRail';
+import { MapThumb } from '@/features/map/MapThumb';
+import { isCityCenterFallback } from '@/features/map/cityCoords';
 import { MessageSheet, OfferSheet, PhoneSheet, ReportSheet, ReviewSheet } from '@/features/listing/ListingSheets';
 import {
   VehicleDamageSvg,
@@ -284,8 +286,15 @@ export default function ListingScreen() {
   // Older servers do not say; then the button stays and the server answers.
   const canCall = data.hasPhone !== false;
 
+  const hasExactPin =
+    listing.lat != null &&
+    listing.lng != null &&
+    !isCityCenterFallback(listing.city, listing.lat, listing.lng);
+
   const openMap = () => {
-    const q = listing.lat != null && listing.lng != null ? `${listing.lat},${listing.lng}` : locationLabel(listing.city, listing.district, listing.neighborhood);
+    const q = hasExactPin
+      ? `${listing.lat},${listing.lng}`
+      : locationLabel(listing.city, listing.district, listing.neighborhood);
     void Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`);
   };
 
@@ -593,6 +602,36 @@ export default function ListingScreen() {
               variant="outline"
               onPress={() => setSheet('review')}
             />
+          ) : null}
+
+          {listing.city ? (
+            <Card style={styles.locationCard}>
+              <View style={styles.row}>
+                <MapPin size={18} color={c.primary} />
+                <Text variant="subheading" style={styles.flex}>
+                  Konum
+                </Text>
+                <Pressable onPress={openMap} hitSlop={8}>
+                  <Text variant="label" tone="primary">
+                    Haritada aç
+                  </Text>
+                </Pressable>
+              </View>
+              {hasExactPin ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Haritada konumu aç"
+                  onPress={openMap}
+                  style={styles.locationMapWrap}
+                >
+                  <MapThumb lat={listing.lat!} lng={listing.lng!} width={Math.max(220, Math.round(width - space.lg * 4))} height={160} radius={radius.md} />
+                </Pressable>
+              ) : null}
+              <Text variant="bodyStrong">{locationLabel(listing.city, listing.district, listing.neighborhood)}</Text>
+              <Text variant="caption" tone="muted">
+                {hasExactPin ? 'Satıcı tarafından haritada işaretlenmiş konum.' : 'Yaklaşık bölge — açık adres paylaşılmaz.'}
+              </Text>
+            </Card>
           ) : null}
 
           <Card style={[styles.safety, { backgroundColor: c.primarySoft, borderColor: c.primarySoft }]}>
@@ -1323,6 +1362,8 @@ const styles = StyleSheet.create({
   section: { gap: space.sm },
   description: { lineHeight: 23 },
   review: { gap: space.xs, padding: space.md },
+  locationCard: { gap: space.sm },
+  locationMapWrap: { overflow: 'hidden', borderRadius: radius.md, alignItems: 'center' },
   safety: { gap: space.sm },
   inlineActions: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   responseRow: { marginTop: 2 },

@@ -16,7 +16,7 @@ const ALLOWED = [
   "loadOlderMessages", "mapCityCounts", "mapListingsInBounds", "markConversationUnread", "markThreadRead",
   "myCreditOrders", "myFollowedSellers", "myRecentListings", "myStoreApplication", "pollThread", "removeRecentListing",
   "reportConversation", "requestMyAccountDeletion", "respondOffer", "restoreMyAccount", "saveChatTemplates",
-  "searchCatalogWithContext", "searchMessages", "sendLocation", "sendMessage", "sendOffer", "sendTyping",
+  "searchCatalogWithContext", "searchCategoryPaths", "searchMessages", "sendLocation", "sendMessage", "sendOffer", "sendTyping",
   "startConversation", "statsHome", "submitStoreApplication", "toggleSavedSearchNotify", "unblockUser",
   "unfollowSeller", "unreadCount", "updateMessageEmail", "updateNotifyPrefs", "updatePrivacySettings", "updateProfile",
   "upsertStore",

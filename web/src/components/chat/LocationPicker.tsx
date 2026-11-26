@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import "leaflet/dist/leaflet.css";
 
 type Place = { label: string; lat: number; lng: number };
+type AddressParts = { city?: string | null; district?: string | null; neighborhood?: string | null };
 
 async function geo<T>(params: Record<string, string>): Promise<T> {
   const res = await fetch(`/api/geo?${new URLSearchParams(params)}`);
@@ -18,23 +19,38 @@ async function geo<T>(params: Record<string, string>): Promise<T> {
 }
 
 /**
- * WhatsApp-style meeting-point picker: pan the map under a fixed pin, search
- * for a place, or jump to the device location; the address under the pin is
+ * WhatsApp-style meeting-point / listing-pin picker: pan the map under a fixed pin,
+ * search for a place, or jump to the device location; the address under the pin is
  * looked up as the map stops.
  */
 export function LocationPicker({
   open,
   onOpenChange,
   onSend,
+  title = "Konum gönder",
+  subtitle = "Haritayı kaydırarak buluşma noktasını seçin",
+  confirmLabel = "Bu konumu gönder",
+  footnote = "Kalabalık ve herkese açık bir yer seçin; ev adresinizi paylaşmayın.",
+  initialCenter = null,
+  initialQuery,
+  autoLocate = true,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSend: (place: { label: string; lat: number; lng: number }) => Promise<void>;
+  onSend: (place: { label: string; lat: number; lng: number } & AddressParts) => void | Promise<void>;
+  title?: string;
+  subtitle?: string;
+  confirmLabel?: string;
+  footnote?: string;
+  initialCenter?: { lat: number; lng: number; zoom?: number } | null;
+  initialQuery?: string;
+  autoLocate?: boolean;
 }) {
   const mapEl = useRef<HTMLDivElement>(null);
   const map = useRef<LeafletMap | null>(null);
   const [center, setCenter] = useState<{ lat: number; lng: number } | null>(null);
   const [label, setLabel] = useState("");
+  const [address, setAddress] = useState<AddressParts>({});
   const [resolving, setResolving] = useState(false);
   const [moving, setMoving] = useState(false);
   const [q, setQ] = useState("");
@@ -52,9 +68,12 @@ export function LocationPicker({
     let instance: LeafletMap | null = null;
     void import("leaflet").then((L) => {
       if (cancelled || !mapEl.current) return;
+      const startLat = initialCenter?.lat ?? TURKEY_CENTER.lat;
+      const startLng = initialCenter?.lng ?? TURKEY_CENTER.lng;
+      const startZoom = initialCenter ? (initialCenter.zoom ?? 16) : TURKEY_CENTER.zoom;
       instance = L.map(mapEl.current, { zoomControl: false, attributionControl: true }).setView(
-        [TURKEY_CENTER.lat, TURKEY_CENTER.lng],
-        TURKEY_CENTER.zoom,
+        [startLat, startLng],
+        startZoom,
       );
       L.tileLayer(TILE_URL, { attribution: TILE_ATTRIBUTION, maxZoom: 19 }).addTo(instance);
       L.control.zoom({ position: "bottomright" }).addTo(instance);
@@ -65,8 +84,20 @@ export function LocationPicker({
         setCenter({ lat: c.lat, lng: c.lng });
       });
       map.current = instance;
+      if (initialCenter) setCenter({ lat: initialCenter.lat, lng: initialCenter.lng });
       setTimeout(() => instance?.invalidateSize(), 150);
-      locate(true);
+      if (initialCenter) {
+        // Already positioned on an existing pin.
+      } else if (initialQuery && initialQuery.trim().length >= 2) {
+        void geo<{ results: Place[] }>({ q: initialQuery.trim() })
+          .then((r) => {
+            if (cancelled || !r.results[0]) return;
+            map.current?.flyTo([r.results[0].lat, r.results[0].lng], 14, { duration: 0.6 });
+          })
+          .catch(() => undefined);
+      } else if (autoLocate) {
+        locate(true);
+      }
     });
     return () => {
       cancelled = true;
@@ -74,9 +105,11 @@ export function LocationPicker({
       map.current = null;
       setCenter(null);
       setLabel("");
+      setAddress({});
       setQ("");
       setResults([]);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   // Address of the point under the pin once the map settles (zoomed in far enough to mean a place).
@@ -91,9 +124,20 @@ export function LocationPicker({
     const id = ++lookup.current;
     setResolving(true);
     const t = setTimeout(() => {
-      void geo<{ label?: string }>({ lat: String(center.lat), lng: String(center.lng) })
-        .then((r) => id === lookup.current && setLabel(r.label || "Seçilen konum"))
-        .catch(() => id === lookup.current && setLabel("Seçilen konum"))
+      void geo<{ label?: string; city?: string | null; district?: string | null; neighborhood?: string | null }>({
+        lat: String(center.lat),
+        lng: String(center.lng),
+      })
+        .then((r) => {
+          if (id !== lookup.current) return;
+          setLabel(r.label || "Seçilen konum");
+          setAddress({ city: r.city, district: r.district, neighborhood: r.neighborhood });
+        })
+        .catch(() => {
+          if (id !== lookup.current) return;
+          setLabel("Seçilen konum");
+          setAddress({});
+        })
         .finally(() => id === lookup.current && setResolving(false));
     }, 500);
     return () => {
@@ -160,7 +204,7 @@ export function LocationPicker({
     if (!center || !label) return;
     setBusy(true);
     try {
-      await onSend({ label: label.slice(0, 120), lat: center.lat, lng: center.lng });
+      await onSend({ label: label.slice(0, 120), lat: center.lat, lng: center.lng, ...address });
       onOpenChange(false);
     } catch (err) {
       toast.error(errorText(err, "Konum gönderilemedi"));
@@ -180,8 +224,8 @@ export function LocationPicker({
             <X className="size-5" />
           </button>
           <div className="min-w-0">
-            <DialogTitle className="text-base">Konum gönder</DialogTitle>
-            <DialogDescription className="text-xs">Haritayı kaydırarak buluşma noktasını seçin</DialogDescription>
+            <DialogTitle className="text-base">{title}</DialogTitle>
+            <DialogDescription className="text-xs">{subtitle}</DialogDescription>
           </div>
         </div>
 
@@ -246,9 +290,9 @@ export function LocationPicker({
             </div>
           </div>
           <Button type="button" className="w-full" disabled={!canSend || busy} onClick={() => void send()}>
-            <Send className="size-4" /> {busy ? "Gönderiliyor…" : "Bu konumu gönder"}
+            <Send className="size-4" /> {busy ? "Kaydediliyor…" : confirmLabel}
           </Button>
-          <p className="text-center text-[11px] text-subtle">Kalabalık ve herkese açık bir yer seçin; ev adresinizi paylaşmayın.</p>
+          {footnote ? <p className="text-center text-[11px] text-subtle">{footnote}</p> : null}
         </div>
       </DialogContent>
     </Dialog>

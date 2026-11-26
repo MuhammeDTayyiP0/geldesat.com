@@ -117,7 +117,13 @@ export const Route = createFileRoute("/api/geo")({
           // ~100 m rounding keeps the cache useful and does not leak an exact position upstream.
           const params = new URLSearchParams({ lat: lat.toFixed(3), lon: lng.toFixed(3), format: "jsonv2", addressdetails: "1", zoom: "18" });
           const place = (await nominatim(`/reverse?${params}`)) as NominatimPlace;
-          return json({ label: place?.lat ? shortLabel(place) : "" });
+          const a = place?.address ?? {};
+          return json({
+            label: place?.lat ? shortLabel(place) : "",
+            city: a.province ?? a.city ?? a.state ?? null,
+            district: a.town ?? a.city_district ?? a.district ?? a.county ?? null,
+            neighborhood: a.neighbourhood ?? a.suburb ?? a.quarter ?? null,
+          });
         } catch {
           return json({ error: "Adres bilgisi alınamadı." }, 502);
         }

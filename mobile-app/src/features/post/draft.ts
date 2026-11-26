@@ -29,6 +29,9 @@ export type Draft = {
   city: string;
   district: string;
   neighborhood: string;
+  lat?: number | null;
+  lng?: number | null;
+  pinLabel?: string;
   phone: string;
   step?: StepKey;
   /** Sent with a new listing: a retried "Yayınla" returns the listing instead of making a second one. */
@@ -68,7 +71,7 @@ export const STEP_TITLES: Record<StepKey, string> = {
   photos: 'Fotoğraflar',
   details: 'İlan bilgileri',
   attributes: 'Özellikler',
-  location: 'Konum ve iletişim',
+  location: 'Konum & İletişim',
   preview: 'Önizleme',
 };
 
@@ -92,7 +95,10 @@ export function stepError(
       if (title.length < 5) return 'Başlık en az 5 karakter olmalı.';
       const price = parseMasked(draft.price) ?? 0;
       if (price < 1) return 'Geçerli bir fiyat girin.';
-      if (price > MAX_PRICE) return 'Fiyat en fazla 1.000.000.000 ₺ olabilir.';
+      if (price > MAX_PRICE) {
+        const sym = draft.currency === 'USD' ? '$' : draft.currency === 'EUR' ? '€' : '₺';
+        return `Fiyat en fazla 1.000.000.000 ${sym} olabilir.`;
+      }
       if (draft.description.trim().length < 10) return 'Açıklama en az 10 karakter olmalı.';
       return null;
     }

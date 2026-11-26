@@ -182,24 +182,24 @@ type SvgPartShape = {
 };
 
 const SVG_SHAPES: ReadonlyArray<SvgPartShape> = [
-  // Center spine (front at top -> rear at bottom)
-  { id: "on_tampon", d: "M74 30 Q140 8 206 30 L199 50 Q140 38 81 50 Z", labelX: 140, labelY: 32 },
-  { id: "kaput", d: "M81 54 Q140 44 199 54 L192 126 Q140 122 88 126 Z", labelX: 140, labelY: 90 },
-  { id: "tavan", d: "M89 157 Q140 153 191 157 L191 267 Q140 271 89 267 Z", labelX: 140, labelY: 212 },
-  { id: "bagaj", d: "M88 294 Q140 298 192 294 L199 351 Q140 362 81 351 Z", labelX: 140, labelY: 326 },
-  { id: "arka_tampon", d: "M76 357 Q140 368 204 357 L207 377 Q140 394 73 377 Z", labelX: 140, labelY: 376 },
+  // Center spine (front at top -> rear at bottom), viewBox 0 0 300 440
+  { id: "on_tampon", d: "M74 34 Q150 8 226 34 L217 56 Q150 42 83 56 Z", labelX: 150, labelY: 36 },
+  { id: "kaput", d: "M84 61 Q150 48 216 61 L207 137 Q150 132 93 137 Z", labelX: 150, labelY: 98 },
+  { id: "tavan", d: "M96 174 Q150 169 204 174 L204 289 Q150 294 96 289 Z", labelX: 150, labelY: 232 },
+  { id: "bagaj", d: "M93 322 Q150 327 207 322 L216 382 Q150 394 84 382 Z", labelX: 150, labelY: 356 },
+  { id: "arka_tampon", d: "M78 388 Q150 400 222 388 L226 410 Q150 430 74 410 Z", labelX: 150, labelY: 408 },
 
   // Left side (Sol)
-  { id: "sol_on_camurluk", d: "M42 56 Q58 48 75 53 L81 127 L42 127 Q39 92 42 56 Z", labelX: 60, labelY: 92, rotate: -90 },
-  { id: "sol_on_kapi", d: "M42 133 L82 133 L82 210 L42 210 Z", labelX: 62, labelY: 172, rotate: -90 },
-  { id: "sol_arka_kapi", d: "M42 216 L82 216 L82 290 L42 290 Z", labelX: 62, labelY: 253, rotate: -90 },
-  { id: "sol_arka_camurluk", d: "M42 296 L82 296 L75 351 Q56 356 42 345 Q39 322 42 296 Z", labelX: 60, labelY: 324, rotate: -90 },
+  { id: "sol_on_camurluk", d: "M46 62 Q62 52 79 59 L86 138 L44 138 Q41 98 46 62 Z", labelX: 64, labelY: 100, rotate: -90 },
+  { id: "sol_on_kapi", d: "M44 144 L87 144 L87 224 L44 224 Z", labelX: 65, labelY: 184, rotate: -90 },
+  { id: "sol_arka_kapi", d: "M44 230 L87 230 L87 314 L44 314 Z", labelX: 65, labelY: 272, rotate: -90 },
+  { id: "sol_arka_camurluk", d: "M44 320 L87 320 L79 382 Q60 388 46 375 Q41 348 44 320 Z", labelX: 64, labelY: 352, rotate: -90 },
 
   // Right side (Sağ)
-  { id: "sag_on_camurluk", d: "M205 53 Q222 48 238 56 Q241 92 238 127 L199 127 Z", labelX: 220, labelY: 92, rotate: 90 },
-  { id: "sag_on_kapi", d: "M198 133 L238 133 L238 210 L198 210 Z", labelX: 218, labelY: 172, rotate: 90 },
-  { id: "sag_arka_kapi", d: "M198 216 L238 216 L238 290 L198 290 Z", labelX: 218, labelY: 253, rotate: 90 },
-  { id: "sag_arka_camurluk", d: "M198 296 L238 296 Q241 322 238 345 Q224 356 205 351 Z", labelX: 220, labelY: 324, rotate: 90 },
+  { id: "sag_on_camurluk", d: "M221 59 Q238 52 254 62 Q259 98 256 138 L214 138 Z", labelX: 236, labelY: 100, rotate: 90 },
+  { id: "sag_on_kapi", d: "M213 144 L256 144 L256 224 L213 224 Z", labelX: 235, labelY: 184, rotate: 90 },
+  { id: "sag_arka_kapi", d: "M213 230 L256 230 L256 314 L213 314 Z", labelX: 235, labelY: 272, rotate: 90 },
+  { id: "sag_arka_camurluk", d: "M213 320 L256 320 Q259 348 254 375 Q240 388 221 382 Z", labelX: 236, labelY: 352, rotate: 90 },
 ];
 
 const PART_BY_ID = new Map(DAMAGE_PARTS.map((p) => [p.id, p]));
@@ -365,39 +365,59 @@ export function VehicleDamageDiagram({
 
       <div className="grid gap-5 md:grid-cols-[260px_minmax(0,1fr)] md:items-start">
         {/* Top-down 13-part SVG vehicle diagram */}
-        <div className="flex flex-col items-center rounded-xl border border-border bg-elevated/40 p-3">
-          <div className="mb-1 flex w-full max-w-[230px] items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-subtle">
-            <span>Sol</span>
-            <span>Ön</span>
-            <span>Sağ</span>
+        <div className="flex flex-col items-center rounded-2xl border border-border bg-elevated/45 p-3.5">
+          <div className="mb-1.5 flex w-full max-w-[244px] items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-subtle">
+            <span className="rounded-full border border-border/70 bg-surface px-2 py-0.5">Sol</span>
+            <span className="rounded-full border border-border/70 bg-surface px-2.5 py-0.5 text-fg">Ön</span>
+            <span className="rounded-full border border-border/70 bg-surface px-2 py-0.5">Sağ</span>
           </div>
           <svg
-            viewBox="0 0 280 404"
-            className="h-auto w-full max-w-[230px] select-none"
+            viewBox="0 0 300 440"
+            className="h-auto w-full max-w-[244px] select-none"
             role="img"
             aria-label="Araç boya ve değişen şeması"
           >
-            {/* Outer chassis subtle outline */}
-            <rect x="37" y="22" width="206" height="362" rx="34" className="fill-none stroke-border/45" strokeWidth="1" strokeDasharray="3 3" />
+            <defs>
+              <radialGradient id="webCarShadow" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stopColor="#0f172a" stopOpacity="0.22" />
+                <stop offset="70%" stopColor="#0f172a" stopOpacity="0.08" />
+                <stop offset="100%" stopColor="#0f172a" stopOpacity="0" />
+              </radialGradient>
+              <linearGradient id="webGlassGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stopColor="#334155" stopOpacity="0.48" />
+                <stop offset="50%" stopColor="#1e293b" stopOpacity="0.62" />
+                <stop offset="100%" stopColor="#475569" stopOpacity="0.42" />
+              </linearGradient>
+            </defs>
 
-            {/* Wheel-arch indicators */}
-            <rect x="29" y="68" width="9" height="44" rx="4.5" className="fill-border/55 stroke-border" strokeWidth="1" />
-            <rect x="242" y="68" width="9" height="44" rx="4.5" className="fill-border/55 stroke-border" strokeWidth="1" />
-            <rect x="29" y="294" width="9" height="44" rx="4.5" className="fill-border/55 stroke-border" strokeWidth="1" />
-            <rect x="242" y="294" width="9" height="44" rx="4.5" className="fill-border/55 stroke-border" strokeWidth="1" />
+            {/* Soft ground drop shadow */}
+            <ellipse cx="150" cy="226" rx="126" ry="204" fill="url(#webCarShadow)" />
 
-            {/* Headlights & taillights */}
-            <path d="M56 38 Q68 28 78 32 L72 42 Q62 40 54 44 Z" className="fill-amber-400/35 stroke-amber-500/60" strokeWidth="1" />
-            <path d="M224 38 Q212 28 202 32 L208 42 Q218 40 226 44 Z" className="fill-amber-400/35 stroke-amber-500/60" strokeWidth="1" />
-            <path d="M54 358 Q64 364 74 362 L76 372 Q62 374 52 366 Z" className="fill-rose-500/35 stroke-rose-500/60" strokeWidth="1" />
-            <path d="M226 358 Q216 364 206 362 L204 372 Q218 374 228 366 Z" className="fill-rose-500/35 stroke-rose-500/60" strokeWidth="1" />
+            {/* Wheels / tires */}
+            <g>
+              <rect x="30" y="76" width="12" height="52" rx="5.5" className="fill-slate-800/80 stroke-border dark:fill-slate-700" strokeWidth="1" />
+              <rect x="258" y="76" width="12" height="52" rx="5.5" className="fill-slate-800/80 stroke-border dark:fill-slate-700" strokeWidth="1" />
+              <rect x="30" y="314" width="12" height="52" rx="5.5" className="fill-slate-800/80 stroke-border dark:fill-slate-700" strokeWidth="1" />
+              <rect x="258" y="314" width="12" height="52" rx="5.5" className="fill-slate-800/80 stroke-border dark:fill-slate-700" strokeWidth="1" />
+            </g>
 
-            {/* Windshield & rear glass decorative guides */}
-            <path d="M89 130 Q140 124 191 130 L185 153 Q140 148 95 153 Z" className="fill-border/35 stroke-border" strokeWidth="1.2" />
-            <path d="M95 272 Q140 276 185 272 L191 290 Q140 294 89 290 Z" className="fill-border/35 stroke-border" strokeWidth="1.2" />
+            {/* Outer aerodynamic chassis silhouette */}
+            <path
+              d="M72 30 Q150 4 228 30 Q262 52 262 110 L262 346 Q262 396 228 412 Q150 434 72 412 Q38 396 38 346 L38 110 Q38 52 72 30 Z"
+              className="fill-surface/55 stroke-border/70"
+              strokeWidth="1.2"
+            />
+
+            {/* Headlights & LED DRLs */}
+            <path d="M55 44 Q70 30 82 35 L75 49 Q63 47 53 52 Z" className="fill-amber-300/45 stroke-amber-500/70" strokeWidth="1.1" />
+            <path d="M245 44 Q230 30 218 35 L225 49 Q237 47 247 52 Z" className="fill-amber-300/45 stroke-amber-500/70" strokeWidth="1.1" />
+            {/* Taillights */}
+            <path d="M54 388 Q66 396 80 393 L82 405 Q65 408 52 398 Z" className="fill-rose-500/45 stroke-rose-500/75" strokeWidth="1.1" />
+            <path d="M246 388 Q234 396 220 393 L218 405 Q235 408 248 398 Z" className="fill-rose-500/45 stroke-rose-500/75" strokeWidth="1.1" />
+
             {/* Side mirrors */}
-            <path d="M26 136 Q32 130 41 134 L41 142 Q32 144 26 138 Z" className="fill-border/55 stroke-border" strokeWidth="1" />
-            <path d="M254 136 Q248 130 239 134 L239 142 Q248 144 254 138 Z" className="fill-border/55 stroke-border" strokeWidth="1" />
+            <path d="M23 148 Q30 140 43 146 L43 156 Q31 159 23 152 Z" className="fill-surface stroke-border" strokeWidth="1.2" />
+            <path d="M277 148 Q270 140 257 146 L257 156 Q269 159 277 152 Z" className="fill-surface stroke-border" strokeWidth="1.2" />
 
             {SVG_SHAPES.map((shape) => {
               const part = PART_BY_ID.get(shape.id)!;
@@ -435,22 +455,55 @@ export function VehicleDamageDiagram({
                     strokeLinejoin="round"
                   />
                   {shortTag ? (
-                    <text
-                      x={shape.labelX}
-                      y={shape.labelY}
-                      textAnchor="middle"
-                      dominantBaseline="central"
+                    <g
                       transform={shape.rotate ? `rotate(${shape.rotate} ${shape.labelX} ${shape.labelY})` : undefined}
-                      className="pointer-events-none fill-fg text-[9px] font-bold"
+                      className="pointer-events-none"
                     >
-                      {shortTag}
-                    </text>
+                      <rect
+                        x={shape.labelX - 24}
+                        y={shape.labelY - 9}
+                        width={48}
+                        height={18}
+                        rx={6}
+                        className="fill-surface/90 stroke-border/60"
+                        strokeWidth="0.7"
+                      />
+                      <text
+                        x={shape.labelX}
+                        y={shape.labelY}
+                        textAnchor="middle"
+                        dominantBaseline="central"
+                        className="fill-fg text-[9px] font-bold"
+                      >
+                        {shortTag}
+                      </text>
+                    </g>
                   ) : null}
                 </g>
               );
             })}
+
+            {/* Decorative hood crease lines, panoramic roof & glass cabin (non-interactive) */}
+            <g className="pointer-events-none">
+              <path d="M108 72 L114 128" className="stroke-border/45" strokeWidth="1" strokeLinecap="round" />
+              <path d="M192 72 L186 128" className="stroke-border/45" strokeWidth="1" strokeLinecap="round" />
+              <rect x="108" y="186" width="84" height="86" rx="14" className="fill-none stroke-border/45" strokeWidth="1" strokeDasharray="3 3" />
+              {/* Windshield & rear glass */}
+              <path d="M94 140 Q150 132 206 140 L199 169 Q150 163 101 169 Z" fill="url(#webGlassGrad)" className="stroke-border" strokeWidth="1.2" />
+              <path d="M101 294 Q150 299 199 294 L206 318 Q150 324 94 318 Z" fill="url(#webGlassGrad)" className="stroke-border" strokeWidth="1.2" />
+              {/* Side window strips */}
+              <path d="M88 158 L94 176 L94 288 L88 308 Z" fill="url(#webGlassGrad)" opacity="0.6" />
+              <path d="M212 158 L206 176 L206 288 L212 308 Z" fill="url(#webGlassGrad)" opacity="0.6" />
+              {/* Door handles */}
+              <line x1="48" y1="192" x2="48" y2="206" className="stroke-border" strokeWidth="2" strokeLinecap="round" />
+              <line x1="48" y1="278" x2="48" y2="292" className="stroke-border" strokeWidth="2" strokeLinecap="round" />
+              <line x1="252" y1="192" x2="252" y2="206" className="stroke-border" strokeWidth="2" strokeLinecap="round" />
+              <line x1="252" y1="278" x2="252" y2="292" className="stroke-border" strokeWidth="2" strokeLinecap="round" />
+            </g>
           </svg>
-          <span className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-subtle">Arka</span>
+          <span className="mt-1.5 rounded-full border border-border/70 bg-surface px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-subtle">
+            Arka
+          </span>
           {!readOnly ? (
             <p className="mt-2 text-center text-[11px] text-muted">
               {activeBrushSpec ? `Dokunduğunuz parça "${activeBrushSpec.label}" olur` : "Parçaya tıklayarak durumu değiştirin"}

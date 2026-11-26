@@ -1,20 +1,40 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, BackHandler, FlatList, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, BackHandler, FlatList, Keyboard, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import * as Crypto from 'expo-crypto';
+import * as Location from 'expo-location';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { KeyboardAwareScrollView, type KeyboardAwareScrollViewRef } from 'react-native-keyboard-controller';
+import { KeyboardAwareScrollView, KeyboardToolbar, type KeyboardAwareScrollViewRef } from 'react-native-keyboard-controller';
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, CarFront, Check, ChevronLeft, ChevronRight, Info, LayoutGrid, MapPin, Phone, Search, Sparkles, X } from 'lucide-react-native';
+import {
+  AlertTriangle,
+  CarFront,
+  Check,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Info,
+  LayoutGrid,
+  LocateFixed,
+  MapPin,
+  Phone,
+  Search,
+  Sparkles,
+  Trash2,
+  X,
+} from 'lucide-react-native';
 import { errorMessage } from '@/api/client';
-import { account, catalog, myListings, uploads } from '@/api/endpoints';
+import { account, catalog, geo, myListings, uploads } from '@/api/endpoints';
 import { keys, queryClient, useMe } from '@/api/queries';
 import type { AttrDef, Category } from '@/api/types';
 import { useSession } from '@/auth/session';
 import { NEIGHBORHOODS } from '@/data/neighborhoods';
 import { TURKEY_CITIES } from '@/data/locations';
 import { categoryIcon } from '@/features/catalog/categoryIcon';
+import { LocationPicker } from '@/features/chat/LocationPicker';
 import { OptionPicker } from '@/features/location/OptionPicker';
+import { MapThumb } from '@/features/map/MapThumb';
+import { isCityCenterFallback } from '@/features/map/cityCoords';
 import { AttrField } from '@/features/post/AttrField';
 import {
   VehicleDamageSvg,
@@ -30,7 +50,7 @@ import { MAX_PHOTOS, PHOTO_KEEP_MS, STEP_TITLES, emptyDraft, needsPhoto, stepErr
 import { mediaUrl } from '@/lib/config';
 import { useFlag } from '@/lib/flags';
 import { cleanPhone, formatNumber, formatPrice, locationLabel, maskPhoneInput, maskThousands, parseMasked } from '@/lib/format';
-import { pickPhotos, preparePhoto, recoverPickedPhotos, type PickedPhoto } from '@/lib/photos';
+import { pickPhotos, preparePhoto, recoverPickedPhotos, rotatePhoto, type PickedPhoto } from '@/lib/photos';
 import { clearDraft, loadDraft, saveDraft } from '@/lib/storage';
 import { Badge, Button, Card, Chip, Divider, EmptyState, ErrorState, IconButton, Input, Loading, Segmented, SelectField, Text, confirm, hairline, radius, space, toast, useTheme } from '@/ui';
 import { Image } from 'expo-image';
@@ -91,6 +111,110 @@ function sortedCats(list: Category[]): Category[] {
   return [...list].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.name.localeCompare(b.name, 'tr'));
 }
 
+const DAMAGE_ALLOWED_IDS = new Set([
+  'otomobil',
+  'arazi-suv',
+  'minivan',
+  'hasarli',
+  'klasik',
+  'engelli-plaka',
+  'kiralik-arac',
+  'ticari-kamyonet',
+  'ticari-minibus',
+]);
+const DAMAGE_EXCLUDED_IDS = new Set([
+  'moto',
+  'motosiklet',
+  'deniz',
+  'hava',
+  'atv',
+  'elektrikli-bisiklet',
+  'karavan',
+  'ticari-kamyon',
+  'ticari-cekici',
+  'ticari-otobus',
+]);
+
+function isDamageVehicleCategory(path: Category[]): boolean {
+  if (path.some((p) => DAMAGE_EXCLUDED_IDS.has(p.id) || DAMAGE_EXCLUDED_IDS.has(p.slug))) return false;
+  if (path.some((p) => DAMAGE_ALLOWED_IDS.has(p.id) || DAMAGE_ALLOWED_IDS.has(p.slug))) return true;
+  return path.some((p) => {
+    const n = p.name.toLocaleLowerCase('tr');
+    return n.includes('otomobil') || n.includes('suv') || n.includes('minivan') || n.includes('panelvan');
+  });
+}
+
+function getCategoryPlaceholders(path: Category[]): { title: string; description: string } {
+  const root = path[0]?.id;
+  const joined = path.map((p) => p.name.toLocaleLowerCase('tr')).join(' ');
+  if (root === 'emlak' || joined.includes('arsa') || joined.includes('daire') || joined.includes('konut')) {
+    if (joined.includes('arsa') || joined.includes('tarla')) {
+      return {
+        title: 'Örn. Yatırıma uygun imarlı 450 m² köşe parsel arsa',
+        description: 'Ada/parsel veya konum bilgisi, imar durumu, yola cephe, altyapı ve tapu durumu…',
+      };
+    }
+    return {
+      title: 'Örn. Kadıköy Moda’da 2+1 deniz manzaralı ferah daire',
+      description: 'Cephe, ısınma, aidat, ulaşım yakınlığı, tadilat ve tapu/kredi durumu…',
+    };
+  }
+  if (root === 'vasita') {
+    if (joined.includes('motosiklet')) {
+      return {
+        title: 'Örn. Hatasız 2022 Yamaha MT-07 ABS 12.000 km',
+        description: 'Bakım geçmişi, lastik/zincir durumu, ekstra aksesuarlar, tramer/boya bilgisi…',
+      };
+    }
+    return {
+      title: 'Örn. Sahibinden temiz 2018 Renault Clio 1.5 dCi',
+      description: 'Bakım geçmişi, ekspertiz/boya durumu, lastikler, yedek anahtar ve muayene tarihi…',
+    };
+  }
+  if (joined.includes('telefon') || joined.includes('bilgisayar') || root === 'elektronik') {
+    return {
+      title: 'Örn. iPhone 15 Pro 256 GB TR Garantili Kutu Faturalı',
+      description: 'Pil sağlığı, kozmetik durumu, kutu/fatura/garanti, tamir veya değişen parça bilgisi…',
+    };
+  }
+  return {
+    title: 'Örn. Marka, model, beden/kapasite ve önemli özellik',
+    description: 'Ürünün durumu, kullanım süresi, varsa kusurları, kutu/garanti ve teslimat bilgisi…',
+  };
+}
+
+const foldGeo = (s: string) =>
+  s
+    .toLocaleLowerCase('tr')
+    .replace(/i̇/g, 'i')
+    .replace(/[ıi]/g, 'i')
+    .replace(/ş/g, 's')
+    .replace(/ğ/g, 'g')
+    .replace(/ü/g, 'u')
+    .replace(/ö/g, 'o')
+    .replace(/ç/g, 'c');
+
+function matchCityName(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const n = foldGeo(raw.replace(/\s+(ili|province)$/i, '').trim());
+  return TURKEY_CITIES.find((c) => foldGeo(c.name) === n)?.name ?? null;
+}
+
+function matchDistrictName(city: string, raw: string | null | undefined): string | null {
+  if (!city || !raw) return null;
+  const cityObj = TURKEY_CITIES.find((c) => c.name === city);
+  if (!cityObj) return null;
+  const n = foldGeo(raw.replace(/\s+(ilçesi|district)$/i, '').trim());
+  return cityObj.districts.find((d) => foldGeo(d) === n) ?? null;
+}
+
+function matchNeighborhoodName(city: string, district: string, raw: string | null | undefined): string | null {
+  if (!city || !district || !raw) return null;
+  const list = NEIGHBORHOODS[city]?.[district] ?? [];
+  const n = foldGeo(raw.replace(/\s+(mahallesi|mah\.?)$/i, '').trim());
+  return list.find((h) => foldGeo(h) === n) ?? null;
+}
+
 function editSnapshotOf(d: Draft): string {
   return JSON.stringify({
     path: d.path.map((p) => p.id),
@@ -141,16 +265,30 @@ function PostForm({ editId, copyFrom, owner }: { editId?: string; copyFrom?: str
   const [copiedBanner, setCopiedBanner] = useState(false);
   const [offeredDraft, setOfferedDraft] = useState<{ draft: Draft; savedAt: number } | null>(null);
   const [step, setStep] = useState<StepKey>('category');
+  const [maxReachedIdx, setMaxReachedIdx] = useState(0);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [ready, setReady] = useState(!(editId || (copyFrom && copyAndQualityOn)));
   // New listing: nothing is saved until the "continue the draft?" question is answered,
   // or the empty form would overwrite the draft while the question is open.
   const [hydrated, setHydrated] = useState(!!editId);
   const [busy, setBusy] = useState(false);
   const [picker, setPicker] = useState<'city' | 'district' | 'neighborhood' | null>(null);
+  const [mapPickerOpen, setMapPickerOpen] = useState(false);
+  const [gpsLocating, setGpsLocating] = useState(false);
+  const [stickyLetters, setStickyLetters] = useState<string[]>([]);
+  const jumpToLetterRef = useRef<((letter: string) => void) | null>(null);
   /** Photos just picked, shown full screen before anything uploads. */
   const [review, setReview] = useState<PickedPhoto[] | null>(null);
   const [viewing, setViewing] = useState<number | null>(null);
   const originalImages = useRef<string[]>([]);
+  const editStoreIdRef = useRef<string | null | undefined>(undefined);
+  const [editInitialContent, setEditInitialContent] = useState<{
+    title: string;
+    description: string;
+    categoryId: string;
+    images: string[];
+    attrsJson: string;
+  } | null>(null);
   const initialEditSnapshot = useRef<string | null>(null);
   /** Running uploads, so removing a photo stops its upload. */
   const uploadsInFlight = useRef(new Map<string, AbortController>());
@@ -159,18 +297,8 @@ function PostForm({ editId, copyFrom, owner }: { editId?: string; copyFrom?: str
   const copiedRef = useRef(false);
 
   const leaf = draft.path[draft.path.length - 1];
-  const isVehicleCategory = useMemo(
-    () =>
-      draft.path.some(
-        (p) =>
-          p.id === 'vasita' ||
-          p.slug === 'vasita' ||
-          p.slug === 'otomobil' ||
-          p.name.toLocaleLowerCase('tr').includes('vasıta') ||
-          p.name.toLocaleLowerCase('tr').includes('otomobil'),
-      ),
-    [draft.path],
-  );
+  const isVehicleCategory = useMemo(() => isDamageVehicleCategory(draft.path), [draft.path]);
+  const placeholders = useMemo(() => getCategoryPlaceholders(draft.path), [draft.path]);
   const attrsQuery = useQuery({
     queryKey: keys.attributes(leaf?.id ?? ''),
     queryFn: () => catalog.attributes(leaf?.id ?? ''),
@@ -192,6 +320,28 @@ function PostForm({ editId, copyFrom, owner }: { editId?: string; copyFrom?: str
   const stepIndex = steps.indexOf(step);
   const quality = useMemo(() => computeListingQuality(draft, attributes), [draft, attributes]);
 
+  const setStepAndTrack = useCallback(
+    (nextStep: StepKey) => {
+      setStep(nextStep);
+      const idx = steps.indexOf(nextStep);
+      if (idx >= 0) setMaxReachedIdx((prev) => (idx > prev ? idx : prev));
+    },
+    [steps],
+  );
+
+  const editWillReReview = useMemo(() => {
+    if (!editId || !editInitialContent) return false;
+    const init = editInitialContent;
+    const addedPhoto = draft.photos.some((p) => !p.url || !init.images.includes(p.url));
+    return (
+      init.title !== draft.title.trim() ||
+      init.description !== draft.description.trim() ||
+      init.categoryId !== (leaf?.id ?? '') ||
+      addedPhoto ||
+      init.attrsJson !== JSON.stringify(draft.attrs)
+    );
+  }, [editId, editInitialContent, draft.photos, draft.title, draft.description, draft.attrs, leaf?.id]);
+
   // Edit: load the listing; copyFrom: prefill new listing; new: offer the saved draft and prefill from the profile.
   useEffect(() => {
     let cancelled = false;
@@ -210,6 +360,21 @@ function PostForm({ editId, copyFrom, owner }: { editId?: string; copyFrom?: str
             setRejectionReason(r.listing.rejection_reason);
           }
           if (isCopy) setCopiedBanner(true);
+          if (editId) {
+            editStoreIdRef.current = r.listing.store_id ?? null;
+            setEditInitialContent({
+              title: r.listing.title,
+              description: r.listing.description ?? '',
+              categoryId: r.path[r.path.length - 1] ?? r.listing.category_id ?? '',
+              images: r.listing.images,
+              attrsJson: JSON.stringify(r.listing.attrs ?? {}),
+            });
+            setMaxReachedIdx(5);
+          }
+          const hasRealPin =
+            r.listing.lat != null &&
+            r.listing.lng != null &&
+            !isCityCenterFallback(r.listing.city, r.listing.lat, r.listing.lng);
           const cur: Currency = r.listing.currency === 'USD' || r.listing.currency === 'EUR' ? r.listing.currency : 'TRY';
           setDraft((prev) => {
             const nextDraft: Draft = {
@@ -223,6 +388,12 @@ function PostForm({ editId, copyFrom, owner }: { editId?: string; copyFrom?: str
               city: r.listing.city ?? '',
               district: r.listing.district ?? '',
               neighborhood: r.listing.neighborhood ?? '',
+              lat: isCopy ? null : hasRealPin ? r.listing.lat : null,
+              lng: isCopy ? null : hasRealPin ? r.listing.lng : null,
+              pinLabel:
+                !isCopy && hasRealPin
+                  ? [r.listing.neighborhood, r.listing.district, r.listing.city].filter(Boolean).join(', ')
+                  : undefined,
               phone: isCopy ? prev.phone : (r.phone ? maskPhoneInput(r.phone) : ''),
               clientKey: editId ? undefined : Crypto.randomUUID(),
             };
@@ -300,6 +471,7 @@ function PostForm({ editId, copyFrom, owner }: { editId?: string; copyFrom?: str
       photos,
       clientKey: saved.clientKey ?? Crypto.randomUUID(),
     });
+    setMaxReachedIdx(Math.max(0, validSteps.indexOf(restoredStep)));
     setStep(restoredStep);
     setOfferedDraft(null);
   };
@@ -307,6 +479,30 @@ function PostForm({ editId, copyFrom, owner }: { editId?: string; copyFrom?: str
   const discardOfferedDraft = () => {
     setOfferedDraft(null);
     void clearDraft();
+  };
+
+  const clearNewForm = async () => {
+    const ok = await confirm({
+      title: 'Form temizlensin mi?',
+      message: 'Girdiğiniz başlık, açıklama, fotoğraflar ve taslak silinecek.',
+      confirmText: 'Temizle',
+      destructive: true,
+    });
+    if (!ok) return;
+    Keyboard.dismiss();
+    const p = me.data?.profile;
+    setDraft({
+      ...emptyDraft,
+      phone: p?.phone ? maskPhoneInput(p.phone) : '',
+      city: p?.city ?? '',
+      district: p?.district ?? '',
+      clientKey: Crypto.randomUUID(),
+    });
+    setFieldErrors({});
+    setMaxReachedIdx(0);
+    setStep('category');
+    void clearDraft();
+    toast.info('Form temizlendi.');
   };
 
   useEffect(() => {
@@ -394,24 +590,149 @@ function PostForm({ editId, copyFrom, owner }: { editId?: string; copyFrom?: str
       return item ? { ...d, photos: [item, ...d.photos.filter((p) => p.key !== key)] } : d;
     });
 
+  const rotateExistingPhoto = async (key: string) => {
+    const item = draft.photos.find((p) => p.key === key);
+    if (!item?.source) {
+      toast.info('Bu fotoğraf döndürülemiyor.');
+      return;
+    }
+    const prevUrl = item.url;
+    try {
+      const turned = await rotatePhoto(item.source);
+      setPhoto(key, { localUri: turned.uri, source: turned });
+      await upload(key, turned);
+      if (prevUrl && !originalImages.current.includes(prevUrl)) void uploads.discardListingPhoto(prevUrl);
+    } catch (e) {
+      toast.error(errorMessage(e, 'Fotoğraf döndürülemedi.'));
+    }
+  };
+
+  const applyGeoAddress = (
+    geoCity?: string | null,
+    geoDistrict?: string | null,
+    geoNeighborhood?: string | null,
+    overwrite = false,
+  ) => {
+    const matchedCity = matchCityName(geoCity);
+    if (!matchedCity) return;
+    setDraft((d) => {
+      if (!overwrite && d.city) return d;
+      const matchedDistrict = matchDistrictName(matchedCity, geoDistrict) ?? '';
+      const matchedHood = matchedDistrict ? (matchNeighborhoodName(matchedCity, matchedDistrict, geoNeighborhood) ?? '') : '';
+      return { ...d, city: matchedCity, district: matchedDistrict, neighborhood: matchedHood };
+    });
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      delete next.city;
+      delete next.district;
+      return next;
+    });
+  };
+
+  const detectCurrentLocation = async () => {
+    Keyboard.dismiss();
+    setGpsLocating(true);
+    try {
+      const perm = await Location.requestForegroundPermissionsAsync();
+      if (!perm.granted) {
+        toast.info('Konum izni verilmedi. Haritadan manuel seçebilirsiniz.');
+        return;
+      }
+      const pos = await Promise.race([
+        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High }),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 12_000)),
+      ]);
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      const res = await geo
+        .reverseFull(lat, lng)
+        .catch(() => ({ label: 'Mevcut konum', city: null, district: null, neighborhood: null }));
+      setDraft((d) => ({ ...d, lat, lng, pinLabel: res.label || 'Mevcut konum' }));
+      applyGeoAddress(res.city, res.district, res.neighborhood, true);
+      toast.success('Konumunuz haritaya eklendi.');
+    } catch {
+      toast.error('Konumunuz alınamadı. Haritadan seçebilirsiniz.');
+    } finally {
+      setGpsLocating(false);
+    }
+  };
+
+  const clearFieldError = (key: string) =>
+    setFieldErrors((prev) => {
+      if (!(key in prev)) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+
+  const collectStepErrors = (targetStep: StepKey): string | null => {
+    const errs: Record<string, string> = {};
+    if (targetStep === 'details') {
+      if (draft.title.trim().length < 5) errs.title = 'Başlık en az 5 karakter olmalı.';
+      const p = parseMasked(draft.price) ?? 0;
+      if (p < 1) errs.price = 'Geçerli bir fiyat girin.';
+      else if (p > 1_000_000_000) errs.price = 'Fiyat en fazla 1 milyar olabilir.';
+      if (draft.description.trim().length < 10) errs.description = 'Açıklama en az 10 karakter olmalı.';
+      setFieldErrors((prev) => ({
+        ...Object.fromEntries(Object.entries(prev).filter(([k]) => !['title', 'price', 'description'].includes(k))),
+        ...errs,
+      }));
+    } else if (targetStep === 'attributes') {
+      for (const a of attributes) {
+        if (a.required && (draft.attrs[a.name] === undefined || draft.attrs[a.name] === '')) {
+          errs[`attr:${a.name}`] = `“${a.name}” alanını doldurun.`;
+        }
+      }
+      const maxYear = new Date().getFullYear() + 1;
+      for (const yk of ['Yıl', 'Model Yılı'] as const) {
+        const y = draft.attrs[yk];
+        if (y !== undefined && y !== '' && (Number(y) < 1950 || Number(y) > maxYear)) {
+          errs[`attr:${yk}`] = `${yk} 1950 ile ${maxYear} arasında olmalı.`;
+        }
+      }
+      setFieldErrors((prev) => ({
+        ...Object.fromEntries(Object.entries(prev).filter(([k]) => !k.startsWith('attr:'))),
+        ...errs,
+      }));
+    } else if (targetStep === 'location') {
+      if (!draft.city) errs.city = 'İl seçin.';
+      if (!draft.district) errs.district = 'İlçe seçin.';
+      const phone = cleanPhone(draft.phone);
+      if (phone && !/^05\d{9}$/.test(phone)) errs.phone = 'Telefon 05xx xxx xx xx biçiminde olmalı.';
+      else if (!phone && stepContext.profilePhone === false) errs.phone = 'İlan vermek için telefon numarası yazın.';
+      setFieldErrors((prev) => ({
+        ...Object.fromEntries(Object.entries(prev).filter(([k]) => !['city', 'district', 'phone'].includes(k))),
+        ...errs,
+      }));
+    }
+    return stepError(targetStep, draft, attributes, stepContext);
+  };
+
   // ─── Navigation ───────────────────────────────────────────────────────────
+  const goTo = (nextStep: StepKey) => {
+    Keyboard.dismiss();
+    setStepAndTrack(nextStep);
+  };
+
   const next = () => {
-    const problem = stepError(step, draft, attributes, stepContext);
+    Keyboard.dismiss();
+    const problem = collectStepErrors(step);
     if (problem) {
       toast.error(problem);
       return;
     }
     const following = steps[stepIndex + 1];
-    if (following) setStep(following);
+    if (following) setStepAndTrack(following);
   };
 
   const back = () => {
+    Keyboard.dismiss();
     if (step === 'category' && draft.path.length) {
       update({ path: draft.path.slice(0, -1) });
       return;
     }
     const prev = steps[stepIndex - 1];
-    if (prev) setStep(prev);
+    if (prev) setStepAndTrack(prev);
     else void close();
   };
 
@@ -462,10 +783,12 @@ function PostForm({ editId, copyFrom, owner }: { editId?: string; copyFrom?: str
         city: draft.city,
         district: draft.district,
         neighborhood: draft.neighborhood || undefined,
+        lat: draft.lat ?? null,
+        lng: draft.lng ?? null,
         phone: cleanPhone(draft.phone) || undefined,
         images: draft.photos.flatMap((p) => (p.url ? [p.url] : [])),
         attrs: Object.fromEntries(Object.entries(draft.attrs).filter(([, v]) => v !== undefined && v !== '')),
-        storeId: meData?.store?.id,
+        storeId: editId ? (editStoreIdRef.current ?? undefined) : meData?.store?.id,
         clientKey: editId ? undefined : draft.clientKey,
       });
       if (!editId) await clearDraft();
@@ -502,9 +825,19 @@ function PostForm({ editId, copyFrom, owner }: { editId?: string; copyFrom?: str
   const hoods = (draft.city && draft.district && NEIGHBORHOODS[draft.city]?.[draft.district]) || [];
   const isLast = step === 'preview';
 
+  const hasClearableContent = Boolean(!editId && !offeredDraft && (draft.path.length || draft.title || draft.description || draft.price || draft.photos.length || draft.lat != null));
+
   return (
     <View style={[styles.flex, { backgroundColor: c.bg }]}>
-      <TopBar title={editId ? 'İlanı düzenle' : 'Ücretsiz ilan ver'} onClose={() => void close()} />
+      <TopBar
+        title={editId ? 'İlanı düzenle' : 'Ücretsiz ilan ver'}
+        onClose={() => void close()}
+        right={
+          hasClearableContent ? (
+            <IconButton icon={Trash2} label="Formu temizle" onPress={() => void clearNewForm()} />
+          ) : undefined
+        }
+      />
       <View style={[styles.progressWrap, { backgroundColor: c.surface, borderBottomColor: c.border }]}>
         <View style={styles.progressText}>
           <Text variant="label">{STEP_TITLES[step]}</Text>
@@ -519,17 +852,18 @@ function PostForm({ editId, copyFrom, owner }: { editId?: string; copyFrom?: str
           {steps.map((s, i) => {
             const done = i < stepIndex;
             const current = s === step;
+            const canPick = !current && (Boolean(editId) || i <= maxReachedIdx || done);
             return (
               <Pressable
                 key={s}
                 accessibilityRole="button"
-                disabled={!done || busy}
-                onPress={() => done && !busy && setStep(s)}
+                disabled={!canPick || busy}
+                onPress={() => canPick && !busy && goTo(s)}
                 style={[
                   styles.stepPill,
                   current
                     ? { backgroundColor: c.primarySoft, borderColor: c.primary }
-                    : done
+                    : done || canPick
                       ? { backgroundColor: c.surface, borderColor: c.borderStrong }
                       : { backgroundColor: c.elevated, borderColor: c.border },
                 ]}
@@ -538,8 +872,8 @@ function PostForm({ editId, copyFrom, owner }: { editId?: string; copyFrom?: str
                 <Text
                   variant="small"
                   style={{
-                    fontWeight: current || done ? '600' : '500',
-                    color: current ? c.primary : done ? c.fg : c.subtle,
+                    fontWeight: current || canPick ? '600' : '500',
+                    color: current ? c.primary : canPick ? c.fg : c.subtle,
                   }}
                 >
                   {STEP_TITLES[s]}
@@ -550,9 +884,33 @@ function PostForm({ editId, copyFrom, owner }: { editId?: string; copyFrom?: str
         </ScrollView>
       </View>
 
+      {step === 'category' && stickyLetters.length > 0 ? (
+        <View style={[styles.stickyLetterWrap, { backgroundColor: c.surface, borderBottomColor: c.border }]}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.letterBar}>
+            {stickyLetters.map((letter) => (
+              <Pressable
+                key={letter}
+                accessibilityRole="button"
+                accessibilityLabel={`${letter} harfine git`}
+                onPress={() => {
+                  Keyboard.dismiss();
+                  jumpToLetterRef.current?.(letter);
+                }}
+                style={[styles.letterBtn, { backgroundColor: c.elevated }]}
+              >
+                <Text variant="small" style={styles.letterBtnText}>
+                  {letter}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      ) : null}
+
       <KeyboardAwareScrollView
         ref={scrollRef}
         bottomOffset={90}
+        keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.content}
       >
@@ -608,8 +966,12 @@ function PostForm({ editId, copyFrom, owner }: { editId?: string; copyFrom?: str
           <CategoryStep
             path={draft.path}
             onPath={(path) => update({ path, attrs: path[path.length - 1]?.id === leaf?.id ? draft.attrs : {} })}
-            onLeaf={() => setStep('photos')}
+            onLeaf={() => goTo('photos')}
             onJumpY={(y) => scrollRef.current?.scrollTo({ y, animated: true })}
+            onLettersChange={(letters, jumper) => {
+              setStickyLetters(letters);
+              jumpToLetterRef.current = jumper;
+            }}
           />
         ) : null}
 
@@ -633,6 +995,7 @@ function PostForm({ editId, copyFrom, owner }: { editId?: string; copyFrom?: str
                 if (photo) void upload(key, photo);
                 else toast.error('Bu fotoğraf tekrar yüklenemiyor; silip yeniden ekleyin.');
               }}
+              onRotate={(key) => void rotateExistingPhoto(key)}
               onMove={movePhoto}
               onCover={makeCover}
               onOpen={setViewing}
@@ -642,47 +1005,72 @@ function PostForm({ editId, copyFrom, owner }: { editId?: string; copyFrom?: str
 
         {step === 'details' ? (
           <View style={styles.form}>
-            <CategorySummary path={draft.path} onChange={() => setStep('category')} />
+            <CategorySummary path={draft.path} onChange={() => goTo('category')} />
             {editId ? (
-              <Card style={[styles.warnBanner, { backgroundColor: c.warnSoft, borderColor: c.warn }]}>
-                <AlertTriangle size={16} color={c.warn} />
-                <Text variant="caption" style={styles.flex}>
-                  Başlık, açıklama, kategori, özellik değişirse veya yeni fotoğraf eklerseniz ilan yeniden onaya gider ve o sırada yayında görünmez.
-                </Text>
-              </Card>
+              editWillReReview ? (
+                <Card style={[styles.warnBanner, { backgroundColor: c.warnSoft, borderColor: c.warn }]}>
+                  <AlertTriangle size={16} color={c.warn} />
+                  <Text variant="caption" style={styles.flex}>
+                    Başlık, açıklama, kategori, özellik değişti veya yeni fotoğraf eklendi; kaydettiğinizde ilan yeniden onaya gönderilir.
+                  </Text>
+                </Card>
+              ) : (
+                <Card style={[styles.warnBanner, { backgroundColor: c.okSoft, borderColor: c.ok }]}>
+                  <CheckCircle2 size={16} color={c.ok} />
+                  <Text variant="caption" style={styles.flex}>
+                    Fiyat, konum veya telefon değişiklikleri onay gerektirmez; kaydettiğiniz anda yayında kalır.
+                  </Text>
+                </Card>
+              )
             ) : null}
             <Input
               label="İlan başlığı"
               required
-              placeholder="Örn. Sahibinden temiz 2018 Renault Clio 1.5 dCi"
+              placeholder={placeholders.title}
+              error={fieldErrors.title}
               value={draft.title}
-              onChangeText={(t) => update({ title: t.slice(0, 100) })}
+              onChangeText={(t) => {
+                clearFieldError('title');
+                update({ title: t.slice(0, 100) });
+              }}
               maxLength={100}
               hint={`${draft.title.length}/100 · Marka, model ve en önemli özelliği yazın.`}
             />
-            <View style={styles.currencyWrap}>
-              <Text variant="label" style={styles.currencyLabel}>
-                Para birimi
-              </Text>
-              <Segmented value={currency} onChange={(next) => update({ currency: next })} options={CURRENCY_OPTIONS} />
+            <View style={styles.priceRow}>
+              <View style={styles.priceInputWrap}>
+                <Input
+                  label="Fiyat"
+                  required
+                  keyboardType="number-pad"
+                  placeholder="0"
+                  error={fieldErrors.price}
+                  value={draft.price}
+                  onChangeText={(t) => {
+                    clearFieldError('price');
+                    update({ price: maskThousands(t) });
+                  }}
+                  suffix={CURRENCY_SUFFIX[currency]}
+                  style={styles.price}
+                />
+              </View>
+              <View style={styles.currencyCompactWrap}>
+                <Text variant="label" style={styles.currencyLabel}>
+                  Birim
+                </Text>
+                <Segmented value={currency} onChange={(next) => update({ currency: next })} options={CURRENCY_OPTIONS} />
+              </View>
             </View>
-            <Input
-              label="Fiyat"
-              required
-              keyboardType="number-pad"
-              placeholder="0"
-              value={draft.price}
-              onChangeText={(t) => update({ price: maskThousands(t) })}
-              suffix={CURRENCY_SUFFIX[currency]}
-              style={styles.price}
-            />
             <Input
               label="Açıklama"
               required
               multiline
-              placeholder="Ürünün durumu, kullanım süresi, varsa kusurları, teslimat bilgisi…"
+              placeholder={placeholders.description}
+              error={fieldErrors.description}
               value={draft.description}
-              onChangeText={(t) => update({ description: t.slice(0, 5000) })}
+              onChangeText={(t) => {
+                clearFieldError('description');
+                update({ description: t.slice(0, 5000) });
+              }}
               maxLength={5000}
               style={styles.description}
               hint={`${draft.description.length}/5000 · Kusurları dürüstçe yazmak satışı hızlandırır.`}
@@ -702,14 +1090,21 @@ function PostForm({ editId, copyFrom, owner }: { editId?: string; copyFrom?: str
                   key={a.id}
                   attr={a}
                   value={draft.attrs[a.name]}
-                  onChange={(v) =>
+                  error={fieldErrors[`attr:${a.name}`]}
+                  hint={
+                    damageOn && isVehicleCategory && (a.name === 'Boya-Değişen' || a.name === 'Hasar Kaydı')
+                      ? 'Aşağıdaki hasar şemasıyla otomatik senkronize edilir.'
+                      : undefined
+                  }
+                  onChange={(v) => {
+                    clearFieldError(`attr:${a.name}`);
                     setDraft((d) => {
                       const attrs = { ...d.attrs };
                       if (v === undefined) delete attrs[a.name];
                       else attrs[a.name] = v;
                       return { ...d, attrs };
-                    })
-                  }
+                    });
+                  }}
                 />
               ))}
             {damageOn && isVehicleCategory ? (
@@ -736,26 +1131,111 @@ function PostForm({ editId, copyFrom, owner }: { editId?: string; copyFrom?: str
 
         {step === 'location' ? (
           <View style={styles.form}>
-            <SelectField label="İl" required icon={MapPin} placeholder="İl seçin" value={draft.city} onPress={() => setPicker('city')} />
+            <View style={styles.gpsRow}>
+              <Button
+                title={gpsLocating ? 'Konum alınıyor…' : 'Mevcut konumumu kullan'}
+                icon={LocateFixed}
+                variant="outline"
+                size="sm"
+                loading={gpsLocating}
+                onPress={() => void detectCurrentLocation()}
+              />
+              {draft.path[0]?.id === 'emlak' ? (
+                <Badge label="Ev / Arsa için harita önerilir" tone="primary" />
+              ) : null}
+            </View>
+            <SelectField
+              label="İl"
+              required
+              icon={MapPin}
+              placeholder="İl seçin"
+              value={draft.city}
+              error={fieldErrors.city}
+              onPress={() => {
+                Keyboard.dismiss();
+                setPicker('city');
+              }}
+            />
             <SelectField
               label="İlçe"
               required
               placeholder={draft.city ? 'İlçe seçin' : 'Önce il seçin'}
               value={draft.district}
+              error={fieldErrors.district}
               disabled={!draft.city}
-              onPress={() => setPicker('district')}
+              onPress={() => {
+                Keyboard.dismiss();
+                setPicker('district');
+              }}
             />
             {hoods.length ? (
-              <SelectField label="Mahalle" placeholder="İsteğe bağlı" value={draft.neighborhood} onPress={() => setPicker('neighborhood')} />
+              <SelectField
+                label="Mahalle"
+                placeholder="İsteğe bağlı"
+                value={draft.neighborhood}
+                onPress={() => {
+                  Keyboard.dismiss();
+                  setPicker('neighborhood');
+                }}
+              />
             ) : null}
+
+            <Card style={styles.pinCard}>
+              <View style={styles.pinCardHead}>
+                <MapPin size={18} color={c.primary} />
+                <View style={styles.flex}>
+                  <Text variant="label">Haritada Konum İşaretle (İsteğe bağlı)</Text>
+                  <Text variant="small" tone="muted">
+                    İşaretlerseniz ilan detayında il merkezi yerine seçtiğiniz nokta görünür.
+                  </Text>
+                </View>
+              </View>
+              {draft.lat != null && draft.lng != null ? (
+                <View style={styles.pinPreviewRow}>
+                  <MapThumb lat={draft.lat} lng={draft.lng} width={132} height={84} radius={radius.md} />
+                  <View style={styles.flex}>
+                    <Text variant="caption" numberOfLines={2}>
+                      {draft.pinLabel || locationLabel(draft.city, draft.district, draft.neighborhood) || 'Haritada işaretlendi'}
+                    </Text>
+                    <Text variant="small" tone="subtle">
+                      {draft.lat.toFixed(5)}, {draft.lng.toFixed(5)}
+                    </Text>
+                  </View>
+                </View>
+              ) : null}
+              <View style={styles.pinCardActions}>
+                <Button
+                  title={draft.lat != null ? 'Konumu değiştir' : 'Haritada seç'}
+                  size="sm"
+                  variant="outline"
+                  onPress={() => {
+                    Keyboard.dismiss();
+                    setMapPickerOpen(true);
+                  }}
+                />
+                {draft.lat != null ? (
+                  <Button
+                    title="Kaldır"
+                    size="sm"
+                    variant="ghost"
+                    onPress={() => update({ lat: null, lng: null, pinLabel: undefined })}
+                  />
+                ) : null}
+              </View>
+            </Card>
+
             <Divider />
             <Input
               label="Telefon"
               icon={Phone}
               keyboardType="phone-pad"
               placeholder="05xx xxx xx xx"
+              error={fieldErrors.phone}
               value={draft.phone}
-              onChangeText={(t) => update({ phone: maskPhoneInput(t) })}
+              onChangeText={(t) => {
+                clearFieldError('phone');
+                update({ phone: maskPhoneInput(t) });
+              }}
               hint={
                 me.data?.profile?.phone
                   ? 'Boş bırakırsanız profilinizdeki numara kullanılır. Alıcılar “Ara” ile bu numarayı görür.'
@@ -777,7 +1257,7 @@ function PostForm({ editId, copyFrom, owner }: { editId?: string; copyFrom?: str
             draft={draft}
             currency={currency}
             attributes={attributes}
-            onEdit={setStep}
+            onEdit={goTo}
             onOpenPhoto={setViewing}
             editing={!!editId}
             damageOn={damageOn}
@@ -803,14 +1283,27 @@ function PostForm({ editId, copyFrom, owner }: { editId?: string; copyFrom?: str
         )}
       </View>
 
-      <OptionPicker visible={picker === 'city'} onClose={() => setPicker(null)} title="İl seçin" value={draft.city} onSelect={(v) => update({ city: v ?? '', district: '', neighborhood: '' })} />
+      <OptionPicker
+        visible={picker === 'city'}
+        onClose={() => setPicker(null)}
+        title="İl seçin"
+        value={draft.city}
+        onSelect={(v) => {
+          clearFieldError('city');
+          clearFieldError('district');
+          update({ city: v ?? '', district: '', neighborhood: '' });
+        }}
+      />
       <OptionPicker
         visible={picker === 'district'}
         onClose={() => setPicker(null)}
         title="İlçe seçin"
         options={cityData?.districts ?? []}
         value={draft.district}
-        onSelect={(v) => update({ district: v ?? '', neighborhood: '' })}
+        onSelect={(v) => {
+          clearFieldError('district');
+          update({ district: v ?? '', neighborhood: '' });
+        }}
       />
       <OptionPicker
         visible={picker === 'neighborhood'}
@@ -821,6 +1314,35 @@ function PostForm({ editId, copyFrom, owner }: { editId?: string; copyFrom?: str
         allLabel="Belirtmek istemiyorum"
         onSelect={(v) => update({ neighborhood: v ?? '' })}
       />
+
+      <LocationPicker
+        visible={mapPickerOpen}
+        onClose={() => setMapPickerOpen(false)}
+        title="İlan konumu seç"
+        subtitle="Haritayı kaydırarak ilanın konumunu işaretleyin"
+        confirmLabel="Bu konumu seç"
+        footnote=""
+        showMineShortcut={false}
+        autoLocate={false}
+        initialCenter={draft.lat != null && draft.lng != null ? { lat: draft.lat, lng: draft.lng, zoom: 16 } : null}
+        initialQuery={draft.lat == null && (draft.district || draft.city) ? [draft.district, draft.city].filter(Boolean).join(', ') : undefined}
+        onSend={(label, lat, lng, addr) => {
+          update({ lat, lng, pinLabel: label });
+          applyGeoAddress(addr?.city, addr?.district, addr?.neighborhood, false);
+        }}
+      />
+
+      <KeyboardToolbar
+        theme={{
+          light: { primary: c.primary, disabled: c.subtle, background: c.surface, ripple: c.elevated },
+          dark: { primary: c.primary, disabled: c.subtle, background: c.surface, ripple: c.elevated },
+        }}
+      >
+        <KeyboardToolbar.Prev />
+        <KeyboardToolbar.Next />
+        <KeyboardToolbar.Content />
+        <KeyboardToolbar.Done text="Bitti" />
+      </KeyboardToolbar>
 
       <PhotoReview
         photos={review}
@@ -857,7 +1379,7 @@ function resumePhotos(photos: PhotoItem[], savedAt: number): { photos: PhotoItem
   return { photos: kept, expired };
 }
 
-function TopBar({ title, onClose }: { title: string; onClose: () => void }) {
+function TopBar({ title, onClose, right }: { title: string; onClose: () => void; right?: React.ReactNode }) {
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
   return (
@@ -866,28 +1388,33 @@ function TopBar({ title, onClose }: { title: string; onClose: () => void }) {
       <Text variant="subheading" style={styles.flex} center>
         {title}
       </Text>
-      <View style={styles.topSpacer} />
+      {right ?? <View style={styles.topSpacer} />}
     </View>
   );
 }
 
-/** Inline drill-down: tap through the tree until a leaf is reached. */
+/** Inline drill-down + global category path search. */
 function CategoryStep({
   path,
   onPath,
   onLeaf,
   onJumpY,
+  onLettersChange,
 }: {
   path: Category[];
   onPath: (path: Category[]) => void;
   onLeaf: () => void;
   onJumpY: (y: number) => void;
+  onLettersChange: (letters: string[], jumper: ((letter: string) => void) | null) => void;
 }) {
   const { c, dark } = useTheme();
   const leafPicked = path.length > 0 && path[path.length - 1]?.has_children === false;
   const browsePath = (leafPicked ? path.slice(0, -1) : path).map((p) => p.id);
   const browseKey = browsePath.join('/');
   const [search, setSearch] = useState({ key: browseKey, text: '' });
+  const [globalQ, setGlobalQ] = useState('');
+  const [globalResults, setGlobalResults] = useState<{ path: Category[]; leaf: Category }[]>([]);
+  const [globalBusy, setGlobalBusy] = useState(false);
   const query = search.key === browseKey ? search.text : '';
   const setQuery = (text: string) => setSearch({ key: browseKey, text });
   const level = useQuery({ queryKey: keys.browse(browsePath), queryFn: () => catalog.browse(browsePath), placeholderData: (p) => p });
@@ -895,6 +1422,34 @@ function CategoryStep({
   const counts = level.data?.counts ?? {};
   const listOffsetY = useRef(0);
   const sectionOffsets = useRef<Record<string, number>>({});
+
+  useEffect(() => {
+    sectionOffsets.current = {};
+  }, [browseKey]);
+
+  useEffect(() => {
+    const term = globalQ.trim();
+    if (term.length < 2) return;
+    let cancelled = false;
+    const t = setTimeout(() => {
+      setGlobalBusy(true);
+      void catalog
+        .searchCategoryPaths(term)
+        .then((rows) => {
+          if (!cancelled) setGlobalResults(rows);
+        })
+        .catch(() => {
+          if (!cancelled) setGlobalResults([]);
+        })
+        .finally(() => {
+          if (!cancelled) setGlobalBusy(false);
+        });
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [globalQ]);
 
   const searching = query.trim().length > 0;
   const shown = useMemo(() => {
@@ -915,7 +1470,19 @@ function CategoryStep({
     }
     return [...map.keys()].sort(sortLetters).map((letter) => ({ letter, items: map.get(letter) ?? [] }));
   }, [shown, useLetters]);
-  const letters = groups.map((g) => g.letter).filter(Boolean);
+  const letters = useMemo(() => groups.map((g) => g.letter).filter(Boolean), [groups]);
+
+  useEffect(() => {
+    if (!level.isLoading && useLetters && letters.length > 0) {
+      onLettersChange(letters, (letter) => {
+        const secY = sectionOffsets.current[letter];
+        if (secY !== undefined) onJumpY(Math.max(0, listOffsetY.current + secY - 8));
+      });
+    } else {
+      onLettersChange([], null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [level.isLoading, useLetters, letters]);
 
   const popular = useMemo(() => {
     if (searching) return [];
@@ -931,7 +1498,70 @@ function CategoryStep({
 
   return (
     <View style={styles.form}>
-      <Text tone="muted">Ne satıyorsunuz? En alt kategoriye kadar inin; alıcılar ilanınızı filtrelerle bu şekilde bulur.</Text>
+      <Text tone="muted">Hızlı arama yapın veya ana kategoriden en alt türe kadar inin.</Text>
+
+      <View style={styles.globalSearchWrap}>
+        <Input
+          icon={Search}
+          placeholder="Tüm kategorilerde hızlı ara (ör. iPhone 15, Clio)"
+          value={globalQ}
+          onChangeText={(text) => {
+            setGlobalQ(text);
+            if (text.trim().length < 2) {
+              setGlobalResults([]);
+              setGlobalBusy(false);
+            }
+          }}
+          right={
+            globalBusy ? (
+              <ActivityIndicator size="small" color={c.primary} />
+            ) : globalQ ? (
+              <Pressable accessibilityRole="button" accessibilityLabel="Aramayı temizle" hitSlop={8} onPress={() => setGlobalQ('')}>
+                <X size={16} color={c.subtle} />
+              </Pressable>
+            ) : undefined
+          }
+        />
+        {globalQ.trim().length >= 2 && (globalResults.length > 0 || !globalBusy) ? (
+          <View style={[styles.globalResultsCard, { backgroundColor: c.surface, borderColor: c.border }]}>
+            {globalResults.length === 0 ? (
+              <Text variant="caption" tone="muted" style={styles.emptyCat}>
+                “{globalQ.trim()}” için kategori bulunamadı.
+              </Text>
+            ) : (
+              globalResults.map((hit, idx) => (
+                <View key={hit.leaf.id}>
+                  {idx > 0 ? <Divider inset={space.md} /> : null}
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => {
+                      Keyboard.dismiss();
+                      const normalized = hit.path.map((p, i) => ({
+                        ...p,
+                        has_children: i < hit.path.length - 1 ? true : hit.leaf.has_children,
+                      }));
+                      onPath(normalized);
+                      setGlobalQ('');
+                      setGlobalResults([]);
+                      if (hit.leaf.has_children === false) onLeaf();
+                    }}
+                    style={({ pressed }) => [styles.globalResultRow, pressed && { backgroundColor: c.elevated }]}
+                  >
+                    <View style={styles.flex}>
+                      <Text variant="bodyStrong">{hit.leaf.name}</Text>
+                      <Text variant="small" tone="muted" numberOfLines={1}>
+                        {hit.path.map((p) => p.name).join(' › ')}
+                      </Text>
+                    </View>
+                    <ChevronRight size={16} color={c.subtle} />
+                  </Pressable>
+                </View>
+              ))
+            )}
+          </View>
+        ) : null}
+      </View>
+
       {path.length ? (
         <View style={styles.crumbs}>
           <Pressable
@@ -945,11 +1575,15 @@ function CategoryStep({
           </Pressable>
           {path.map((p, i) => {
             const active = i === path.length - 1;
+            const isLeafItem = active && p.has_children === false;
             return (
               <View key={p.id} style={styles.crumb}>
                 <ChevronRight size={14} color={c.subtle} />
                 <Pressable
-                  onPress={() => onPath(path.slice(0, i + 1).map((x, j) => (j === i ? { ...x, has_children: true } : x)))}
+                  onPress={() => {
+                    if (isLeafItem) return;
+                    onPath(path.slice(0, i + 1).map((x, j) => (j === i ? { ...x, has_children: true } : x)));
+                  }}
                   hitSlop={6}
                   style={[
                     styles.crumbPill,
@@ -1004,27 +1638,6 @@ function CategoryStep({
             ))}
           </ScrollView>
         </View>
-      ) : null}
-
-      {!level.isLoading && useLetters && letters.length > 0 ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.letterBar}>
-          {letters.map((letter) => (
-            <Pressable
-              key={letter}
-              accessibilityRole="button"
-              accessibilityLabel={`${letter} harfine git`}
-              onPress={() => {
-                const secY = sectionOffsets.current[letter];
-                if (secY !== undefined) onJumpY(Math.max(0, listOffsetY.current + secY - 8));
-              }}
-              style={[styles.letterBtn, { backgroundColor: c.elevated }]}
-            >
-              <Text variant="small" style={styles.letterBtnText}>
-                {letter}
-              </Text>
-            </Pressable>
-          ))}
-        </ScrollView>
       ) : null}
 
       {level.isError && !level.data ? (
@@ -1194,15 +1807,40 @@ function Preview({
           </View>
         ) : null}
         <View style={styles.previewBody}>
-          <Text variant="title" tone="primary">
-            {formatPrice(parseMasked(draft.price) ?? 0, currency)}
-          </Text>
+          <View style={styles.previewPriceRow}>
+            <Text variant="title" tone="primary" style={styles.flex}>
+              {formatPrice(parseMasked(draft.price) ?? 0, currency)}
+            </Text>
+            <Pressable onPress={() => onEdit('details')} hitSlop={8}>
+              <Text variant="label" tone="primary">
+                Düzenle
+              </Text>
+            </Pressable>
+          </View>
           <Text variant="subheading">{draft.title}</Text>
           <Text variant="caption" tone="muted">
             {locationLabel(draft.city, draft.district, draft.neighborhood)} · {draft.photos.length} fotoğraf
           </Text>
         </View>
       </Card>
+      {draft.lat != null && draft.lng != null ? (
+        <Card style={styles.pinCard}>
+          <View style={styles.pinPreviewRow}>
+            <MapThumb lat={draft.lat} lng={draft.lng} width={120} height={76} radius={radius.md} />
+            <View style={styles.flex}>
+              <Text variant="label">Harita konumu işaretlendi</Text>
+              <Text variant="caption" tone="muted" numberOfLines={2}>
+                {draft.pinLabel || locationLabel(draft.city, draft.district, draft.neighborhood)}
+              </Text>
+            </View>
+            <Pressable onPress={() => onEdit('location')} hitSlop={8}>
+              <Text variant="label" tone="primary">
+                Düzenle
+              </Text>
+            </Pressable>
+          </View>
+        </Card>
+      ) : null}
       <PreviewRow label="Kategori" value={draft.path.map((p) => p.name).join(' › ')} onEdit={() => onEdit('category')} />
       <PreviewRow label="Açıklama" value={draft.description} onEdit={() => onEdit('details')} />
       {attrEntries.length ? (
@@ -1268,7 +1906,14 @@ function previewAttrValue(attr: AttrDef, value: string | number | undefined): st
     if (raw === 1 || raw === 'Evet') return 'Evet';
     if (raw === 0 || raw === 'Hayır') return 'Hayır';
   }
-  return typeof value === 'number' ? formatNumber(value) : String(value ?? '');
+  const isYear = attr.name === 'Yıl' || attr.name === 'Model Yılı';
+  const formatted =
+    isYear
+      ? String(value ?? '')
+      : typeof value === 'number' || (attr.type === 'NUMBER' && /^\d+$/.test(String(value ?? '')))
+        ? formatNumber(Number(value))
+        : String(value ?? '');
+  return attr.unit && formatted && !formatted.includes(attr.unit) ? `${formatted} ${attr.unit}` : formatted;
 }
 
 function PreviewRow({ label, value, onEdit }: { label: string; value: string; onEdit: () => void }) {
@@ -1387,8 +2032,21 @@ const styles = StyleSheet.create({
   qualityHead: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   qualityTrack: { height: 6, borderRadius: 3, overflow: 'hidden' },
   qualityBar: { height: 6, borderRadius: 3 },
+  stickyLetterWrap: { paddingHorizontal: space.lg, paddingVertical: space.xs, borderBottomWidth: hairline },
+  priceRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm },
+  priceInputWrap: { flex: 1 },
+  currencyCompactWrap: { gap: space.xs + 2, minWidth: 168 },
   currencyWrap: { gap: space.xs + 2 },
   currencyLabel: { marginLeft: 2 },
+  gpsRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: space.sm },
+  pinCard: { gap: space.sm, padding: space.md },
+  pinCardHead: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm },
+  pinPreviewRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  pinCardActions: { flexDirection: 'row', gap: space.sm },
+  globalSearchWrap: { gap: space.xs },
+  globalResultsCard: { borderRadius: radius.lg, borderWidth: hairline, overflow: 'hidden' },
+  globalResultRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.md, paddingVertical: space.md },
+  previewPriceRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm },
   damageCard: { gap: space.md },
   damageHead: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   form: { gap: space.lg },

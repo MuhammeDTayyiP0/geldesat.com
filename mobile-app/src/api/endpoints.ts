@@ -41,6 +41,7 @@ export const catalog = {
   stats: () => rpc<{ listings: number; cities: number }>('statsHome'),
   roots: () => rpc<{ roots: Category[]; counts: Record<string, number> }>('listCategoryRoots'),
   browse: (path: string[]) => rpc<BrowseResult>('browseCategories', { path }),
+  searchCategoryPaths: (q: string) => rpc<{ path: Category[]; leaf: Category }[]>('searchCategoryPaths', { q }),
   category: (slug: string) => rpc<CategoryInfo>('getCategory', { slug }),
   attributes: (categoryId: string) =>
     request<{ attributes: AttrDef[] }>(`/api/mobile/category-attributes${toQuery({ categoryId })}`, { auth: false }).then((r) => r.attributes),
@@ -224,6 +225,7 @@ export const chat = {
 // ─── Places (meeting-point picker; the site proxies OpenStreetMap Nominatim) ──
 
 export type GeoPlace = { label: string; lat: number; lng: number };
+export type GeoReverseResult = { label: string; city?: string | null; district?: string | null; neighborhood?: string | null };
 
 export const geo = {
   search: (q: string, near?: { lat: number; lng: number }) =>
@@ -231,7 +233,9 @@ export const geo = {
       (r) => r.results,
     ),
   reverse: (lat: number, lng: number) =>
-    request<{ label: string }>(`/api/geo${toQuery({ lat: lat.toFixed(6), lng: lng.toFixed(6) })}`, { auth: false }).then((r) => r.label),
+    request<GeoReverseResult>(`/api/geo${toQuery({ lat: lat.toFixed(6), lng: lng.toFixed(6) })}`, { auth: false }).then((r) => r.label),
+  reverseFull: (lat: number, lng: number) =>
+    request<GeoReverseResult>(`/api/geo${toQuery({ lat: lat.toFixed(6), lng: lng.toFixed(6) })}`, { auth: false }),
 };
 
 // ─── Uploads ────────────────────────────────────────────────────────────────

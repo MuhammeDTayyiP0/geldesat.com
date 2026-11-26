@@ -184,6 +184,7 @@ html {
     background-position: right 0.75rem center;
     padding: 0 2.5rem 0 0.75rem;
     font-size: 1rem;
+    line-height: normal;
     color: var(--color-fg);
     outline: none;
   }
@@ -211,6 +212,7 @@ html {
     background-size: 14px;
     padding: 0 2rem 0 0.75rem;
     font-size: 0.875rem;
+    line-height: normal;
     color: var(--color-fg);
     outline: none;
   }

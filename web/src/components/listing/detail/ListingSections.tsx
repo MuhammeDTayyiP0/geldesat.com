@@ -20,6 +20,8 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { MapThumb } from "@/components/chat/MapThumb";
+import { isCityCenterFallback } from "@/lib/data/geo";
 import { cn, formatDate, formatPrice } from "@/lib/utils";
 
 /** Card shell shared by every section of the listing page. */
@@ -292,26 +294,59 @@ export function PriceHistorySection({ history, currency }: { history: Array<{ pr
 }
 
 /**
- * Only the district/city is known, so this links out to map search instead of
- * pinning a marker that would pretend to be the exact address.
+ * Shows the listing's explicit map pin when present (ignoring legacy province-center
+ * fallbacks), otherwise links out to map search by district/neighborhood/city.
  */
-export function LocationSection({ city, district, neighborhood }: { city: string | null; district: string | null; neighborhood: string | null }) {
+export function LocationSection({
+  city,
+  district,
+  neighborhood,
+  lat,
+  lng,
+}: {
+  city: string | null;
+  district: string | null;
+  neighborhood: string | null;
+  lat?: number | null;
+  lng?: number | null;
+}) {
   if (!city) return null;
   const text = [neighborhood, district, city].filter(Boolean).join(", ");
+  const hasExactPin = lat != null && lng != null && !isCityCenterFallback(city, lat, lng);
   const query = encodeURIComponent(text);
+  const googleHref = hasExactPin
+    ? `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`
+    : `https://www.google.com/maps/search/?api=1&query=${query}`;
+  const yandexHref = hasExactPin
+    ? `https://yandex.com.tr/harita/?pt=${lng},${lat}&z=16&l=map`
+    : `https://yandex.com.tr/harita/?text=${query}`;
   return (
     <Section title="Konum">
+      {hasExactPin ? (
+        <a
+          href={googleHref}
+          target="_blank"
+          rel="noreferrer"
+          className="mb-3 block overflow-hidden rounded-xl border border-border transition-opacity hover:opacity-95"
+        >
+          <div className="flex justify-center bg-elevated">
+            <MapThumb lat={lat!} lng={lng!} width={560} height={190} />
+          </div>
+        </a>
+      ) : null}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="flex items-start gap-2 text-sm">
           <MapPin className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
           <span>
             <span className="font-medium">{text}</span>
-            <span className="mt-0.5 block text-xs text-muted">Açık adres satıcı tarafından paylaşılmaz.</span>
+            <span className="mt-0.5 block text-xs text-muted">
+              {hasExactPin ? "Satıcı tarafından haritada işaretlenmiş konum." : "Açık adres satıcı tarafından paylaşılmaz."}
+            </span>
           </span>
         </p>
         <div className="flex gap-2">
           <a
-            href={`https://www.google.com/maps/search/?api=1&query=${query}`}
+            href={googleHref}
             target="_blank"
             rel="noreferrer"
             className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-medium hover:bg-elevated"
@@ -319,7 +354,7 @@ export function LocationSection({ city, district, neighborhood }: { city: string
             Google Haritalar <ExternalLink className="size-3" />
           </a>
           <a
-            href={`https://yandex.com.tr/harita/?text=${query}`}
+            href={yandexHref}
             target="_blank"
             rel="noreferrer"
             className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-medium hover:bg-elevated"

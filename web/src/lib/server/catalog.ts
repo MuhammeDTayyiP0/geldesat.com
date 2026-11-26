@@ -273,6 +273,36 @@ export const browseCategories = createServerFn({ method: "GET" })
     return { pathRows, children, counts: pickCounts(counts, children) };
   });
 
+/**
+ * Global category path search across the full category tree for the post-listing flow.
+ * Matches multi-word queries across the category name and its ancestor names.
+ */
+export const searchCategoryPaths = createServerFn({ method: "POST" })
+  .validator(z.object({ q: z.string().trim().min(2).max(80) }))
+  .handler(async ({ data }) => {
+    const words = foldTr(data.q).split(/\s+/).filter(Boolean).slice(0, 5);
+    if (!words.length) return [] as Array<{ path: CategoryRow[]; leaf: CategoryRow }>;
+    const tree = await getCategoryTree();
+    const firstWord = words[0];
+    const scored: Array<{ score: number; path: CategoryRow[]; leaf: CategoryRow }> = [];
+
+    for (const cat of tree.rows) {
+      const path = categoryPath(tree, cat.id);
+      const foldedName = foldTr(cat.name);
+      const foldedFull = path.map((p) => foldTr(p.name)).join(" ");
+      if (!words.every((w) => foldedFull.includes(w))) continue;
+      let score = 0;
+      if (!cat.has_children) score += 100;
+      if (foldedName.startsWith(firstWord)) score += 30;
+      else if (foldedName.includes(firstWord)) score += 15;
+      score -= path.length;
+      scored.push({ score, path: path as CategoryRow[], leaf: cat as CategoryRow });
+    }
+
+    scored.sort((a, b) => b.score - a.score || a.leaf.name.localeCompare(b.leaf.name, "tr"));
+    return scored.slice(0, 12).map(({ path, leaf }) => ({ path, leaf }));
+  });
+
 export const getCategory = createServerFn({ method: "POST" })
   .validator(z.object({ slug: z.string() }))
   .handler(async ({ data }) => {
@@ -585,10 +615,6 @@ export const getListing = createServerFn({ method: "POST" })
       const isOwner = listing.user_id === sessionUser.id;
       const isAdmin = profile[0]?.role === "ADMIN";
       if (!isOwner && !isAdmin) return null;
-    }
-    if ((listing.lat == null || listing.lng == null) && listing.city && CITY_COORDS[listing.city]) {
-      listing.lat = CITY_COORDS[listing.city].lat;
-      listing.lng = CITY_COORDS[listing.city].lng;
     }
     // Everything below depends only on the listing row, so fetch it in parallel.
     const similarOf = (narrow: boolean) =>

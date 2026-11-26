@@ -360,6 +360,8 @@ export type ListingInput = {
   city: string;
   district: string;
   neighborhood?: string;
+  lat?: number | null;
+  lng?: number | null;
   phone?: string;
   images: string[];
   attrs: Record<string, string | number>;

@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { getSql } from "@/lib/db";
-import { CITY_COORDS } from "@/lib/data/geo";
 import { cleanAttrs, type AttrValues } from "@/lib/listing-attrs";
 import { needsReReview, sameAttrs } from "@/lib/listing-status";
 import { asJson, formatPrice, listingSlug, newId, num } from "@/lib/utils";
@@ -21,6 +20,8 @@ export const ListingInput = z.object({
   city: z.string().min(1).max(60),
   district: z.string().min(1).max(60),
   neighborhood: z.string().max(60).optional(),
+  lat: z.number().min(-90).max(90).nullable().optional(),
+  lng: z.number().min(-180).max(180).nullable().optional(),
   phone: z.string().max(20).optional(),
   images: z.array(z.string()).max(10),
   attrs: z.record(z.string(), z.union([z.string(), z.number()])),
@@ -114,7 +115,13 @@ export async function saveListingRecord(userId: string, data: ListingInputData) 
     if (!store[0]) throw new Error("Mağaza bulunamadı");
   };
 
-  const coords = CITY_COORDS[data.city];
+  const hasExplicitPin =
+    typeof data.lat === "number" &&
+    Number.isFinite(data.lat) &&
+    typeof data.lng === "number" &&
+    Number.isFinite(data.lng);
+  const saveLat = hasExplicitPin ? Number(data.lat!.toFixed(6)) : null;
+  const saveLng = hasExplicitPin ? Number(data.lng!.toFixed(6)) : null;
   if (data.id && existing) {
     await assertStoreOwner(ownerId);
     const txResult = await sql.transaction(async (tx) => {
@@ -151,7 +158,7 @@ export async function saveListingRecord(userId: string, data: ListingInputData) 
           rejection_reason=case when $19::boolean then null else rejection_reason end,
           updated_at=now() where id=$1`,
         [data.id, data.categoryId, data.title, data.description, data.price, data.city, data.district, data.neighborhood || null,
-          coords?.lat ?? null, coords?.lng ?? null, JSON.stringify(data.images), JSON.stringify(attrs),
+          saveLat, saveLng, JSON.stringify(data.images), JSON.stringify(attrs),
           phoneOverride, data.storeId || null, nextStatus, reReview, slug, nextCurrency, clearRejection],
       );
       if (num(locked.price) !== data.price) await tx.query("insert into price_history (listing_id,price) values ($1,$2)", [data.id, data.price]);
@@ -223,7 +230,7 @@ export async function saveListingRecord(userId: string, data: ListingInputData) 
        values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::jsonb,$17::jsonb,$18,now()+interval '30 days',
          case when $10::text = 'ACTIVE' then now() end,$19::bigint,$20)`,
       [id, slug, userId, data.storeId || null, data.categoryId, data.title, data.description, data.price, currency, next, data.city, data.district,
-        data.neighborhood || null, coords?.lat ?? null, coords?.lng ?? null, JSON.stringify(data.images), JSON.stringify(attrs), phoneOverride, listingNo,
+        data.neighborhood || null, saveLat, saveLng, JSON.stringify(data.images), JSON.stringify(attrs), phoneOverride, listingNo,
         data.clientKey ?? null],
     );
     await tx.query("insert into price_history (listing_id,price) values ($1,$2)", [id, data.price]);

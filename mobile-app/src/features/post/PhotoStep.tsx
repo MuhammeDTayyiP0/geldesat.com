@@ -1,6 +1,6 @@
 import { ActivityIndicator, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Image } from 'expo-image';
-import { ArrowLeft, ArrowRight, Camera, ImagePlus, RotateCcw, Star, Trash2 } from 'lucide-react-native';
+import { ArrowLeft, ArrowRight, Camera, ImagePlus, RotateCcw, RotateCw, Star, Trash2 } from 'lucide-react-native';
 import { mediaUrl } from '@/lib/config';
 import { Badge, Button, Text, confirm, radius, space, useTheme } from '@/ui';
 import { MAX_PHOTOS, type PhotoItem } from './draft';
@@ -10,6 +10,7 @@ type Props = {
   onAdd: (source: 'camera' | 'library') => void;
   onRemove: (key: string) => void;
   onRetry: (key: string) => void;
+  onRotate?: (key: string) => void;
   onMove: (key: string, delta: -1 | 1) => void;
   onCover: (key: string) => void;
   /** Show photo `index` full screen. */
@@ -17,12 +18,15 @@ type Props = {
   required: boolean;
 };
 
-export function PhotoStep({ photos, onAdd, onRemove, onRetry, onMove, onCover, onOpen, required }: Props) {
+export function PhotoStep({ photos, onAdd, onRemove, onRetry, onRotate, onMove, onCover, onOpen, required }: Props) {
   const { c } = useTheme();
   const { width } = useWindowDimensions();
-  const size = Math.floor((width - space.lg * 2 - space.sm * 2) / 3);
+  const coverWidth = width - space.lg * 2;
+  const size = Math.floor((coverWidth - space.sm * 2) / 3);
   const left = MAX_PHOTOS - photos.length;
   const failed = photos.map((p, i) => ({ p, i })).filter(({ p }) => p.status === 'error');
+  const coverPhoto = photos[0];
+  const restPhotos = photos.slice(1);
 
   const remove = async (p: PhotoItem, i: number) => {
     // A finished photo is work; ask first. A failed or uploading one can go at once.
@@ -31,6 +35,69 @@ export function PhotoStep({ photos, onAdd, onRemove, onRetry, onMove, onCover, o
       if (!ok) return;
     }
     onRemove(p.key);
+  };
+
+  const renderTile = (p: PhotoItem, i: number, isCover: boolean) => {
+    const uri = (p.status === 'done' ? mediaUrl(p.url, isCover ? 800 : 480) : undefined) ?? p.localUri ?? mediaUrl(p.url, isCover ? 800 : 480);
+    return (
+      <View
+        key={p.key}
+        style={[
+          styles.tile,
+          isCover ? { width: coverWidth, height: Math.round(coverWidth * 0.62) } : { width: size, height: size },
+          { backgroundColor: c.elevated },
+        ]}
+      >
+        <Pressable accessibilityRole="imagebutton" accessibilityLabel={`${i + 1}. fotoğrafı büyüt`} onPress={() => onOpen(i)} style={StyleSheet.absoluteFill}>
+          {uri ? <Image source={uri} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}
+        </Pressable>
+        {isCover ? <Badge label="KAPAK FOTOĞRAFI" tone="primary" style={styles.cover} /> : null}
+        {p.status === 'uploading' ? (
+          <View style={[styles.overlay, { backgroundColor: c.overlay }]}>
+            <ActivityIndicator color="#fff" />
+          </View>
+        ) : p.status === 'error' ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${i + 1}. fotoğraf yüklenemedi: ${p.error ?? ''}. Tekrar dene`}
+            onPress={() => onRetry(p.key)}
+            style={[styles.overlay, { backgroundColor: 'rgba(180,35,24,0.7)' }]}
+          >
+            <RotateCcw size={20} color="#fff" />
+            <Text variant="small" style={styles.white}>
+              Tekrar dene
+            </Text>
+          </Pressable>
+        ) : null}
+        <View style={styles.deleteCorner}>
+          <Tool label={`${i + 1}. fotoğrafı sil`} onPress={() => void remove(p, i)}>
+            <Trash2 size={15} color="#fff" />
+          </Tool>
+        </View>
+        <View style={styles.tools}>
+          {i > 0 ? (
+            <Tool label="Sola taşı" onPress={() => onMove(p.key, -1)}>
+              <ArrowLeft size={14} color="#fff" />
+            </Tool>
+          ) : null}
+          {i > 0 && p.status === 'done' ? (
+            <Tool label="Kapak yap" onPress={() => onCover(p.key)}>
+              <Star size={14} color="#fff" />
+            </Tool>
+          ) : null}
+          {onRotate && p.source && p.status === 'done' ? (
+            <Tool label="Döndür" onPress={() => onRotate(p.key)}>
+              <RotateCw size={14} color="#fff" />
+            </Tool>
+          ) : null}
+          {i < photos.length - 1 ? (
+            <Tool label="Sağa taşı" onPress={() => onMove(p.key, 1)}>
+              <ArrowRight size={14} color="#fff" />
+            </Tool>
+          ) : null}
+        </View>
+      </View>
+    );
   };
 
   return (
@@ -50,8 +117,8 @@ export function PhotoStep({ photos, onAdd, onRemove, onRetry, onMove, onCover, o
             Kameranızla çekin veya galeriden birden fazla fotoğraf seçin.
           </Text>
           <View style={styles.emptyActions}>
-            <Button title="Galeriden seç" icon={ImagePlus} onPress={() => onAdd('library')} style={styles.flex} />
-            <Button title="Fotoğraf çek" icon={Camera} variant="outline" onPress={() => onAdd('camera')} style={styles.flex} />
+            <Button title="Galeriden seç" icon={ImagePlus} onPress={() => onAdd('library')} />
+            <Button title="Fotoğraf çek" icon={Camera} variant="outline" onPress={() => onAdd('camera')} />
           </View>
           <Text variant="small" tone="subtle" center>
             JPEG, PNG, WebP veya HEIC · en fazla {MAX_PHOTOS} fotoğraf
@@ -64,73 +131,26 @@ export function PhotoStep({ photos, onAdd, onRemove, onRetry, onMove, onCover, o
             <Button title="Fotoğraf çek" icon={Camera} variant="outline" disabled={left < 1} onPress={() => onAdd('camera')} style={styles.flex} />
           </View>
 
-          <View style={styles.grid}>
-        {photos.map((p, i) => {
-          // The uploaded copy once there is one: the local file may be gone after a restart.
-          const uri = (p.status === 'done' ? mediaUrl(p.url, 480) : undefined) ?? p.localUri ?? mediaUrl(p.url, 480);
-          return (
-            <View key={p.key} style={[styles.tile, { width: size, height: size, backgroundColor: c.elevated }]}>
-              <Pressable accessibilityRole="imagebutton" accessibilityLabel={`${i + 1}. fotoğrafı büyüt`} onPress={() => onOpen(i)} style={StyleSheet.absoluteFill}>
-                {uri ? <Image source={uri} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}
-              </Pressable>
-              {i === 0 ? <Badge label="KAPAK" tone="primary" style={styles.cover} /> : null}
-              {p.status === 'uploading' ? (
-                <View style={[styles.overlay, { backgroundColor: c.overlay }]}>
-                  <ActivityIndicator color="#fff" />
-                </View>
-              ) : p.status === 'error' ? (
+          {coverPhoto ? renderTile(coverPhoto, 0, true) : null}
+
+          {restPhotos.length > 0 || left > 0 ? (
+            <View style={styles.grid}>
+              {restPhotos.map((p, idx) => renderTile(p, idx + 1, false))}
+              {left > 0 ? (
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={`${i + 1}. fotoğraf yüklenemedi: ${p.error ?? ''}. Tekrar dene`}
-                  onPress={() => onRetry(p.key)}
-                  style={[styles.overlay, { backgroundColor: 'rgba(180,35,24,0.7)' }]}
+                  accessibilityLabel="Fotoğraf ekle"
+                  onPress={() => onAdd('library')}
+                  style={[styles.tile, styles.add, { width: size, height: size, borderColor: c.borderStrong }]}
                 >
-                  <RotateCcw size={20} color="#fff" />
-                  <Text variant="small" style={styles.white}>
-                    Tekrar dene
+                  <ImagePlus size={24} color={c.subtle} />
+                  <Text variant="small" tone="subtle">
+                    {photos.length}/{MAX_PHOTOS}
                   </Text>
                 </Pressable>
               ) : null}
-              {/* Delete in its own corner: with four buttons in one row it was cut off on phones under 430 pt. */}
-              <View style={styles.deleteCorner}>
-                <Tool label={`${i + 1}. fotoğrafı sil`} onPress={() => void remove(p, i)}>
-                  <Trash2 size={15} color="#fff" />
-                </Tool>
-              </View>
-              <View style={styles.tools}>
-                {i > 0 ? (
-                  <Tool label="Sola taşı" onPress={() => onMove(p.key, -1)}>
-                    <ArrowLeft size={14} color="#fff" />
-                  </Tool>
-                ) : null}
-                {i > 0 && p.status === 'done' ? (
-                  <Tool label="Kapak yap" onPress={() => onCover(p.key)}>
-                    <Star size={14} color="#fff" />
-                  </Tool>
-                ) : null}
-                {i < photos.length - 1 ? (
-                  <Tool label="Sağa taşı" onPress={() => onMove(p.key, 1)}>
-                    <ArrowRight size={14} color="#fff" />
-                  </Tool>
-                ) : null}
-              </View>
             </View>
-          );
-        })}
-        {left > 0 ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Fotoğraf ekle"
-            onPress={() => onAdd('library')}
-            style={[styles.tile, styles.add, { width: size, height: size, borderColor: c.borderStrong }]}
-          >
-            <ImagePlus size={24} color={c.subtle} />
-            <Text variant="small" tone="subtle">
-              {photos.length}/{MAX_PHOTOS}
-            </Text>
-          </Pressable>
-        ) : null}
-          </View>
+          ) : null}
         </>
       )}
 
@@ -184,7 +204,7 @@ const styles = StyleSheet.create({
     marginBottom: space.xs,
   },
   emptySub: { maxWidth: 280 },
-  emptyActions: { flexDirection: 'row', gap: space.sm, width: '100%', marginTop: space.sm },
+  emptyActions: { width: '100%', gap: space.sm, marginTop: space.sm },
   actions: { flexDirection: 'row', gap: space.sm },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   tile: { borderRadius: radius.md, overflow: 'hidden' },

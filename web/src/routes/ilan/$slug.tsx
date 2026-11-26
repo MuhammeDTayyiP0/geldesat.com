@@ -767,7 +767,7 @@ function ListingPage() {
           ) : null}
           <DescriptionSection text={listing.description} />
           <PriceHistorySection history={history} currency={listing.currency} />
-          <LocationSection city={listing.city} district={listing.district} neighborhood={listing.neighborhood} />
+          <LocationSection city={listing.city} district={listing.district} neighborhood={listing.neighborhood} lat={listing.lat} lng={listing.lng} />
           <div className="space-y-3 lg:hidden">
             <SafetyNote />
             {!isOwner ? (

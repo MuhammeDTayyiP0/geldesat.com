@@ -2,29 +2,37 @@ import { ErrorState } from "@/components/common/ErrorState";
 import { createFileRoute, useNavigate, useBlocker } from "@tanstack/react-router";
 import { errorText } from "@/lib/error-text";
 import { useEffect, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
-import { browseCategories } from "@/lib/server/catalog";
+import { browseCategories, searchCategoryPaths } from "@/lib/server/catalog";
 import { getCategoryAttrs, getListingForEdit, getMe, saveListing } from "@/lib/server/account";
 import { TURKEY_CITIES } from "@/lib/data/locations";
-import { NEIGHBORHOODS } from "@/lib/data/geo";
+import { isCityCenterFallback, NEIGHBORHOODS } from "@/lib/data/geo";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import { PhoneInput } from "@/components/ui/phone-input";
+import { LocationPicker } from "@/components/chat/LocationPicker";
+import { MapThumb } from "@/components/chat/MapThumb";
 import {
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
   Check,
+  CheckCircle2,
   ChevronRight,
   Copy,
   ImageIcon,
   Lightbulb,
+  Loader2,
+  LocateFixed,
   MapPin,
   Pencil,
+  Search,
   Send,
   Sparkles,
+  Trash2,
+  X,
 } from "lucide-react";
 import { cleanPhone, cn, formatNumber, formatPrice, maskPhone10 } from "@/lib/utils";
 import { toast } from "sonner";
@@ -50,10 +58,16 @@ function AttrInput({
   a,
   values,
   setValues,
+  error,
+  hint,
+  onClearError,
 }: {
   a: AttrDef;
   values: Record<string, string | number>;
   setValues: Dispatch<SetStateAction<Record<string, string | number>>>;
+  error?: string;
+  hint?: string;
+  onClearError?: () => void;
 }) {
   const isYear = a.type === "NUMBER" && (a.name === "Yıl" || a.name === "Model Yılı");
   const isFormattedNumber = a.type === "NUMBER" && !isYear;
@@ -71,7 +85,12 @@ function AttrInput({
           id={`attr-${a.id}`}
           required={a.required}
           value={String(rawVal ?? "")}
-          onChange={(e) => setValues((v) => ({ ...v, [a.name]: e.target.value }))}
+          aria-invalid={Boolean(error)}
+          className={error ? "border-danger focus-visible:ring-danger/30" : undefined}
+          onChange={(e) => {
+            onClearError?.();
+            setValues((v) => ({ ...v, [a.name]: e.target.value }));
+          }}
         >
           <option value="">Seçin</option>
           {(a.options ?? []).map((o) => (
@@ -85,9 +104,30 @@ function AttrInput({
           inputMode="numeric"
           autoComplete="off"
           required={a.required}
+          aria-invalid={Boolean(error)}
+          className={error ? "border-danger focus-visible:ring-danger/30" : undefined}
           value={rawVal !== undefined && rawVal !== "" ? formatNumber(rawVal) : ""}
           onChange={(e) => {
+            onClearError?.();
             const digits = e.target.value.replace(/\D/g, "").slice(0, 10);
+            setValues((v) => ({ ...v, [a.name]: digits === "" ? "" : Number(digits) }));
+          }}
+        />
+      ) : isYear ? (
+        <Input
+          id={`attr-${a.id}`}
+          type="text"
+          inputMode="numeric"
+          autoComplete="off"
+          maxLength={4}
+          placeholder={`Örn. ${new Date().getFullYear() - 3}`}
+          required={a.required}
+          aria-invalid={Boolean(error)}
+          className={error ? "border-danger focus-visible:ring-danger/30" : undefined}
+          value={String(rawVal ?? "")}
+          onChange={(e) => {
+            onClearError?.();
+            const digits = e.target.value.replace(/\D/g, "").slice(0, 4);
             setValues((v) => ({ ...v, [a.name]: digits === "" ? "" : Number(digits) }));
           }}
         />
@@ -96,14 +136,18 @@ function AttrInput({
           id={`attr-${a.id}`}
           type={a.type === "NUMBER" ? "number" : "text"}
           required={a.required}
-          min={isYear ? 1950 : a.type === "NUMBER" ? 0 : undefined}
-          max={isYear ? new Date().getFullYear() + 1 : undefined}
+          aria-invalid={Boolean(error)}
+          className={error ? "border-danger focus-visible:ring-danger/30" : undefined}
+          min={a.type === "NUMBER" ? 0 : undefined}
           value={String(rawVal ?? "")}
-          onChange={(e) =>
-            setValues((v) => ({ ...v, [a.name]: a.type === "NUMBER" && e.target.value !== "" ? Number(e.target.value) : e.target.value }))
-          }
+          onChange={(e) => {
+            onClearError?.();
+            setValues((v) => ({ ...v, [a.name]: a.type === "NUMBER" && e.target.value !== "" ? Number(e.target.value) : e.target.value }));
+          }}
         />
       )}
+      {error ? <p className="mt-1 text-xs font-medium text-danger">{error}</p> : null}
+      {!error && hint ? <p className="mt-1 text-xs text-muted">{hint}</p> : null}
     </div>
   );
 }
@@ -146,6 +190,111 @@ function computeQualityScore(input: {
 }
 
 type StepKey = "category" | "photos" | "details" | "attributes" | "location" | "preview";
+const ALL_STEPS: StepKey[] = ["category", "photos", "details", "attributes", "location", "preview"];
+
+const DAMAGE_ALLOWED_IDS = new Set([
+  "otomobil",
+  "arazi-suv",
+  "minivan",
+  "hasarli",
+  "klasik",
+  "engelli-plaka",
+  "kiralik-arac",
+  "ticari-kamyonet",
+  "ticari-minibus",
+]);
+const DAMAGE_EXCLUDED_IDS = new Set([
+  "moto",
+  "motosiklet",
+  "deniz",
+  "hava",
+  "atv",
+  "elektrikli-bisiklet",
+  "karavan",
+  "ticari-kamyon",
+  "ticari-cekici",
+  "ticari-otobus",
+]);
+
+function isDamageVehicleCategory(pathIds: string[], pathRows: CategoryRow[]): boolean {
+  if (pathIds.some((id) => DAMAGE_EXCLUDED_IDS.has(id))) return false;
+  if (pathIds.some((id) => DAMAGE_ALLOWED_IDS.has(id))) return true;
+  return pathRows.some((c) => {
+    const n = c.name.toLocaleLowerCase("tr");
+    return n.includes("otomobil") || n.includes("suv") || n.includes("minivan") || n.includes("panelvan");
+  });
+}
+
+function getCategoryPlaceholders(pathIds: string[], pathRows: CategoryRow[]): { title: string; description: string } {
+  const root = pathIds[0];
+  const joined = pathRows.map((c) => c.name.toLocaleLowerCase("tr")).join(" ");
+  if (root === "emlak" || joined.includes("arsa") || joined.includes("daire") || joined.includes("konut")) {
+    if (joined.includes("arsa") || joined.includes("tarla")) {
+      return {
+        title: "Örn. Yatırıma uygun imarlı 450 m² köşe parsel arsa",
+        description: "Ada/parsel veya konum bilgisi, imar durumu, yola cephe, altyapı ve tapu durumu…",
+      };
+    }
+    return {
+      title: "Örn. Kadıköy Moda'da 2+1 deniz manzaralı ferah daire",
+      description: "Cephe, ısınma, aidat, ulaşım yakınlığı, tadilat ve tapu/kredi durumu…",
+    };
+  }
+  if (root === "vasita") {
+    if (joined.includes("motosiklet")) {
+      return {
+        title: "Örn. Hatasız 2022 Yamaha MT-07 ABS 12.000 km",
+        description: "Bakım geçmişi, lastik/zincir durumu, ekstra aksesuarlar, tramer/boya bilgisi…",
+      };
+    }
+    return {
+      title: "Örn. Sahibinden temiz 2018 Renault Clio 1.5 dCi",
+      description: "Bakım geçmişi, ekspertiz/boya durumu, lastikler, yedek anahtar ve muayene tarihi…",
+    };
+  }
+  if (joined.includes("telefon") || joined.includes("bilgisayar") || root === "elektronik") {
+    return {
+      title: "Örn. iPhone 15 Pro 256 GB TR Garantili Kutu Faturalı",
+      description: "Pil sağlığı, kozmetik durumu, kutu/fatura/garanti, tamir veya değişen parça bilgisi…",
+    };
+  }
+  return {
+    title: "Örn. Marka, model, beden/kapasite ve önemli özellik",
+    description: "Ürünün durumu, kullanım süresi, varsa kusurları, kutu/garanti ve teslimat bilgisi…",
+  };
+}
+
+const foldGeo = (s: string) =>
+  s
+    .toLocaleLowerCase("tr")
+    .replace(/i̇/g, "i")
+    .replace(/[ıi]/g, "i")
+    .replace(/ş/g, "s")
+    .replace(/ğ/g, "g")
+    .replace(/ü/g, "u")
+    .replace(/ö/g, "o")
+    .replace(/ç/g, "c");
+
+function matchCityName(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const n = foldGeo(raw.replace(/\s+(ili|province)$/i, "").trim());
+  return TURKEY_CITIES.find((c) => foldGeo(c.name) === n)?.name ?? null;
+}
+
+function matchDistrictName(city: string, raw: string | null | undefined): string | null {
+  if (!city || !raw) return null;
+  const cityObj = TURKEY_CITIES.find((c) => c.name === city);
+  if (!cityObj) return null;
+  const n = foldGeo(raw.replace(/\s+(ilçesi|district)$/i, "").trim());
+  return cityObj.districts.find((d) => foldGeo(d) === n) ?? null;
+}
+
+function matchNeighborhoodName(city: string, district: string, raw: string | null | undefined): string | null {
+  if (!city || !district || !raw) return null;
+  const list = NEIGHBORHOODS[city]?.[district] ?? [];
+  const n = foldGeo(raw.replace(/\s+(mahallesi|mah\.?)$/i, "").trim());
+  return list.find((h) => foldGeo(h) === n) ?? null;
+}
 
 type ListingDraft = {
   path: string[];
@@ -156,6 +305,9 @@ type ListingDraft = {
   city: string;
   district: string;
   neighborhood: string;
+  lat?: number | null;
+  lng?: number | null;
+  pinLabel?: string;
   phone: string;
   images: string[];
   values: Record<string, string | number>;
@@ -241,10 +393,22 @@ function PostForm() {
   const [city, setCity] = useState("");
   const [district, setDistrict] = useState("");
   const [neighborhood, setNeighborhood] = useState("");
+  const [pinLat, setPinLat] = useState<number | null>(null);
+  const [pinLng, setPinLng] = useState<number | null>(null);
+  const [pinLabel, setPinLabel] = useState("");
+  const [mapPickerOpen, setMapPickerOpen] = useState(false);
+  const [gpsLocating, setGpsLocating] = useState(false);
   const [phone, setPhone] = useState("");
   const [images, setImages] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [photoErrorCount, setPhotoErrorCount] = useState(0);
+  const [maxReachedIdx, setMaxReachedIdx] = useState(0);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
+  const [globalCatQ, setGlobalCatQ] = useState("");
+  const [globalCatResults, setGlobalCatResults] = useState<Array<{ path: CategoryRow[]; leaf: CategoryRow }>>([]);
+  const [globalCatBusy, setGlobalCatBusy] = useState(false);
   const [storeId, setStoreId] = useState<string | undefined>();
   const [storeName, setStoreName] = useState<string | undefined>();
   const [listingStatus, setListingStatus] = useState<string | null>(null);
@@ -258,6 +422,13 @@ function PostForm() {
   const [profilePhone, setProfilePhone] = useState("");
   const [offeredDraft, setOfferedDraft] = useState<ListingDraft | null>(null);
   const saved = useRef(false);
+  const editInitialContentRef = useRef<{
+    title: string;
+    description: string;
+    categoryId: string;
+    images: string[];
+    valuesJson: string;
+  } | null>(null);
   const clientKeyRef = useRef(
     typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
       ? crypto.randomUUID()
@@ -373,6 +544,13 @@ function PostForm() {
         setCity(r.listing.city ?? "");
         setDistrict(r.listing.district ?? "");
         setNeighborhood(r.listing.neighborhood ?? "");
+        const hasRealPin =
+          r.listing.lat != null &&
+          r.listing.lng != null &&
+          !isCityCenterFallback(r.listing.city, r.listing.lat, r.listing.lng);
+        setPinLat(hasRealPin ? r.listing.lat : null);
+        setPinLng(hasRealPin ? r.listing.lng : null);
+        setPinLabel(hasRealPin ? [r.listing.neighborhood, r.listing.district, r.listing.city].filter(Boolean).join(", ") : "");
         setValues(r.listing.attrs ?? {});
         if (r.listing.store_id) setStoreId(r.listing.store_id);
         if (editId) {
@@ -380,6 +558,14 @@ function PostForm() {
           setImages(r.listing.images);
           setListingStatus(r.listing.status);
           setRejectionReason(r.listing.rejection_reason ?? null);
+          editInitialContentRef.current = {
+            title: r.listing.title,
+            description: r.listing.description,
+            categoryId: r.path[r.path.length - 1] ?? r.listing.category_id,
+            images: r.listing.images,
+            valuesJson: JSON.stringify(r.listing.attrs ?? {}),
+          };
+          setMaxReachedIdx(ALL_STEPS.length - 1);
         } else {
           setOfferedDraft(null);
           setCopiedBanner(true);
@@ -407,12 +593,57 @@ function PostForm() {
     topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [step]);
 
+  // Global category path search (debounced).
+  useEffect(() => {
+    const term = globalCatQ.trim();
+    if (term.length < 2) {
+      setGlobalCatResults([]);
+      setGlobalCatBusy(false);
+      return;
+    }
+    let cancelled = false;
+    setGlobalCatBusy(true);
+    const timer = setTimeout(() => {
+      void searchCategoryPaths({ data: { q: term } })
+        .then((rows) => {
+          if (!cancelled) setGlobalCatResults(rows);
+        })
+        .catch(() => {
+          if (!cancelled) setGlobalCatResults([]);
+        })
+        .finally(() => {
+          if (!cancelled) setGlobalCatBusy(false);
+        });
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [globalCatQ]);
+
   // Drafts: a new listing survives a refresh or the back button; an edit warns before leaving.
   const draftKey = userId ? `geldesat:ilan-taslak:${userId}` : null;
-  const draft: ListingDraft = { path, title, description, price, currency, city, district, neighborhood, phone, images, values, step, savedAt: Date.now() };
+  const draft: ListingDraft = {
+    path,
+    title,
+    description,
+    price,
+    currency,
+    city,
+    district,
+    neighborhood,
+    lat: pinLat,
+    lng: pinLng,
+    pinLabel,
+    phone,
+    images,
+    values,
+    step,
+    savedAt: Date.now(),
+  };
   const { savedAt: _savedAt, ...draftFields } = draft;
   const draftJson = JSON.stringify(draftFields);
-  const hasContent = Boolean(path.length || title || description || price || images.length);
+  const hasContent = Boolean(path.length || title || description || price || images.length || pinLat != null);
   const loadedForm = useRef<string | null>(null);
   if (editId && loaded && loadedForm.current === null) loadedForm.current = draftJson;
   const editChanged = Boolean(editId) && loadedForm.current !== null && loadedForm.current !== draftJson;
@@ -447,75 +678,183 @@ function PostForm() {
   });
 
   const location = [neighborhood, district, city].filter(Boolean).join(", ");
-  const isVehicleCategory =
-    path.includes("vasita") ||
-    path.includes("otomobil") ||
-    pathRows.some((c) => c.slug === "vasita" || c.slug === "otomobil" || c.name === "Vasıta" || c.name === "Otomobil");
+  const isVehicleCategory = isDamageVehicleCategory(path, pathRows);
+  const placeholders = getCategoryPlaceholders(path, pathRows);
   const showAttributes =
     attrs.length > 0 || (hasarSemasiAcik && isVehicleCategory && leaf) || (Boolean(selected) && leaf && (attrsLoading || attrsError));
   const steps: StepKey[] = ["category", "photos", "details", ...(showAttributes ? (["attributes"] as const) : []), "location", "preview"];
+  const activeStepIdx = steps.indexOf(step);
+
+  useEffect(() => {
+    if (activeStepIdx > maxReachedIdx) setMaxReachedIdx(activeStepIdx);
+  }, [activeStepIdx, maxReachedIdx]);
+
+  const editWillReReview = (() => {
+    if (!editId || !editInitialContentRef.current) return false;
+    const init = editInitialContentRef.current;
+    const addedPhoto = images.some((u) => !init.images.includes(u));
+    return (
+      init.title !== title.trim() ||
+      init.description !== description.trim() ||
+      init.categoryId !== (selected ?? "") ||
+      addedPhoto ||
+      init.valuesJson !== JSON.stringify(values)
+    );
+  })();
 
   if (isPending || (user && !loaded)) return <BrandSpinner fullPage text="İlan formu hazırlanıyor…" />;
   if (!user) return <RedirectToSignIn />;
+
+  function clearFieldError(key: string) {
+    setFieldErrors((prev) => {
+      if (!(key in prev)) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  }
+
+  function focusField(id: string) {
+    requestAnimationFrame(() => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.focus?.({ preventScroll: true });
+      }
+    });
+  }
 
   function goTo(next: StepKey) {
     if (uploading || busy) return;
     setStep(next);
   }
 
-  function detailsStepProblem(): string | null {
-    if (title.trim().length < 5) return "İlan başlığı en az 5 karakter olmalı.";
-    if (priceNumber < 1) return "Geçerli bir fiyat girin.";
-    if (priceNumber > 1_000_000_000) return "Fiyat en fazla 1 milyar olabilir.";
-    if (description.trim().length < 10) return "Açıklama en az 10 karakter olmalı.";
-    return null;
-  }
+  function validateDetailsStep(): string | null {
+    const errs: Record<string, string> = {};
+    if (title.trim().length < 5) errs.title = "İlan başlığı en az 5 karakter olmalı.";
+    if (priceNumber < 1) errs.price = "Geçerli bir fiyat girin.";
+    else if (priceNumber > 1_000_000_000) errs.price = "Fiyat en fazla 1 milyar olabilir.";
+    if (description.trim().length < 10) errs.description = "Açıklama en az 10 karakter olmalı.";
 
-  function attributesStepProblem(): string | null {
-    if (attrsLoading) return "Kategori özellikleri yükleniyor, lütfen bekleyin.";
-    if (attrsError) return "Kategori özellikleri yüklenemedi. Sayfadaki “Tekrar dene”ye basın.";
-    const missing = attrs.find((a) => a.required && (values[a.name] === undefined || values[a.name] === ""));
-    if (missing) return `Zorunlu alan: ${missing.name}`;
-    const maxYear = new Date().getFullYear() + 1;
-    for (const yearKey of ["Yıl", "Model Yılı"] as const) {
-      const y = values[yearKey];
-      if (y !== undefined && y !== "" && (Number(y) < 1950 || Number(y) > maxYear)) {
-        return `${yearKey} 1950 ile ${maxYear} arasında olmalı.`;
-      }
+    setFieldErrors((prev) => ({
+      ...Object.fromEntries(Object.entries(prev).filter(([k]) => !["title", "price", "description"].includes(k))),
+      ...errs,
+    }));
+
+    if (errs.title) {
+      focusField("listing-title");
+      return errs.title;
+    }
+    if (errs.price) {
+      focusField("listing-price");
+      return errs.price;
+    }
+    if (errs.description) {
+      focusField("listing-desc");
+      return errs.description;
     }
     return null;
   }
 
-  function locationStepProblem(): string | null {
-    if (!city || !district) return "İl ve ilçe seçin.";
+  function validateAttributesStep(): string | null {
+    if (attrsLoading) return "Kategori özellikleri yükleniyor, lütfen bekleyin.";
+    if (attrsError) return "Kategori özellikleri yüklenemedi. Sayfadaki “Tekrar dene”ye basın.";
+    const errs: Record<string, string> = {};
+    let firstId: string | null = null;
+    let firstMsg: string | null = null;
+
+    for (const a of attrs) {
+      if (a.required && (values[a.name] === undefined || values[a.name] === "")) {
+        const msg = `Zorunlu alan: ${a.name}`;
+        errs[`attr:${a.name}`] = msg;
+        if (!firstMsg) {
+          firstMsg = msg;
+          firstId = `attr-${a.id}`;
+        }
+      }
+    }
+
+    const maxYear = new Date().getFullYear() + 1;
+    for (const yearKey of ["Yıl", "Model Yılı"] as const) {
+      const y = values[yearKey];
+      if (y !== undefined && y !== "" && (Number(y) < 1950 || Number(y) > maxYear)) {
+        const msg = `${yearKey} 1950 ile ${maxYear} arasında olmalı.`;
+        errs[`attr:${yearKey}`] = msg;
+        if (!firstMsg) {
+          const def = attrs.find((a) => a.name === yearKey);
+          firstMsg = msg;
+          firstId = def ? `attr-${def.id}` : null;
+        }
+      }
+    }
+
+    setFieldErrors((prev) => ({
+      ...Object.fromEntries(Object.entries(prev).filter(([k]) => !k.startsWith("attr:"))),
+      ...errs,
+    }));
+
+    if (firstMsg) {
+      if (firstId) focusField(firstId);
+      return firstMsg;
+    }
+    return null;
+  }
+
+  function validateLocationStep(): string | null {
+    const errs: Record<string, string> = {};
+    if (!city) errs.city = "İl seçin.";
+    if (!district) errs.district = "İlçe seçin.";
     const digits = cleanPhone(phone);
-    if (!digits && !profilePhone) return "İlan için bir telefon numarası girin.";
-    if (digits && !/^0?5\d{9}$/.test(digits)) return "Geçerli bir cep telefonu girin (5xx xxx xx xx).";
+    if (!digits && !profilePhone) errs.phone = "İlan için bir telefon numarası girin.";
+    else if (digits && !/^0?5\d{9}$/.test(digits)) errs.phone = "Geçerli bir cep telefonu girin (5xx xxx xx xx).";
+
+    setFieldErrors((prev) => ({
+      ...Object.fromEntries(Object.entries(prev).filter(([k]) => !["city", "district", "phone"].includes(k))),
+      ...errs,
+    }));
+
+    if (errs.city) {
+      focusField("listing-city");
+      return errs.city;
+    }
+    if (errs.district) {
+      focusField("listing-district");
+      return errs.district;
+    }
+    if (errs.phone) {
+      focusField("listing-phone");
+      return errs.phone;
+    }
     return null;
   }
 
   async function publish() {
     if (!selected || uploading) return;
+    if (photoErrorCount > 0) {
+      toast.error("Yüklenemeyen fotoğrafları silin veya tekrar deneyin.");
+      setStep("photos");
+      return;
+    }
     if (needsPhoto && images.length < 1) {
       toast.error("Emlak ve vasıta ilanlarında en az 1 fotoğraf zorunludur.");
       setStep("photos");
       return;
     }
-    const detailsErr = detailsStepProblem();
+    const detailsErr = validateDetailsStep();
     if (detailsErr) {
       toast.error(detailsErr);
       setStep("details");
       return;
     }
     if (showAttributes) {
-      const attrsErr = attributesStepProblem();
+      const attrsErr = validateAttributesStep();
       if (attrsErr) {
         toast.error(attrsErr);
         setStep("attributes");
         return;
       }
     }
-    const locErr = locationStepProblem();
+    const locErr = validateLocationStep();
     if (locErr) {
       toast.error(locErr);
       setStep("location");
@@ -534,6 +873,8 @@ function PostForm() {
           city,
           district,
           neighborhood: neighborhood || undefined,
+          lat: pinLat,
+          lng: pinLng,
           phone: cleanPhone(phone) || undefined,
           images,
           attrs: values,
@@ -574,12 +915,93 @@ function PostForm() {
     setCity(d.city);
     setDistrict(d.district);
     setNeighborhood(d.neighborhood);
+    setPinLat(typeof d.lat === "number" ? d.lat : null);
+    setPinLng(typeof d.lng === "number" ? d.lng : null);
+    setPinLabel(d.pinLabel ?? "");
     setPhone(d.phone);
     setImages(photosGone ? [] : d.images);
     setValues(d.values);
-    setStep(normalizeDraftStep(d.step, steps));
+    const restored = d.path.length === 0 ? "category" : normalizeDraftStep(d.step, ALL_STEPS);
+    setStep(restored);
+    setMaxReachedIdx(Math.max(0, ALL_STEPS.indexOf(restored)));
     setOfferedDraft(null);
     if (photosGone && d.images.length) toast.warning("Taslaktaki fotoğrafların süresi doldu; lütfen yeniden ekleyin.");
+  }
+
+  function resetNewForm() {
+    discardDraft();
+    keepValuesFor.current = null;
+    setPath([]);
+    setAttrs([]);
+    setValues({});
+    setTitle("");
+    setDescription("");
+    setPrice("");
+    setCurrency("TRY");
+    setCity("");
+    setDistrict("");
+    setNeighborhood("");
+    setPinLat(null);
+    setPinLng(null);
+    setPinLabel("");
+    setPhone(profilePhone ? maskPhone10(profilePhone) : "");
+    setImages([]);
+    setFieldErrors({});
+    setMaxReachedIdx(0);
+    setStep("category");
+    setClearConfirmOpen(false);
+    toast.info("Form temizlendi.");
+  }
+
+  function applyGeoAddress(
+    geoCity?: string | null,
+    geoDistrict?: string | null,
+    geoNeighborhood?: string | null,
+    overwrite = false,
+  ) {
+    const matchedCity = matchCityName(geoCity);
+    if (!matchedCity) return;
+    if (!overwrite && city) return;
+    const matchedDistrict = matchDistrictName(matchedCity, geoDistrict) ?? "";
+    const matchedHood = matchedDistrict ? (matchNeighborhoodName(matchedCity, matchedDistrict, geoNeighborhood) ?? "") : "";
+    setCity(matchedCity);
+    setDistrict(matchedDistrict);
+    setNeighborhood(matchedHood);
+    clearFieldError("city");
+    if (matchedDistrict) clearFieldError("district");
+  }
+
+  function useCurrentLocation() {
+    if (!navigator.geolocation) {
+      toast.error("Tarayıcınız konum bilgisini desteklemiyor.");
+      return;
+    }
+    setGpsLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        setPinLat(lat);
+        setPinLng(lng);
+        void fetch(`/api/geo?lat=${lat}&lng=${lng}`)
+          .then((r) => (r.ok ? r.json() : null))
+          .then((res: { label?: string; city?: string | null; district?: string | null; neighborhood?: string | null } | null) => {
+            setPinLabel(res?.label || "Mevcut konum");
+            applyGeoAddress(res?.city, res?.district, res?.neighborhood, true);
+            toast.success("Konumunuz haritaya eklendi.");
+          })
+          .catch(() => {
+            setPinLabel("Mevcut konum");
+            toast.success("Konumunuz haritaya eklendi.");
+          })
+          .finally(() => setGpsLocating(false));
+      },
+      () => {
+        setGpsLocating(false);
+        toast.error("Konumunuz alınamadı. Haritadan manuel seçebilirsiniz.");
+      },
+      { enableHighAccuracy: true, timeout: 10_000 },
+    );
   }
 
   function discardDraft() {
@@ -626,14 +1048,20 @@ function PostForm() {
                   : "";
         if (val && (!boyaAttr.options?.length || boyaAttr.options.includes(val))) {
           next["Boya-Değişen"] = val;
+        } else if (!serialized) {
+          delete next["Boya-Değişen"];
         }
       }
 
       const hasarAttr = attrs.find((a) => a.name === "Hasar Kaydı");
-      if (hasarAttr && nextDamage.tramer !== null) {
-        const val = nextDamage.tramer > 0 ? "Var" : "Yok";
-        if (!hasarAttr.options?.length || hasarAttr.options.includes(val)) {
-          next["Hasar Kaydı"] = val;
+      if (hasarAttr) {
+        if (nextDamage.tramer !== null) {
+          const val = nextDamage.tramer > 0 ? "Var" : "Yok";
+          if (!hasarAttr.options?.length || hasarAttr.options.includes(val)) {
+            next["Hasar Kaydı"] = val;
+          }
+        } else if (!serialized) {
+          delete next["Hasar Kaydı"];
         }
       }
       return next;
@@ -641,7 +1069,7 @@ function PostForm() {
   }
 
   return (
-    <div ref={topRef} className="mx-auto max-w-6xl scroll-mt-20 px-4 pb-44 pt-4 sm:pt-8 md:pb-16">
+    <div ref={topRef} className="mx-auto max-w-6xl scroll-mt-20 px-4 pb-28 pt-4 sm:pt-8 md:pb-16">
       {offeredDraft ? (
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-primary/30 bg-primary/8 p-3 text-sm">
           <p>
@@ -664,6 +1092,11 @@ function PostForm() {
             {editId ? "Değişikliklerinizi yapın ve kaydedin." : `${steps.length} adımda ilanınızı oluşturun, binlerce alıcıya ulaşın.`}
           </p>
         </div>
+        {!editId && hasContent && !offeredDraft ? (
+          <Button type="button" size="sm" variant="ghost" className="text-muted hover:text-danger" onClick={() => setClearConfirmOpen(true)}>
+            <Trash2 className="size-3.5" /> Formu temizle
+          </Button>
+        ) : null}
       </header>
 
       {editId && listingStatus === "REJECTED" ? (
@@ -684,9 +1117,16 @@ function PostForm() {
         </div>
       ) : null}
 
-      <Stepper steps={steps} step={step} onPick={goTo} locked={uploading || busy} />
+      <Stepper
+        steps={steps}
+        step={step}
+        onPick={goTo}
+        locked={uploading || busy}
+        maxReachedIdx={maxReachedIdx}
+        freeNav={Boolean(editId)}
+      />
 
-      {benzerIlanAcik ? (
+      {benzerIlanAcik && step !== "category" ? (
         <div className="mt-4 rounded-xl border border-border bg-surface p-3 lg:hidden">
           <div className="flex items-center justify-between gap-2 text-xs font-semibold">
             <span className="flex items-center gap-1.5">
@@ -711,7 +1151,64 @@ function PostForm() {
         <div className="min-w-0 rounded-2xl border border-border bg-surface p-4 shadow-card sm:p-6">
           {step === "category" ? (
             <section aria-labelledby="step-category">
-              <SectionHeading id="step-category" title="Kategori seçin" hint="Önce ana kategori, sonra marka / model veya alt tür." />
+              <SectionHeading id="step-category" title="Kategori seçin" hint="Hızlı arama yapın veya ana kategoriden alt türe inin." />
+
+              <div className="relative mb-4">
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle" />
+                <Input
+                  value={globalCatQ}
+                  onChange={(e) => setGlobalCatQ(e.target.value)}
+                  placeholder="Tüm kategorilerde hızlı ara (ör. iPhone 15, Clio, Satılık Arsa)"
+                  className="pl-9 pr-9"
+                  aria-label="Tüm kategorilerde hızlı ara"
+                />
+                {globalCatBusy ? (
+                  <Loader2 className="absolute right-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-subtle" />
+                ) : globalCatQ ? (
+                  <button
+                    type="button"
+                    aria-label="Aramayı temizle"
+                    onClick={() => setGlobalCatQ("")}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-1 text-subtle hover:text-fg"
+                  >
+                    <X className="size-4" />
+                  </button>
+                ) : null}
+                {globalCatQ.trim().length >= 2 && (globalCatResults.length > 0 || !globalCatBusy) ? (
+                  <div className="mt-2 overflow-hidden rounded-xl border border-border bg-surface shadow-card">
+                    {globalCatResults.length === 0 ? (
+                      <p className="px-3.5 py-3 text-sm text-muted">“{globalCatQ.trim()}” için kategori bulunamadı.</p>
+                    ) : (
+                      <ul className="max-h-72 divide-y divide-border overflow-y-auto">
+                        {globalCatResults.map((hit) => (
+                          <li key={hit.leaf.id}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                for (const row of hit.path) knownCats.current.set(row.id, row);
+                                setPath(hit.path.map((r) => r.id));
+                                setGlobalCatQ("");
+                                setGlobalCatResults([]);
+                                if (!hit.leaf.has_children) setStep("photos");
+                              }}
+                              className="flex w-full items-center justify-between gap-2 px-3.5 py-2.5 text-left text-sm transition-colors hover:bg-elevated"
+                            >
+                              <span className="min-w-0">
+                                <span className="block truncate font-medium text-fg">{hit.leaf.name}</span>
+                                <span className="block truncate text-xs text-muted">
+                                  {hit.path.map((p) => p.name).join(" › ")}
+                                </span>
+                              </span>
+                              <ChevronRight className="size-4 shrink-0 text-subtle" />
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ) : null}
+              </div>
+
               {pathRows.length > 0 ? (
                 <nav aria-label="Seçilen kategori" className="mb-4 flex flex-wrap items-center gap-1.5">
                   <button
@@ -755,6 +1252,7 @@ function PostForm() {
                 <p className="py-10 text-center text-sm text-muted">Kategoriler yükleniyor…</p>
               ) : (
                 <CategoryButtons
+                  key={pathKey}
                   items={currentCats}
                   counts={level.counts}
                   showIcons={path.length === 0}
@@ -786,6 +1284,7 @@ function PostForm() {
                 setImages={setImages}
                 originals={photoOriginals.current}
                 onBusyChange={setUploading}
+                onErrorCountChange={setPhotoErrorCount}
                 required={needsPhoto}
                 editing={Boolean(editId)}
               />
@@ -798,6 +1297,10 @@ function PostForm() {
                   className="flex-1 md:flex-none"
                   disabled={uploading}
                   onClick={() => {
+                    if (photoErrorCount > 0) {
+                      toast.error("Yüklenemeyen fotoğrafları silin veya tekrar deneyin.");
+                      return;
+                    }
                     if (needsPhoto && images.length < 1) {
                       toast.error("Emlak ve vasıta ilanlarında en az 1 fotoğraf zorunludur.");
                       return;
@@ -814,9 +1317,10 @@ function PostForm() {
           {step === "details" ? (
             <form
               aria-labelledby="step-details"
+              noValidate
               onSubmit={(e) => {
                 e.preventDefault();
-                const problem = detailsStepProblem();
+                const problem = validateDetailsStep();
                 if (problem) {
                   toast.error(problem);
                   return;
@@ -829,9 +1333,17 @@ function PostForm() {
               <CategorySummary rows={pathRows} onChange={() => goTo("category")} />
 
               {editId ? (
-                <p className="mb-4 rounded-lg border border-warn/30 bg-warn/8 px-3 py-2 text-sm text-warn">
-                  Başlık, açıklama, kategori, özellik değişirse veya yeni fotoğraf eklerseniz ilan yeniden onaya gider ve o sırada yayında görünmez.
-                </p>
+                editWillReReview ? (
+                  <p className="mb-4 flex items-start gap-2 rounded-lg border border-warn/30 bg-warn/8 px-3 py-2 text-sm text-warn">
+                    <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                    Başlık, açıklama, kategori, özellik değişti veya yeni fotoğraf eklendi; kaydettiğinizde ilan yeniden onaya gönderilir.
+                  </p>
+                ) : (
+                  <p className="mb-4 flex items-start gap-2 rounded-lg border border-ok/30 bg-ok/8 px-3 py-2 text-sm text-ok">
+                    <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
+                    Fiyat, konum veya telefon değişiklikleri onay gerektirmez; kaydettiğiniz anda yayında kalır.
+                  </p>
+                )
               ) : null}
 
               <div className="space-y-4">
@@ -842,12 +1354,18 @@ function PostForm() {
                   <Input
                     id="listing-title"
                     value={title}
-                    onChange={(e) => setTitle(e.target.value.slice(0, 100))}
-                    placeholder="Örn. Sahibinden temiz 2018 Renault Clio 1.5 dCi"
+                    onChange={(e) => {
+                      clearFieldError("title");
+                      setTitle(e.target.value.slice(0, 100));
+                    }}
+                    placeholder={placeholders.title}
+                    aria-invalid={Boolean(fieldErrors.title)}
+                    className={fieldErrors.title ? "border-danger focus-visible:ring-danger/30" : undefined}
                     minLength={5}
                     maxLength={100}
                     required
                   />
+                  {fieldErrors.title ? <p className="mt-1 text-xs font-medium text-danger">{fieldErrors.title}</p> : null}
                 </div>
                 <div>
                   <FieldLabel htmlFor="listing-price">Fiyat</FieldLabel>
@@ -857,9 +1375,16 @@ function PostForm() {
                       inputMode="numeric"
                       autoComplete="off"
                       value={price ? formatNumber(price) : ""}
-                      onChange={(e) => setPrice(e.target.value.replace(/\D/g, "").replace(/^0+/, "").slice(0, 10))}
+                      onChange={(e) => {
+                        clearFieldError("price");
+                        setPrice(e.target.value.replace(/\D/g, "").replace(/^0+/, "").slice(0, 10));
+                      }}
                       placeholder="0"
-                      className="flex-1 text-lg font-semibold tabular-nums md:text-base"
+                      aria-invalid={Boolean(fieldErrors.price)}
+                      className={cn(
+                        "flex-1 text-lg font-semibold tabular-nums md:text-base",
+                        fieldErrors.price && "border-danger focus-visible:ring-danger/30",
+                      )}
                       required
                     />
                     <Select
@@ -874,6 +1399,7 @@ function PostForm() {
                       <option value="EUR">EUR (€)</option>
                     </Select>
                   </div>
+                  {fieldErrors.price ? <p className="mt-1 text-xs font-medium text-danger">{fieldErrors.price}</p> : null}
                 </div>
                 <div>
                   <FieldLabel htmlFor="listing-desc" count={`${description.length}/5000`}>
@@ -882,13 +1408,19 @@ function PostForm() {
                   <Textarea
                     id="listing-desc"
                     value={description}
-                    onChange={(e) => setDescription(e.target.value.slice(0, 5000))}
-                    placeholder="Ürünün durumu, kullanım süresi, varsa kusurları, teslimat bilgisi…"
+                    onChange={(e) => {
+                      clearFieldError("description");
+                      setDescription(e.target.value.slice(0, 5000));
+                    }}
+                    placeholder={placeholders.description}
+                    aria-invalid={Boolean(fieldErrors.description)}
+                    className={fieldErrors.description ? "border-danger focus-visible:ring-danger/30" : undefined}
                     rows={6}
                     minLength={10}
                     maxLength={5000}
                     required
                   />
+                  {fieldErrors.description ? <p className="mt-1 text-xs font-medium text-danger">{fieldErrors.description}</p> : null}
                 </div>
               </div>
 
@@ -906,9 +1438,10 @@ function PostForm() {
           {step === "attributes" ? (
             <form
               aria-labelledby="step-attributes"
+              noValidate
               onSubmit={(e) => {
                 e.preventDefault();
-                const problem = attributesStepProblem();
+                const problem = validateAttributesStep();
                 if (problem) {
                   toast.error(problem);
                   return;
@@ -929,7 +1462,19 @@ function PostForm() {
                         {attrs
                           .filter((a) => a.type !== "MULTI" && a.type !== "BOOLEAN")
                           .map((a) => (
-                            <AttrInput key={a.id} a={a} values={values} setValues={setValues} />
+                            <AttrInput
+                              key={a.id}
+                              a={a}
+                              values={values}
+                              setValues={setValues}
+                              error={fieldErrors[`attr:${a.name}`]}
+                              hint={
+                                hasarSemasiAcik && isVehicleCategory && (a.name === "Boya-Değişen" || a.name === "Hasar Kaydı")
+                                  ? "Aşağıdaki hasar şemasıyla otomatik senkronize edilir."
+                                  : undefined
+                              }
+                              onClearError={() => clearFieldError(`attr:${a.name}`)}
+                            />
                           ))}
                       </div>
                     ) : null}
@@ -1033,9 +1578,10 @@ function PostForm() {
           {step === "location" ? (
             <form
               aria-labelledby="step-location"
+              noValidate
               onSubmit={(e) => {
                 e.preventDefault();
-                const problem = locationStepProblem();
+                const problem = validateLocationStep();
                 if (problem) {
                   toast.error(problem);
                   return;
@@ -1043,17 +1589,32 @@ function PostForm() {
                 setStep("preview");
               }}
             >
-              <SectionHeading id="step-location" title="Konum ve iletişim" hint="Alıcıların size ulaşacağı bilgiler." />
+              <SectionHeading id="step-location" title="Konum & İletişim" hint="Alıcıların size ulaşacağı bilgiler." />
 
               <div className="space-y-5">
                 <FieldGroup title="Konum">
-                  <div className="grid gap-4 sm:grid-cols-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <Button type="button" variant="outline" size="sm" disabled={gpsLocating} onClick={useCurrentLocation}>
+                      {gpsLocating ? <Loader2 className="size-3.5 animate-spin" /> : <LocateFixed className="size-3.5 text-primary" />}
+                      {gpsLocating ? "Konum alınıyor…" : "Mevcut konumumu kullan"}
+                    </Button>
+                    {path[0] === "emlak" ? (
+                      <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-medium text-primary">
+                        Ev / Arsa için haritada konum işaretleme önerilir
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className={cn("grid gap-4", hoods.length ? "sm:grid-cols-3" : "sm:grid-cols-2")}>
                     <div>
-                      <Label htmlFor="listing-city">İl</Label>
+                      <Label htmlFor="listing-city">İl *</Label>
                       <Select
                         id="listing-city"
                         value={city}
+                        aria-invalid={Boolean(fieldErrors.city)}
+                        className={fieldErrors.city ? "border-danger focus-visible:ring-danger/30" : undefined}
                         onChange={(e) => {
+                          clearFieldError("city");
+                          clearFieldError("district");
                           setCity(e.target.value);
                           setDistrict("");
                           setNeighborhood("");
@@ -1065,14 +1626,18 @@ function PostForm() {
                           <option key={c.name}>{c.name}</option>
                         ))}
                       </Select>
+                      {fieldErrors.city ? <p className="mt-1 text-xs font-medium text-danger">{fieldErrors.city}</p> : null}
                     </div>
                     <div>
-                      <Label htmlFor="listing-district">İlçe</Label>
+                      <Label htmlFor="listing-district">İlçe *</Label>
                       <Select
                         id="listing-district"
                         value={district}
                         disabled={!city}
+                        aria-invalid={Boolean(fieldErrors.district)}
+                        className={fieldErrors.district ? "border-danger focus-visible:ring-danger/30" : undefined}
                         onChange={(e) => {
+                          clearFieldError("district");
                           setDistrict(e.target.value);
                           setNeighborhood("");
                         }}
@@ -1083,29 +1648,94 @@ function PostForm() {
                           <option key={d}>{d}</option>
                         ))}
                       </Select>
+                      {fieldErrors.district ? <p className="mt-1 text-xs font-medium text-danger">{fieldErrors.district}</p> : null}
                     </div>
-                    <div>
-                      <Label htmlFor="listing-hood">Mahalle</Label>
-                      <Select
-                        id="listing-hood"
-                        value={neighborhood}
-                        disabled={!hoods.length}
-                        onChange={(e) => setNeighborhood(e.target.value)}
-                      >
-                        <option value="">{hoods.length ? "İsteğe bağlı" : "—"}</option>
-                        {hoods.map((h) => (
-                          <option key={h}>{h}</option>
-                        ))}
-                      </Select>
+                    {hoods.length ? (
+                      <div>
+                        <Label htmlFor="listing-hood">Mahalle</Label>
+                        <Select
+                          id="listing-hood"
+                          value={neighborhood}
+                          onChange={(e) => setNeighborhood(e.target.value)}
+                        >
+                          <option value="">İsteğe bağlı</option>
+                          {hoods.map((h) => (
+                            <option key={h}>{h}</option>
+                          ))}
+                        </Select>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="rounded-xl border border-border bg-elevated/45 p-3.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="flex items-center gap-1.5 text-sm font-medium">
+                          <MapPin className="size-4 text-primary" /> Haritada Konum İşaretle (İsteğe bağlı)
+                        </p>
+                        <p className="mt-0.5 text-xs text-muted">
+                          İşaretlerseniz ilan detayında yaklaşık il merkezi yerine seçtiğiniz nokta gösterilir.
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button type="button" size="sm" variant="outline" onClick={() => setMapPickerOpen(true)}>
+                          {pinLat != null ? "Konumu değiştir" : "Haritada seç"}
+                        </Button>
+                        {pinLat != null ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="text-muted hover:text-danger"
+                            onClick={() => {
+                              setPinLat(null);
+                              setPinLng(null);
+                              setPinLabel("");
+                            }}
+                          >
+                            Kaldır
+                          </Button>
+                        ) : null}
+                      </div>
                     </div>
+                    {pinLat != null && pinLng != null ? (
+                      <div className="mt-3 flex flex-col gap-2.5 sm:flex-row sm:items-center">
+                        <div className="overflow-hidden rounded-xl border border-border">
+                          <MapThumb lat={pinLat} lng={pinLng} width={220} height={115} />
+                        </div>
+                        <div className="min-w-0 text-xs">
+                          <p className="font-medium text-fg">{pinLabel || location || "Haritada işaretlendi"}</p>
+                          <p className="mt-0.5 tabular-nums text-muted">
+                            {pinLat.toFixed(5)}, {pinLng.toFixed(5)}
+                          </p>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 </FieldGroup>
 
                 <FieldGroup title="İletişim">
                   <div className="sm:max-w-sm">
-                    <Label htmlFor="listing-phone">Telefon</Label>
-                    <PhoneInput id="listing-phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
-                    <p className="mt-1.5 text-xs text-muted">Alıcılar “Telefonu göster” ile bu numarayı görür.</p>
+                    <Label htmlFor="listing-phone">Telefon{profilePhone ? "" : " *"}</Label>
+                    <PhoneInput
+                      id="listing-phone"
+                      value={phone}
+                      aria-invalid={Boolean(fieldErrors.phone)}
+                      className={fieldErrors.phone ? "border-danger focus-visible:ring-danger/30" : undefined}
+                      onChange={(e) => {
+                        clearFieldError("phone");
+                        setPhone(e.target.value);
+                      }}
+                    />
+                    {fieldErrors.phone ? (
+                      <p className="mt-1 text-xs font-medium text-danger">{fieldErrors.phone}</p>
+                    ) : (
+                      <p className="mt-1.5 text-xs text-muted">
+                        {profilePhone
+                          ? "Boş bırakırsanız profilinizdeki numara kullanılır. Alıcılar “Telefonu göster” ile bu numarayı görür."
+                          : "İlan vermek için telefon gerekli. Alıcılar “Telefonu göster” ile bu numarayı görür."}
+                      </p>
+                    )}
                   </div>
                   {storeId && storeName ? (
                     <p className="rounded-xl border border-primary/25 bg-primary/8 px-3.5 py-2.5 text-xs font-medium text-primary">
@@ -1132,7 +1762,7 @@ function PostForm() {
 
               <div className="relative">
                 <ListingImageGallery images={images} title={title} categoryName={pathRows[pathRows.length - 1]?.name} />
-                <EditLink onClick={() => goTo("photos")} className="absolute bottom-3 right-3 z-10 hidden sm:inline-flex" floating>
+                <EditLink onClick={() => goTo("photos")} className="absolute bottom-3 right-3 z-10 inline-flex" floating>
                   Fotoğrafları düzenle
                 </EditLink>
               </div>
@@ -1152,6 +1782,28 @@ function PostForm() {
                 </div>
               </div>
 
+              {pinLat != null && pinLng != null ? (
+                <div className="flex items-center gap-3 rounded-xl border border-border bg-elevated/40 p-3">
+                  <div className="overflow-hidden rounded-lg border border-border">
+                    <MapThumb lat={pinLat} lng={pinLng} width={150} height={84} />
+                  </div>
+                  <div className="min-w-0 text-xs">
+                    <p className="font-semibold text-fg">Harita konumu işaretlendi</p>
+                    <p className="mt-0.5 truncate text-muted">{pinLabel || location}</p>
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-border px-3.5 py-2.5 text-sm">
+                <div>
+                  <span className="text-muted">İletişim telefonu: </span>
+                  <span className="font-medium">{phone || (profilePhone ? `${maskPhone10(profilePhone)} (Profil)` : "Profil telefonunuz")}</span>
+                </div>
+                <button type="button" onClick={() => goTo("location")} className="text-xs font-medium text-primary hover:underline">
+                  Düzenle
+                </button>
+              </div>
+
               {Object.entries(values).some(([k, v]) => !k.startsWith("_") && v !== "" && v != null) ? (
                 <div>
                   <div className="mb-2 flex items-center justify-between gap-2">
@@ -1165,11 +1817,29 @@ function PostForm() {
                   <dl className="grid grid-cols-1 overflow-hidden rounded-xl border border-border sm:grid-cols-2">
                     {Object.entries(values)
                       .filter(([k, v]) => !k.startsWith("_") && v !== "" && v != null)
-                      .map(([k, v]) => {
+                      .map(([k, v], idx) => {
+                        const def = attrs.find((a) => a.name === k);
                         const raw = String(v);
-                        const display = raw === "true" ? "Evet" : raw === "false" ? "Hayır" : raw;
+                        const isYear = k === "Yıl" || k === "Model Yılı";
+                        const formatted =
+                          raw === "true"
+                            ? "Evet"
+                            : raw === "false"
+                              ? "Hayır"
+                              : !isYear && (typeof v === "number" || (def?.type === "NUMBER" && /^\d+$/.test(raw)))
+                                ? formatNumber(v)
+                                : raw;
+                        const display = def?.unit && !formatted.includes(def.unit) ? `${formatted} ${def.unit}` : formatted;
                         return (
-                          <div key={k} className="flex justify-between gap-4 border-b border-border px-3 py-2.5 text-sm last:border-b-0 sm:odd:border-r">
+                          <div
+                            key={k}
+                            className={cn(
+                              "flex justify-between gap-4 border-border px-3 py-2.5 text-sm",
+                              idx > 0 && "border-t",
+                              idx === 1 && "sm:border-t-0",
+                              idx % 2 === 1 && "sm:border-l",
+                            )}
+                          >
                             <dt className="text-muted">{k}</dt>
                             <dd className="text-right font-medium">{display}</dd>
                           </div>
@@ -1246,7 +1916,7 @@ function PostForm() {
             </div>
           </div>
 
-          {benzerIlanAcik ? (
+          {benzerIlanAcik && step !== "category" ? (
             <div className="rounded-2xl border border-border bg-surface p-4">
               <div className="flex items-center justify-between gap-2">
                 <p className="flex items-center gap-2 text-sm font-semibold">
@@ -1283,6 +1953,41 @@ function PostForm() {
         </aside>
       </div>
 
+      <LocationPicker
+        open={mapPickerOpen}
+        onOpenChange={setMapPickerOpen}
+        title="İlan konumu seç"
+        subtitle="Haritayı kaydırarak ilanın konumunu işaretleyin"
+        confirmLabel="Bu konumu seç"
+        footnote=""
+        initialCenter={pinLat != null && pinLng != null ? { lat: pinLat, lng: pinLng, zoom: 16 } : null}
+        initialQuery={!pinLat && (district || city) ? [district, city].filter(Boolean).join(", ") : undefined}
+        autoLocate={false}
+        onSend={(place) => {
+          setPinLat(place.lat);
+          setPinLng(place.lng);
+          setPinLabel(place.label);
+          applyGeoAddress(place.city, place.district, place.neighborhood, false);
+        }}
+      />
+
+      <Dialog open={clearConfirmOpen} onOpenChange={setClearConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Form temizlensin mi?</DialogTitle>
+            <DialogDescription>Girdiğiniz başlık, açıklama, fotoğraflar ve taslak silinecek.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setClearConfirmOpen(false)}>
+              Vazgeç
+            </Button>
+            <Button type="button" variant="danger" onClick={resetNewForm}>
+              Temizle
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog
         open={blocker.status === "blocked"}
         onOpenChange={(open) => {
@@ -1314,11 +2019,15 @@ function Stepper({
   step,
   onPick,
   locked,
+  maxReachedIdx,
+  freeNav,
 }: {
   steps: StepKey[];
   step: StepKey;
   onPick: (s: StepKey) => void;
   locked: boolean;
+  maxReachedIdx: number;
+  freeNav: boolean;
 }) {
   const activeIdx = steps.indexOf(step);
   return (
@@ -1339,17 +2048,18 @@ function Stepper({
           {steps.map((s, i) => {
             const done = i < activeIdx;
             const current = s === step;
+            const canPick = !current && (freeNav || i <= maxReachedIdx || done);
             return (
               <button
                 key={s}
                 type="button"
-                disabled={!done || locked}
+                disabled={!canPick || locked}
                 onClick={() => onPick(s)}
                 className={cn(
                   "inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors disabled:cursor-default",
                   current
                     ? "border-primary bg-primary/10 text-primary"
-                    : done
+                    : done || canPick
                       ? "border-border bg-surface text-fg hover:border-primary/40"
                       : "border-border/60 bg-elevated/50 text-subtle",
                 )}
@@ -1366,34 +2076,36 @@ function Stepper({
         {steps.map((s, i) => {
           const done = i < activeIdx;
           const current = s === step;
+          const canPick = !current && (freeNav || i <= maxReachedIdx || done);
           const meta = STEP_META[s];
           return (
             <li key={s} className={cn("flex items-center", i < steps.length - 1 && "flex-1")}>
               <button
                 type="button"
-                disabled={!done || locked}
+                disabled={!canPick || locked}
                 onClick={() => onPick(s)}
                 aria-current={current ? "step" : undefined}
-                className="group flex items-center gap-3 rounded-lg text-left disabled:cursor-default"
+                className="group flex items-center gap-2.5 rounded-lg text-left disabled:cursor-default"
               >
                 <span
                   className={cn(
-                    "grid size-9 shrink-0 place-items-center rounded-full text-sm font-semibold transition-colors",
+                    "grid size-8 shrink-0 place-items-center rounded-full text-sm font-semibold transition-colors lg:size-9",
                     done && "bg-primary-solid text-primary-fg group-enabled:group-hover:bg-primary-solid/85",
                     current && "bg-primary-solid text-primary-fg ring-4 ring-primary/15",
-                    !done && !current && "border border-border bg-surface text-muted",
+                    !done && !current && canPick && "border border-primary/40 bg-primary/8 text-primary group-enabled:group-hover:bg-primary/15",
+                    !done && !current && !canPick && "border border-border bg-surface text-muted",
                   )}
                 >
                   {done ? <Check className="size-4" /> : i + 1}
                 </span>
-                <span className="hidden lg:block">
-                  <span className={cn("block text-sm font-medium", current || done ? "text-fg" : "text-muted")}>{meta.label}</span>
+                <span className="hidden xl:block">
+                  <span className={cn("block text-sm font-medium", current || done || canPick ? "text-fg" : "text-muted")}>{meta.label}</span>
                   <span className="block text-xs text-subtle">{meta.hint}</span>
                 </span>
-                <span className={cn("text-sm font-medium lg:hidden", current || done ? "text-fg" : "text-muted")}>{meta.label}</span>
+                <span className={cn("text-xs font-medium lg:text-sm xl:hidden", current || done || canPick ? "text-fg" : "text-muted")}>{meta.label}</span>
               </button>
               {i < steps.length - 1 ? (
-                <span className={cn("mx-4 h-0.5 flex-1 rounded-full", done ? "bg-primary-solid" : "bg-border")} aria-hidden="true" />
+                <span className={cn("mx-2 h-0.5 flex-1 rounded-full lg:mx-3", done ? "bg-primary-solid" : "bg-border")} aria-hidden="true" />
               ) : null}
             </li>
           );
@@ -1416,9 +2128,9 @@ function SectionHeading({ id, title, hint }: { id: string; title: string; hint: 
 
 function FieldGroup({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <fieldset className="space-y-4 border-t border-border pt-5 first:border-t-0 first:pt-0">
-      <legend className="float-left mb-4 w-full text-xs font-semibold uppercase tracking-wider text-subtle">{title}</legend>
-      <div className="clear-both space-y-4">{children}</div>
+    <fieldset className="border-t border-border pt-5 first:border-t-0 first:pt-0">
+      <legend className="mb-3 block text-xs font-semibold uppercase tracking-wider text-subtle">{title}</legend>
+      <div className="space-y-4">{children}</div>
     </fieldset>
   );
 }

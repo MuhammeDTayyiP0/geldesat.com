@@ -82,6 +82,21 @@ export const CITY_COORDS: Record<string, { lat: number; lng: number }> = {
   Düzce: { lat: 40.8438, lng: 31.1565 },
 };
 
+/**
+ * Older listings stored CITY_COORDS as lat/lng when no explicit map pin was chosen.
+ * Treat points matching the province center within ~100 m as a fallback, not a real pin.
+ */
+export function isCityCenterFallback(
+  city: string | null | undefined,
+  lat: number | null | undefined,
+  lng: number | null | undefined,
+): boolean {
+  if (!city || lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+  const center = CITY_COORDS[city];
+  if (!center) return false;
+  return Math.abs(lat - center.lat) <= 0.001 && Math.abs(lng - center.lng) <= 0.001;
+}
+
 export const NEIGHBORHOODS: Record<string, Record<string, string[]>> = {
   Adana: {
     Seyhan: ["Reşatbey", "Çınarlı", "Gülbahçesi", "Ziyapaşa"],

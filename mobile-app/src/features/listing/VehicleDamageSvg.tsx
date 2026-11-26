@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import Svg, { G, Path, Rect, Text as SvgText } from 'react-native-svg';
+import Svg, { Defs, Ellipse, G, Line, LinearGradient, Path, RadialGradient, Rect, Stop, Text as SvgText } from 'react-native-svg';
 import { CheckCircle2, Paintbrush, RotateCcw, ShieldCheck } from 'lucide-react-native';
 import type { AttrDef } from '@/api/types';
 import { formatNumber, formatPrice } from '@/lib/format';
@@ -256,14 +256,20 @@ export function syncDamageAttrs(
               : '';
     if (val && (!boyaAttr.options?.length || boyaAttr.options.includes(val))) {
       next['Boya-Değişen'] = val;
+    } else if (!serialized) {
+      delete next['Boya-Değişen'];
     }
   }
 
   const hasarAttr = attrs.find((a) => a.name === 'Hasar Kaydı');
-  if (hasarAttr && nextDamage.tramer !== null) {
-    const val = nextDamage.tramer > 0 ? 'Var' : 'Yok';
-    if (!hasarAttr.options?.length || hasarAttr.options.includes(val)) {
-      next['Hasar Kaydı'] = val;
+  if (hasarAttr) {
+    if (nextDamage.tramer !== null) {
+      const val = nextDamage.tramer > 0 ? 'Var' : 'Yok';
+      if (!hasarAttr.options?.length || hasarAttr.options.includes(val)) {
+        next['Hasar Kaydı'] = val;
+      }
+    } else if (!serialized) {
+      delete next['Hasar Kaydı'];
     }
   }
 
@@ -279,19 +285,19 @@ type SvgPartShape = {
 };
 
 const SVG_SHAPES: readonly SvgPartShape[] = [
-  { id: 'on_tampon', d: 'M74 30 Q140 8 206 30 L199 50 Q140 38 81 50 Z', labelX: 140, labelY: 32 },
-  { id: 'kaput', d: 'M81 54 Q140 44 199 54 L192 126 Q140 122 88 126 Z', labelX: 140, labelY: 90 },
-  { id: 'tavan', d: 'M89 157 Q140 153 191 157 L191 267 Q140 271 89 267 Z', labelX: 140, labelY: 212 },
-  { id: 'bagaj', d: 'M88 294 Q140 298 192 294 L199 351 Q140 362 81 351 Z', labelX: 140, labelY: 326 },
-  { id: 'arka_tampon', d: 'M76 357 Q140 368 204 357 L207 377 Q140 394 73 377 Z', labelX: 140, labelY: 376 },
-  { id: 'sol_on_camurluk', d: 'M42 56 Q58 48 75 53 L81 127 L42 127 Q39 92 42 56 Z', labelX: 60, labelY: 92, rotate: -90 },
-  { id: 'sol_on_kapi', d: 'M42 133 L82 133 L82 210 L42 210 Z', labelX: 62, labelY: 172, rotate: -90 },
-  { id: 'sol_arka_kapi', d: 'M42 216 L82 216 L82 290 L42 290 Z', labelX: 62, labelY: 253, rotate: -90 },
-  { id: 'sol_arka_camurluk', d: 'M42 296 L82 296 L75 351 Q56 356 42 345 Q39 322 42 296 Z', labelX: 60, labelY: 324, rotate: -90 },
-  { id: 'sag_on_camurluk', d: 'M205 53 Q222 48 238 56 Q241 92 238 127 L199 127 Z', labelX: 220, labelY: 92, rotate: 90 },
-  { id: 'sag_on_kapi', d: 'M198 133 L238 133 L238 210 L198 210 Z', labelX: 218, labelY: 172, rotate: 90 },
-  { id: 'sag_arka_kapi', d: 'M198 216 L238 216 L238 290 L198 290 Z', labelX: 218, labelY: 253, rotate: 90 },
-  { id: 'sag_arka_camurluk', d: 'M198 296 L238 296 Q241 322 238 345 Q224 356 205 351 Z', labelX: 220, labelY: 324, rotate: 90 },
+  { id: 'on_tampon', d: 'M74 34 Q150 8 226 34 L217 56 Q150 42 83 56 Z', labelX: 150, labelY: 36 },
+  { id: 'kaput', d: 'M84 61 Q150 48 216 61 L207 137 Q150 132 93 137 Z', labelX: 150, labelY: 98 },
+  { id: 'tavan', d: 'M96 174 Q150 169 204 174 L204 289 Q150 294 96 289 Z', labelX: 150, labelY: 232 },
+  { id: 'bagaj', d: 'M93 322 Q150 327 207 322 L216 382 Q150 394 84 382 Z', labelX: 150, labelY: 356 },
+  { id: 'arka_tampon', d: 'M78 388 Q150 400 222 388 L226 410 Q150 430 74 410 Z', labelX: 150, labelY: 408 },
+  { id: 'sol_on_camurluk', d: 'M46 62 Q62 52 79 59 L86 138 L44 138 Q41 98 46 62 Z', labelX: 64, labelY: 100, rotate: -90 },
+  { id: 'sol_on_kapi', d: 'M44 144 L87 144 L87 224 L44 224 Z', labelX: 65, labelY: 184, rotate: -90 },
+  { id: 'sol_arka_kapi', d: 'M44 230 L87 230 L87 314 L44 314 Z', labelX: 65, labelY: 272, rotate: -90 },
+  { id: 'sol_arka_camurluk', d: 'M44 320 L87 320 L79 382 Q60 388 46 375 Q41 348 44 320 Z', labelX: 64, labelY: 352, rotate: -90 },
+  { id: 'sag_on_camurluk', d: 'M221 59 Q238 52 254 62 Q259 98 256 138 L214 138 Z', labelX: 236, labelY: 100, rotate: 90 },
+  { id: 'sag_on_kapi', d: 'M213 144 L256 144 L256 224 L213 224 Z', labelX: 235, labelY: 184, rotate: 90 },
+  { id: 'sag_arka_kapi', d: 'M213 230 L256 230 L256 314 L213 314 Z', labelX: 235, labelY: 272, rotate: 90 },
+  { id: 'sag_arka_camurluk', d: 'M213 320 L256 320 Q259 348 254 375 Q240 388 221 382 Z', labelX: 236, labelY: 352, rotate: 90 },
 ];
 
 const PART_BY_ID = new Map(DAMAGE_PARTS.map((p) => [p.id, p]));
@@ -468,37 +474,63 @@ export function VehicleDamageSvg({
       {/* Top-down 13-part SVG vehicle diagram */}
       <View style={[styles.diagramCard, { borderColor: c.border, backgroundColor: c.elevated }]}>
         <View style={styles.axisRow}>
-          <Text variant="small" tone="subtle" style={styles.axisLabel}>SOL</Text>
-          <Text variant="small" tone="subtle" style={styles.axisLabel}>ÖN</Text>
-          <Text variant="small" tone="subtle" style={styles.axisLabel}>SAĞ</Text>
+          <View style={[styles.axisPill, { borderColor: c.border, backgroundColor: c.surface }]}>
+            <Text variant="small" tone="subtle" style={styles.axisLabel}>SOL</Text>
+          </View>
+          <View style={[styles.axisPill, { borderColor: c.border, backgroundColor: c.surface }]}>
+            <Text variant="small" style={[styles.axisLabel, { color: c.fg }]}>ÖN</Text>
+          </View>
+          <View style={[styles.axisPill, { borderColor: c.border, backgroundColor: c.surface }]}>
+            <Text variant="small" tone="subtle" style={styles.axisLabel}>SAĞ</Text>
+          </View>
         </View>
         <Svg
-          viewBox="0 0 280 404"
-          width={230}
-          height={Math.round(230 * (404 / 280))}
+          viewBox="0 0 300 440"
+          width={244}
+          height={Math.round(244 * (440 / 300))}
           accessibilityLabel="Araç boya ve değişen şeması"
         >
-          {/* Outer chassis subtle outline */}
-          <Rect x={37} y={22} width={206} height={362} rx={34} fill="none" stroke={c.border} strokeOpacity={0.5} strokeWidth={1} strokeDasharray="3 3" />
+          <Defs>
+            <RadialGradient id="mobCarShadow" cx="50%" cy="50%" r="50%">
+              <Stop offset="0%" stopColor="#0f172a" stopOpacity={dark ? 0.45 : 0.22} />
+              <Stop offset="70%" stopColor="#0f172a" stopOpacity={dark ? 0.18 : 0.08} />
+              <Stop offset="100%" stopColor="#0f172a" stopOpacity={0} />
+            </RadialGradient>
+            <LinearGradient id="mobGlassGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+              <Stop offset="0%" stopColor="#334155" stopOpacity={0.5} />
+              <Stop offset="50%" stopColor="#1e293b" stopOpacity={0.65} />
+              <Stop offset="100%" stopColor="#475569" stopOpacity={0.45} />
+            </LinearGradient>
+          </Defs>
 
-          {/* Wheel-arch indicators */}
-          <Rect x={29} y={68} width={9} height={44} rx={4.5} fill={c.border} fillOpacity={0.55} stroke={c.border} strokeWidth={1} />
-          <Rect x={242} y={68} width={9} height={44} rx={4.5} fill={c.border} fillOpacity={0.55} stroke={c.border} strokeWidth={1} />
-          <Rect x={29} y={294} width={9} height={44} rx={4.5} fill={c.border} fillOpacity={0.55} stroke={c.border} strokeWidth={1} />
-          <Rect x={242} y={294} width={9} height={44} rx={4.5} fill={c.border} fillOpacity={0.55} stroke={c.border} strokeWidth={1} />
+          {/* Soft ground drop shadow */}
+          <Ellipse cx={150} cy={226} rx={126} ry={204} fill="url(#mobCarShadow)" />
 
-          {/* Headlights & taillights */}
-          <Path d="M56 38 Q68 28 78 32 L72 42 Q62 40 54 44 Z" fill="rgba(251, 191, 36, 0.35)" stroke="rgba(245, 158, 11, 0.65)" strokeWidth={1} />
-          <Path d="M224 38 Q212 28 202 32 L208 42 Q218 40 226 44 Z" fill="rgba(251, 191, 36, 0.35)" stroke="rgba(245, 158, 11, 0.65)" strokeWidth={1} />
-          <Path d="M54 358 Q64 364 74 362 L76 372 Q62 374 52 366 Z" fill="rgba(244, 63, 94, 0.35)" stroke="rgba(244, 63, 94, 0.65)" strokeWidth={1} />
-          <Path d="M226 358 Q216 364 206 362 L204 372 Q218 374 228 366 Z" fill="rgba(244, 63, 94, 0.35)" stroke="rgba(244, 63, 94, 0.65)" strokeWidth={1} />
+          {/* Wheels / tires */}
+          <Rect x={30} y={76} width={12} height={52} rx={5.5} fill={dark ? '#334155' : '#1e293b'} fillOpacity={0.82} stroke={c.border} strokeWidth={1} />
+          <Rect x={258} y={76} width={12} height={52} rx={5.5} fill={dark ? '#334155' : '#1e293b'} fillOpacity={0.82} stroke={c.border} strokeWidth={1} />
+          <Rect x={30} y={314} width={12} height={52} rx={5.5} fill={dark ? '#334155' : '#1e293b'} fillOpacity={0.82} stroke={c.border} strokeWidth={1} />
+          <Rect x={258} y={314} width={12} height={52} rx={5.5} fill={dark ? '#334155' : '#1e293b'} fillOpacity={0.82} stroke={c.border} strokeWidth={1} />
 
-          {/* Windshield & rear glass */}
-          <Path d="M89 130 Q140 124 191 130 L185 153 Q140 148 95 153 Z" fill={c.border} fillOpacity={0.35} stroke={c.border} strokeWidth={1.2} />
-          <Path d="M95 272 Q140 276 185 272 L191 290 Q140 294 89 290 Z" fill={c.border} fillOpacity={0.35} stroke={c.border} strokeWidth={1.2} />
+          {/* Outer aerodynamic chassis silhouette */}
+          <Path
+            d="M72 30 Q150 4 228 30 Q262 52 262 110 L262 346 Q262 396 228 412 Q150 434 72 412 Q38 396 38 346 L38 110 Q38 52 72 30 Z"
+            fill={c.surface}
+            fillOpacity={0.6}
+            stroke={c.border}
+            strokeWidth={1.2}
+          />
+
+          {/* Headlights & LED DRLs */}
+          <Path d="M55 44 Q70 30 82 35 L75 49 Q63 47 53 52 Z" fill="rgba(252, 211, 77, 0.45)" stroke="rgba(245, 158, 11, 0.72)" strokeWidth={1.1} />
+          <Path d="M245 44 Q230 30 218 35 L225 49 Q237 47 247 52 Z" fill="rgba(252, 211, 77, 0.45)" stroke="rgba(245, 158, 11, 0.72)" strokeWidth={1.1} />
+          {/* Taillights */}
+          <Path d="M54 388 Q66 396 80 393 L82 405 Q65 408 52 398 Z" fill="rgba(244, 63, 94, 0.45)" stroke="rgba(244, 63, 94, 0.75)" strokeWidth={1.1} />
+          <Path d="M246 388 Q234 396 220 393 L218 405 Q235 408 248 398 Z" fill="rgba(244, 63, 94, 0.45)" stroke="rgba(244, 63, 94, 0.75)" strokeWidth={1.1} />
+
           {/* Side mirrors */}
-          <Path d="M26 136 Q32 130 41 134 L41 142 Q32 144 26 138 Z" fill={c.border} fillOpacity={0.55} stroke={c.border} strokeWidth={1} />
-          <Path d="M254 136 Q248 130 239 134 L239 142 Q248 144 254 138 Z" fill={c.border} fillOpacity={0.55} stroke={c.border} strokeWidth={1} />
+          <Path d="M23 148 Q30 140 43 146 L43 156 Q31 159 23 152 Z" fill={c.surface} stroke={c.border} strokeWidth={1.2} />
+          <Path d="M277 148 Q270 140 257 146 L257 156 Q269 159 277 152 Z" fill={c.surface} stroke={c.border} strokeWidth={1.2} />
 
           {SVG_SHAPES.map((shape) => {
             const stateKey = value.parts[shape.id] ?? 'orijinal';
@@ -526,26 +558,56 @@ export function VehicleDamageSvg({
                   strokeLinejoin="round"
                 />
                 {shortTag ? (
-                  <SvgText
-                    x={shape.labelX}
-                    y={shape.labelY}
-                    textAnchor="middle"
-                    alignmentBaseline="central"
+                  <G
                     originX={shape.labelX}
                     originY={shape.labelY}
                     rotation={shape.rotate ?? 0}
-                    fill={c.fg}
-                    fontSize={9}
-                    fontWeight="700"
                   >
-                    {shortTag}
-                  </SvgText>
+                    <Rect
+                      x={shape.labelX - 24}
+                      y={shape.labelY - 9}
+                      width={48}
+                      height={18}
+                      rx={6}
+                      fill={c.surface}
+                      fillOpacity={0.92}
+                      stroke={c.border}
+                      strokeOpacity={0.7}
+                      strokeWidth={0.7}
+                    />
+                    <SvgText
+                      x={shape.labelX}
+                      y={shape.labelY}
+                      textAnchor="middle"
+                      alignmentBaseline="central"
+                      fill={c.fg}
+                      fontSize={9}
+                      fontWeight="700"
+                    >
+                      {shortTag}
+                    </SvgText>
+                  </G>
                 ) : null}
               </G>
             );
           })}
+
+          {/* Decorative hood crease lines, panoramic roof & glass cabin */}
+          <Path d="M108 72 L114 128" stroke={c.border} strokeOpacity={0.45} strokeWidth={1} strokeLinecap="round" />
+          <Path d="M192 72 L186 128" stroke={c.border} strokeOpacity={0.45} strokeWidth={1} strokeLinecap="round" />
+          <Rect x={108} y={186} width={84} height={86} rx={14} fill="none" stroke={c.border} strokeOpacity={0.45} strokeWidth={1} strokeDasharray="3 3" />
+          <Path d="M94 140 Q150 132 206 140 L199 169 Q150 163 101 169 Z" fill="url(#mobGlassGrad)" stroke={c.border} strokeWidth={1.2} />
+          <Path d="M101 294 Q150 299 199 294 L206 318 Q150 324 94 318 Z" fill="url(#mobGlassGrad)" stroke={c.border} strokeWidth={1.2} />
+          <Path d="M88 158 L94 176 L94 288 L88 308 Z" fill="url(#mobGlassGrad)" opacity={0.6} />
+          <Path d="M212 158 L206 176 L206 288 L212 308 Z" fill="url(#mobGlassGrad)" opacity={0.6} />
+          <Line x1={48} y1={192} x2={48} y2={206} stroke={c.border} strokeWidth={2} strokeLinecap="round" />
+          <Line x1={48} y1={278} x2={48} y2={292} stroke={c.border} strokeWidth={2} strokeLinecap="round" />
+          <Line x1={252} y1={192} x2={252} y2={206} stroke={c.border} strokeWidth={2} strokeLinecap="round" />
+          <Line x1={252} y1={278} x2={252} y2={292} stroke={c.border} strokeWidth={2} strokeLinecap="round" />
         </Svg>
-        <Text variant="small" tone="subtle" style={styles.axisLabel}>ARKA</Text>
+        <View style={[styles.axisPill, { borderColor: c.border, backgroundColor: c.surface, marginTop: 6 }]}>
+          <Text variant="small" tone="subtle" style={styles.axisLabel}>ARKA</Text>
+        </View>
         {!readOnly ? (
           <Text variant="caption" tone="muted" center style={{ marginTop: space.xs }}>
             {activeBrushSpec ? `Dokunduğunuz parça "${activeBrushSpec.label}" olur` : 'Parçaya dokunarak durumu değiştirin'}
@@ -735,8 +797,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     width: '100%',
-    maxWidth: 230,
-    marginBottom: 4,
+    maxWidth: 244,
+    marginBottom: 6,
+  },
+  axisPill: {
+    borderWidth: 1,
+    borderRadius: radius.pill,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
   },
   axisLabel: { letterSpacing: 1, fontSize: 10, fontWeight: '700' },
   selectedCard: {
