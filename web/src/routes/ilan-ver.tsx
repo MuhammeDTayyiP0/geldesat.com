@@ -55,6 +55,10 @@ function AttrInput({
   values: Record<string, string | number>;
   setValues: Dispatch<SetStateAction<Record<string, string | number>>>;
 }) {
+  const isYear = a.type === "NUMBER" && (a.name === "Yıl" || a.name === "Model Yılı");
+  const isFormattedNumber = a.type === "NUMBER" && !isYear;
+  const rawVal = values[a.name];
+
   return (
     <div>
       <Label htmlFor={`attr-${a.id}`}>
@@ -66,7 +70,7 @@ function AttrInput({
         <Select
           id={`attr-${a.id}`}
           required={a.required}
-          value={String(values[a.name] ?? "")}
+          value={String(rawVal ?? "")}
           onChange={(e) => setValues((v) => ({ ...v, [a.name]: e.target.value }))}
         >
           <option value="">Seçin</option>
@@ -74,14 +78,27 @@ function AttrInput({
             <option key={o}>{o}</option>
           ))}
         </Select>
+      ) : isFormattedNumber ? (
+        <Input
+          id={`attr-${a.id}`}
+          type="text"
+          inputMode="numeric"
+          autoComplete="off"
+          required={a.required}
+          value={rawVal !== undefined && rawVal !== "" ? formatNumber(rawVal) : ""}
+          onChange={(e) => {
+            const digits = e.target.value.replace(/\D/g, "").slice(0, 10);
+            setValues((v) => ({ ...v, [a.name]: digits === "" ? "" : Number(digits) }));
+          }}
+        />
       ) : (
         <Input
           id={`attr-${a.id}`}
           type={a.type === "NUMBER" ? "number" : "text"}
           required={a.required}
-          min={a.name === "Yıl" ? 1950 : a.type === "NUMBER" ? 0 : undefined}
-          max={a.name === "Yıl" ? new Date().getFullYear() + 1 : undefined}
-          value={String(values[a.name] ?? "")}
+          min={isYear ? 1950 : a.type === "NUMBER" ? 0 : undefined}
+          max={isYear ? new Date().getFullYear() + 1 : undefined}
+          value={String(rawVal ?? "")}
           onChange={(e) =>
             setValues((v) => ({ ...v, [a.name]: a.type === "NUMBER" && e.target.value !== "" ? Number(e.target.value) : e.target.value }))
           }
@@ -144,7 +161,7 @@ type ListingDraft = {
   savedAt: number;
 };
 
-const PHOTO_KEEP_MS = 20 * 60 * 60_000;
+const PHOTO_KEEP_MS = 23 * 60 * 60_000;
 
 export const Route = createFileRoute("/ilan-ver")({
   validateSearch: (s: Record<string, unknown>): { id?: string; copyFrom?: string } => ({
@@ -164,22 +181,22 @@ export const Route = createFileRoute("/ilan-ver")({
 
 const STEPS = [
   { label: "Kategori", hint: "Ne satıyorsunuz?" },
-  { label: "Detaylar", hint: "Başlık, fiyat ve konum" },
   { label: "Fotoğraflar", hint: "En fazla 10 fotoğraf" },
+  { label: "Detaylar", hint: "Başlık, fiyat ve konum" },
   { label: "Önizleme", hint: "Kontrol edip yayınlayın" },
 ] as const;
 
 const TIPS: Record<number, string[]> = {
   0: ["En alt kategoriye kadar inin; alıcılar ilanınızı filtrelerle bu şekilde bulur.", "Arama kutusuna marka veya model yazarak hızlıca bulabilirsiniz."],
   1: [
-    "Başlıkta marka, model ve en önemli özelliği belirtin.",
-    "Açıklamada kusurları da dürüstçe yazın; güven satışı hızlandırır.",
-    "Piyasa fiyatına yakın ilanlar daha çok mesaj alır.",
-  ],
-  2: [
     "Gün ışığında, ürünün tamamını gösteren fotoğraflar çekin.",
     "Kapak fotoğrafı ilk izlenimdir; en net fotoğrafı kapak yapın.",
     "Fotoğraflar oranları korunarak küçültülür ve filigran eklenir.",
+  ],
+  2: [
+    "Başlıkta marka, model ve en önemli özelliği belirtin.",
+    "Açıklamada kusurları da dürüstçe yazın; güven satışı hızlandırır.",
+    "Piyasa fiyatına yakın ilanlar daha çok mesaj alır.",
   ],
   3: ["Yayınlamadan önce fiyat ve konumu son kez kontrol edin.", "İlanınızı daha sonra “İlanlarım” sayfasından düzenleyebilirsiniz."],
 };
@@ -213,6 +230,7 @@ function PostForm() {
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [storeId, setStoreId] = useState<string | undefined>();
+  const [storeName, setStoreName] = useState<string | undefined>();
   const [listingStatus, setListingStatus] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState<string | null>(null);
   const [copiedBanner, setCopiedBanner] = useState(false);
@@ -309,7 +327,10 @@ function PostForm() {
     if (!userId) return;
     void getMe()
       .then((m) => {
-        if (m.store && !editId) setStoreId(m.store.id);
+        if (m.store) {
+          if (!editId) setStoreId(m.store.id);
+          setStoreName(m.store.name);
+        }
         setProfilePhone(m.profile?.phone ?? "");
         if (!editId && !userProfileLoaded.current) {
           if (m.profile?.phone) setPhone(maskPhone10(m.profile.phone));
@@ -347,7 +368,7 @@ function PostForm() {
           setOfferedDraft(null);
           setCopiedBanner(true);
         }
-        setStep(1);
+        setStep(editId ? 2 : 1);
         setLoaded(true);
       })
       .catch((e) => {
@@ -421,7 +442,7 @@ function PostForm() {
     if (!selected || uploading) return;
     if (needsPhoto && images.length < 1) {
       toast.error("Emlak ve vasıta ilanlarında en az 1 fotoğraf zorunludur.");
-      setStep(2);
+      setStep(1);
       return;
     }
     setBusy(true);
@@ -507,7 +528,15 @@ function PostForm() {
     if (attrsLoading) return "Kategori özellikleri yükleniyor, lütfen bekleyin.";
     if (attrsError) return "Kategori özellikleri yüklenemedi. Sayfadaki “Tekrar dene”ye basın.";
     const missing = attrs.find((a) => a.required && (values[a.name] === undefined || values[a.name] === ""));
-    return missing ? `Zorunlu alan: ${missing.name}` : null;
+    if (missing) return `Zorunlu alan: ${missing.name}`;
+    const maxYear = new Date().getFullYear() + 1;
+    for (const yearKey of ["Yıl", "Model Yılı"] as const) {
+      const y = values[yearKey];
+      if (y !== undefined && y !== "" && (Number(y) < 1950 || Number(y) > maxYear)) {
+        return `${yearKey} 1950 ile ${maxYear} arasında olmalı.`;
+      }
+    }
+    return null;
   }
 
   const location = [neighborhood, district, city].filter(Boolean).join(", ");
@@ -703,6 +732,38 @@ function PostForm() {
           ) : null}
 
           {step === 1 ? (
+            <section aria-label="Fotoğraflar">
+              <PhotoUploader
+                images={images}
+                setImages={setImages}
+                originals={photoOriginals.current}
+                onBusyChange={setUploading}
+                required={needsPhoto}
+                editing={Boolean(editId)}
+              />
+              <StepActions note={uploading ? "Yüklemeler bitince devam edebilirsiniz…" : undefined}>
+                <Button type="button" variant="ghost" disabled={uploading} onClick={() => goTo(0)}>
+                  <ArrowLeft className="size-4" /> Geri
+                </Button>
+                <Button
+                  type="button"
+                  className="flex-1 md:flex-none"
+                  disabled={uploading}
+                  onClick={() => {
+                    if (needsPhoto && images.length < 1) {
+                      toast.error("Emlak ve vasıta ilanlarında en az 1 fotoğraf zorunludur.");
+                      return;
+                    }
+                    setStep(2);
+                  }}
+                >
+                  {images.length ? "Detaylara geç" : "Fotoğrafsız devam et"} <ArrowRight className="size-4" />
+                </Button>
+              </StepActions>
+            </section>
+          ) : null}
+
+          {step === 2 ? (
             <form
               aria-labelledby="step-details"
               onSubmit={(e) => {
@@ -712,7 +773,7 @@ function PostForm() {
                   toast.error(problem);
                   return;
                 }
-                setStep(2);
+                setStep(3);
               }}
             >
               <SectionHeading id="step-details" title="İlan detayları" hint="Alıcıların ilk göreceği bilgiler." />
@@ -846,6 +907,11 @@ function PostForm() {
                     <PhoneInput id="listing-phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
                     <p className="mt-1.5 text-xs text-muted">Alıcılar “Telefonu göster” ile bu numarayı görür.</p>
                   </div>
+                  {storeId && storeName ? (
+                    <p className="rounded-xl border border-primary/25 bg-primary/8 px-3.5 py-2.5 text-xs font-medium text-primary">
+                      İlan “{storeName}” mağazanız adına yayınlanacak.
+                    </p>
+                  ) : null}
                 </FieldGroup>
 
                 {attrs.length ? (
@@ -946,46 +1012,14 @@ function PostForm() {
               </div>
 
               <StepActions>
-                <Button type="button" variant="ghost" onClick={() => goTo(0)}>
+                <Button type="button" variant="ghost" onClick={() => goTo(1)}>
                   <ArrowLeft className="size-4" /> Geri
                 </Button>
                 <Button type="submit" className="flex-1 md:flex-none">
-                  Fotoğraflara geç <ArrowRight className="size-4" />
+                  Önizlemeye geç <ArrowRight className="size-4" />
                 </Button>
               </StepActions>
             </form>
-          ) : null}
-
-          {step === 2 ? (
-            <section aria-label="Fotoğraflar">
-              <PhotoUploader
-                images={images}
-                setImages={setImages}
-                originals={photoOriginals.current}
-                onBusyChange={setUploading}
-                required={needsPhoto}
-                editing={Boolean(editId)}
-              />
-              <StepActions note={uploading ? "Yüklemeler bitince devam edebilirsiniz…" : undefined}>
-                <Button type="button" variant="ghost" disabled={uploading} onClick={() => goTo(1)}>
-                  <ArrowLeft className="size-4" /> Geri
-                </Button>
-                <Button
-                  type="button"
-                  className="flex-1 md:flex-none"
-                  disabled={uploading}
-                  onClick={() => {
-                    if (needsPhoto && images.length < 1) {
-                      toast.error("Emlak ve vasıta ilanlarında en az 1 fotoğraf zorunludur.");
-                      return;
-                    }
-                    setStep(3);
-                  }}
-                >
-                  {images.length ? "Önizleme" : "Fotoğrafsız devam et"} <ArrowRight className="size-4" />
-                </Button>
-              </StepActions>
-            </section>
           ) : null}
 
           {step === 3 ? (
@@ -994,7 +1028,7 @@ function PostForm() {
 
               <div className="relative">
                 <ListingImageGallery images={images} title={title} categoryName={pathRows[pathRows.length - 1]?.name} />
-                <EditLink onClick={() => goTo(2)} className="absolute bottom-3 right-3 z-10 hidden sm:inline-flex" floating>
+                <EditLink onClick={() => goTo(1)} className="absolute bottom-3 right-3 z-10 hidden sm:inline-flex" floating>
                   Fotoğrafları düzenle
                 </EditLink>
               </div>
@@ -1008,7 +1042,7 @@ function PostForm() {
                   </p>
                   <p className="mt-1 text-xs text-subtle">{pathRows.map((c) => c.name).join(" › ")}</p>
                 </div>
-                <EditLink onClick={() => goTo(1)}>Bilgileri düzenle</EditLink>
+                <EditLink onClick={() => goTo(2)}>Bilgileri düzenle</EditLink>
               </div>
 
               {Object.entries(values).some(([k, v]) => !k.startsWith("_") && v !== "" && v != null) ? (
@@ -1042,6 +1076,10 @@ function PostForm() {
                 <h3 className="mb-2 text-sm font-semibold">Açıklama</h3>
                 <p className="whitespace-pre-wrap break-words rounded-xl bg-elevated/50 p-4 text-sm leading-relaxed">{description}</p>
               </div>
+
+              <p className="rounded-xl bg-elevated/60 px-4 py-3 text-xs text-muted">
+                {editId ? "Değişiklikleri kaydet" : "İlanı yayınla"}’ya tıklayarak ilanınızın GeldeSat kullanım koşullarına uygun olduğunu onaylarsınız. Kurallara aykırı ilanlar kaldırılır.
+              </p>
 
               <StepActions>
                 <Button type="button" variant="ghost" disabled={busy} onClick={() => goTo(2)}>

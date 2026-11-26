@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { RotateCcw } from "lucide-react";
+import { CheckCircle2, Paintbrush, RotateCcw, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { cn, formatNumber, formatPrice } from "@/lib/utils";
@@ -183,23 +183,23 @@ type SvgPartShape = {
 
 const SVG_SHAPES: ReadonlyArray<SvgPartShape> = [
   // Center spine (front at top -> rear at bottom)
-  { id: "on_tampon", d: "M76 28 Q140 8 204 28 L198 48 Q140 36 82 48 Z", labelX: 140, labelY: 32 },
-  { id: "kaput", d: "M82 52 Q140 42 198 52 L192 126 L88 126 Z", labelX: 140, labelY: 90 },
-  { id: "tavan", d: "M88 156 L192 156 L192 268 L88 268 Z", labelX: 140, labelY: 214 },
-  { id: "bagaj", d: "M88 294 L192 294 L198 352 Q140 362 82 352 Z", labelX: 140, labelY: 326 },
-  { id: "arka_tampon", d: "M78 358 Q140 368 202 358 L206 378 Q140 394 74 378 Z", labelX: 140, labelY: 376 },
+  { id: "on_tampon", d: "M74 30 Q140 8 206 30 L199 50 Q140 38 81 50 Z", labelX: 140, labelY: 32 },
+  { id: "kaput", d: "M81 54 Q140 44 199 54 L192 126 Q140 122 88 126 Z", labelX: 140, labelY: 90 },
+  { id: "tavan", d: "M89 157 Q140 153 191 157 L191 267 Q140 271 89 267 Z", labelX: 140, labelY: 212 },
+  { id: "bagaj", d: "M88 294 Q140 298 192 294 L199 351 Q140 362 81 351 Z", labelX: 140, labelY: 326 },
+  { id: "arka_tampon", d: "M76 357 Q140 368 204 357 L207 377 Q140 394 73 377 Z", labelX: 140, labelY: 376 },
 
   // Left side (Sol)
-  { id: "sol_on_camurluk", d: "M42 54 Q60 48 76 52 L82 128 L42 128 Z", labelX: 60, labelY: 92, rotate: -90 },
-  { id: "sol_on_kapi", d: "M42 134 L82 134 L82 210 L42 210 Z", labelX: 62, labelY: 172, rotate: -90 },
+  { id: "sol_on_camurluk", d: "M42 56 Q58 48 75 53 L81 127 L42 127 Q39 92 42 56 Z", labelX: 60, labelY: 92, rotate: -90 },
+  { id: "sol_on_kapi", d: "M42 133 L82 133 L82 210 L42 210 Z", labelX: 62, labelY: 172, rotate: -90 },
   { id: "sol_arka_kapi", d: "M42 216 L82 216 L82 290 L42 290 Z", labelX: 62, labelY: 253, rotate: -90 },
-  { id: "sol_arka_camurluk", d: "M42 296 L82 296 L76 352 Q56 356 42 346 Z", labelX: 60, labelY: 324, rotate: -90 },
+  { id: "sol_arka_camurluk", d: "M42 296 L82 296 L75 351 Q56 356 42 345 Q39 322 42 296 Z", labelX: 60, labelY: 324, rotate: -90 },
 
   // Right side (Sağ)
-  { id: "sag_on_camurluk", d: "M204 52 Q220 48 238 54 L238 128 L198 128 Z", labelX: 220, labelY: 92, rotate: 90 },
-  { id: "sag_on_kapi", d: "M198 134 L238 134 L238 210 L198 210 Z", labelX: 218, labelY: 172, rotate: 90 },
+  { id: "sag_on_camurluk", d: "M205 53 Q222 48 238 56 Q241 92 238 127 L199 127 Z", labelX: 220, labelY: 92, rotate: 90 },
+  { id: "sag_on_kapi", d: "M198 133 L238 133 L238 210 L198 210 Z", labelX: 218, labelY: 172, rotate: 90 },
   { id: "sag_arka_kapi", d: "M198 216 L238 216 L238 290 L198 290 Z", labelX: 218, labelY: 253, rotate: 90 },
-  { id: "sag_arka_camurluk", d: "M198 296 L238 296 L238 346 Q224 356 204 352 Z", labelX: 220, labelY: 324, rotate: 90 },
+  { id: "sag_arka_camurluk", d: "M198 296 L238 296 Q241 322 238 345 Q224 356 205 351 Z", labelX: 220, labelY: 324, rotate: 90 },
 ];
 
 const PART_BY_ID = new Map(DAMAGE_PARTS.map((p) => [p.id, p]));
@@ -216,6 +216,7 @@ export function VehicleDamageDiagram({
   className?: string;
 }) {
   const [selectedPart, setSelectedPart] = useState<DamagePartId>("kaput");
+  const [activeBrush, setActiveBrush] = useState<DamagePartState | null>(null);
   const counts = summarizeDamage(value);
   const activePart = PART_BY_ID.get(selectedPart) ?? DAMAGE_PARTS[0];
   const activeState = value.parts[selectedPart] ?? "orijinal";
@@ -228,11 +229,22 @@ export function VehicleDamageDiagram({
     });
   }
 
-  function cyclePart(id: DamagePartId) {
+  function handlePartPress(id: DamagePartId) {
     if (readOnly || !onChange) return;
     setSelectedPart(id);
     const cur = value.parts[id] ?? "orijinal";
+    if (activeBrush) {
+      const next = cur === activeBrush && activeBrush !== "orijinal" ? "orijinal" : activeBrush;
+      updatePart(id, next);
+      return;
+    }
     updatePart(id, NEXT_STATE[cur]);
+  }
+
+  function applyCleanPreset() {
+    if (readOnly || !onChange) return;
+    const base = createEmptyDamageData();
+    onChange({ ...base, tramer: 0 });
   }
 
   function resetAll() {
@@ -241,27 +253,113 @@ export function VehicleDamageDiagram({
   }
 
   const changedParts = DAMAGE_PARTS.filter((p) => value.parts[p.id] !== "orijinal");
+  const isCleanCar = changedParts.length === 0;
+  const activeBrushSpec = activeBrush ? STATE_BY_KEY.get(activeBrush) : undefined;
 
   return (
     <div className={cn("space-y-4", className)}>
-      {/* Legend + summary */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2">
-          {DAMAGE_STATES.map((s) => (
-            <span
-              key={s.key}
-              className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium", s.badgeClass)}
-            >
-              <span className={cn("size-2 rounded-full", s.dotClass)} aria-hidden="true" />
-              {s.label}
-              <span className="tabular-nums opacity-80">({counts[s.key]})</span>
+      {/* Read-only summary banner */}
+      {readOnly ? (
+        <div
+          className={cn(
+            "flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3.5 py-2.5 text-xs font-medium",
+            isCleanCar
+              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+              : "border-border bg-elevated/45 text-fg",
+          )}
+        >
+          <div className="flex items-center gap-2">
+            {isCleanCar ? <ShieldCheck className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" /> : null}
+            <span>
+              {isCleanCar
+                ? "Tamamı Orijinal (Boyasız / Değişensiz)"
+                : [
+                    counts.degisen ? `${counts.degisen} Değişen` : null,
+                    counts.boyali ? `${counts.boyali} Boyalı` : null,
+                    counts.lokal ? `${counts.lokal} Lokal Boyalı` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
             </span>
-          ))}
+          </div>
+          {value.tramer !== null ? (
+            <span className="tabular-nums text-muted">
+              Tramer: <strong className="text-fg">{value.tramer === 0 ? "Yok (0 ₺)" : formatPrice(value.tramer, "TRY")}</strong>
+            </span>
+          ) : null}
         </div>
-        {!readOnly && (changedParts.length > 0 || value.tramer !== null) ? (
-          <Button type="button" variant="ghost" size="sm" onClick={resetAll} className="h-7 px-2 text-xs text-muted">
-            <RotateCcw className="size-3.5" /> Sıfırla
-          </Button>
+      ) : null}
+
+      {/* Legend / Interactive Brush + Quick Presets */}
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {DAMAGE_STATES.map((s) => {
+              const isBrush = !readOnly && activeBrush === s.key;
+              if (readOnly) {
+                return (
+                  <span
+                    key={s.key}
+                    className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium", s.badgeClass)}
+                  >
+                    <span className={cn("size-2 rounded-full", s.dotClass)} aria-hidden="true" />
+                    {s.label}
+                    <span className="tabular-nums opacity-80">({counts[s.key]})</span>
+                  </span>
+                );
+              }
+              return (
+                <button
+                  key={s.key}
+                  type="button"
+                  aria-pressed={isBrush}
+                  onClick={() => setActiveBrush((prev) => (prev === s.key ? null : s.key))}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-all",
+                    s.badgeClass,
+                    isBrush ? "ring-2 ring-primary ring-offset-1 ring-offset-surface" : "opacity-85 hover:opacity-100",
+                  )}
+                >
+                  <span className={cn("size-2 rounded-full", s.dotClass)} aria-hidden="true" />
+                  {s.label}
+                  <span className="tabular-nums opacity-80">({counts[s.key]})</span>
+                </button>
+              );
+            })}
+          </div>
+          {!readOnly ? (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={applyCleanPreset}
+                className={cn(
+                  "h-7 px-2.5 text-xs",
+                  isCleanCar && value.tramer === 0 && "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+                )}
+              >
+                <CheckCircle2 className="size-3.5" /> Tamamı Orijinal · Tramer Yok
+              </Button>
+              {changedParts.length > 0 || value.tramer !== null ? (
+                <Button type="button" variant="ghost" size="sm" onClick={resetAll} className="h-7 px-2 text-xs text-muted">
+                  <RotateCcw className="size-3.5" /> Sıfırla
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+        {!readOnly ? (
+          <p className="flex items-center gap-1.5 text-[11px] text-muted">
+            <Paintbrush className="size-3 shrink-0 text-primary" aria-hidden="true" />
+            {activeBrushSpec ? (
+              <span>
+                Hızlı işaretleme fırçası: <strong className="text-fg">{activeBrushSpec.label}</strong> — dokunduğunuz parça bu duruma geçer.
+              </span>
+            ) : (
+              <span>Hızlı işaretleme fırçası için yukarıdaki bir duruma tıklayın ya da doğrudan parçaya tıklayarak değiştirin.</span>
+            )}
+          </p>
         ) : null}
       </div>
 
@@ -279,12 +377,27 @@ export function VehicleDamageDiagram({
             role="img"
             aria-label="Araç boya ve değişen şeması"
           >
+            {/* Outer chassis subtle outline */}
+            <rect x="37" y="22" width="206" height="362" rx="34" className="fill-none stroke-border/45" strokeWidth="1" strokeDasharray="3 3" />
+
+            {/* Wheel-arch indicators */}
+            <rect x="29" y="68" width="9" height="44" rx="4.5" className="fill-border/55 stroke-border" strokeWidth="1" />
+            <rect x="242" y="68" width="9" height="44" rx="4.5" className="fill-border/55 stroke-border" strokeWidth="1" />
+            <rect x="29" y="294" width="9" height="44" rx="4.5" className="fill-border/55 stroke-border" strokeWidth="1" />
+            <rect x="242" y="294" width="9" height="44" rx="4.5" className="fill-border/55 stroke-border" strokeWidth="1" />
+
+            {/* Headlights & taillights */}
+            <path d="M56 38 Q68 28 78 32 L72 42 Q62 40 54 44 Z" className="fill-amber-400/35 stroke-amber-500/60" strokeWidth="1" />
+            <path d="M224 38 Q212 28 202 32 L208 42 Q218 40 226 44 Z" className="fill-amber-400/35 stroke-amber-500/60" strokeWidth="1" />
+            <path d="M54 358 Q64 364 74 362 L76 372 Q62 374 52 366 Z" className="fill-rose-500/35 stroke-rose-500/60" strokeWidth="1" />
+            <path d="M226 358 Q216 364 206 362 L204 372 Q218 374 228 366 Z" className="fill-rose-500/35 stroke-rose-500/60" strokeWidth="1" />
+
             {/* Windshield & rear glass decorative guides */}
-            <path d="M90 130 L190 130 L184 152 L96 152 Z" className="fill-border/35 stroke-border" strokeWidth="1.2" />
-            <path d="M96 272 L184 272 L190 290 L90 290 Z" className="fill-border/35 stroke-border" strokeWidth="1.2" />
+            <path d="M89 130 Q140 124 191 130 L185 153 Q140 148 95 153 Z" className="fill-border/35 stroke-border" strokeWidth="1.2" />
+            <path d="M95 272 Q140 276 185 272 L191 290 Q140 294 89 290 Z" className="fill-border/35 stroke-border" strokeWidth="1.2" />
             {/* Side mirrors */}
-            <ellipse cx="34" cy="136" rx="7" ry="4" className="fill-border/50 stroke-border" strokeWidth="1" />
-            <ellipse cx="246" cy="136" rx="7" ry="4" className="fill-border/50 stroke-border" strokeWidth="1" />
+            <path d="M26 136 Q32 130 41 134 L41 142 Q32 144 26 138 Z" className="fill-border/55 stroke-border" strokeWidth="1" />
+            <path d="M254 136 Q248 130 239 134 L239 142 Q248 144 254 138 Z" className="fill-border/55 stroke-border" strokeWidth="1" />
 
             {SVG_SHAPES.map((shape) => {
               const part = PART_BY_ID.get(shape.id)!;
@@ -306,19 +419,19 @@ export function VehicleDamageDiagram({
                   role={readOnly ? undefined : "button"}
                   tabIndex={readOnly ? undefined : 0}
                   aria-label={`${part.label}: ${st.label}`}
-                  onClick={() => !readOnly && cyclePart(shape.id)}
+                  onClick={() => !readOnly && handlePartPress(shape.id)}
                   onKeyDown={(e) => {
                     if (!readOnly && (e.key === "Enter" || e.key === " ")) {
                       e.preventDefault();
-                      cyclePart(shape.id);
+                      handlePartPress(shape.id);
                     }
                   }}
                   className={cn(readOnly ? "cursor-default" : "cursor-pointer outline-none")}
                 >
                   <path
                     d={shape.d}
-                    className={cn("transition-colors", st.svgFill, st.svgStroke)}
-                    strokeWidth={isSelected ? 2.4 : 1.5}
+                    className={cn("transition-colors", st.svgFill, isSelected ? "stroke-primary" : st.svgStroke)}
+                    strokeWidth={isSelected ? 2.8 : 1.5}
                     strokeLinejoin="round"
                   />
                   {shortTag ? (
@@ -339,7 +452,9 @@ export function VehicleDamageDiagram({
           </svg>
           <span className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-subtle">Arka</span>
           {!readOnly ? (
-            <p className="mt-2 text-center text-[11px] text-muted">Parçaya tıklayarak durumu değiştirin</p>
+            <p className="mt-2 text-center text-[11px] text-muted">
+              {activeBrushSpec ? `Dokunduğunuz parça "${activeBrushSpec.label}" olur` : "Parçaya tıklayarak durumu değiştirin"}
+            </p>
           ) : null}
         </div>
 
@@ -378,13 +493,17 @@ export function VehicleDamageDiagram({
             {DAMAGE_PARTS.map((part) => {
               const stateKey = value.parts[part.id] ?? "orijinal";
               const st = STATE_BY_KEY.get(stateKey) ?? DAMAGE_STATES[0];
+              const isChanged = stateKey !== "orijinal";
               if (readOnly) {
                 return (
                   <div
                     key={part.id}
-                    className="flex items-center justify-between gap-2 rounded-lg border border-border px-2.5 py-1.5 text-xs"
+                    className={cn(
+                      "flex items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-xs",
+                      isChanged ? "border-border bg-elevated/55" : "border-border/70",
+                    )}
                   >
-                    <span className="truncate text-muted">{part.label}</span>
+                    <span className={cn("truncate", isChanged ? "font-medium text-fg" : "text-muted")}>{part.label}</span>
                     <span className={cn("shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium", st.badgeClass)}>
                       {st.label}
                     </span>
@@ -395,10 +514,14 @@ export function VehicleDamageDiagram({
                 <button
                   key={part.id}
                   type="button"
-                  onClick={() => cyclePart(part.id)}
+                  onClick={() => handlePartPress(part.id)}
                   className={cn(
                     "flex items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-left text-xs transition-colors",
-                    selectedPart === part.id ? "border-primary/50 bg-primary/5" : "border-border hover:bg-elevated/60",
+                    selectedPart === part.id
+                      ? "border-primary/50 bg-primary/5"
+                      : isChanged
+                        ? "border-border bg-elevated/35 hover:bg-elevated/60"
+                        : "border-border hover:bg-elevated/60",
                   )}
                 >
                   <span className="truncate font-medium text-fg">{part.label}</span>
@@ -418,28 +541,42 @@ export function VehicleDamageDiagram({
               </span>
             </div>
           ) : (
-            <div className="sm:max-w-xs">
+            <div className="space-y-2">
               <Label htmlFor="vehicle-tramer-input">Tramer Tutarı (TL, isteğe bağlı)</Label>
-              <div className="relative">
-                <Input
-                  id="vehicle-tramer-input"
-                  inputMode="numeric"
-                  autoComplete="off"
-                  value={value.tramer !== null ? formatNumber(value.tramer) : ""}
-                  onChange={(e) => {
-                    const digits = e.target.value.replace(/\D/g, "").slice(0, 9);
-                    if (!onChange) return;
-                    onChange({
-                      ...value,
-                      tramer: digits === "" ? null : Number(digits),
-                    });
-                  }}
-                  placeholder="Örn. 15.000 veya 0"
-                  className="pr-10 tabular-nums"
-                />
-                <span className="pointer-events-none absolute inset-y-0 right-3 grid place-items-center text-xs font-semibold text-muted">
-                  TL
-                </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative flex-1 sm:max-w-xs">
+                  <Input
+                    id="vehicle-tramer-input"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    value={value.tramer !== null ? formatNumber(value.tramer) : ""}
+                    onChange={(e) => {
+                      const digits = e.target.value.replace(/\D/g, "").slice(0, 9);
+                      if (!onChange) return;
+                      onChange({
+                        ...value,
+                        tramer: digits === "" ? null : Number(digits),
+                      });
+                    }}
+                    placeholder="Örn. 15.000 veya 0"
+                    className="pr-10 tabular-nums"
+                  />
+                  <span className="pointer-events-none absolute inset-y-0 right-3 grid place-items-center text-xs font-semibold text-muted">
+                    TL
+                  </span>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onChange?.({ ...value, tramer: value.tramer === 0 ? null : 0 })}
+                  className={cn(
+                    "h-10 shrink-0 px-3 text-xs",
+                    value.tramer === 0 && "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+                  )}
+                >
+                  Tramer Yok (0 ₺)
+                </Button>
               </div>
             </div>
           )}

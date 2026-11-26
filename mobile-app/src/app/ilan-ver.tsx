@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, BackHandler, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, BackHandler, FlatList, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import * as Crypto from 'expo-crypto';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView, type KeyboardAwareScrollViewRef } from 'react-native-keyboard-controller';
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, CarFront, Check, ChevronLeft, ChevronRight, LayoutGrid, MapPin, Phone, Sparkles, X } from 'lucide-react-native';
+import { AlertTriangle, CarFront, Check, ChevronLeft, ChevronRight, Info, LayoutGrid, MapPin, Phone, Search, Sparkles, X } from 'lucide-react-native';
 import { errorMessage } from '@/api/client';
 import { account, catalog, myListings, uploads } from '@/api/endpoints';
 import { keys, queryClient, useMe } from '@/api/queries';
@@ -18,6 +18,7 @@ import { OptionPicker } from '@/features/location/OptionPicker';
 import { AttrField } from '@/features/post/AttrField';
 import {
   VehicleDamageSvg,
+  hasDamageData,
   parseDamageValue,
   summarizeDamage,
   syncDamageAttrs,
@@ -25,22 +26,65 @@ import {
 import { PhotoReview } from '@/features/photos/PhotoReview';
 import { PhotoViewer } from '@/features/listing/Gallery';
 import { PhotoStep } from '@/features/post/PhotoStep';
-import { MAX_PHOTOS, PHOTO_KEEP_MS, STEP_TITLES, emptyDraft, needsPhoto, stepError, type Draft, type PhotoItem, type StepKey } from '@/features/post/draft';
+import { MAX_PHOTOS, PHOTO_KEEP_MS, STEP_TITLES, emptyDraft, needsPhoto, stepError, type Currency, type Draft, type PhotoItem, type StepKey } from '@/features/post/draft';
 import { mediaUrl } from '@/lib/config';
 import { useFlag } from '@/lib/flags';
 import { cleanPhone, formatNumber, formatPrice, locationLabel, maskPhoneInput, maskThousands, parseMasked } from '@/lib/format';
 import { pickPhotos, preparePhoto, recoverPickedPhotos, type PickedPhoto } from '@/lib/photos';
 import { clearDraft, loadDraft, saveDraft } from '@/lib/storage';
-import { Badge, Button, Card, Divider, EmptyState, ErrorState, IconButton, Input, Loading, Segmented, SelectField, Text, confirm, hairline, radius, space, toast, useTheme } from '@/ui';
+import { Badge, Button, Card, Chip, Divider, EmptyState, ErrorState, IconButton, Input, Loading, Segmented, SelectField, Text, confirm, hairline, radius, space, toast, useTheme } from '@/ui';
 import { Image } from 'expo-image';
 
-type Currency = 'TRY' | 'USD' | 'EUR';
 const CURRENCY_OPTIONS: { value: Currency; label: string }[] = [
   { value: 'TRY', label: '₺ TRY' },
   { value: 'USD', label: '$ USD' },
   { value: 'EUR', label: '€ EUR' },
 ];
 const CURRENCY_SUFFIX: Record<Currency, string> = { TRY: '₺', USD: '$', EUR: '€' };
+const UPLOAD_CONCURRENCY = 3;
+const POPULAR_NAMES = new Set([
+  'BMW',
+  'Mercedes-Benz',
+  'Audi',
+  'Volkswagen',
+  'Renault',
+  'Fiat',
+  'Ford',
+  'Toyota',
+  'Honda',
+  'Hyundai',
+  'Opel',
+  'Peugeot',
+  'Citroen',
+  'Volvo',
+  'Nissan',
+  'Skoda',
+  'Seat',
+  'Dacia',
+  'Tesla',
+  'Togg',
+  'Yamaha',
+  'Kawasaki',
+  'Suzuki',
+  'KTM',
+  'Vespa',
+]);
+
+function editSnapshotOf(d: Draft): string {
+  return JSON.stringify({
+    path: d.path.map((p) => p.id),
+    photos: d.photos.map((p) => p.url ?? p.key),
+    title: d.title,
+    price: d.price,
+    currency: d.currency ?? 'TRY',
+    description: d.description,
+    attrs: d.attrs,
+    city: d.city,
+    district: d.district,
+    neighborhood: d.neighborhood,
+    phone: d.phone,
+  });
+}
 
 export default function PostListingScreen() {
   const { id: editId, copyFrom } = useLocalSearchParams<{ id?: string; copyFrom?: string }>();
@@ -71,7 +115,7 @@ function PostForm({ editId, copyFrom, owner }: { editId?: string; copyFrom?: str
   const copyAndQualityOn = useFlag('benzer_ilan_ver');
   const damageOn = useFlag('arac_hasar_semasi');
   const [draft, setDraft] = useState<Draft>(() => (editId ? emptyDraft : { ...emptyDraft, clientKey: Crypto.randomUUID() }));
-  const [currency, setCurrency] = useState<Currency>('TRY');
+  const currency: Currency = draft.currency === 'USD' || draft.currency === 'EUR' ? draft.currency : 'TRY';
   const [rejectionReason, setRejectionReason] = useState<string | null>(null);
   const [copiedBanner, setCopiedBanner] = useState(false);
   const [step, setStep] = useState<StepKey>('category');
@@ -85,6 +129,7 @@ function PostForm({ editId, copyFrom, owner }: { editId?: string; copyFrom?: str
   const [review, setReview] = useState<PickedPhoto[] | null>(null);
   const [viewing, setViewing] = useState<number | null>(null);
   const originalImages = useRef<string[]>([]);
+  const initialEditSnapshot = useRef<string | null>(null);
   /** Running uploads, so removing a photo stops its upload. */
   const uploadsInFlight = useRef(new Map<string, AbortController>());
   const scrollRef = useRef<KeyboardAwareScrollViewRef>(null);
@@ -144,20 +189,24 @@ function PostForm({ editId, copyFrom, owner }: { editId?: string; copyFrom?: str
           }
           if (isCopy) setCopiedBanner(true);
           const cur: Currency = r.listing.currency === 'USD' || r.listing.currency === 'EUR' ? r.listing.currency : 'TRY';
-          setCurrency(cur);
-          setDraft((prev) => ({
-            path: browse.pathRows.map((row, i) => (i === browse.pathRows.length - 1 ? { ...row, has_children: false } : row)),
-            photos: isCopy ? [] : r.listing.images.map((url) => ({ key: url, url, status: 'done' })),
-            title: r.listing.title,
-            price: maskThousands(String(Math.round(r.listing.price))),
-            description: r.listing.description ?? '',
-            attrs: r.listing.attrs ?? {},
-            city: r.listing.city ?? '',
-            district: r.listing.district ?? '',
-            neighborhood: r.listing.neighborhood ?? '',
-            phone: isCopy ? prev.phone : (r.phone ? maskPhoneInput(r.phone) : ''),
-            clientKey: editId ? undefined : Crypto.randomUUID(),
-          }));
+          setDraft((prev) => {
+            const nextDraft: Draft = {
+              path: browse.pathRows.map((row, i) => (i === browse.pathRows.length - 1 ? { ...row, has_children: false } : row)),
+              photos: isCopy ? [] : r.listing.images.map((url) => ({ key: url, url, status: 'done' })),
+              title: r.listing.title,
+              price: maskThousands(String(Math.round(r.listing.price))),
+              currency: cur,
+              description: r.listing.description ?? '',
+              attrs: r.listing.attrs ?? {},
+              city: r.listing.city ?? '',
+              district: r.listing.district ?? '',
+              neighborhood: r.listing.neighborhood ?? '',
+              phone: isCopy ? prev.phone : (r.phone ? maskPhoneInput(r.phone) : ''),
+              clientKey: editId ? undefined : Crypto.randomUUID(),
+            };
+            if (editId) initialEditSnapshot.current = editSnapshotOf(nextDraft);
+            return nextDraft;
+          });
           setStep(isCopy ? 'photos' : 'details');
           setHydrated(true);
           setReady(true);
@@ -188,8 +237,20 @@ function PostForm({ editId, copyFrom, owner }: { editId?: string; copyFrom?: str
           const { photos, expired } = resumePhotos(saved.photos, stored.savedAt);
           if (expired) toast.info(`${expired} fotoğrafın süresi doldu; lütfen yeniden ekleyin.`);
           const leafPicked = saved.path[saved.path.length - 1]?.has_children === false;
-          setDraft({ ...saved, photos, clientKey: saved.clientKey ?? Crypto.randomUUID() });
-          setStep(leafPicked ? 'photos' : 'category');
+          const validSteps: StepKey[] = ['category', 'photos', 'details', 'attributes', 'location', 'preview'];
+          const restoredStep =
+            saved.step && validSteps.includes(saved.step) && (leafPicked || saved.step === 'category')
+              ? saved.step
+              : leafPicked
+                ? 'photos'
+                : 'category';
+          setDraft({
+            ...saved,
+            currency: saved.currency === 'USD' || saved.currency === 'EUR' ? saved.currency : 'TRY',
+            photos,
+            clientKey: saved.clientKey ?? Crypto.randomUUID(),
+          });
+          setStep(restoredStep);
         } else void clearDraft();
         setHydrated(true);
       })();
@@ -221,9 +282,9 @@ function PostForm({ editId, copyFrom, owner }: { editId?: string; copyFrom?: str
   // Keep a draft of new listings so an interrupted post is not lost.
   useEffect(() => {
     if (editId || !ready || !hydrated) return;
-    const t = setTimeout(() => void saveDraft(draft, owner), 600);
+    const t = setTimeout(() => void saveDraft({ ...draft, step }, owner), 600);
     return () => clearTimeout(t);
-  }, [draft, editId, ready, hydrated, owner]);
+  }, [draft, step, editId, ready, hydrated, owner]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ y: 0, animated: false });
@@ -266,7 +327,7 @@ function PostForm({ editId, copyFrom, owner }: { editId?: string; copyFrom?: str
     }
   };
 
-  /** The person checked the photos and tapped "ekle": now they upload, in the background. */
+  /** The person checked the photos and tapped "ekle": now they upload, up to 3 in parallel. */
   const acceptPhotos = async (picked: PickedPhoto[]) => {
     setReview(null);
     const items = picked.map((p, i) => ({ key: `${Date.now()}-${i}`, photo: p }));
@@ -274,11 +335,16 @@ function PostForm({ editId, copyFrom, owner }: { editId?: string; copyFrom?: str
       ...d,
       photos: [...d.photos, ...items.map(({ key, photo }) => ({ key, localUri: photo.uri, status: 'uploading' as const, source: photo }))],
     }));
-    for (const { key, photo } of items) {
-      // Removed before its turn came: skip it.
-      if (removedKeys.current.has(key)) continue;
-      await upload(key, photo);
-    }
+    let cursor = 0;
+    const worker = async () => {
+      while (cursor < items.length) {
+        const next = items[cursor++];
+        if (!next || removedKeys.current.has(next.key)) continue;
+        await upload(next.key, next.photo);
+      }
+    };
+    const poolSize = Math.min(UPLOAD_CONCURRENCY, items.length);
+    await Promise.all(Array.from({ length: poolSize }, () => worker()));
   };
 
   const removePhoto = (key: string) => {
@@ -328,7 +394,7 @@ function PostForm({ editId, copyFrom, owner }: { editId?: string; copyFrom?: str
 
   const close = async () => {
     if (busy) return;
-    if (editId) {
+    if (editId && initialEditSnapshot.current !== null && editSnapshotOf(draft) !== initialEditSnapshot.current) {
       const ok = await confirm({ title: 'Değişiklikler kaydedilmeyecek', message: 'Düzenlemeden çıkılsın mı?', confirmText: 'Çık', destructive: true });
       if (!ok) return;
     }
@@ -473,25 +539,43 @@ function PostForm({ editId, copyFrom, owner }: { editId?: string; copyFrom?: str
         {step === 'category' ? <CategoryStep path={draft.path} onPath={(path) => update({ path, attrs: path[path.length - 1]?.id === leaf?.id ? draft.attrs : {} })} onLeaf={() => setStep('photos')} /> : null}
 
         {step === 'photos' ? (
-          <PhotoStep
-            photos={draft.photos}
-            required={needsPhoto(draft)}
-            onAdd={(s) => void addPhotos(s)}
-            onRemove={removePhoto}
-            onRetry={(key) => {
-              const photo = draft.photos.find((p) => p.key === key)?.source;
-              if (photo) void upload(key, photo);
-              else toast.error('Bu fotoğraf tekrar yüklenemiyor; silip yeniden ekleyin.');
-            }}
-            onMove={movePhoto}
-            onCover={makeCover}
-            onOpen={setViewing}
-          />
+          <View style={styles.form}>
+            {editId ? (
+              <Card style={[styles.warnBanner, { backgroundColor: c.warnSoft, borderColor: c.warn }]}>
+                <Info size={16} color={c.warn} />
+                <Text variant="caption" style={styles.flex}>
+                  Yeni fotoğraf eklemek ilanı tekrar onaya gönderir. Sıralamak ve silmek onay gerektirmez.
+                </Text>
+              </Card>
+            ) : null}
+            <PhotoStep
+              photos={draft.photos}
+              required={needsPhoto(draft)}
+              onAdd={(s) => void addPhotos(s)}
+              onRemove={removePhoto}
+              onRetry={(key) => {
+                const photo = draft.photos.find((p) => p.key === key)?.source;
+                if (photo) void upload(key, photo);
+                else toast.error('Bu fotoğraf tekrar yüklenemiyor; silip yeniden ekleyin.');
+              }}
+              onMove={movePhoto}
+              onCover={makeCover}
+              onOpen={setViewing}
+            />
+          </View>
         ) : null}
 
         {step === 'details' ? (
           <View style={styles.form}>
             <CategorySummary path={draft.path} onChange={() => setStep('category')} />
+            {editId ? (
+              <Card style={[styles.warnBanner, { backgroundColor: c.warnSoft, borderColor: c.warn }]}>
+                <AlertTriangle size={16} color={c.warn} />
+                <Text variant="caption" style={styles.flex}>
+                  Başlık, açıklama, kategori, özellik değişirse veya yeni fotoğraf eklerseniz ilan yeniden onaya gider ve o sırada yayında görünmez.
+                </Text>
+              </Card>
+            ) : null}
             <Input
               label="İlan başlığı"
               required
@@ -505,7 +589,7 @@ function PostForm({ editId, copyFrom, owner }: { editId?: string; copyFrom?: str
               <Text variant="label" style={styles.currencyLabel}>
                 Para birimi
               </Text>
-              <Segmented value={currency} onChange={setCurrency} options={CURRENCY_OPTIONS} />
+              <Segmented value={currency} onChange={(next) => update({ currency: next })} options={CURRENCY_OPTIONS} />
             </View>
             <Input
               label="Fiyat"
@@ -613,7 +697,18 @@ function PostForm({ editId, copyFrom, owner }: { editId?: string; copyFrom?: str
           </View>
         ) : null}
 
-        {step === 'preview' ? <Preview draft={draft} currency={currency} attributes={attributes} onEdit={setStep} editing={!!editId} /> : null}
+        {step === 'preview' ? (
+          <Preview
+            draft={draft}
+            currency={currency}
+            attributes={attributes}
+            onEdit={setStep}
+            onOpenPhoto={setViewing}
+            editing={!!editId}
+            damageOn={damageOn}
+            isVehicleCategory={isVehicleCategory}
+          />
+        ) : null}
       </KeyboardAwareScrollView>
 
       <View style={[styles.footer, { backgroundColor: c.surface, borderTopColor: c.border, paddingBottom: insets.bottom + space.sm }]}>
@@ -706,8 +801,31 @@ function CategoryStep({ path, onPath, onLeaf }: { path: Category[]; onPath: (pat
   const { c, dark } = useTheme();
   const leafPicked = path.length > 0 && path[path.length - 1]?.has_children === false;
   const browsePath = (leafPicked ? path.slice(0, -1) : path).map((p) => p.id);
+  const browseKey = browsePath.join('/');
+  const [search, setSearch] = useState({ key: browseKey, text: '' });
+  const query = search.key === browseKey ? search.text : '';
+  const setQuery = (text: string) => setSearch({ key: browseKey, text });
   const level = useQuery({ queryKey: keys.browse(browsePath), queryFn: () => catalog.browse(browsePath), placeholderData: (p) => p });
-  const children = level.data?.children ?? [];
+  const children = useMemo(() => level.data?.children ?? [], [level.data?.children]);
+
+  const searching = query.trim().length > 0;
+  const shown = useMemo(() => {
+    const q = query.trim().toLocaleLowerCase('tr');
+    if (!q) return children;
+    return children.filter((cat) => cat.name.toLocaleLowerCase('tr').includes(q));
+  }, [children, query]);
+
+  const popular = useMemo(() => {
+    if (searching) return [];
+    return children.filter((cat) => POPULAR_NAMES.has(cat.name)).slice(0, 10);
+  }, [children, searching]);
+
+  const pickCategory = (cat: Category) => {
+    const base = leafPicked ? path.slice(0, -1) : path;
+    const nextPath = [...base, cat];
+    onPath(nextPath);
+    if (cat.has_children === false) onLeaf();
+  };
 
   return (
     <View style={styles.form}>
@@ -741,42 +859,77 @@ function CategoryStep({ path, onPath, onLeaf }: { path: Category[]; onPath: (pat
         </Card>
       ) : null}
 
+      {!level.isLoading && children.length > 8 ? (
+        <Input
+          icon={Search}
+          placeholder="Ara (ör. BMW, Civic, Satılık Daire)"
+          value={query}
+          onChangeText={setQuery}
+          right={
+            query ? (
+              <Pressable accessibilityRole="button" accessibilityLabel="Aramayı temizle" hitSlop={8} onPress={() => setQuery('')}>
+                <X size={16} color={c.subtle} />
+              </Pressable>
+            ) : undefined
+          }
+        />
+      ) : null}
+
+      {!level.isLoading && popular.length >= 4 ? (
+        <View style={styles.popularWrap}>
+          <Text variant="small" tone="muted" style={styles.popularLabel}>
+            POPÜLER
+          </Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.popularScroll}>
+            {popular.map((cat) => (
+              <Chip key={cat.id} label={cat.name} selected={false} onPress={() => pickCategory(cat)} />
+            ))}
+          </ScrollView>
+        </View>
+      ) : null}
+
       {level.isError && !level.data ? (
         <ErrorState error={level.error} onRetry={() => void level.refetch()} compact />
       ) : level.isLoading ? (
         <ActivityIndicator color={c.primary} style={styles.loading} />
       ) : (
-        <View style={[styles.catList, { backgroundColor: c.surface, borderColor: c.border }]}>
-          {children.map((cat, i) => {
-            const selected = leafPicked && path[path.length - 1]?.id === cat.id;
-            const { icon: Icon, tint } = categoryIcon(cat.icon, dark);
-            return (
-              <View key={cat.id}>
-                {i ? <Divider inset={space.lg} /> : null}
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => {
-                    const base = leafPicked ? path.slice(0, -1) : path;
-                    const nextPath = [...base, cat];
-                    onPath(nextPath);
-                    if (cat.has_children === false) onLeaf();
-                  }}
-                  style={({ pressed }) => [styles.catRow, pressed && { backgroundColor: c.elevated }]}
-                >
-                  {browsePath.length === 0 ? (
-                    <View style={[styles.catIcon, { backgroundColor: `${tint}1a` }]}>
-                      <Icon size={20} color={tint} />
-                    </View>
-                  ) : null}
-                  <Text variant={selected ? 'bodyStrong' : 'body'} tone={selected ? 'primary' : 'default'} style={styles.flex}>
-                    {cat.name}
-                  </Text>
-                  {selected ? <Check size={18} color={c.primary} /> : cat.has_children !== false ? <ChevronRight size={18} color={c.subtle} /> : null}
-                </Pressable>
-              </View>
-            );
-          })}
-        </View>
+        <>
+          <View style={[styles.catList, { backgroundColor: c.surface, borderColor: c.border }]}>
+            {shown.length === 0 ? (
+              <Text tone="muted" style={styles.emptyCat}>
+                Eşleşen kategori yok.
+              </Text>
+            ) : (
+              shown.map((cat, i) => {
+                const selected = leafPicked && path[path.length - 1]?.id === cat.id;
+                const { icon: Icon, tint } = categoryIcon(cat.icon, dark);
+                return (
+                  <View key={cat.id}>
+                    {i ? <Divider inset={space.lg} /> : null}
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => pickCategory(cat)}
+                      style={({ pressed }) => [styles.catRow, pressed && { backgroundColor: c.elevated }]}
+                    >
+                      {browsePath.length === 0 ? (
+                        <View style={[styles.catIcon, { backgroundColor: `${tint}1a` }]}>
+                          <Icon size={20} color={tint} />
+                        </View>
+                      ) : null}
+                      <Text variant={selected ? 'bodyStrong' : 'body'} tone={selected ? 'primary' : 'default'} style={styles.flex}>
+                        {cat.name}
+                      </Text>
+                      {selected ? <Check size={18} color={c.primary} /> : cat.has_children !== false ? <ChevronRight size={18} color={c.subtle} /> : null}
+                    </Pressable>
+                  </View>
+                );
+              })
+            )}
+          </View>
+          <Text variant="small" tone="subtle">
+            {shown.length} kategori
+          </Text>
+        </>
       )}
     </View>
   );
@@ -802,19 +955,27 @@ function Preview({
   currency,
   attributes,
   onEdit,
+  onOpenPhoto,
   editing,
+  damageOn,
+  isVehicleCategory,
 }: {
   draft: Draft;
   currency: Currency;
   attributes: AttrDef[];
   onEdit: (step: StepKey) => void;
+  onOpenPhoto: (index: number) => void;
   editing: boolean;
+  damageOn: boolean;
+  isVehicleCategory: boolean;
 }) {
   const { c } = useTheme();
-  const cover = draft.photos[0];
-  const coverUri = cover?.localUri ?? mediaUrl(cover?.url, 800);
+  const { width } = useWindowDimensions();
+  const cardWidth = width - space.lg * 2;
+  const [photoIdx, setPhotoIdx] = useState(0);
   const attrRows = attributes.filter((a) => draft.attrs[a.name] !== undefined && draft.attrs[a.name] !== '');
-  const damageSummaryLine = summarizeDamageForPreview(draft.attrs['_damage']);
+  const showVisualDamage = damageOn && isVehicleCategory && hasDamageData(draft.attrs['_damage']);
+  const damageSummaryLine = !showVisualDamage ? summarizeDamageForPreview(draft.attrs['_damage']) : null;
   const allAttrLines = [
     ...attrRows.map((a) => `${a.name}: ${previewAttrValue(a, draft.attrs[a.name])}`),
     ...(damageSummaryLine ? [`Hasar & Tramer: ${damageSummaryLine}`] : []),
@@ -825,7 +986,42 @@ function Preview({
         {editing ? 'Kaydetmeden önce bilgileri kontrol edin.' : 'Yayınlamadan önce bilgileri kontrol edin. İlanınızı daha sonra “İlanlarım”dan düzenleyebilirsiniz.'}
       </Text>
       <Card padded={false} style={styles.previewCard}>
-        {coverUri ? <Image source={coverUri} style={styles.previewImage} contentFit="cover" /> : null}
+        {draft.photos.length ? (
+          <View>
+            <FlatList
+              data={draft.photos}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              keyExtractor={(item) => item.key}
+              onMomentumScrollEnd={(e) => setPhotoIdx(Math.round(e.nativeEvent.contentOffset.x / cardWidth))}
+              renderItem={({ item, index: i }) => {
+                const uri = item.localUri ?? mediaUrl(item.url, 800);
+                return (
+                  <Pressable accessibilityRole="imagebutton" accessibilityLabel={`Fotoğraf ${i + 1}, büyüt`} onPress={() => onOpenPhoto(i)}>
+                    {uri ? <Image source={uri} style={{ width: cardWidth, aspectRatio: 4 / 3 }} contentFit="cover" /> : null}
+                  </Pressable>
+                );
+              }}
+            />
+            {draft.photos.length > 1 ? (
+              <View style={styles.previewCounter}>
+                <Text variant="small" style={styles.previewCounterText}>
+                  {photoIdx + 1} / {draft.photos.length}
+                </Text>
+              </View>
+            ) : null}
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => onEdit('photos')}
+              style={[styles.previewEditPhotos, { backgroundColor: c.surface }]}
+            >
+              <Text variant="small" tone="primary" style={styles.previewEditPhotosText}>
+                Fotoğrafları düzenle
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
         <View style={styles.previewBody}>
           <Text variant="title" tone="primary">
             {formatPrice(parseMasked(draft.price) ?? 0, currency)}
@@ -840,6 +1036,22 @@ function Preview({
       <PreviewRow label="Açıklama" value={draft.description} onEdit={() => onEdit('details')} />
       {allAttrLines.length ? (
         <PreviewRow label="Özellikler" value={allAttrLines.join('\n')} onEdit={() => onEdit('attributes')} />
+      ) : null}
+      {showVisualDamage ? (
+        <Card style={styles.damageCard}>
+          <View style={styles.damageHead}>
+            <CarFront size={18} color={c.primary} />
+            <Text variant="label" style={styles.flex}>
+              Boya, Değişen ve Tramer
+            </Text>
+            <Pressable onPress={() => onEdit('attributes')} hitSlop={8}>
+              <Text variant="label" tone="primary">
+                Düzenle
+              </Text>
+            </Pressable>
+          </View>
+          <VehicleDamageSvg readOnly value={parseDamageValue(draft.attrs['_damage'])} />
+        </Card>
       ) : null}
       <PreviewRow label="Telefon" value={draft.phone || 'Profil telefonunuz'} onEdit={() => onEdit('location')} />
       <View style={[styles.rules, { backgroundColor: c.elevated }]}>
@@ -871,7 +1083,7 @@ function PreviewRow({ label, value, onEdit }: { label: string; value: string; on
         <Text variant="label" tone="muted">
           {label}
         </Text>
-        <Text numberOfLines={4}>{value}</Text>
+        <Text>{value}</Text>
       </View>
       <Text variant="label" tone="primary">
         Düzenle
@@ -961,6 +1173,7 @@ const styles = StyleSheet.create({
   bar: { height: 4, borderRadius: 2 },
   content: { padding: space.lg, paddingBottom: space.xxxl * 2, gap: space.lg },
   rejectBanner: { gap: space.xs, borderWidth: 1 },
+  warnBanner: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm, borderWidth: 1, padding: space.md },
   rejectHead: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   qualityCard: { gap: space.sm, padding: space.md },
   qualityHead: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
@@ -978,12 +1191,34 @@ const styles = StyleSheet.create({
   picked: { flexDirection: 'row', alignItems: 'center', gap: space.sm, padding: space.md },
   loading: { padding: space.xxl },
   catList: { borderRadius: radius.lg, borderWidth: hairline, overflow: 'hidden' },
+  emptyCat: { padding: space.lg, textAlign: 'center' },
+  popularWrap: { gap: space.xs },
+  popularLabel: { fontWeight: '700', letterSpacing: 0.6 },
+  popularScroll: { gap: space.xs + 2 },
   catRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: space.lg, minHeight: 54 },
   catIcon: { width: 36, height: 36, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
   summary: { flexDirection: 'row', alignItems: 'center', gap: space.sm, padding: space.md, borderRadius: radius.md, borderWidth: hairline },
   storeNote: { padding: space.md },
   previewCard: { overflow: 'hidden' },
-  previewImage: { width: '100%', aspectRatio: 4 / 3 },
+  previewCounter: {
+    position: 'absolute',
+    left: space.sm,
+    bottom: space.sm,
+    backgroundColor: 'rgba(13,17,23,0.72)',
+    borderRadius: radius.pill,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  previewCounterText: { color: '#fff', fontWeight: '600' },
+  previewEditPhotos: {
+    position: 'absolute',
+    right: space.sm,
+    bottom: space.sm,
+    borderRadius: radius.pill,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  previewEditPhotosText: { fontWeight: '600' },
   previewBody: { padding: space.lg, gap: space.xs },
   previewRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.md, padding: space.lg, borderRadius: radius.lg, borderWidth: hairline },
   rules: { padding: space.md, borderRadius: radius.md },

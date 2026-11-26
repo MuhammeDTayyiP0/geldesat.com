@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import Svg, { Ellipse, G, Path, Text as SvgText } from 'react-native-svg';
-import { RotateCcw } from 'lucide-react-native';
+import Svg, { G, Path, Rect, Text as SvgText } from 'react-native-svg';
+import { CheckCircle2, Paintbrush, RotateCcw, ShieldCheck } from 'lucide-react-native';
 import type { AttrDef } from '@/api/types';
 import { formatNumber, formatPrice } from '@/lib/format';
 import { Button, Input, Text, radius, space, useTheme } from '@/ui';
@@ -279,19 +279,19 @@ type SvgPartShape = {
 };
 
 const SVG_SHAPES: readonly SvgPartShape[] = [
-  { id: 'on_tampon', d: 'M76 28 Q140 8 204 28 L198 48 Q140 36 82 48 Z', labelX: 140, labelY: 32 },
-  { id: 'kaput', d: 'M82 52 Q140 42 198 52 L192 126 L88 126 Z', labelX: 140, labelY: 90 },
-  { id: 'tavan', d: 'M88 156 L192 156 L192 268 L88 268 Z', labelX: 140, labelY: 214 },
-  { id: 'bagaj', d: 'M88 294 L192 294 L198 352 Q140 362 82 352 Z', labelX: 140, labelY: 326 },
-  { id: 'arka_tampon', d: 'M78 358 Q140 368 202 358 L206 378 Q140 394 74 378 Z', labelX: 140, labelY: 376 },
-  { id: 'sol_on_camurluk', d: 'M42 54 Q60 48 76 52 L82 128 L42 128 Z', labelX: 60, labelY: 92, rotate: -90 },
-  { id: 'sol_on_kapi', d: 'M42 134 L82 134 L82 210 L42 210 Z', labelX: 62, labelY: 172, rotate: -90 },
+  { id: 'on_tampon', d: 'M74 30 Q140 8 206 30 L199 50 Q140 38 81 50 Z', labelX: 140, labelY: 32 },
+  { id: 'kaput', d: 'M81 54 Q140 44 199 54 L192 126 Q140 122 88 126 Z', labelX: 140, labelY: 90 },
+  { id: 'tavan', d: 'M89 157 Q140 153 191 157 L191 267 Q140 271 89 267 Z', labelX: 140, labelY: 212 },
+  { id: 'bagaj', d: 'M88 294 Q140 298 192 294 L199 351 Q140 362 81 351 Z', labelX: 140, labelY: 326 },
+  { id: 'arka_tampon', d: 'M76 357 Q140 368 204 357 L207 377 Q140 394 73 377 Z', labelX: 140, labelY: 376 },
+  { id: 'sol_on_camurluk', d: 'M42 56 Q58 48 75 53 L81 127 L42 127 Q39 92 42 56 Z', labelX: 60, labelY: 92, rotate: -90 },
+  { id: 'sol_on_kapi', d: 'M42 133 L82 133 L82 210 L42 210 Z', labelX: 62, labelY: 172, rotate: -90 },
   { id: 'sol_arka_kapi', d: 'M42 216 L82 216 L82 290 L42 290 Z', labelX: 62, labelY: 253, rotate: -90 },
-  { id: 'sol_arka_camurluk', d: 'M42 296 L82 296 L76 352 Q56 356 42 346 Z', labelX: 60, labelY: 324, rotate: -90 },
-  { id: 'sag_on_camurluk', d: 'M204 52 Q220 48 238 54 L238 128 L198 128 Z', labelX: 220, labelY: 92, rotate: 90 },
-  { id: 'sag_on_kapi', d: 'M198 134 L238 134 L238 210 L198 210 Z', labelX: 218, labelY: 172, rotate: 90 },
+  { id: 'sol_arka_camurluk', d: 'M42 296 L82 296 L75 351 Q56 356 42 345 Q39 322 42 296 Z', labelX: 60, labelY: 324, rotate: -90 },
+  { id: 'sag_on_camurluk', d: 'M205 53 Q222 48 238 56 Q241 92 238 127 L199 127 Z', labelX: 220, labelY: 92, rotate: 90 },
+  { id: 'sag_on_kapi', d: 'M198 133 L238 133 L238 210 L198 210 Z', labelX: 218, labelY: 172, rotate: 90 },
   { id: 'sag_arka_kapi', d: 'M198 216 L238 216 L238 290 L198 290 Z', labelX: 218, labelY: 253, rotate: 90 },
-  { id: 'sag_arka_camurluk', d: 'M198 296 L238 296 L238 346 Q224 356 204 352 Z', labelX: 220, labelY: 324, rotate: 90 },
+  { id: 'sag_arka_camurluk', d: 'M198 296 L238 296 Q241 322 238 345 Q224 356 205 351 Z', labelX: 220, labelY: 324, rotate: 90 },
 ];
 
 const PART_BY_ID = new Map(DAMAGE_PARTS.map((p) => [p.id, p]));
@@ -307,10 +307,14 @@ export function VehicleDamageSvg({
 }) {
   const { c, dark } = useTheme();
   const [selectedPart, setSelectedPart] = useState<DamagePartId>('kaput');
+  const [activeBrush, setActiveBrush] = useState<DamagePartState | null>(null);
   const counts = summarizeDamage(value);
   const activePart = PART_BY_ID.get(selectedPart) ?? DAMAGE_PARTS[0];
   const activeState = value.parts[selectedPart] ?? 'orijinal';
   const changedParts = DAMAGE_PARTS.filter((p) => value.parts[p.id] !== 'orijinal');
+  const isCleanCar = changedParts.length === 0;
+  const activeBrushSpec = activeBrush ? STATE_BY_KEY.get(activeBrush) : undefined;
+  const orijinalPal = dark ? DAMAGE_STATES[0].dark : DAMAGE_STATES[0].light;
 
   const paletteOf = (key: DamagePartState): DamageStatePalette => {
     const spec = STATE_BY_KEY.get(key) ?? DAMAGE_STATES[0];
@@ -325,11 +329,22 @@ export function VehicleDamageSvg({
     });
   }
 
-  function cyclePart(id: DamagePartId) {
+  function handlePartPress(id: DamagePartId) {
     if (readOnly || !onChange) return;
     setSelectedPart(id);
     const cur = value.parts[id] ?? 'orijinal';
+    if (activeBrush) {
+      const next = cur === activeBrush && activeBrush !== 'orijinal' ? 'orijinal' : activeBrush;
+      updatePart(id, next);
+      return;
+    }
     updatePart(id, NEXT_STATE[cur]);
+  }
+
+  function applyCleanPreset() {
+    if (readOnly || !onChange) return;
+    const base = createEmptyDamageData();
+    onChange({ ...base, tramer: 0 });
   }
 
   function resetAll() {
@@ -339,26 +354,114 @@ export function VehicleDamageSvg({
 
   return (
     <View style={styles.container}>
-      {/* Legend + reset */}
-      <View style={styles.legendRow}>
-        <View style={styles.legendWrap}>
-          {DAMAGE_STATES.map((s) => {
-            const pal = dark ? s.dark : s.light;
-            return (
-              <View
-                key={s.key}
-                style={[styles.legendPill, { backgroundColor: pal.badgeBg, borderColor: pal.badgeBorder }]}
-              >
-                <View style={[styles.dot, { backgroundColor: pal.dot }]} />
-                <Text style={[styles.legendText, { color: pal.text }]}>
-                  {s.label} ({counts[s.key]})
-                </Text>
-              </View>
-            );
-          })}
+      {/* Read-only summary banner */}
+      {readOnly ? (
+        <View
+          style={[
+            styles.summaryBanner,
+            isCleanCar
+              ? { borderColor: orijinalPal.badgeBorder, backgroundColor: orijinalPal.badgeBg }
+              : { borderColor: c.border, backgroundColor: c.elevated },
+          ]}
+        >
+          <View style={styles.summaryBannerLeft}>
+            {isCleanCar ? <ShieldCheck size={16} color={orijinalPal.text} /> : null}
+            <Text variant="label" style={{ color: isCleanCar ? orijinalPal.text : c.fg }}>
+              {isCleanCar
+                ? 'Tamamı Orijinal (Boyasız / Değişensiz)'
+                : [
+                    counts.degisen ? `${counts.degisen} Değişen` : null,
+                    counts.boyali ? `${counts.boyali} Boyalı` : null,
+                    counts.lokal ? `${counts.lokal} Lokal Boyalı` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+            </Text>
+          </View>
+          {value.tramer !== null ? (
+            <Text variant="caption" tone="muted">
+              Tramer: <Text variant="label">{value.tramer === 0 ? 'Yok (0 ₺)' : formatPrice(value.tramer, 'TRY')}</Text>
+            </Text>
+          ) : null}
         </View>
-        {!readOnly && (changedParts.length > 0 || value.tramer !== null) ? (
-          <Button size="sm" variant="ghost" icon={RotateCcw} title="Sıfırla" onPress={resetAll} />
+      ) : null}
+
+      {/* Legend / Interactive brush + presets */}
+      <View style={styles.legendSection}>
+        <View style={styles.legendRow}>
+          <View style={styles.legendWrap}>
+            {DAMAGE_STATES.map((s) => {
+              const pal = dark ? s.dark : s.light;
+              const isBrush = !readOnly && activeBrush === s.key;
+              if (readOnly) {
+                return (
+                  <View
+                    key={s.key}
+                    style={[styles.legendPill, { backgroundColor: pal.badgeBg, borderColor: pal.badgeBorder }]}
+                  >
+                    <View style={[styles.dot, { backgroundColor: pal.dot }]} />
+                    <Text style={[styles.legendText, { color: pal.text }]}>
+                      {s.label} ({counts[s.key]})
+                    </Text>
+                  </View>
+                );
+              }
+              return (
+                <Pressable
+                  key={s.key}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isBrush }}
+                  onPress={() => setActiveBrush((prev) => (prev === s.key ? null : s.key))}
+                  style={[
+                    styles.legendPill,
+                    {
+                      backgroundColor: pal.badgeBg,
+                      borderColor: isBrush ? c.primary : pal.badgeBorder,
+                      borderWidth: isBrush ? 2 : 1,
+                    },
+                  ]}
+                >
+                  <View style={[styles.dot, { backgroundColor: pal.dot }]} />
+                  <Text style={[styles.legendText, { color: pal.text }]}>
+                    {s.label} ({counts[s.key]})
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+
+        {!readOnly ? (
+          <>
+            <View style={styles.presetRow}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={applyCleanPreset}
+                style={[
+                  styles.presetBtn,
+                  isCleanCar && value.tramer === 0
+                    ? { borderColor: orijinalPal.badgeBorder, backgroundColor: orijinalPal.badgeBg }
+                    : { borderColor: c.border, backgroundColor: c.surface },
+                ]}
+              >
+                <CheckCircle2 size={14} color={isCleanCar && value.tramer === 0 ? orijinalPal.text : c.muted} />
+                <Text variant="small" style={{ fontWeight: '600', color: isCleanCar && value.tramer === 0 ? orijinalPal.text : c.fg }}>
+                  Tamamı Orijinal · Tramer Yok
+                </Text>
+              </Pressable>
+              {changedParts.length > 0 || value.tramer !== null ? (
+                <Button size="sm" variant="ghost" icon={RotateCcw} title="Sıfırla" onPress={resetAll} />
+              ) : null}
+            </View>
+            <View style={styles.brushHintRow}>
+              <Paintbrush size={13} color={c.primary} />
+              <Text variant="caption" tone="muted" style={styles.flexOne}>
+                {activeBrushSpec
+                  ? `Hızlı işaretleme fırçası: ${activeBrushSpec.label} — dokunduğunuz parça bu duruma geçer.`
+                  : 'Hızlı işaretleme fırçası için yukarıdaki bir duruma dokunun ya da doğrudan parçaya dokunup değiştirin.'}
+              </Text>
+            </View>
+          </>
         ) : null}
       </View>
 
@@ -375,12 +478,27 @@ export function VehicleDamageSvg({
           height={Math.round(230 * (404 / 280))}
           accessibilityLabel="Araç boya ve değişen şeması"
         >
+          {/* Outer chassis subtle outline */}
+          <Rect x={37} y={22} width={206} height={362} rx={34} fill="none" stroke={c.border} strokeOpacity={0.5} strokeWidth={1} strokeDasharray="3 3" />
+
+          {/* Wheel-arch indicators */}
+          <Rect x={29} y={68} width={9} height={44} rx={4.5} fill={c.border} fillOpacity={0.55} stroke={c.border} strokeWidth={1} />
+          <Rect x={242} y={68} width={9} height={44} rx={4.5} fill={c.border} fillOpacity={0.55} stroke={c.border} strokeWidth={1} />
+          <Rect x={29} y={294} width={9} height={44} rx={4.5} fill={c.border} fillOpacity={0.55} stroke={c.border} strokeWidth={1} />
+          <Rect x={242} y={294} width={9} height={44} rx={4.5} fill={c.border} fillOpacity={0.55} stroke={c.border} strokeWidth={1} />
+
+          {/* Headlights & taillights */}
+          <Path d="M56 38 Q68 28 78 32 L72 42 Q62 40 54 44 Z" fill="rgba(251, 191, 36, 0.35)" stroke="rgba(245, 158, 11, 0.65)" strokeWidth={1} />
+          <Path d="M224 38 Q212 28 202 32 L208 42 Q218 40 226 44 Z" fill="rgba(251, 191, 36, 0.35)" stroke="rgba(245, 158, 11, 0.65)" strokeWidth={1} />
+          <Path d="M54 358 Q64 364 74 362 L76 372 Q62 374 52 366 Z" fill="rgba(244, 63, 94, 0.35)" stroke="rgba(244, 63, 94, 0.65)" strokeWidth={1} />
+          <Path d="M226 358 Q216 364 206 362 L204 372 Q218 374 228 366 Z" fill="rgba(244, 63, 94, 0.35)" stroke="rgba(244, 63, 94, 0.65)" strokeWidth={1} />
+
           {/* Windshield & rear glass */}
-          <Path d="M90 130 L190 130 L184 152 L96 152 Z" fill={c.border} fillOpacity={0.35} stroke={c.border} strokeWidth={1.2} />
-          <Path d="M96 272 L184 272 L190 290 L90 290 Z" fill={c.border} fillOpacity={0.35} stroke={c.border} strokeWidth={1.2} />
+          <Path d="M89 130 Q140 124 191 130 L185 153 Q140 148 95 153 Z" fill={c.border} fillOpacity={0.35} stroke={c.border} strokeWidth={1.2} />
+          <Path d="M95 272 Q140 276 185 272 L191 290 Q140 294 89 290 Z" fill={c.border} fillOpacity={0.35} stroke={c.border} strokeWidth={1.2} />
           {/* Side mirrors */}
-          <Ellipse cx={34} cy={136} rx={7} ry={4} fill={c.border} fillOpacity={0.5} stroke={c.border} strokeWidth={1} />
-          <Ellipse cx={246} cy={136} rx={7} ry={4} fill={c.border} fillOpacity={0.5} stroke={c.border} strokeWidth={1} />
+          <Path d="M26 136 Q32 130 41 134 L41 142 Q32 144 26 138 Z" fill={c.border} fillOpacity={0.55} stroke={c.border} strokeWidth={1} />
+          <Path d="M254 136 Q248 130 239 134 L239 142 Q248 144 254 138 Z" fill={c.border} fillOpacity={0.55} stroke={c.border} strokeWidth={1} />
 
           {SVG_SHAPES.map((shape) => {
             const stateKey = value.parts[shape.id] ?? 'orijinal';
@@ -398,13 +516,13 @@ export function VehicleDamageSvg({
             return (
               <G
                 key={shape.id}
-                onPress={readOnly ? undefined : () => cyclePart(shape.id)}
+                onPress={readOnly ? undefined : () => handlePartPress(shape.id)}
               >
                 <Path
                   d={shape.d}
                   fill={pal.fill}
-                  stroke={pal.stroke}
-                  strokeWidth={isSelected ? 2.4 : 1.5}
+                  stroke={isSelected ? c.primary : pal.stroke}
+                  strokeWidth={isSelected ? 2.8 : 1.5}
                   strokeLinejoin="round"
                 />
                 {shortTag ? (
@@ -430,7 +548,7 @@ export function VehicleDamageSvg({
         <Text variant="small" tone="subtle" style={styles.axisLabel}>ARKA</Text>
         {!readOnly ? (
           <Text variant="caption" tone="muted" center style={{ marginTop: space.xs }}>
-            Parçaya dokunarak durumu değiştirin
+            {activeBrushSpec ? `Dokunduğunuz parça "${activeBrushSpec.label}" olur` : 'Parçaya dokunarak durumu değiştirin'}
           </Text>
         ) : null}
       </View>
@@ -475,11 +593,21 @@ export function VehicleDamageSvg({
           const st = STATE_BY_KEY.get(stateKey) ?? DAMAGE_STATES[0];
           const pal = paletteOf(stateKey);
           const isSelected = !readOnly && selectedPart === part.id;
+          const isChanged = stateKey !== 'orijinal';
 
           if (readOnly) {
             return (
-              <View key={part.id} style={[styles.partRow, { borderColor: c.border, backgroundColor: c.surface }]}>
-                <Text variant="caption" tone="muted" numberOfLines={1} style={styles.partLabel}>
+              <View
+                key={part.id}
+                style={[
+                  styles.partRow,
+                  {
+                    borderColor: c.border,
+                    backgroundColor: isChanged ? c.elevated : c.surface,
+                  },
+                ]}
+              >
+                <Text variant="caption" tone={isChanged ? 'default' : 'muted'} numberOfLines={1} style={[styles.partLabel, isChanged && styles.changedText]}>
                   {part.label}
                 </Text>
                 <View style={[styles.stateBadge, { backgroundColor: pal.badgeBg, borderColor: pal.badgeBorder }]}>
@@ -492,12 +620,12 @@ export function VehicleDamageSvg({
           return (
             <Pressable
               key={part.id}
-              onPress={() => cyclePart(part.id)}
+              onPress={() => handlePartPress(part.id)}
               style={[
                 styles.partRow,
                 {
                   borderColor: isSelected ? c.primary : c.border,
-                  backgroundColor: isSelected ? c.primarySoft : c.surface,
+                  backgroundColor: isSelected ? c.primarySoft : isChanged ? c.elevated : c.surface,
                 },
               ]}
             >
@@ -521,21 +649,37 @@ export function VehicleDamageSvg({
           </Text>
         </View>
       ) : (
-        <Input
-          label="Tramer Tutarı (TL, isteğe bağlı)"
-          keyboardType="numeric"
-          value={value.tramer !== null ? formatNumber(value.tramer) : ''}
-          onChangeText={(txt) => {
-            if (!onChange) return;
-            const digits = txt.replace(/\D/g, '').slice(0, 9);
-            onChange({
-              ...value,
-              tramer: digits === '' ? null : Number(digits),
-            });
-          }}
-          placeholder="Örn. 15.000 veya 0"
-          suffix="TL"
-        />
+        <View style={styles.tramerEditWrap}>
+          <Input
+            label="Tramer Tutarı (TL, isteğe bağlı)"
+            keyboardType="numeric"
+            value={value.tramer !== null ? formatNumber(value.tramer) : ''}
+            onChangeText={(txt) => {
+              if (!onChange) return;
+              const digits = txt.replace(/\D/g, '').slice(0, 9);
+              onChange({
+                ...value,
+                tramer: digits === '' ? null : Number(digits),
+              });
+            }}
+            placeholder="Örn. 15.000 veya 0"
+            suffix="TL"
+          />
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => onChange?.({ ...value, tramer: value.tramer === 0 ? null : 0 })}
+            style={[
+              styles.tramerQuickChip,
+              value.tramer === 0
+                ? { borderColor: orijinalPal.badgeBorder, backgroundColor: orijinalPal.badgeBg }
+                : { borderColor: c.border, backgroundColor: c.surface },
+            ]}
+          >
+            <Text variant="caption" style={{ fontWeight: '600', color: value.tramer === 0 ? orijinalPal.text : c.fg }}>
+              Tramer Yok (0 ₺)
+            </Text>
+          </Pressable>
+        </View>
       )}
     </View>
   );
@@ -543,6 +687,20 @@ export function VehicleDamageSvg({
 
 const styles = StyleSheet.create({
   container: { gap: space.md },
+  flexOne: { flex: 1 },
+  summaryBanner: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: space.sm,
+    borderWidth: 1,
+    borderRadius: radius.lg,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+  },
+  summaryBannerLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  legendSection: { gap: space.sm },
   legendRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: space.sm },
   legendWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   legendPill: {
@@ -551,11 +709,22 @@ const styles = StyleSheet.create({
     gap: 5,
     borderWidth: 1,
     borderRadius: radius.pill,
-    paddingHorizontal: 9,
-    paddingVertical: 3,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
   },
   dot: { width: 7, height: 7, borderRadius: 4 },
   legendText: { fontSize: 11, fontWeight: '600' },
+  presetRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: space.sm },
+  presetBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: radius.pill,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  brushHintRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   diagramCard: {
     alignItems: 'center',
     borderWidth: 1,
@@ -595,6 +764,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   partLabel: { flex: 1 },
+  changedText: { fontWeight: '600' },
   stateBadge: {
     borderWidth: 1,
     borderRadius: radius.pill,
@@ -611,5 +781,13 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     paddingHorizontal: space.md,
     paddingVertical: space.md,
+  },
+  tramerEditWrap: { gap: space.sm },
+  tramerQuickChip: {
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderRadius: radius.pill,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
 });

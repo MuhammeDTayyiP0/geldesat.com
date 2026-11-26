@@ -16,17 +16,21 @@ export type PhotoItem = {
   source?: PickedPhoto;
 };
 
+export type Currency = 'TRY' | 'USD' | 'EUR';
+
 export type Draft = {
   path: Category[];
   photos: PhotoItem[];
   title: string;
   price: string;
+  currency?: Currency;
   description: string;
   attrs: Record<string, string | number>;
   city: string;
   district: string;
   neighborhood: string;
   phone: string;
+  step?: StepKey;
   /** Sent with a new listing: a retried "Yayınla" returns the listing instead of making a second one. */
   clientKey?: string;
 };
@@ -36,6 +40,7 @@ export const emptyDraft: Draft = {
   photos: [],
   title: '',
   price: '',
+  currency: 'TRY',
   description: '',
   attrs: {},
   city: '',
@@ -96,9 +101,13 @@ export function stepError(
       const missing = attributes.find((a) => a.required && (draft.attrs[a.name] === undefined || draft.attrs[a.name] === ''));
       if (missing) return `“${missing.name}” alanını doldurun.`;
       // Same range as the site and the server.
-      const year = draft.attrs['Yıl'];
       const maxYear = new Date().getFullYear() + 1;
-      if (year !== undefined && year !== '' && (Number(year) < MIN_YEAR || Number(year) > maxYear)) return `Yıl ${MIN_YEAR} ile ${maxYear} arasında olmalı.`;
+      for (const yearKey of ['Yıl', 'Model Yılı'] as const) {
+        const year = draft.attrs[yearKey];
+        if (year !== undefined && year !== '' && (Number(year) < MIN_YEAR || Number(year) > maxYear)) {
+          return `${yearKey} ${MIN_YEAR} ile ${maxYear} arasında olmalı.`;
+        }
+      }
       return null;
     }
     case 'location': {
