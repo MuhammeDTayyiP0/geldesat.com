@@ -11,7 +11,8 @@ import { updateSessionUser } from '@/auth/session';
 import { TURKEY_CITIES } from '@/data/locations';
 import { OptionPicker } from '@/features/location/OptionPicker';
 import { cleanPhone, maskPhoneInput } from '@/lib/format';
-import { pickPhotos, preparePhoto } from '@/lib/photos';
+import { pickPhotos, type PickedPhoto } from '@/lib/photos';
+import { AvatarCropper } from '@/features/photos/AvatarCropper';
 import { Avatar, Button, ErrorState, Header, Input, ListRow, Loading, RowGroup, SelectField, Sheet, Text, space, toast, useTheme } from '@/ui';
 import { RequireSignIn } from '@/auth/RequireSignIn';
 
@@ -36,6 +37,7 @@ function ProfileSettings() {
   const [picker, setPicker] = useState<'city' | 'district' | 'photo' | null>(null);
   const [saving, setSaving] = useState(false);
   const [avatarBusy, setAvatarBusy] = useState(false);
+  const [pendingPhoto, setPendingPhoto] = useState<PickedPhoto | null>(null);
   const [loaded, setLoaded] = useState(false);
   // What to do once the photo sheet has closed: a picker opened while it is closing freezes the app.
   const [afterSheet, setAfterSheet] = useState<'camera' | 'library' | 'remove' | null>(null);
@@ -73,10 +75,15 @@ function ProfileSettings() {
     setPicker(null);
     const [photo] = await pickPhotos(source, 1);
     if (!photo) return;
+    setPendingPhoto(photo);
+  };
+
+  const confirmAvatar = async (cropped: { uri: string; mimeType: string; fileName: string }) => {
     setAvatarBusy(true);
     try {
-      await uploads.avatar(await preparePhoto(photo));
+      await uploads.avatar(cropped);
       await queryClient.invalidateQueries({ queryKey: keys.me });
+      setPendingPhoto(null);
       toast.success('Profil fotoğrafı güncellendi');
     } catch (e) {
       toast.error(errorMessage(e));
@@ -154,9 +161,17 @@ function ProfileSettings() {
           {me.data.profile?.avatar_url ? <ListRow icon={Trash2} label="Fotoğrafı kaldır" danger onPress={() => { setAfterSheet('remove'); setPicker(null); }} /> : null}
         </RowGroup>
         <Text variant="caption" tone="subtle" center>
-          Fotoğraf kare olarak kırpılır ve küçültülür.
+          Seçtikten sonra kırpıp yakınlaştırabilirsiniz.
         </Text>
       </Sheet>
+      <AvatarCropper
+        photo={pendingPhoto}
+        shape="circle"
+        title="Profil fotoğrafı"
+        busy={avatarBusy}
+        onCancel={() => setPendingPhoto(null)}
+        onConfirm={confirmAvatar}
+      />
     </View>
   );
 }

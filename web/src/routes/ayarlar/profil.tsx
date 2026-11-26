@@ -9,7 +9,7 @@ import { authClient } from "@/lib/auth/client";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { TURKEY_CITIES } from "@/lib/data/locations";
-import { PHOTO_ACCEPT } from "@/lib/images";
+import { checkPhotoFile, PHOTO_ACCEPT } from "@/lib/images";
 import { removeAvatar, uploadAvatar } from "@/lib/listing-photos";
 import { cleanPhone, maskPhone10 } from "@/lib/utils";
 import { BrandSpinner } from "@/components/brand/BrandSpinner";
@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { AccountShell, UserAvatar } from "@/components/account/AccountShell";
+import { AvatarCropperDialog } from "@/components/account/AvatarCropperDialog";
 
 export const Route = createFileRoute("/ayarlar/profil")({
   head: () => ({ meta: [{ title: "Profil bilgileri | GeldeSat" }, { name: "robots", content: "noindex,nofollow" }] }),
@@ -34,6 +35,7 @@ function ProfileSettings() {
   const [avatar, setAvatar] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [photoBusy, setPhotoBusy] = useState(false);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -82,12 +84,22 @@ function ProfileSettings() {
     }
   }
 
-  async function onPhoto(file: File | undefined) {
+  function onSelectPhoto(file: File | undefined) {
     if (!file) return;
+    const problem = checkPhotoFile(file);
+    if (problem) {
+      toast.error(problem);
+      return;
+    }
+    setPendingFile(file);
+  }
+
+  async function onPhoto(blob: Blob) {
     setPhotoBusy(true);
     try {
-      const url = await uploadAvatar(file);
+      const url = await uploadAvatar(blob);
       setAvatar(url);
+      setPendingFile(null);
       toast.success("Profil fotoğrafı güncellendi");
     } catch (err) {
       toast.error(errorText(err, "Fotoğraf yüklenemedi"));
@@ -123,7 +135,7 @@ function ProfileSettings() {
           </div>
           <div className="min-w-0">
             <p className="font-medium">Profil fotoğrafı</p>
-            <p className="mt-0.5 text-xs text-muted">Kare kırpılır; JPEG, PNG, WebP veya HEIC.</p>
+            <p className="mt-0.5 text-xs text-muted">Seçtikten sonra kırpıp konumlandırabilirsiniz; JPEG, PNG, WebP veya HEIC.</p>
             <div className="mt-3 flex flex-wrap gap-2">
               <input
                 ref={fileRef}
@@ -131,7 +143,7 @@ function ProfileSettings() {
                 accept={PHOTO_ACCEPT}
                 className="hidden"
                 onChange={(e) => {
-                  void onPhoto(e.target.files?.[0]);
+                  onSelectPhoto(e.target.files?.[0]);
                   e.target.value = "";
                 }}
               />
@@ -204,6 +216,14 @@ function ProfileSettings() {
           </div>
         </form>
       </div>
+      <AvatarCropperDialog
+        file={pendingFile}
+        shape="circle"
+        title="Profil fotoğrafını düzenle"
+        busy={photoBusy}
+        onCancel={() => setPendingFile(null)}
+        onConfirm={onPhoto}
+      />
     </AccountShell>
   );
 }

@@ -26,13 +26,14 @@ import {
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { TURKEY_CITIES } from "@/lib/data/locations";
-import { PHOTO_ACCEPT } from "@/lib/images";
+import { checkPhotoFile, PHOTO_ACCEPT } from "@/lib/images";
 import { UPLOAD_HEADER } from "@/lib/listing-photos";
 import { useFlag } from "@/lib/use-flag";
 import { cleanPhone, formatDate, formatPrice, maskPhone10 } from "@/lib/utils";
 import { BrandSpinner } from "@/components/brand/BrandSpinner";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input, Label, Select, Textarea } from "@/components/ui/input";
+import { AvatarCropperDialog } from "@/components/account/AvatarCropperDialog";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { AccountShell } from "@/components/account/AccountShell";
 
@@ -244,6 +245,7 @@ function StoreSettings() {
   const [busy, setBusy] = useState(false);
   const [appBusy, setAppBusy] = useState(false);
   const [logoBusy, setLogoBusy] = useState(false);
+  const [pendingLogo, setPendingLogo] = useState<File | null>(null);
   const [failed, setFailed] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
 
@@ -324,12 +326,21 @@ function StoreSettings() {
     }
   }
 
-  async function onLogoUpload(file: File | undefined) {
+  function onSelectLogo(file: File | undefined) {
     if (!file) return;
+    const problem = checkPhotoFile(file);
+    if (problem) {
+      toast.error(problem);
+      return;
+    }
+    setPendingLogo(file);
+  }
+
+  async function onLogoUpload(blob: Blob) {
     setLogoBusy(true);
     try {
       const formData = new FormData();
-      formData.append("file", file, file.name || "logo");
+      formData.append("file", blob, "logo.jpg");
       const res = await fetch("/api/store-logo", {
         method: "POST",
         headers: { [UPLOAD_HEADER]: "1" },
@@ -338,6 +349,7 @@ function StoreSettings() {
       const body = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
       if (!res.ok || !body.url) throw new Error(body.error || "Logo yüklenemedi.");
       setStore((prev) => (prev ? { ...prev, logoUrl: body.url ?? null } : prev));
+      setPendingLogo(null);
       toast.success("Mağaza logosu güncellendi");
     } catch (err) {
       toast.error(errorText(err, "Logo yüklenemedi"));
@@ -574,7 +586,7 @@ function StoreSettings() {
             </div>
             <div className="min-w-0">
               <p className="font-medium">Mağaza logosu</p>
-              <p className="mt-0.5 text-xs text-muted">Kare kırpılır; JPEG, PNG, WebP veya HEIC.</p>
+              <p className="mt-0.5 text-xs text-muted">Seçtikten sonra kırpıp konumlandırabilirsiniz; JPEG, PNG, WebP veya HEIC.</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <input
                   ref={logoInputRef}
@@ -582,7 +594,7 @@ function StoreSettings() {
                   accept={PHOTO_ACCEPT}
                   className="hidden"
                   onChange={(e) => {
-                    void onLogoUpload(e.target.files?.[0]);
+                    onSelectLogo(e.target.files?.[0]);
                     e.target.value = "";
                   }}
                 />
@@ -797,6 +809,14 @@ function StoreSettings() {
           ) : null}
         </div>
       )}
+      <AvatarCropperDialog
+        file={pendingLogo}
+        shape="rounded"
+        title="Mağaza logosunu düzenle"
+        busy={logoBusy}
+        onCancel={() => setPendingLogo(null)}
+        onConfirm={onLogoUpload}
+      />
     </AccountShell>
   );
 }

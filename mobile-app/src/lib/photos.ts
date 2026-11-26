@@ -1,6 +1,6 @@
 import { Linking, Platform } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
+import { FlipType, ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { confirm } from '@/ui/dialogs';
 
 export type PickedPhoto = { uri: string; width: number; height: number; mimeType?: string | null; fileName?: string | null };
@@ -90,6 +90,46 @@ export async function preparePhoto(photo: PickedPhoto): Promise<{ uri: string; m
     image = await context.renderAsync();
     const saved = await image.saveAsync({ compress: 0.85, format: SaveFormat.JPEG });
     return { uri: saved.uri, mimeType: 'image/jpeg', fileName: `foto-${Date.now()}.jpg` };
+  } finally {
+    image?.release?.();
+    context.release?.();
+  }
+}
+
+/** Flip a photo horizontally as a new local file (capped at upload edge). */
+export async function flipPhotoHorizontal(photo: PickedPhoto): Promise<PickedPhoto> {
+  const context = ImageManipulator.manipulate(photo.uri).flip(FlipType.Horizontal);
+  if (Math.max(photo.width, photo.height) > MAX_EDGE) {
+    context.resize(photo.width >= photo.height ? { width: MAX_EDGE } : { height: MAX_EDGE });
+  }
+  let image: Awaited<ReturnType<typeof context.renderAsync>> | undefined;
+  try {
+    image = await context.renderAsync();
+    const saved = await image.saveAsync({ compress: 0.92, format: SaveFormat.JPEG });
+    return { uri: saved.uri, width: saved.width, height: saved.height, mimeType: 'image/jpeg', fileName: photo.fileName };
+  } finally {
+    image?.release?.();
+    context.release?.();
+  }
+}
+
+/** Crop a square region from a photo and cap it to 800x800 JPEG for avatar/logo upload. */
+export async function cropSquarePhoto(
+  photo: PickedPhoto,
+  crop: { originX: number; originY: number; size: number },
+): Promise<{ uri: string; mimeType: string; fileName: string }> {
+  const size = Math.max(1, Math.min(Math.round(crop.size), photo.width, photo.height));
+  const originX = Math.max(0, Math.min(Math.round(crop.originX), photo.width - size));
+  const originY = Math.max(0, Math.min(Math.round(crop.originY), photo.height - size));
+  const context = ImageManipulator.manipulate(photo.uri).crop({ originX, originY, width: size, height: size });
+  if (size > 800) {
+    context.resize({ width: 800, height: 800 });
+  }
+  let image: Awaited<ReturnType<typeof context.renderAsync>> | undefined;
+  try {
+    image = await context.renderAsync();
+    const saved = await image.saveAsync({ compress: 0.9, format: SaveFormat.JPEG });
+    return { uri: saved.uri, mimeType: 'image/jpeg', fileName: `avatar-${Date.now()}.jpg` };
   } finally {
     image?.release?.();
     context.release?.();

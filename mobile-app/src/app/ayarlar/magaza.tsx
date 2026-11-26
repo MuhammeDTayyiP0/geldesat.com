@@ -10,7 +10,8 @@ import { account, storeApplications, uploads } from '@/api/endpoints';
 import { keys, queryClient, useMe } from '@/api/queries';
 import { OptionPicker } from '@/features/location/OptionPicker';
 import { cleanPhone, formatDate, formatPhone, maskPhoneInput } from '@/lib/format';
-import { pickPhotos, preparePhoto } from '@/lib/photos';
+import { pickPhotos, type PickedPhoto } from '@/lib/photos';
+import { AvatarCropper } from '@/features/photos/AvatarCropper';
 import { Avatar, Badge, Button, Card, ErrorState, Header, Input, ListRow, Loading, RowGroup, SelectField, Sheet, Text, radius, space, toast, useTheme } from '@/ui';
 import { RequireSignIn } from '@/auth/RequireSignIn';
 
@@ -38,6 +39,7 @@ function StoreSettings() {
   const [loadedFor, setLoadedFor] = useState<string | null>(null);
   const [logoSheet, setLogoSheet] = useState(false);
   const [logoBusy, setLogoBusy] = useState(false);
+  const [pendingLogo, setPendingLogo] = useState<PickedPhoto | null>(null);
   const [afterLogoSheet, setAfterLogoSheet] = useState<'camera' | 'library' | 'remove' | null>(null);
 
   // Corporate application state (when user has no store yet)
@@ -92,9 +94,18 @@ function StoreSettings() {
     try {
       const [photo] = await pickPhotos(source, 1);
       if (!photo) return;
-      setLogoBusy(true);
-      await uploads.storeLogo(await preparePhoto(photo));
+      setPendingLogo(photo);
+    } catch (e) {
+      toast.error(errorMessage(e));
+    }
+  };
+
+  const confirmLogo = async (cropped: { uri: string; mimeType: string; fileName: string }) => {
+    setLogoBusy(true);
+    try {
+      await uploads.storeLogo(cropped);
       await queryClient.invalidateQueries({ queryKey: keys.me });
+      setPendingLogo(null);
       toast.success('Mağaza logosu güncellendi');
     } catch (e) {
       toast.error(errorMessage(e));
@@ -346,9 +357,17 @@ function StoreSettings() {
           ) : null}
         </RowGroup>
         <Text variant="caption" tone="subtle" center>
-          Logo kare olarak kırpılır ve küçültülür.
+          Seçtikten sonra kırpıp yakınlaştırabilirsiniz.
         </Text>
       </Sheet>
+      <AvatarCropper
+        photo={pendingLogo}
+        shape="rounded"
+        title="Mağaza logosu"
+        busy={logoBusy}
+        onCancel={() => setPendingLogo(null)}
+        onConfirm={confirmLogo}
+      />
     </View>
   );
 }
