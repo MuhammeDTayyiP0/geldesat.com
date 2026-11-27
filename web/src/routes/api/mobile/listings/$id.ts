@@ -3,11 +3,12 @@ import { createFileRoute } from "@tanstack/react-router";
 import { getSql } from "@/lib/db";
 import { auth } from "@/lib/auth/server";
 import { isExpired, ownerActions } from "@/lib/listing-status";
-import { canReviewSeller, firstInWindow, inheritedAttributes, mapListing, rateLimit, revealListingPhone, viewerKey } from "@/lib/server/helpers";
+import { canReviewSeller, firstInWindow, inheritedAttributes, isActiveAdmin, mapListing, rateLimit, revealListingPhone, viewerKey } from "@/lib/server/helpers";
 import { getSellerResponseStats } from "@/lib/server/chat";
 import { errorStatus, publicErrorMessage } from "@/lib/server/errors";
 import { assertMobileJsonWrite } from "@/lib/server/mobile-auth";
 import { recordListingView } from "@/lib/server/recently-viewed";
+import { DELETED_USER_NAME } from "@/lib/server/retention";
 
 async function sessionUserId(request: Request) {
   const session = await auth.api.getSession({ headers: request.headers });
@@ -22,7 +23,7 @@ export const Route = createFileRoute("/api/mobile/listings/$id")({
           const sql = await getSql();
           const listingNo = listingNoFromSlug(params.id);
           const rows = await sql.query<Record<string, unknown>>(
-            `select l.*, c.name as category_name, c.slug as category_slug,
+            `select l.*, (l.approved_at is not null) as approved, c.name as category_name, c.slug as category_slug,
                     p.display_name as seller_name, p.avatar_url as seller_avatar, s.name as store_name, s.slug as store_slug,
                     coalesce(p.phone_visibility, 'members') as phone_visibility, coalesce(p.show_whatsapp, true) as show_whatsapp,
                     (coalesce(nullif(trim(l.phone_override), ''), nullif(trim(p.phone), '')) is not null) as has_phone,
@@ -40,11 +41,18 @@ export const Route = createFileRoute("/api/mobile/listings/$id")({
           if (!rows[0]) return Response.json({ success: false, error: "İlan bulunamadı." }, { status: 404 });
           const listing = mapListing(rows[0]);
           const userId = await sessionUserId(request);
-          // Same rule as the site: sold and expired listings stay readable, the rest only for the owner.
+          // Same rule as the site: sold and expired listings stay readable, the rest only for the owner or active admin.
           if (listing.status !== "ACTIVE" && listing.status !== "SOLD" && userId !== listing.user_id) {
-            return Response.json({ success: false, error: "İlan yayında değil." }, { status: 404 });
+            const adminProf = userId
+              ? (await sql.query<{ role: string; banned_at: unknown; deletion_requested_at: unknown }>(
+                  "select role, banned_at, deletion_requested_at from profiles where user_id=$1",
+                  [userId],
+                ))[0]
+              : null;
+            if (!isActiveAdmin(adminProf)) {
+              return Response.json({ success: false, error: "İlan yayında değil." }, { status: 404 });
+            }
           }
-          if (userId && userId !== listing.user_id) await recordListingView(userId, listing.id);
           const favoriteRows = userId
             ? await sql.query<{ listing_id: string }>("select listing_id from favorites where user_id=$1 and listing_id=$2", [userId, listing.id])
             : [];
@@ -55,8 +63,9 @@ export const Route = createFileRoute("/api/mobile/listings/$id")({
               : [listing.category_id, listing.id];
             return sql.query<Record<string, unknown>>(
               `select l.*,c.name as category_name,c.slug as category_slug,p.display_name as seller_name,
+                      s.name as store_name, s.slug as store_slug,
                       coalesce((select json_agg(b.kind) from boosts b where b.listing_id=l.id and b.ends_at>now()),'[]'::json) as boosts
-               from listings l join categories c on c.id=l.category_id left join profiles p on p.user_id=l.user_id
+               from listings l join categories c on c.id=l.category_id left join profiles p on p.user_id=l.user_id left join stores s on s.id=l.store_id
                where l.category_id=$1 and l.id<>$2 and l.status='ACTIVE' and (l.expires_at is null or l.expires_at>now())${hasPriceBand ? " and l.price between $3 and $4" : ""}
                order by l.created_at desc limit 4`,
               queryParams,
@@ -78,6 +87,7 @@ export const Route = createFileRoute("/api/mobile/listings/$id")({
             ),
             getSellerResponseStats(sql, listing.user_id),
             inheritedAttributes(listing.category_id),
+            userId && userId !== listing.user_id ? recordListingView(userId, listing.id).catch(() => undefined) : Promise.resolve(),
           ]);
           const similarRows = similarNarrow.length > 0 || listing.price <= 0 ? similarNarrow : await fetchSimilar(false);
           const attrUnits = Object.fromEntries(
@@ -114,7 +124,7 @@ export const Route = createFileRoute("/api/mobile/listings/$id")({
               ownerActions: actions,
               history: history.map((row) => ({ price: Number(row.price), at: asIso(row.recorded_at) })),
               similar: similarRows.map(mapListing),
-              reviews: reviews.map((row) => ({ id: String(row.id), rating: Number(row.rating), comment: String(row.comment ?? ''), reviewer: String(row.reviewer ?? 'Üye'), at: asIso(row.created_at) })),
+              reviews: reviews.map((row) => ({ id: String(row.id), rating: Number(row.rating), comment: String(row.comment ?? ''), reviewer: String(row.reviewer ?? DELETED_USER_NAME), at: asIso(row.created_at) })),
               sellerStats: { rating_avg: Number(metric?.rating_avg || 0), rating_count: Number(metric?.rating_count || 0), responseStats },
               favoriteCount: Number(metric?.favorite_count || 0),
               phoneRevealCount: Number(metric?.phone_reveal_count || 0),
@@ -142,7 +152,7 @@ export const Route = createFileRoute("/api/mobile/listings/$id")({
             const status = errorStatus(err, /giriş yapın/.test(message) ? 401 : 404);
             return Response.json({ success: false, error: message }, { status });
           }
-          return Response.json({ success: true, phone });
+          return Response.json({ success: true, phone }, { headers: { "Cache-Control": "private, no-store" } });
         } catch (error) {
           const message = publicErrorMessage(error, "Telefon numarası alınamadı.");
           return Response.json({ success: false, error: message }, { status: errorStatus(error, 500) });

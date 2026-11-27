@@ -85,8 +85,14 @@ export const Route = createFileRoute("/ilan/$slug")({
     }
     const { listing, path, seller } = loaderData;
     const seo = buildListingSeo({ listing, path, seller });
-    const published = listing.created_at ? new Date(listing.created_at).toISOString() : undefined;
-    const modified = listing.updated_at ? new Date(listing.updated_at).toISOString() : published;
+    const published =
+      listing.created_at && Number.isFinite(Date.parse(String(listing.created_at)))
+        ? new Date(listing.created_at).toISOString()
+        : undefined;
+    const modified =
+      listing.updated_at && Number.isFinite(Date.parse(String(listing.updated_at)))
+        ? new Date(listing.updated_at).toISOString()
+        : published;
     return {
       meta: [
         { title: seo.title },
@@ -101,7 +107,6 @@ export const Route = createFileRoute("/ilan/$slug")({
         { property: "og:image", content: seo.coverImage },
         { property: "og:image:alt", content: listing.title },
         ...(modified ? [{ property: "og:updated_time", content: modified }] : []),
-        ...(published ? [{ property: "article:published_time", content: published }] : []),
         { name: "twitter:card", content: "summary_large_image" },
         { name: "twitter:title", content: seo.title },
         { name: "twitter:description", content: seo.description },
@@ -451,7 +456,14 @@ function ListingPage() {
   return (
     <div className="mx-auto max-w-6xl px-4 pb-28 pt-4 sm:pt-6 lg:pb-12">
       <Breadcrumbs path={path} title={listing.title} />
-      <StatusBanner status={listing.status} expired={expired} isOwner={isOwner} onRenew={renew} busy={ownerBusy} />
+      <StatusBanner
+        status={listing.status}
+        expired={expired}
+        isOwner={isOwner}
+        onRenew={renew}
+        busy={ownerBusy}
+        rejectionReason={listing.rejection_reason}
+      />
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-8">
         <div className="min-w-0 lg:col-start-1 lg:row-start-1">
@@ -806,10 +818,10 @@ function ListingPage() {
 
       {/* Phone action bar: the main contact actions always in thumb reach. */}
       <div
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface/95 px-4 pt-2.5 shadow-[0_-4px_16px_rgba(0,0,0,0.08)] backdrop-blur-md lg:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface/95 px-3 pt-2.5 shadow-[0_-4px_16px_rgba(0,0,0,0.08)] backdrop-blur-md lg:hidden"
         style={{ paddingBottom: "max(0.625rem, env(safe-area-inset-bottom, 0px))" }}
       >
-        <div className="mx-auto flex max-w-xl items-center gap-2">
+        <div className="mx-auto flex max-w-xl items-center gap-1.5">
           {isOwner ? (
             <>
               <Link to="/ilan-ver" search={{ id: listing.id }} className={buttonVariants({ className: "flex-1 w-full" })}>
@@ -833,27 +845,27 @@ function ListingPage() {
               </Button>
               {has_phone ? (
                 phone ? (
-                  <Button type="button" variant="outline" className="flex-1" onClick={() => setPhoneDialogOpen(true)}>
-                    <Phone className="size-4 text-ok" /> Ara
+                  <Button type="button" variant="outline" className="min-w-0 flex-1 px-2.5" onClick={() => setPhoneDialogOpen(true)}>
+                    <Phone className="size-4 shrink-0 text-ok" /> <span className="truncate">Ara</span>
                   </Button>
                 ) : (
-                  <Button type="button" variant="outline" className="flex-1" disabled={phoneBusy} onClick={() => void onRevealPhone({ openDialog: true })}>
-                    <Phone className="size-4 text-ok" /> {phoneBusy ? "…" : "Telefon"}
+                  <Button type="button" variant="outline" className="min-w-0 flex-1 px-2.5" disabled={phoneBusy} onClick={() => void onRevealPhone({ openDialog: true })}>
+                    <Phone className="size-4 shrink-0 text-ok" /> <span className="truncate">{phoneBusy ? "…" : "Telefon"}</span>
                   </Button>
                 )
               ) : null}
               {whatsapp ? (
-                <a href={whatsapp} target="_blank" rel="noreferrer" aria-label="WhatsApp ile yaz" className="grid size-11 shrink-0 place-items-center rounded-md bg-[#25D366] text-white">
+                <a href={whatsapp} target="_blank" rel="noreferrer" aria-label="WhatsApp ile yaz" className="grid size-10 shrink-0 place-items-center rounded-md bg-[#25D366] text-white">
                   <WhatsAppIcon className="size-5" />
                 </a>
               ) : null}
               {teklifAcik && !isOwner && isLive ? (
-                <Button type="button" variant="outline" className="shrink-0 whitespace-nowrap px-3" onClick={openOfferDialog}>
-                  <Tag className="size-4" /> Teklif ver
+                <Button type="button" variant="outline" className="min-w-0 shrink-0 px-2.5" onClick={openOfferDialog}>
+                  <Tag className="size-4 shrink-0" /> <span className="hidden min-[380px]:inline">Teklif</span>
                 </Button>
               ) : null}
-              <Button className="flex-1" onClick={() => requireUser() && setMessageOpen(true)}>
-                <MessageCircle className="size-4" /> Mesaj
+              <Button className="min-w-0 flex-1 px-2.5" onClick={() => requireUser() && setMessageOpen(true)}>
+                <MessageCircle className="size-4 shrink-0" /> <span className="truncate">Mesaj</span>
               </Button>
             </>
           ) : (
@@ -1013,7 +1025,10 @@ function ListingPage() {
           sellerName={seller.name}
           listingId={listing.id}
           existing={review.existing}
-          onSaved={(existing) => setReview({ ...review, existing })}
+          onSaved={(existing) => {
+            setReview({ ...review, existing });
+            void router.invalidate();
+          }}
         />
       ) : null}
     </div>

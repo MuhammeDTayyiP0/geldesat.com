@@ -33,6 +33,7 @@ import {
   Checkbox,
   EmptyState,
   ErrorState,
+  InlineQueryError,
   Menu,
   MenuItem,
   MenuSeparator,
@@ -255,6 +256,7 @@ function ListingsPage() {
           </div>
         ) : null}
 
+        {query.isError && query.data ? <InlineQueryError error={query.error} onRetry={() => void query.refetch()} /> : null}
         {query.error && !query.data ? (
           <ErrorState error={query.error} onRetry={() => void query.refetch()} />
         ) : query.isLoading ? (

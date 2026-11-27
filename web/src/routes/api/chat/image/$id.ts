@@ -23,18 +23,24 @@ export const Route = createFileRoute("/api/chat/image/$id")({
                    and m.meta->>'image_id' = i.id
                )
              )
-             or exists (select 1 from profiles p where p.user_id = $2 and p.role = 'ADMIN')
+             or exists (
+               select 1 from profiles p
+               where p.user_id = $2
+                 and p.role = 'ADMIN'
+                 and p.banned_at is null
+                 and p.deletion_requested_at is null
+             )
            )`,
           [params.id, user.id],
         );
-        if (!rows[0]) return new Response(null, { status: 404 });
+        if (!rows[0]) return new Response(null, { status: 404, headers: { "Cache-Control": "private, no-store" } });
         const bytes = new Uint8Array(rows[0].data.byteLength);
         bytes.set(rows[0].data);
         return new Response(bytes, {
           headers: {
             "Content-Type": rows[0].mime_type,
             "Content-Length": String(bytes.byteLength),
-            "Cache-Control": "private, max-age=31536000, immutable",
+            "Cache-Control": "private, no-cache, must-revalidate",
             "X-Content-Type-Options": "nosniff",
           },
         });

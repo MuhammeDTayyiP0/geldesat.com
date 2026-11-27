@@ -10,6 +10,7 @@ import type {
   BrowseResult,
   Category,
   CategoryInfo,
+  CategoryPriceStats,
   ChatMessage,
   Conversation,
   FollowStatus,
@@ -46,6 +47,8 @@ export const catalog = {
   attributes: (categoryId: string) =>
     request<{ attributes: AttrDef[] }>(`/api/mobile/category-attributes${toQuery({ categoryId })}`, { auth: false }).then((r) => r.attributes),
   autocomplete: (q: string) => rpc<AutocompleteResult>('autocompleteSuggestions', { q }),
+  priceStats: (data: { categoryId: string; city?: string; currency?: 'TRY' | 'USD' | 'EUR' }) =>
+    rpc<CategoryPriceStats | null>('getCategoryPriceStats', data),
   search: (filters: SearchFilters) => rpc<SearchResult>('searchCatalogWithContext', filters),
   /** Same visibility and sort rules as search; used for home rails. */
   listings: (params: SearchFilters & { offset?: number }) =>
@@ -103,6 +106,8 @@ export const myListings = {
     request<{ id: string; slug: string; status: string }>('/api/mobile/my-listings', { method: 'POST', body: input }),
   action: (id: string, body: { action: 'delete' | 'renew' } | { action: 'status'; status: 'ACTIVE' | 'INACTIVE' | 'SOLD' }) =>
     request(`/api/mobile/my-listings/${encodeURIComponent(id)}`, { method: 'POST', body }),
+  quickUpdatePrice: (id: string, price: number) =>
+    rpc<{ ok: true; price: number; previousPrice: number }>('quickUpdatePrice', { id, price }),
 };
 
 // ─── Account ────────────────────────────────────────────────────────────────
@@ -211,7 +216,10 @@ export const chat = {
     rpc<ChatMessage>('sendOffer', { conversationId, amount, counterTo }),
   respondOffer: (messageId: string, accept: boolean) => rpc<ChatMessage>('respondOffer', { messageId, accept }),
   deleteMessage: (messageId: string) => rpc<ChatMessage>('deleteMessage', { messageId }),
+  editMessage: (messageId: string, content: string) => rpc<{ message: ChatMessage }>('editMessage', { messageId, content }),
   archive: (conversationId: string, archived: boolean) => rpc('archiveConversation', { conversationId, archived }),
+  pin: (conversationId: string, pinned: boolean) => rpc<{ ok: true; pinned: boolean }>('pinConversation', { conversationId, pinned }),
+  mute: (conversationId: string, muted: boolean) => rpc<{ ok: true; muted: boolean }>('muteConversation', { conversationId, muted }),
   markUnread: (conversationId: string, unread: boolean) => rpc('markConversationUnread', { conversationId, unread }),
   remove: (conversationId: string) => rpc('deleteConversation', { conversationId }),
   report: (conversationId: string, reason: string, details?: string, messageId?: string) =>
@@ -224,7 +232,7 @@ export const chat = {
 
 // ─── Places (meeting-point picker; the site proxies OpenStreetMap Nominatim) ──
 
-export type GeoPlace = { label: string; lat: number; lng: number };
+export type GeoPlace = { label: string; lat: number; lng: number; city?: string | null; district?: string | null; neighborhood?: string | null };
 export type GeoReverseResult = { label: string; city?: string | null; district?: string | null; neighborhood?: string | null };
 
 export const geo = {

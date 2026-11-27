@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth/server";
 import { getSql } from "@/lib/db";
 import { assertMobileJsonWrite, getMobileUserId } from "@/lib/server/mobile-auth";
 import { errorStatus, publicErrorMessage } from "@/lib/server/errors";
+import { rateLimit } from "@/lib/server/helpers";
 import { readLimited } from "@/lib/server/request-body";
 
 export const Route = createFileRoute("/api/mobile/notifications")({
@@ -28,8 +29,10 @@ export const Route = createFileRoute("/api/mobile/notifications")({
         try {
           const csrfError = assertMobileJsonWrite(request);
           if (csrfError) return csrfError;
-          const userId = await getMobileUserId(request);
+          const session = await auth.api.getSession({ headers: request.headers });
+          const userId = session?.user?.id ?? null;
           if (!userId) return Response.json({ success: false, error: "Giriş yapmanız gerekiyor." }, { status: 401 });
+          rateLimit(`mobile-notif:${userId}`, 60, 60_000);
           const sql = await getSql();
           const rawText = new TextDecoder().decode(await readLimited(request, 32 * 1024));
           let body: { action?: unknown; token?: unknown; platform?: unknown } = {};
@@ -48,7 +51,6 @@ export const Route = createFileRoute("/api/mobile/notifications")({
             if (body.platform !== "ios" && body.platform !== "android") {
               return Response.json({ success: false, error: "Cihaz türü geçersiz." }, { status: 400 });
             }
-            const session = await auth.api.getSession({ headers: request.headers });
             await sql.query(
               `insert into mobile_push_tokens (token,user_id,platform,session_id) values ($1,$2,$3,$4)
                on conflict (token) do update set user_id=excluded.user_id, platform=excluded.platform, session_id=excluded.session_id, updated_at=now()`,

@@ -62,7 +62,7 @@ export const Route = createFileRoute("/api/mobile/sellers/$id")({
                   logo: stores[0].logo_url ? String(stores[0].logo_url) : null,
                 }
               : null,
-            reviews: reviews.map((review) => ({ id: String(review.id), rating: num(review.rating), comment: String(review.comment ?? ""), reviewer: String(review.reviewer ?? "Üye"), at: new Date(String(review.created_at)).toISOString() })),
+            reviews: reviews.map((review) => ({ id: String(review.id), rating: num(review.rating), comment: String(review.comment ?? ""), reviewer: String(review.reviewer ?? "Silinmiş kullanıcı"), at: new Date(String(review.created_at)).toISOString() })),
           }, listings: listings.map(mapListing) }, { headers: { "Cache-Control": "public, max-age=30" } });
         } catch (error) {
           const message = publicErrorMessage(error, "Satıcı profili yüklenemedi.");

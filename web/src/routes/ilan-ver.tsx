@@ -2,7 +2,7 @@ import { ErrorState } from "@/components/common/ErrorState";
 import { createFileRoute, useNavigate, useBlocker } from "@tanstack/react-router";
 import { errorText } from "@/lib/error-text";
 import { useEffect, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
-import { browseCategories, searchCategoryPaths } from "@/lib/server/catalog";
+import { browseCategories, getCategoryPriceStats, searchCategoryPaths } from "@/lib/server/catalog";
 import { getCategoryAttrs, getListingForEdit, getMe, saveListing } from "@/lib/server/account";
 import { TURKEY_CITIES } from "@/lib/data/locations";
 import { isCityCenterFallback, NEIGHBORHOODS } from "@/lib/data/geo";
@@ -35,6 +35,7 @@ import {
   X,
 } from "lucide-react";
 import { cleanPhone, cn, formatNumber, formatPrice, maskPhone10 } from "@/lib/utils";
+import { sameAttrs } from "@/lib/listing-status";
 import { toast } from "sonner";
 import type { AttrDef, CategoryRow } from "@/lib/server/helpers";
 import { CategoryButtons } from "@/components/listing/CategoryPicker";
@@ -54,6 +55,17 @@ import { useFlag } from "@/lib/use-flag";
 
 const evetHayir = ["Evet", "Hayır"];
 
+const INTEGER_ATTR_RE = /^(yıl|model yılı|km|kilometre|m²|metrekare|bina yaşı|kat sayısı|bulunduğu kat|banyo sayısı|oda sayısı)$/i;
+
+function sanitizeDecimalAttr(raw: string): string {
+  const normalized = raw.replace(/,/g, ".").replace(/[^0-9.]/g, "");
+  const firstDot = normalized.indexOf(".");
+  if (firstDot === -1) return normalized.slice(0, 10);
+  const intPart = normalized.slice(0, firstDot).slice(0, 8);
+  const fracPart = normalized.slice(firstDot + 1).replace(/\./g, "").slice(0, 4);
+  return `${intPart}.${fracPart}`;
+}
+
 function AttrInput({
   a,
   values,
@@ -70,7 +82,8 @@ function AttrInput({
   onClearError?: () => void;
 }) {
   const isYear = a.type === "NUMBER" && (a.name === "Yıl" || a.name === "Model Yılı");
-  const isFormattedNumber = a.type === "NUMBER" && !isYear;
+  const isIntegerNumber = a.type === "NUMBER" && !isYear && INTEGER_ATTR_RE.test(a.name.trim());
+  const isDecimalNumber = a.type === "NUMBER" && !isYear && !isIntegerNumber;
   const rawVal = values[a.name];
 
   return (
@@ -97,7 +110,7 @@ function AttrInput({
             <option key={o}>{o}</option>
           ))}
         </Select>
-      ) : isFormattedNumber ? (
+      ) : isIntegerNumber ? (
         <Input
           id={`attr-${a.id}`}
           type="text"
@@ -111,6 +124,21 @@ function AttrInput({
             onClearError?.();
             const digits = e.target.value.replace(/\D/g, "").slice(0, 10);
             setValues((v) => ({ ...v, [a.name]: digits === "" ? "" : Number(digits) }));
+          }}
+        />
+      ) : isDecimalNumber ? (
+        <Input
+          id={`attr-${a.id}`}
+          type="text"
+          inputMode="decimal"
+          autoComplete="off"
+          required={a.required}
+          aria-invalid={Boolean(error)}
+          className={error ? "border-danger focus-visible:ring-danger/30" : undefined}
+          value={String(rawVal ?? "")}
+          onChange={(e) => {
+            onClearError?.();
+            setValues((v) => ({ ...v, [a.name]: sanitizeDecimalAttr(e.target.value) }));
           }}
         />
       ) : isYear ? (
@@ -420,6 +448,7 @@ function PostForm() {
   const [attrsLoading, setAttrsLoading] = useState(false);
   const [attrAttempt, setAttrAttempt] = useState(0);
   const [profilePhone, setProfilePhone] = useState("");
+  const [priceStats, setPriceStats] = useState<Awaited<ReturnType<typeof getCategoryPriceStats>>>(null);
   const [offeredDraft, setOfferedDraft] = useState<ListingDraft | null>(null);
   const saved = useRef(false);
   const editInitialContentRef = useRef<{
@@ -476,6 +505,27 @@ function PostForm() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathKey, level.key, selectedRow?.has_children, levelAttempt]);
 
+  useEffect(() => {
+    if (!leaf || !selected) {
+      setPriceStats(null);
+      return;
+    }
+    let cancelled = false;
+    const t = setTimeout(() => {
+      getCategoryPriceStats({ data: { categoryId: selected, city: city || undefined, currency } })
+        .then((res) => {
+          if (!cancelled) setPriceStats(res);
+        })
+        .catch(() => {
+          if (!cancelled) setPriceStats(null);
+        });
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [leaf, selected, city, currency]);
+
   // Only a final category has a form; moving through its parents must not wipe
   // what was filled in, unless a different category is really chosen.
   useEffect(() => {
@@ -519,14 +569,14 @@ function PostForm() {
           setStoreName(m.store.name);
         }
         setProfilePhone(m.profile?.phone ?? "");
-        if (!editId && !userProfileLoaded.current) {
-          if (m.profile?.phone) setPhone(maskPhone10(m.profile.phone));
-          if (m.profile?.city) setCity(m.profile.city);
+        if (!editId && !copyId && !userProfileLoaded.current) {
+          if (m.profile?.phone) setPhone((prev) => prev || maskPhone10(m.profile!.phone!));
+          if (m.profile?.city) setCity((prev) => prev || m.profile!.city!);
           userProfileLoaded.current = true;
         }
       })
       .catch(() => undefined);
-  }, [userId, editId]);
+  }, [userId, editId, copyId]);
 
   useEffect(() => {
     const sourceId = editId ?? copyId;
@@ -686,6 +736,12 @@ function PostForm() {
   const activeStepIdx = steps.indexOf(step);
 
   useEffect(() => {
+    if (step === "attributes" && !showAttributes) {
+      setStep("details");
+    }
+  }, [step, showAttributes]);
+
+  useEffect(() => {
     if (activeStepIdx > maxReachedIdx) setMaxReachedIdx(activeStepIdx);
   }, [activeStepIdx, maxReachedIdx]);
 
@@ -693,12 +749,18 @@ function PostForm() {
     if (!editId || !editInitialContentRef.current) return false;
     const init = editInitialContentRef.current;
     const addedPhoto = images.some((u) => !init.images.includes(u));
+    let attrsChanged = false;
+    try {
+      attrsChanged = !sameAttrs(JSON.parse(init.valuesJson) as Record<string, unknown>, values);
+    } catch {
+      attrsChanged = init.valuesJson !== JSON.stringify(values);
+    }
     return (
       init.title !== title.trim() ||
       init.description !== description.trim() ||
       init.categoryId !== (selected ?? "") ||
       addedPhoto ||
-      init.valuesJson !== JSON.stringify(values)
+      attrsChanged
     );
   })();
 
@@ -961,9 +1023,19 @@ function PostForm() {
   ) {
     const matchedCity = matchCityName(geoCity);
     if (!matchedCity) return;
-    if (!overwrite && city) return;
+    if (!overwrite && city && matchedCity !== city) return;
     const matchedDistrict = matchDistrictName(matchedCity, geoDistrict) ?? "";
     const matchedHood = matchedDistrict ? (matchNeighborhoodName(matchedCity, matchedDistrict, geoNeighborhood) ?? "") : "";
+    if (!overwrite && city === matchedCity) {
+      if (!district && matchedDistrict) {
+        setDistrict(matchedDistrict);
+        clearFieldError("district");
+        if (!neighborhood && matchedHood) setNeighborhood(matchedHood);
+      } else if (!neighborhood && matchedHood) {
+        setNeighborhood(matchedHood);
+      }
+      return;
+    }
     setCity(matchedCity);
     setDistrict(matchedDistrict);
     setNeighborhood(matchedHood);
@@ -1069,7 +1141,7 @@ function PostForm() {
   }
 
   return (
-    <div ref={topRef} className="mx-auto max-w-6xl scroll-mt-20 px-4 pb-28 pt-4 sm:pt-8 md:pb-16">
+    <div ref={topRef} className="mx-auto max-w-6xl scroll-mt-28 px-4 pb-28 pt-4 sm:pt-8 md:pb-16">
       {offeredDraft ? (
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-primary/30 bg-primary/8 p-3 text-sm">
           <p>
@@ -1153,27 +1225,29 @@ function PostForm() {
             <section aria-labelledby="step-category">
               <SectionHeading id="step-category" title="Kategori seçin" hint="Hızlı arama yapın veya ana kategoriden alt türe inin." />
 
-              <div className="relative mb-4">
-                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle" />
-                <Input
-                  value={globalCatQ}
-                  onChange={(e) => setGlobalCatQ(e.target.value)}
-                  placeholder="Tüm kategorilerde hızlı ara (ör. iPhone 15, Clio, Satılık Arsa)"
-                  className="pl-9 pr-9"
-                  aria-label="Tüm kategorilerde hızlı ara"
-                />
-                {globalCatBusy ? (
-                  <Loader2 className="absolute right-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-subtle" />
-                ) : globalCatQ ? (
-                  <button
-                    type="button"
-                    aria-label="Aramayı temizle"
-                    onClick={() => setGlobalCatQ("")}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-1 text-subtle hover:text-fg"
-                  >
-                    <X className="size-4" />
-                  </button>
-                ) : null}
+              <div className="mb-4">
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle" />
+                  <Input
+                    value={globalCatQ}
+                    onChange={(e) => setGlobalCatQ(e.target.value)}
+                    placeholder="Tüm kategorilerde hızlı ara (ör. iPhone 15, Clio, Satılık Arsa)"
+                    className="pl-9 pr-9"
+                    aria-label="Tüm kategorilerde hızlı ara"
+                  />
+                  {globalCatBusy ? (
+                    <Loader2 className="absolute right-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-subtle" />
+                  ) : globalCatQ ? (
+                    <button
+                      type="button"
+                      aria-label="Aramayı temizle"
+                      onClick={() => setGlobalCatQ("")}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-1 text-subtle hover:text-fg"
+                    >
+                      <X className="size-4" />
+                    </button>
+                  ) : null}
+                </div>
                 {globalCatQ.trim().length >= 2 && (globalCatResults.length > 0 || !globalCatBusy) ? (
                   <div className="mt-2 overflow-hidden rounded-xl border border-border bg-surface shadow-card">
                     {globalCatResults.length === 0 ? (
@@ -1400,6 +1474,18 @@ function PostForm() {
                     </Select>
                   </div>
                   {fieldErrors.price ? <p className="mt-1 text-xs font-medium text-danger">{fieldErrors.price}</p> : null}
+                  {priceStats ? (
+                    <p className="mt-1.5 flex items-center gap-1.5 rounded-lg bg-elevated px-2.5 py-1.5 text-xs text-muted">
+                      <Lightbulb className="size-3.5 shrink-0 text-primary" />
+                      <span>
+                        Benzer {priceStats.count} ilan ({priceStats.cityScoped ? city : "Türkiye"}):{" "}
+                        <strong className="text-fg tabular-nums">
+                          {formatPrice(priceStats.p25, priceStats.currency)} – {formatPrice(priceStats.p75, priceStats.currency)}
+                        </strong>{" "}
+                        (ort. {formatPrice(priceStats.median, priceStats.currency)})
+                      </span>
+                    </p>
+                  ) : null}
                 </div>
                 <div>
                   <FieldLabel htmlFor="listing-desc" count={`${description.length}/5000`}>
@@ -1484,32 +1570,41 @@ function PostForm() {
                           .filter((a) => a.type === "BOOLEAN")
                           .map((a) => {
                             const cur = String(values[a.name] ?? "");
+                            const err = fieldErrors[`attr:${a.name}`];
                             return (
-                              <div
-                                key={a.id}
-                                className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2"
-                              >
-                                <span className="text-sm">
-                                  {a.name}
-                                  {a.required ? " *" : ""}
-                                </span>
-                                <div className="inline-flex shrink-0 rounded-md bg-elevated p-0.5" role="radiogroup" aria-label={a.name}>
-                                  {(a.options ?? evetHayir).map((o) => (
-                                    <button
-                                      key={o}
-                                      type="button"
-                                      role="radio"
-                                      aria-checked={cur === o}
-                                      className={cn(
-                                        "h-8 rounded px-3 text-sm transition-colors",
-                                        cur === o ? "bg-surface font-medium text-fg shadow-xs" : "text-muted hover:text-fg",
-                                      )}
-                                      onClick={() => setValues((v) => ({ ...v, [a.name]: cur === o ? "" : o }))}
-                                    >
-                                      {o}
-                                    </button>
-                                  ))}
+                              <div key={a.id} id={`attr-${a.id}`} tabIndex={-1} className="outline-none">
+                                <div
+                                  className={cn(
+                                    "flex items-center justify-between gap-3 rounded-lg border px-3 py-2",
+                                    err ? "border-danger" : "border-border",
+                                  )}
+                                >
+                                  <span className="text-sm">
+                                    {a.name}
+                                    {a.required ? " *" : ""}
+                                  </span>
+                                  <div className="inline-flex shrink-0 rounded-md bg-elevated p-0.5" role="radiogroup" aria-label={a.name}>
+                                    {(a.options ?? evetHayir).map((o) => (
+                                      <button
+                                        key={o}
+                                        type="button"
+                                        role="radio"
+                                        aria-checked={cur === o}
+                                        className={cn(
+                                          "h-8 rounded px-3 text-sm transition-colors",
+                                          cur === o ? "bg-surface font-medium text-fg shadow-xs" : "text-muted hover:text-fg",
+                                        )}
+                                        onClick={() => {
+                                          clearFieldError(`attr:${a.name}`);
+                                          setValues((v) => ({ ...v, [a.name]: cur === o ? "" : o }));
+                                        }}
+                                      >
+                                        {o}
+                                      </button>
+                                    ))}
+                                  </div>
                                 </div>
+                                {err ? <p className="mt-1 text-xs font-medium text-danger">{err}</p> : null}
                               </div>
                             );
                           })}
@@ -1521,8 +1616,9 @@ function PostForm() {
                         const cur = String(values[a.name] ?? "")
                           .split(", ")
                           .filter(Boolean);
+                        const err = fieldErrors[`attr:${a.name}`];
                         return (
-                          <fieldset key={a.id}>
+                          <fieldset key={a.id} id={`attr-${a.id}`} tabIndex={-1} className="outline-none">
                             <legend className="mb-2 text-sm font-medium">
                               {a.name}
                               {a.required ? " *" : ""}
@@ -1541,6 +1637,7 @@ function PostForm() {
                                       on ? "border-primary bg-primary/10 text-primary" : "border-border hover:border-primary/40",
                                     )}
                                     onClick={() => {
+                                      clearFieldError(`attr:${a.name}`);
                                       const next = on ? cur.filter((x) => x !== o) : [...cur, o];
                                       setValues((v) => ({ ...v, [a.name]: next.join(", ") }));
                                     }}
@@ -1551,6 +1648,7 @@ function PostForm() {
                                 );
                               })}
                             </div>
+                            {err ? <p className="mt-1 text-xs font-medium text-danger">{err}</p> : null}
                           </fieldset>
                         );
                       })}
@@ -1618,6 +1716,9 @@ function PostForm() {
                           setCity(e.target.value);
                           setDistrict("");
                           setNeighborhood("");
+                          setPinLat(null);
+                          setPinLng(null);
+                          setPinLabel("");
                         }}
                         required
                       >
@@ -1640,6 +1741,9 @@ function PostForm() {
                           clearFieldError("district");
                           setDistrict(e.target.value);
                           setNeighborhood("");
+                          setPinLat(null);
+                          setPinLng(null);
+                          setPinLabel("");
                         }}
                         required
                       >
@@ -1650,9 +1754,9 @@ function PostForm() {
                       </Select>
                       {fieldErrors.district ? <p className="mt-1 text-xs font-medium text-danger">{fieldErrors.district}</p> : null}
                     </div>
-                    {hoods.length ? (
-                      <div>
-                        <Label htmlFor="listing-hood">Mahalle</Label>
+                    <div>
+                      <Label htmlFor="listing-hood">Mahalle</Label>
+                      {hoods.length ? (
                         <Select
                           id="listing-hood"
                           value={neighborhood}
@@ -1663,8 +1767,17 @@ function PostForm() {
                             <option key={h}>{h}</option>
                           ))}
                         </Select>
-                      </div>
-                    ) : null}
+                      ) : (
+                        <Input
+                          id="listing-hood"
+                          value={neighborhood}
+                          onChange={(e) => setNeighborhood(e.target.value)}
+                          disabled={!district}
+                          maxLength={60}
+                          placeholder={district ? "Mahalle (isteğe bağlı)" : "Önce ilçe seçin"}
+                        />
+                      )}
+                    </div>
                   </div>
 
                   <div className="rounded-xl border border-border bg-elevated/45 p-3.5">
@@ -1762,7 +1875,7 @@ function PostForm() {
 
               <div className="relative">
                 <ListingImageGallery images={images} title={title} categoryName={pathRows[pathRows.length - 1]?.name} />
-                <EditLink onClick={() => goTo("photos")} className="absolute bottom-3 right-3 z-10 inline-flex" floating>
+                <EditLink onClick={() => goTo("photos")} className="absolute right-3 top-3 z-10 inline-flex" floating>
                   Fotoğrafları düzenle
                 </EditLink>
               </div>
@@ -1958,6 +2071,7 @@ function PostForm() {
         onOpenChange={setMapPickerOpen}
         title="İlan konumu seç"
         subtitle="Haritayı kaydırarak ilanın konumunu işaretleyin"
+        labelTitle="İlan konumu"
         confirmLabel="Bu konumu seç"
         footnote=""
         initialCenter={pinLat != null && pinLng != null ? { lat: pinLat, lng: pinLng, zoom: 16 } : null}
@@ -1967,7 +2081,7 @@ function PostForm() {
           setPinLat(place.lat);
           setPinLng(place.lng);
           setPinLabel(place.label);
-          applyGeoAddress(place.city, place.district, place.neighborhood, false);
+          applyGeoAddress(place.city, place.district, place.neighborhood, true);
         }}
       />
 

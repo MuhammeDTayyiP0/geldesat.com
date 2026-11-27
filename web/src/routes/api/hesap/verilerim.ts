@@ -14,9 +14,13 @@ export const Route = createFileRoute("/api/hesap/verilerim")({
   server: {
     handlers: {
       GET: async ({ request }) => {
-        if (request.headers.get("sec-fetch-site") === "cross-site") return new Response("Forbidden", { status: 403 });
+        if (request.headers.get("sec-fetch-site") === "cross-site") {
+          return new Response("Forbidden", { status: 403, headers: { "Cache-Control": "private, no-store" } });
+        }
         const user = await getSessionUser();
-        if (!user) return Response.json({ error: "Giriş yapmalısınız" }, { status: 401 });
+        if (!user) {
+          return Response.json({ error: "Giriş yapmalısınız" }, { status: 401, headers: { "Cache-Control": "private, no-store" } });
+        }
         try {
           rateLimit(`export:${user.id}`, 5, 60 * 60_000);
           const sql = await getSql();
@@ -55,7 +59,7 @@ export const Route = createFileRoute("/api/hesap/verilerim")({
             q(`select "createdAt" as created_at, "updatedAt" as last_active, "userAgent" as user_agent, "ipAddress" as ip_address
                from "session" where "userId"=$1`),
           ]);
-          const [chatPhotos, creditOrders, creditLedger, boosts, phoneReveals, devices] = await Promise.all([
+          const [chatPhotos, creditOrders, creditLedger, boosts, phoneReveals, devices, savedSearches, sellerFollows, storeApplications] = await Promise.all([
             q(`select i.id, i.conversation_id, i.mime_type, i.created_at from chat_images i join conversations c on c.id=i.conversation_id
                where c.buyer_id=$1 or c.seller_id=$1`),
             q(`select id, sku, credits, price, status, created_at, resolved_at from credit_orders where user_id=$1 order by created_at`),
@@ -63,6 +67,11 @@ export const Route = createFileRoute("/api/hesap/verilerim")({
             q(`select listing_id, kind, starts_at, ends_at from boosts where user_id=$1`),
             q(`select listing_id, created_at from phone_reveals where viewer_id=$1 order by created_at`),
             q(`select platform, updated_at from mobile_push_tokens where user_id=$1`),
+            q(`select id, name, category_slug, city, district, q, min_price, max_price, filters, notify, created_at
+               from saved_searches where user_id=$1 order by created_at`),
+            q(`select seller_id, created_at from seller_follows where follower_id=$1 order by created_at`),
+            q(`select id, name, city, phone, tax_no, note, status, review_note, created_at, reviewed_at
+               from store_applications where user_id=$1 order by created_at`),
           ]);
           const body = JSON.stringify(
             {
@@ -72,10 +81,13 @@ export const Route = createFileRoute("/api/hesap/verilerim")({
               sign_in_methods: logins,
               profile: profile[0] ?? null,
               store: store[0] ?? null,
+              store_applications: storeApplications,
               listings,
               price_history: priceHistory,
               favorites,
               recently_viewed: recentlyViewed,
+              saved_searches: savedSearches,
+              followed_sellers: sellerFollows,
               conversations,
               messages,
               reviews_given: reviewsGiven,
@@ -104,7 +116,10 @@ export const Route = createFileRoute("/api/hesap/verilerim")({
             },
           });
         } catch (err) {
-          return Response.json({ error: publicErrorMessage(err, "Veriler hazırlanamadı") }, { status: errorStatus(err, 400) });
+          return Response.json(
+            { error: publicErrorMessage(err, "Veriler hazırlanamadı") },
+            { status: errorStatus(err, 400), headers: { "Cache-Control": "private, no-store" } },
+          );
         }
       },
     },

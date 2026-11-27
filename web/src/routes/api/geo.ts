@@ -27,6 +27,15 @@ type NominatimPlace = {
 };
 
 /** Short Turkish-style label: "Caferağa Mah., Moda Cd., Kadıköy, İstanbul". */
+function extractAddress(p: NominatimPlace) {
+  const a = p?.address ?? {};
+  return {
+    city: a.province ?? a.city ?? a.state ?? null,
+    district: a.town ?? a.city_district ?? a.district ?? a.county ?? null,
+    neighborhood: a.neighbourhood ?? a.suburb ?? a.quarter ?? null,
+  };
+}
+
 function shortLabel(p: NominatimPlace): string {
   const a = p.address ?? {};
   const parts = [
@@ -55,7 +64,11 @@ function nextNominatimSlot(): Promise<void> {
 
 async function nominatim(path: string): Promise<unknown> {
   const hit = cache.get(path);
-  if (hit && Date.now() - hit.at < TTL_MS) return hit.body;
+  if (hit && Date.now() - hit.at < TTL_MS) {
+    cache.delete(path);
+    cache.set(path, hit);
+    return hit.body;
+  }
   const existing = inFlight.get(path);
   if (existing) return existing;
   const promise = (async () => {
@@ -66,7 +79,11 @@ async function nominatim(path: string): Promise<unknown> {
     });
     if (!res.ok) throw new Error(`nominatim ${res.status}`);
     const body: unknown = await res.json();
-    if (cache.size > 5000) cache.clear();
+    while (cache.size >= 5000) {
+      const oldest = cache.keys().next().value;
+      if (oldest === undefined) break;
+      cache.delete(oldest);
+    }
     cache.set(path, { at: Date.now(), body });
     return body;
   })();
@@ -98,13 +115,16 @@ export const Route = createFileRoute("/api/geo")({
             if (q.length < 2 || q.length > 100) return json({ results: [] });
             const params = new URLSearchParams({ q, format: "jsonv2", addressdetails: "1", limit: "8", countrycodes: "tr" });
             const near = url.searchParams.get("near")?.split(",").map(Number);
-            if (near?.length === 2 && near.every(Number.isFinite)) {
-              const [lat, lng] = near;
-              params.set("viewbox", `${lng - 0.6},${lat + 0.4},${lng + 0.6},${lat - 0.4}`);
+            if (near?.length === 2 && near.every(Number.isFinite) && Math.abs(near[0]) <= 90 && Math.abs(near[1]) <= 180) {
+              const lat = Number(near[0].toFixed(1));
+              const lng = Number(near[1].toFixed(1));
+              params.set("viewbox", `${(lng - 0.6).toFixed(2)},${(lat + 0.4).toFixed(2)},${(lng + 0.6).toFixed(2)},${(lat - 0.4).toFixed(2)}`);
             }
             const places = (await nominatim(`/search?${params}`)) as NominatimPlace[];
             return json({
-              results: places.map((p) => ({ label: shortLabel(p), lat: Number(p.lat), lng: Number(p.lon) })).filter((p) => p.label),
+              results: places
+                .map((p) => ({ label: shortLabel(p), lat: Number(p.lat), lng: Number(p.lon), ...extractAddress(p) }))
+                .filter((p) => p.label),
             });
           }
           const rawLat = url.searchParams.get("lat");
@@ -117,12 +137,9 @@ export const Route = createFileRoute("/api/geo")({
           // ~100 m rounding keeps the cache useful and does not leak an exact position upstream.
           const params = new URLSearchParams({ lat: lat.toFixed(3), lon: lng.toFixed(3), format: "jsonv2", addressdetails: "1", zoom: "18" });
           const place = (await nominatim(`/reverse?${params}`)) as NominatimPlace;
-          const a = place?.address ?? {};
           return json({
             label: place?.lat ? shortLabel(place) : "",
-            city: a.province ?? a.city ?? a.state ?? null,
-            district: a.town ?? a.city_district ?? a.district ?? a.county ?? null,
-            neighborhood: a.neighbourhood ?? a.suburb ?? a.quarter ?? null,
+            ...extractAddress(place),
           });
         } catch {
           return json({ error: "Adres bilgisi alınamadı." }, 502);

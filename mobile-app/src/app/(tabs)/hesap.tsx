@@ -2,12 +2,10 @@ import { useRef, type ComponentRef } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter, useScrollToTop, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Bell, Bookmark, ChevronRight, Heart, History, LayoutGrid, MessageCircle, Rocket, Settings, Store } from 'lucide-react-native';
-import { useQuery } from '@tanstack/react-query';
-import { account } from '@/api/endpoints';
+import { Bell, Bookmark, ChevronRight, Heart, History, LayoutGrid, MessageCircle, Rocket, Settings, Store, UserCheck } from 'lucide-react-native';
 import { keys, queryClient, useCounts, useMe } from '@/api/queries';
 import { useSession } from '@/auth/session';
-import { formatDate, formatNumber } from '@/lib/format';
+import { formatNumber } from '@/lib/format';
 import { Avatar, Badge, BrandIcon, Button, IconButton, ListRow, RowGroup, Stars, Text, hairline, radius, space, useTheme } from '@/ui';
 import { useFlag } from '@/lib/flags';
 
@@ -16,6 +14,7 @@ export default function AccountScreen() {
   // Doping sales are closed while this is off: no entry points to an empty shop (K11).
   const dopingOn = useFlag('doping_enabled');
   const kayitliAramalar = useFlag('kayitli_aramalar');
+  const saticiTakip = useFlag('satici_takip');
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const session = useSession();
@@ -24,9 +23,6 @@ export default function AccountScreen() {
   const signedIn = session.status === 'signedIn';
   const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
   useScrollToTop(scrollRef);
-  // A deletion in progress is said where people look first, with the way back.
-  const deletion = useQuery({ queryKey: keys.deletion, queryFn: account.deletionStatus, enabled: signedIn, staleTime: 5 * 60_000 });
-  const purgeAt = deletion.data?.purgeAt;
 
   const topBar = (
     <View style={[styles.top, { paddingTop: insets.top + space.sm }]}>
@@ -77,21 +73,6 @@ export default function AccountScreen() {
       }
     >
       {topBar}
-
-      {purgeAt ? (
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => router.push('/ayarlar/guvenlik')}
-          style={[styles.card, { backgroundColor: c.dangerSoft, borderColor: c.dangerSoft }]}
-        >
-          <Text variant="label" tone="danger">
-            Hesabınız {formatDate(purgeAt)} tarihinde silinecek
-          </Text>
-          <Text variant="caption" tone="muted">
-            İlanlarınız gizli. Vazgeçtiyseniz dokunun ve “Hesabımı geri al”ı seçin.
-          </Text>
-        </Pressable>
-      ) : null}
 
       {/* "Hesabım" is only a menu; what others see is the public profile ("Profilimi gör"). */}
       <View style={[styles.card, { backgroundColor: c.surface, borderColor: c.border }]}>
@@ -156,6 +137,14 @@ export default function AccountScreen() {
               label="Kayıtlı aramalarım"
               detail="Kaydettiğiniz aramalar ve bildirimler"
               onPress={() => router.push('/kayitli-aramalar' as Href)}
+            />
+          ) : null}
+          {saticiTakip ? (
+            <ListRow
+              icon={UserCheck}
+              label="Takip ettiklerim"
+              detail="Takip ettiğiniz satıcılar"
+              onPress={() => router.push('/takip-ettiklerim' as Href)}
             />
           ) : null}
           <ListRow

@@ -99,11 +99,13 @@ export async function unregisterPushToken(pushToken: string, sessionToken: strin
 
 /** Whether the system may still show its permission question (false after a hard "no"). */
 export async function canAskForPush(): Promise<boolean> {
+  if (Platform.OS === 'web') return false;
   const current = await Notifications.getPermissionsAsync();
   return current.granted || current.canAskAgain;
 }
 
 export async function pushPermissionGranted(): Promise<boolean> {
+  if (Platform.OS === 'web') return false;
   return (await Notifications.getPermissionsAsync()).granted;
 }
 

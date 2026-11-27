@@ -7,6 +7,17 @@ import { Chip, Input, SelectField, Segmented, Text, space } from '@/ui';
 
 const YES_NO = ['Evet', 'Hayır'];
 
+const INTEGER_ATTR_RE = /^(yıl|model yılı|km|kilometre|m²|metrekare|bina yaşı|kat sayısı|bulunduğu kat|banyo sayısı|oda sayısı)$/i;
+
+function sanitizeDecimalInput(raw: string): string {
+  const normalized = raw.replace(/,/g, '.').replace(/[^0-9.]/g, '');
+  const firstDot = normalized.indexOf('.');
+  if (firstDot === -1) return normalized.slice(0, 10);
+  const intPart = normalized.slice(0, firstDot).slice(0, 8);
+  const fracPart = normalized.slice(firstDot + 1).replace(/\./g, '').slice(0, 4);
+  return `${intPart}.${fracPart}`;
+}
+
 /** One attribute input, storing values the way the website does (keyed by attribute name). */
 export function AttrField({
   attr,
@@ -120,6 +131,24 @@ export function AttrField({
 
   if (attr.type === 'NUMBER') {
     const isYear = attr.name === 'Yıl' || attr.name === 'Model Yılı';
+    const isInteger = isYear || INTEGER_ATTR_RE.test(attr.name.trim());
+    if (!isInteger) {
+      return (
+        <Input
+          label={label}
+          required={attr.required}
+          keyboardType="decimal-pad"
+          placeholder="0"
+          error={error}
+          hint={hint}
+          value={value === undefined || value === '' ? '' : String(value)}
+          onChangeText={(t) => {
+            const cleaned = sanitizeDecimalInput(t);
+            onChange(cleaned === '' ? undefined : cleaned);
+          }}
+        />
+      );
+    }
     return (
       <Input
         label={label}
@@ -146,8 +175,8 @@ export function AttrField({
       error={error}
       hint={hint}
       value={value === undefined ? '' : String(value)}
-      onChangeText={(t) => onChange(t ? t.slice(0, 120) : undefined)}
-      maxLength={120}
+      onChangeText={(t) => onChange(t ? t.slice(0, 200) : undefined)}
+      maxLength={200}
     />
   );
 }

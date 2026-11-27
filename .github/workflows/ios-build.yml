@@ -13,6 +13,9 @@ on:
       - ".github/workflows/ios-build.yml"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ios-build-${{ github.ref }}
   cancel-in-progress: true

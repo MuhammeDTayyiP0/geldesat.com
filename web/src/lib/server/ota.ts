@@ -1,6 +1,6 @@
-import { createHash, createSign, timingSafeEqual } from "node:crypto";
+import { createHash, createPrivateKey, createSign, timingSafeEqual, type KeyObject } from "node:crypto";
 import { flagBucket } from "../flags";
-import { rateLimit, viewerKey } from "./helpers";
+import { isRateLimited, rateLimit, viewerKey } from "./helpers";
 import { RateLimitError } from "./errors";
 
 /**
@@ -60,6 +60,7 @@ export function publishAuth(request: Request): "ok" | "off" | "denied" | "rate_l
   }
   const token = process.env.OTA_PUBLISH_TOKEN?.trim();
   if (!token || token.length < 24) return "off";
+  if (isRateLimited(`ota-publish-fail:${ip}`, 10, 15 * 60_000)) return "rate_limited";
   const given = (request.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
   const a = Buffer.from(given);
   const b = Buffer.from(token);
@@ -152,23 +153,31 @@ export function rollbackDirective(row: OtaUpdateRow): Directive {
   return { type: "rollBackToEmbedded", parameters: { commitTime: iso(row.created_at) } };
 }
 
+let cachedSigningPem = "";
+let cachedSigningKey: KeyObject | null = null;
+
+function getSigningKey(rawKey: string): KeyObject {
+  const pem = rawKey.includes("\\n") ? rawKey.replace(/\\n/g, "\n") : rawKey;
+  if (cachedSigningKey && cachedSigningPem === pem) return cachedSigningKey;
+  const parsed = createPrivateKey(pem);
+  cachedSigningPem = pem;
+  cachedSigningKey = parsed;
+  return parsed;
+}
+
 /**
  * Optional Expo Updates code signing (RSA-SHA256). When `OTA_CODE_SIGNING_PRIVATE_KEY`
  * is configured (PEM, newlines may be `\n`), manifest/directive parts include an
  * `expo-signature` header matching the Expo Updates v1 code-signing spec.
+ * Fails closed (throws) if a key is configured but malformed/unusable.
  */
 function signOtaPart(payload: string): string | null {
   const rawKey = process.env.OTA_CODE_SIGNING_PRIVATE_KEY?.trim();
   if (!rawKey) return null;
-  const pem = rawKey.includes("\\n") ? rawKey.replace(/\\n/g, "\n") : rawKey;
   const keyId = (process.env.OTA_CODE_SIGNING_KEY_ID?.trim() || "main").replace(/[^A-Za-z0-9._-]/g, "");
-  try {
-    const sig = createSign("RSA-SHA256").update(payload, "utf8").sign(pem, "base64");
-    return `sig="${sig}", keyid="${keyId}", alg="rsa-v1_5-sha256"`;
-  } catch (err) {
-    console.error("[ota] invalid signing key", err);
-    return null;
-  }
+  const key = getSigningKey(rawKey);
+  const sig = createSign("RSA-SHA256").update(payload, "utf8").sign(key, "base64");
+  return `sig="${sig}", keyid="${keyId}", alg="rsa-v1_5-sha256"`;
 }
 
 /** multipart/mixed body with the given JSON parts, as the protocol expects. */

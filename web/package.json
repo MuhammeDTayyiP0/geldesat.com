@@ -1,7 +1,7 @@
 {
   "name": "geldesat-web",
   "private": true,
-  "sideEffects": false,
+  "sideEffects": ["**/*.css", "src/lib/db.ts", "src/lib/auth/server.ts"],
   "type": "module",
   "overrides": {
     "nf3": "0.3.17"

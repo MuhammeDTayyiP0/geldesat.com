@@ -44,14 +44,38 @@ import { Avatar, ErrorState, Field, inputClass, KeyValue, Menu, MenuItem, MenuSe
 
 export function UserSheetBody({ id, canGoBack }: { id: string; canGoBack: boolean }) {
   const { back, close, openListing, openUser } = useSheets();
+  const { confirm } = useConfirm();
   const query = useQuery({ queryKey: ["admin", "user", id], queryFn: () => adminUserDetail({ data: { userId: id } }) });
   const [tab, setTab] = useState<"overview" | "listings" | "sessions" | "reviews" | "history">("overview");
   const [modal, setModal] = useState<null | "edit" | "credits" | "notify">(null);
+  const [noteDirty, setNoteDirty] = useState(false);
+
+  async function confirmDiscard(): Promise<boolean> {
+    if (!noteDirty) return true;
+    return confirm({
+      title: "Kaydedilmemiş yönetici notu var",
+      body: "Kaydetmediğiniz yönetici notu kaybolacak. Yine de çıkılsın mı?",
+      confirmLabel: "Kaydetmeden çık",
+      danger: true,
+    });
+  }
+
+  async function handleClose() {
+    if (!(await confirmDiscard())) return;
+    setNoteDirty(false);
+    close();
+  }
+
+  async function handleBack() {
+    if (!(await confirmDiscard())) return;
+    setNoteDirty(false);
+    back();
+  }
 
   if (query.isLoading) {
     return (
       <>
-        <SheetHeader onClose={close}>
+        <SheetHeader onClose={handleClose}>
           <div className="h-5 w-48 animate-pulse rounded bg-elevated" />
         </SheetHeader>
         <div className="flex flex-1 items-center justify-center gap-2 text-sm text-muted">
@@ -63,7 +87,7 @@ export function UserSheetBody({ id, canGoBack }: { id: string; canGoBack: boolea
   if (query.error && !query.data) {
     return (
       <>
-        <SheetHeader onClose={close}>
+        <SheetHeader onClose={handleClose}>
           <span className="font-semibold">Üye</span>
         </SheetHeader>
         <ErrorState error={query.error} onRetry={() => void query.refetch()} />
@@ -78,10 +102,10 @@ export function UserSheetBody({ id, canGoBack }: { id: string; canGoBack: boolea
 
   return (
     <>
-      <SheetHeader onClose={close}>
+      <SheetHeader onClose={handleClose}>
         <div className="flex items-start gap-3">
           {canGoBack ? (
-            <button type="button" onClick={back} className="mt-0.5 rounded-lg p-1 text-muted hover:bg-elevated hover:text-fg" aria-label="Geri">
+            <button type="button" onClick={handleBack} className="mt-0.5 rounded-lg p-1 text-muted hover:bg-elevated hover:text-fg" aria-label="Geri">
               <ArrowLeft className="size-4" />
             </button>
           ) : null}
@@ -121,7 +145,13 @@ export function UserSheetBody({ id, canGoBack }: { id: string; canGoBack: boolea
 
       <TabBar
         value={tab}
-        onChange={setTab}
+        onChange={(next) => {
+          void confirmDiscard().then((ok) => {
+            if (!ok) return;
+            setNoteDirty(false);
+            setTab(next);
+          });
+        }}
         items={[
           { value: "overview", label: "Genel" },
           { value: "listings", label: "İlanlar", count: u.listing_count },
@@ -160,7 +190,7 @@ export function UserSheetBody({ id, canGoBack }: { id: string; canGoBack: boolea
               />
               {u.bio ? <p className="mt-3 whitespace-pre-wrap border-t border-border pt-3 text-sm text-muted">{u.bio}</p> : null}
             </section>
-            <AdminNote user={u} />
+            <AdminNote user={u} onDirtyChange={setNoteDirty} />
             {d.creditLedger.length ? (
               <section className="rounded-xl border border-border bg-surface p-4">
                 <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Son kredi hareketleri</h3>
@@ -397,7 +427,7 @@ function UserActionBar({ detail, onModal }: { detail: AdminUserDetail; onModal: 
               Yönetici yetkisini kaldır{isSelf ? " (kendi hesabınız)" : ""}
             </MenuItem>
           ) : (
-            <MenuItem icon={ShieldCheck} onSelect={() => void setRole("ADMIN")} disabled={Boolean(u.banned_at)}>
+            <MenuItem icon={ShieldCheck} onSelect={() => void setRole("ADMIN")} disabled={Boolean(u.banned_at || u.deletion_requested_at)}>
               Yönetici yap
             </MenuItem>
           )}
@@ -405,7 +435,23 @@ function UserActionBar({ detail, onModal }: { detail: AdminUserDetail; onModal: 
             Kredi tanımla{isSelf ? " (kendi hesabınız)" : ""}
           </MenuItem>
           {!u.email_verified && u.email ? (
-            <MenuItem icon={BadgeCheck} onSelect={() => void run(() => adminVerifyEmail({ data: { userId: u.user_id } }), "E-posta doğrulandı olarak işaretlendi.")}>
+            <MenuItem
+              icon={BadgeCheck}
+              onSelect={() => {
+                void confirm({
+                  title: "E-posta doğrulansın mı?",
+                  body: `${u.email} adresi doğrulanmış olarak işaretlenecek.`,
+                  confirmLabel: "Doğrulanmış say",
+                }).then((ok) => {
+                  if (ok) {
+                    void run(() => adminVerifyEmail({ data: { userId: u.user_id } }), "E-posta doğrulandı olarak işaretlendi.", [
+                      ["admin", "user", u.user_id],
+                      ["admin", "users"],
+                    ]);
+                  }
+                });
+              }}
+            >
               E-postayı doğrulanmış say
             </MenuItem>
           ) : null}
@@ -429,6 +475,8 @@ function UserActionBar({ detail, onModal }: { detail: AdminUserDetail; onModal: 
 
 function SessionsTab({ detail }: { detail: AdminUserDetail }) {
   const { run, busy } = useRunner();
+  const current = useCurrentUserState().user;
+  const isPeerAdmin = detail.user.role === "ADMIN" && current?.id !== detail.user.user_id;
   if (!detail.sessions.length) return <p className="text-sm text-muted">Açık oturum yok.</p>;
   return (
     <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface">
@@ -445,8 +493,13 @@ function SessionsTab({ detail }: { detail: AdminUserDetail }) {
             size="sm"
             variant="ghost"
             className="text-danger"
-            disabled={busy}
-            onClick={() => void run(() => adminRevokeSessions({ data: { userId: detail.user.user_id, sessionId: s.id } }), "Oturum kapatıldı.")}
+            disabled={busy || isPeerAdmin}
+            title={isPeerAdmin ? "Başka yöneticinin oturumu kapatılamaz" : undefined}
+            onClick={() =>
+              void run(() => adminRevokeSessions({ data: { userId: detail.user.user_id, sessionId: s.id } }), "Oturum kapatıldı.", [
+                ["admin", "user", detail.user.user_id],
+              ])
+            }
           >
             Kapat
           </Button>
@@ -462,13 +515,16 @@ function summarizeUa(ua: string): string {
   return [browser, os].filter(Boolean).join(" · ");
 }
 
-function AdminNote({ user }: { user: AdminUserDetail["user"] }) {
+function AdminNote({ user, onDirtyChange }: { user: AdminUserDetail["user"]; onDirtyChange?: (dirty: boolean) => void }) {
   const { run, busy } = useRunner();
   const [value, setValue] = useState(user.admin_note ?? "");
   useEffect(() => {
     setValue(user.admin_note ?? "");
   }, [user.admin_note]);
   const dirty = value.trim() !== (user.admin_note ?? "").trim();
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
   return (
     <section className="rounded-xl border border-warn/30 bg-warn/5 p-4">
       <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-warn">Yönetici notu (yalnızca yöneticiler görür)</h3>
@@ -479,7 +535,9 @@ function AdminNote({ user }: { user: AdminUserDetail["user"] }) {
             size="sm"
             disabled={busy}
             onClick={() =>
-              void run(() => adminSetUserNote({ data: { userId: user.user_id, note: value } }), "Not kaydedildi.")
+              void run(() => adminSetUserNote({ data: { userId: user.user_id, note: value } }), "Not kaydedildi.", [
+                ["admin", "user", user.user_id],
+              ])
             }
           >
             Notu kaydet

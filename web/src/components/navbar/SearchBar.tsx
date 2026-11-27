@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   ChevronDown,
   ChevronRight,
@@ -28,17 +28,32 @@ export function AutocompleteSearchBar({
 }) {
   const navigate = useNavigate();
   const inputId = useId();
+  const listboxId = useId();
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const routeKey = useRouterState({
+    select: (s) => `${s.location.pathname}:${String((s.location.search as { category?: unknown }).category ?? "")}`,
+  });
+  const urlCategory = useRouterState({
+    select: (s) => {
+      const cat = (s.location.search as { category?: unknown }).category;
+      return typeof cat === "string" && MAIN_NAV_CATEGORIES.some((c) => c.slug === cat) ? cat : "all";
+    },
+  });
 
   const [query, setQuery] = useState(initialQuery);
   const [isOpen, setIsOpen] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState("all");
+  const [selectedCategory, setSelectedCategory] = useState(urlCategory);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [suggestions, setSuggestions] = useState<AutocompleteData | null>(null);
 
   // Shows the search being looked at, like /search?q=araba.
   useEffect(() => setQuery(initialQuery), [initialQuery]);
+  useEffect(() => {
+    setSelectedCategory(urlCategory);
+  }, [routeKey, urlCategory]);
 
   const trimmedQuery = query.trim();
 
@@ -180,7 +195,10 @@ export function AutocompleteSearchBar({
             ref={inputRef}
             id={inputId}
             type="text"
-            role="searchbox"
+            role="combobox"
+            aria-expanded={isOpen}
+            aria-controls={listboxId}
+            aria-autocomplete="list"
             enterKeyHint="search"
             value={query}
             onChange={(e) => {
@@ -189,7 +207,17 @@ export function AutocompleteSearchBar({
             }}
             onFocus={() => setIsOpen(true)}
             onKeyDown={(e) => {
-              if (e.key === "Escape") setIsOpen(false);
+              if (e.key === "Escape") {
+                setIsOpen(false);
+                return;
+              }
+              if (e.key === "ArrowDown" && isOpen && dropdownRef.current) {
+                const first = dropdownRef.current.querySelector<HTMLElement>("a[href], button");
+                if (first) {
+                  e.preventDefault();
+                  first.focus();
+                }
+              }
             }}
             placeholder="Kelime, ilan no, marka veya kategori ile ara..."
             autoComplete="off"
@@ -228,7 +256,26 @@ export function AutocompleteSearchBar({
       {/* Autocomplete Dropdown Paneli */}
       {isOpen && (
         <div
-          className="absolute left-0 right-0 top-full mt-1.5 z-50 max-h-[70dvh] overflow-y-auto bg-surface rounded-xl border border-border shadow-lift overflow-hidden divide-y divide-border/60 animate-in fade-in-50 zoom-in-95 duration-100"
+          ref={dropdownRef}
+          id={listboxId}
+          role="listbox"
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              setIsOpen(false);
+              inputRef.current?.focus();
+              return;
+            }
+            if ((e.key === "ArrowDown" || e.key === "ArrowUp") && dropdownRef.current) {
+              const items = Array.from(dropdownRef.current.querySelectorAll<HTMLElement>("a[href], button"));
+              const idx = items.indexOf(document.activeElement as HTMLElement);
+              if (idx === -1) return;
+              e.preventDefault();
+              if (e.key === "ArrowDown") items[Math.min(idx + 1, items.length - 1)]?.focus();
+              else if (idx === 0) inputRef.current?.focus();
+              else items[idx - 1]?.focus();
+            }
+          }}
+          className="absolute left-0 right-0 top-full mt-1.5 z-50 max-h-[70dvh] overflow-x-hidden overflow-y-auto bg-surface rounded-xl border border-border shadow-lift divide-y divide-border/60 animate-in fade-in-50 zoom-in-95 duration-100"
         >
           {/* 1. Canlı Arama Hedefleri (Kullanıcı bir şey yazıyorsa) */}
           {trimmedQuery.length > 0 && (

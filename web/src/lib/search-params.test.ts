@@ -109,3 +109,16 @@ test("neighborhood, postedWithin, withPhotos, sellerType, and priceDropped parse
   assert.equal(invalid.withPhotos, undefined);
   assert.equal(invalid.priceDropped, undefined);
 });
+
+test("nearLat, nearLng, maxDistanceKm, and distance sort validate bounds", () => {
+  const valid = toFilters(parseSearch({ nearLat: "41.0082", nearLng: "28.9784", maxDistanceKm: "25", sort: "distance" }));
+  assert.equal(valid.nearLat, 41.0082);
+  assert.equal(valid.nearLng, 28.9784);
+  assert.equal(valid.maxDistanceKm, 25);
+  assert.equal(valid.sort, "distance");
+
+  const outOfRange = toFilters(parseSearch({ nearLat: "120", nearLng: "28.9", maxDistanceKm: "900" }));
+  assert.equal(outOfRange.nearLat, undefined);
+  assert.equal(outOfRange.nearLng, undefined);
+  assert.equal(outOfRange.maxDistanceKm, undefined);
+});

@@ -85,6 +85,9 @@ export function appRouteForWebPath(path: string): Href | null {
         'priceDropped',
         'attrs',
         'sort',
+        'nearLat',
+        'nearLng',
+        'maxDistanceKm',
       ]) {
         const value = query.get(key);
         if (value) params[key] = value;
@@ -96,6 +99,7 @@ export function appRouteForWebPath(path: string): Href | null {
     case 'ayarlar':
       if (second === 'hesap') return '/ayarlar/guvenlik';
       if (second === 'kayitli-aramalar') return '/kayitli-aramalar' as Href;
+      if (second === 'takip-ettiklerim') return '/takip-ettiklerim' as Href;
       return second && SETTINGS_PAGES.has(second) ? (`/ayarlar/${second}` as Href) : ('/ayarlar' as Href);
     case 'profil':
       return '/hesap';

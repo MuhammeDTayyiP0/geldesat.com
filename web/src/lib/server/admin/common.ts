@@ -29,11 +29,7 @@ export async function audit(
   meta?: Record<string, unknown>,
 ): Promise<void> {
   if (targetType === "category") {
-    // Every category edit is audited, so this is the one place to refresh the
-    // public tree. Edits often run inside a transaction that commits after this
-    // call, so clear once more after it has had time to land.
     clearCategoryCache();
-    setTimeout(clearCategoryCache, 2000);
   }
   try {
     await sql.query(
@@ -59,7 +55,6 @@ export async function auditMany(sql: QuerySql, adminId: string, rows: AuditBatch
   if (!rows.length) return;
   if (rows.some((r) => r.targetType === "category")) {
     clearCategoryCache();
-    setTimeout(clearCategoryCache, 2000);
   }
   try {
     await sql.query(

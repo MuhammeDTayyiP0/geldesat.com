@@ -1,6 +1,7 @@
 /** Chat helpers kept in step with web/src/lib/chat-shared.ts. */
 
 export const DELETE_WINDOW_MS = 60 * 60_000;
+export const EDIT_WINDOW_MS = 15 * 60_000;
 export const DELETED_MESSAGE_TEXT = 'Bu mesaj silindi';
 export const LISTING_PHOTO_MSG = '::ilan-foto::';
 export const MAX_TEMPLATES = 15;

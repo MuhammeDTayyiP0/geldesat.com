@@ -1,14 +1,16 @@
 import { memo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
-import { Heart, ImageOff, Images, MapPin, Store } from 'lucide-react-native';
+import { Heart, ImageOff, Images, MapPin, Scale, Store } from 'lucide-react-native';
 import type { Listing } from '@/api/types';
+import { toggleCompare, useCompareList } from '@/lib/compare';
 import { mediaUrl } from '@/lib/config';
+import { useFlag } from '@/lib/flags';
 import { formatNumber, formatPrice, timeAgo } from '@/lib/format';
-import { Badge, Text, radius, space, useTheme } from '@/ui';
+import { Badge, Text, radius, space, toast, useTheme } from '@/ui';
 
 type CardListing = Pick<Listing, 'id' | 'title' | 'price' | 'currency' | 'images' | 'city' | 'district' | 'created_at' | 'attrs'> &
-  Partial<Pick<Listing, 'boosts' | 'category_name' | 'featured_until' | 'user_id' | 'store_name' | 'status' | 'expires_at'>>;
+  Partial<Pick<Listing, 'boosts' | 'category_name' | 'featured_until' | 'user_id' | 'store_name' | 'status' | 'expires_at' | 'previous_price' | 'distance_km'>>;
 
 type Props = {
   listing: CardListing;
@@ -48,12 +50,30 @@ function isFeatured(listing: Pick<Listing, 'boosts' | 'featured_until'>): boolea
 
 export const ListingCard = memo(function ListingCard({ listing, onPress, favorite, onFavorite, layout = 'grid', statusLabel }: Props) {
   const { c } = useTheme();
+  const compareOn = useFlag('ilan_karsilastirma');
+  const compareList = useCompareList();
+  const inCompare = compareOn && compareList.some((x) => x.id === listing.id);
   const cover = mediaUrl(listing.images[0], layout === 'row' ? 240 : 480);
   const urgent = listing.boosts?.includes('ACIL');
   const featured = isFeatured(listing);
   const bold = listing.boosts?.includes('KALIN');
   const place = [listing.district, listing.city].filter(Boolean).join(', ');
   const extra = highlights(listing.attrs ?? {});
+  const prevPrice = listing.previous_price && listing.previous_price > listing.price ? listing.previous_price : null;
+  const dropPct = prevPrice ? Math.round(((prevPrice - listing.price) / prevPrice) * 100) : 0;
+
+  const onCompare = () => {
+    void toggleCompare({
+      id: listing.id,
+      title: listing.title,
+      price: listing.price,
+      currency: listing.currency,
+      image: listing.images[0] ?? null,
+    }).then((res) => {
+      if (res.full) toast.error('En fazla 4 ilanı karşılaştırabilirsiniz');
+      else toast.success(res.added ? 'Karşılaştırmaya eklendi' : 'Karşılaştırmadan çıkarıldı');
+    });
+  };
 
   const image = (
     <View style={[layout === 'row' ? styles.rowImage : styles.image, { backgroundColor: c.elevated }]}>
@@ -100,11 +120,44 @@ export const ListingCard = memo(function ListingCard({ listing, onPress, favorit
     </Pressable>
   ) : null;
 
+  const compareBtn = compareOn ? (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={inCompare ? `${listing.title}: karşılaştırmadan çıkar` : `${listing.title}: karşılaştır`}
+      accessibilityState={{ selected: inCompare }}
+      hitSlop={4}
+      onPress={onCompare}
+      style={[
+        styles.compareBtn,
+        layout === 'row' && styles.compareBtnRow,
+        { backgroundColor: inCompare ? c.primarySolid : 'rgba(13,17,23,0.45)' },
+      ]}
+    >
+      <Scale size={14} color="#ffffff" />
+    </Pressable>
+  ) : null;
+
   const body = (
     <View style={layout === 'row' ? styles.rowBody : styles.body}>
-      <Text variant="bodyStrong" style={[styles.price, { color: c.primary }]} numberOfLines={1}>
-        {formatPrice(listing.price, listing.currency)}
-      </Text>
+      <View style={styles.priceRow}>
+        <Text variant="bodyStrong" style={[styles.price, { color: c.primary }]} numberOfLines={1}>
+          {formatPrice(listing.price, listing.currency)}
+        </Text>
+        {prevPrice ? (
+          <>
+            <Text variant="small" tone="muted" style={styles.oldPrice} numberOfLines={1}>
+              {formatPrice(prevPrice, listing.currency)}
+            </Text>
+            {dropPct >= 1 ? (
+              <View style={[styles.dropPill, { backgroundColor: c.okSoft }]}>
+                <Text variant="small" style={[styles.dropText, { color: c.ok }]}>
+                  -%{dropPct}
+                </Text>
+              </View>
+            ) : null}
+          </>
+        ) : null}
+      </View>
       <Text variant="caption" numberOfLines={2} style={[styles.title, bold && styles.bold]}>
         {listing.title}
       </Text>
@@ -126,6 +179,11 @@ export const ListingCard = memo(function ListingCard({ listing, onPress, favorit
         <Text variant="small" tone="subtle" numberOfLines={1} style={styles.flex}>
           {place || listing.category_name || ''}
         </Text>
+        {listing.distance_km != null ? (
+          <Text variant="small" tone="muted" style={styles.distText}>
+            {listing.distance_km < 1 ? '<1' : listing.distance_km} km
+          </Text>
+        ) : null}
         {layout !== 'rail' ? (
           <Text variant="small" tone="subtle">
             {timeAgo(listing.created_at)}
@@ -154,6 +212,7 @@ export const ListingCard = memo(function ListingCard({ listing, onPress, favorit
         {image}
         {body}
       </Pressable>
+      {compareBtn}
       {heart}
     </View>
   );
@@ -192,6 +251,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   heartRow: { right: undefined, left: 128 - 34 - space.xs },
+  compareBtn: {
+    position: 'absolute',
+    right: 34 + space.xs + 4,
+    top: space.xs + 3,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  compareBtnRow: { right: undefined, left: 128 - 34 - space.xs - 32 },
+  priceRow: { flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', gap: 5 },
+  oldPrice: { textDecorationLine: 'line-through', fontSize: 11 },
+  dropPill: { paddingHorizontal: 5, paddingVertical: 1, borderRadius: radius.sm },
+  dropText: { fontSize: 10, fontWeight: '700' },
+  distText: { fontSize: 11, fontWeight: '600' },
   flexCol: { flex: 1 },
   rowInner: { flex: 1, flexDirection: 'row' },
   body: { padding: space.sm + 2, gap: 3 },

@@ -10,13 +10,10 @@ screenshots
 .output
 .nitro
 .tanstack
-.vercel
-.next
 dist
 *.zip
 .cache
 .engram
 build.log
-env.ornek
 *.md
 **/*.test.*

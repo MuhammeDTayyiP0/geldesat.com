@@ -17,6 +17,11 @@ const PENDING = (user: string) => `
   and (cv.buyer_id = ${user} or cv.seller_id = ${user})
   and ${chatVisibleTo(user)}
   and (case when cv.buyer_id = ${user} then cv.buyer_archived_at else cv.seller_archived_at end) is null
+  and not exists (
+    select 1 from user_blocks b
+    where (b.blocker_id = ${user} and b.blocked_id = m.sender_id)
+       or (b.blocker_id = m.sender_id and b.blocked_id = ${user})
+  )
   and m.created_at > coalesce(p.last_message_email_at, '-infinity'::timestamptz)`;
 
 let lastRun = 0;
@@ -32,7 +37,6 @@ export async function sweepMessageDigests(force = false): Promise<number> {
   if (!mailConfigured || running || (!force && Date.now() - lastRun < 10 * 60_000)) return 0;
   running = true;
   let sent = 0;
-  lastRun = Date.now();
   try {
     const sql = await getSql();
     const due = await sql.query<{ user_id: string; email: string; name: string }>(
@@ -47,6 +51,7 @@ export async function sweepMessageDigests(force = false): Promise<number> {
        limit 50`,
       [MIN_HOURS_BETWEEN, WAIT_MINUTES],
     );
+    lastRun = Date.now();
 
     for (const user of due) {
       if (isOnline(user.user_id)) continue;
@@ -76,11 +81,13 @@ export async function sweepMessageDigests(force = false): Promise<number> {
           [user.user_id],
         );
         if (!chats.length) return null;
-        const claimedAt = new Date();
-        await tx.query("update profiles set last_message_email_at = $2 where user_id = $1", [user.user_id, claimedAt]);
-        return { chats, prevSentAt: fresh[0].last_message_email_at ?? null, claimedAt };
+        const stamped = await tx.query<{ last_message_email_at: string | Date }>(
+          "update profiles set last_message_email_at = now() where user_id = $1 returning last_message_email_at",
+          [user.user_id],
+        );
+        return { chats, prevSentAt: fresh[0].last_message_email_at ?? null, claimedAt: stamped[0]?.last_message_email_at };
       });
-      if (!claim) continue;
+      if (!claim || !claim.claimedAt) continue;
       // Phase 2: perform SMTP I/O outside any DB transaction; restore the previous stamp if sending fails.
       try {
         await sendMessageDigestMail({
@@ -99,11 +106,13 @@ export async function sweepMessageDigests(force = false): Promise<number> {
         sent += 1;
       } catch (err) {
         console.error("[digest] mail failed", user.user_id, err);
-        await sql.query("update profiles set last_message_email_at = $2 where user_id = $1 and last_message_email_at = $3", [
-          user.user_id,
-          claim.prevSentAt,
-          claim.claimedAt,
-        ]);
+        await sql
+          .query("update profiles set last_message_email_at = $2 where user_id = $1 and last_message_email_at = $3", [
+            user.user_id,
+            claim.prevSentAt,
+            claim.claimedAt,
+          ])
+          .catch(() => undefined);
       }
     }
     return sent;

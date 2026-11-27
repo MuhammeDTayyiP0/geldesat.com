@@ -48,9 +48,8 @@ function pgliteBootstrapPlugin(): Plugin {
 }
 
 /**
- * Dev-only bridge to the production SEO middleware (server/middleware/seo.ts),
- * so sitemaps and robots.txt have a single implementation. Production runs the
- * same file through Nitro.
+ * Dev-only bridge to the production SEO & App-Links middlewares, so sitemaps,
+ * robots.txt and .well-known files have a single implementation.
  */
 function seoDevPlugin(): Plugin {
   const paths = /^\/(?:robots\.txt|sitemap[\w-]*\.xml)$/;
@@ -60,12 +59,14 @@ function seoDevPlugin(): Plugin {
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
         const url = new URL(req.url ?? "/", "http://localhost");
-        if (!paths.test(url.pathname)) return next();
+        const isWellKnown = url.pathname === "/.well-known/assetlinks.json" || url.pathname === "/.well-known/apple-app-site-association";
+        if (!paths.test(url.pathname) && !isWellKnown) return next();
         try {
-          const mod = (await server.ssrLoadModule("/server/middleware/seo.ts")) as {
-            default: (event: { url: URL }, next: () => unknown) => Promise<unknown>;
+          const modPath = isWellKnown ? "/server/middleware/app-links.ts" : "/server/middleware/seo.ts";
+          const mod = (await server.ssrLoadModule(modPath)) as {
+            default: (event: { url: URL; req?: { method?: string } }, next: () => unknown) => Promise<unknown> | unknown;
           };
-          const result = await mod.default({ url }, () => null);
+          const result = await mod.default({ url, req: { method: req.method } }, () => null);
           if (!(result instanceof Response)) return next();
           res.statusCode = result.status;
           result.headers.forEach((value, key) => res.setHeader(key, value));
@@ -101,7 +102,7 @@ export default defineConfig(({ command, isPreview }) => ({
     ...(command === "build" || isPreview
       ? [
           // Self-hosted Node server (Coolify / Docker); server/ holds Nitro middleware.
-          nitro({ preset: "node-server", serverDir: "./server", traceDeps: ["@electric-sql/pglite*"] }),
+          nitro({ preset: "node-server", serverDir: "./server" }),
         ]
       : []),
     viteReact(),

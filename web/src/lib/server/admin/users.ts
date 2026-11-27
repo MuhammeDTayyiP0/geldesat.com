@@ -245,8 +245,8 @@ export const adminUserDetail = createServerFn({ method: "POST" })
 export type AdminUserDetail = Awaited<ReturnType<typeof adminUserDetail>>;
 
 async function targetProfile(sql: Awaited<ReturnType<typeof getSql>>, userId: string) {
-  const rows = await sql.query<{ role: string; display_name: string; banned_at: unknown }>(
-    "select role, display_name, banned_at from profiles where user_id = $1",
+  const rows = await sql.query<{ role: string; display_name: string; banned_at: unknown; deletion_requested_at: unknown }>(
+    "select role, display_name, banned_at, deletion_requested_at from profiles where user_id = $1",
     [userId],
   );
   if (!rows[0]) throw new Error("Kullanıcı bulunamadı.");
@@ -289,7 +289,9 @@ export const adminSetUserRole = createServerFn({ method: "POST" })
     if (data.userId === context.adminId && data.role !== "ADMIN") throw new Error("Kendi yönetici yetkinizi kaldıramazsınız.");
     const sql = await getSql();
     const t = await targetProfile(sql, data.userId);
-    if (t.banned_at && data.role === "ADMIN") throw new Error("Askıdaki bir hesap yönetici yapılamaz.");
+    if ((t.banned_at || t.deletion_requested_at) && data.role === "ADMIN") {
+      throw new Error("Askıda veya silinme sürecindeki bir hesap yönetici yapılamaz.");
+    }
     await assertAdminPassword(sql, context.adminId, data.password);
     if (data.role === "USER" && (await isBootstrapAdmin(sql, data.userId))) {
       throw new Error("Bu hesap ADMIN_EMAILS listesinde olduğu için yetkisi geri gelir. Önce listeden çıkarın.");
@@ -297,13 +299,18 @@ export const adminSetUserRole = createServerFn({ method: "POST" })
     await sql.transaction(async (tx) => {
       // Lock active admin rows in deterministic order to avoid deadlocks when demoting peers.
       const activeAdmins = await tx.query<{ user_id: string }>(
-        "select user_id from profiles where role = 'ADMIN' and banned_at is null order by user_id for update",
+        "select user_id from profiles where role = 'ADMIN' and banned_at is null and deletion_requested_at is null order by user_id for update",
       );
       const lockedTarget = (
-        await tx.query<{ banned_at: unknown }>("select banned_at from profiles where user_id = $1 for update", [data.userId])
+        await tx.query<{ banned_at: unknown; deletion_requested_at: unknown }>(
+          "select banned_at, deletion_requested_at from profiles where user_id = $1 for update",
+          [data.userId],
+        )
       )[0];
       if (!lockedTarget) throw new Error("Kullanıcı bulunamadı.");
-      if (lockedTarget.banned_at && data.role === "ADMIN") throw new Error("Askıdaki bir hesap yönetici yapılamaz.");
+      if ((lockedTarget.banned_at || lockedTarget.deletion_requested_at) && data.role === "ADMIN") {
+        throw new Error("Askıda veya silinme sürecindeki bir hesap yönetici yapılamaz.");
+      }
       const others = activeAdmins.filter((row) => row.user_id !== data.userId);
       if (data.role === "USER" && !others.length) throw new Error("Son yöneticinin yetkisi kaldırılamaz.");
       await tx.query("update profiles set role = $2 where user_id = $1", [data.userId, data.role]);
@@ -389,7 +396,10 @@ export const adminRevokeSessions = createServerFn({ method: "POST" })
     const rows = data.sessionId
       ? await sql.query<{ id: string }>('delete from "session" where "userId" = $1 and id = $2 returning id', [data.userId, data.sessionId])
       : await sql.query<{ id: string }>('delete from "session" where "userId" = $1 returning id', [data.userId]);
-    if (!data.sessionId) disconnectUserStreams(data.userId);
+    if (!data.sessionId) {
+      await sql.query("delete from mobile_push_tokens where user_id = $1 and session_id is null", [data.userId]);
+      disconnectUserStreams(data.userId);
+    }
     await audit(sql, context.adminId, "user.sessions", "user", data.userId, `${t.display_name}: ${rows.length} oturum kapatıldı`);
     return { ok: true as const, count: rows.length };
   });
@@ -413,6 +423,7 @@ export const adminCancelUserDeletion = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     const t = await targetProfile(sql, data.userId);
+    if (!t.deletion_requested_at) return { ok: true as const };
     const { restoreAccount } = await import("../retention");
     await restoreAccount(data.userId);
     await audit(sql, context.adminId, "user.restore", "user", data.userId, `${t.display_name}: silinme talebi iptal edildi`);
@@ -438,15 +449,25 @@ export const adminUpdateUser = createServerFn({ method: "POST" })
       throw new Error("Başka bir yönetici hesabı üzerinde bu işlem yapılamaz.");
     }
     const phone = data.phone ? normalizeTrPhone(data.phone) : null;
-    const before = (await sql.query<Record<string, string | null>>("select display_name, phone, city, district, bio from profiles where user_id = $1", [data.userId]))[0];
-    if (phone) {
-      const taken = await sql.query<{ user_id: string }>("select user_id from profiles where phone = $1 and user_id <> $2", [phone, data.userId]);
-      if (taken[0]) throw new Error("Bu telefon başka bir hesapta kayıtlı.");
-    }
-    await sql.query(
-      `update profiles set display_name=$2, phone=$3, city=$4, district=$5, bio=$6 where user_id=$1`,
-      [data.userId, data.display_name, phone, data.city || null, data.district || null, data.bio || null],
-    );
+    const before = await sql.transaction(async (tx) => {
+      const prev = (await tx.query<Record<string, string | null>>("select display_name, phone, city, district, bio from profiles where user_id = $1 for update", [data.userId]))[0];
+      if (phone) {
+        const taken = await tx.query<{ user_id: string }>("select user_id from profiles where phone = $1 and user_id <> $2", [phone, data.userId]);
+        if (taken[0]) throw new Error("Bu telefon başka bir hesapta kayıtlı.");
+      }
+      try {
+        await tx.query(
+          `update profiles set display_name=$2, phone=$3, city=$4, district=$5, bio=$6 where user_id=$1`,
+          [data.userId, data.display_name, phone, data.city || null, data.district || null, data.bio || null],
+        );
+      } catch (err) {
+        if (typeof err === "object" && err !== null && (err as { code?: string }).code === "23505") {
+          throw new Error("Bu telefon başka bir hesapta kayıtlı.");
+        }
+        throw err;
+      }
+      return prev;
+    });
     await audit(sql, context.adminId, "user.edit", "user", data.userId, `${t.display_name}: profil bilgileri düzenlendi`, {
       changed: (["display_name", "phone", "city", "district", "bio"] as const).filter((key) => (before?.[key] ?? null) !== ({ display_name: data.display_name, phone, city: data.city || null, district: data.district || null, bio: data.bio || null })[key]),
     });

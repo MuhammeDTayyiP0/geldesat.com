@@ -104,7 +104,7 @@ export default function CategoriesScreen() {
               </Pressable>
             ) : undefined
           }
-          ItemSeparatorComponent={() => <Divider inset={path.length ? space.lg : 68} />}
+          ItemSeparatorComponent={path.length ? ChildSeparator : RootSeparator}
           renderItem={({ item, index }) => {
             const { icon: Icon, tint } = categoryIcon(item.icon, dark);
             const count = counts[item.id];
@@ -144,6 +144,9 @@ export default function CategoriesScreen() {
     </View>
   );
 }
+
+const RootSeparator = () => <Divider inset={68} />;
+const ChildSeparator = () => <Divider inset={space.lg} />;
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },

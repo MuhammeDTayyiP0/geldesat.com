@@ -1,7 +1,8 @@
 import { getSessionUser } from "@/lib/auth/verify.server";
 import { UPLOAD_HEADER } from "@/lib/listing-photos";
 
-export const json = (body: unknown, status = 200) => Response.json(body, { status });
+export const json = (body: unknown, status = 200) =>
+  Response.json(body, { status, headers: { "Cache-Control": "private, no-store" } });
 
 /** Session user for a same-site upload request (custom header, not cross-site), or an error response. */
 export async function authorizeUpload(request: Request): Promise<{ userId: string } | Response> {

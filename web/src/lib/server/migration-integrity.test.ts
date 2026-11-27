@@ -157,3 +157,34 @@ test("0044 deduplicates open reports and enforces seller_follows and open report
     await db.close();
   }
 });
+
+test("0045 drops redundant indexes, enforces enum checks, and adds chat pin/mute/edit columns", async () => {
+  const db = await schemaBefore("0045");
+  try {
+    const sql0045 = await readFile(join(dir, "0045_cleanup_constraints_and_chat_features.sql"), "utf8");
+    await db.exec(sql0045);
+    await db.exec(sql0045);
+
+    const dropped = await db.query<{ indexname: string }>(
+      `select indexname from pg_indexes
+       where indexname in ('stores_user_id_idx', 'stores_lower_slug_idx', 'listings_category_idx', 'listings_city_idx', 'listings_user_idx')`,
+    );
+    assert.deepEqual(dropped.rows, []);
+
+    await assert.rejects(db.query("insert into profiles (user_id, display_name, role) values ('bad-role', 'X', 'SUPERADMIN')"));
+    await assert.rejects(
+      db.query("insert into store_applications (id, user_id, name, status) values ('sa1', 'buyer', 'Test', 'INVALID')"),
+    );
+    await assert.rejects(
+      db.query("insert into credit_orders (id, user_id, sku, credits, price, status) values ('co1', 'buyer', 's1', 10, 100, 'BOGUS')"),
+    );
+
+    await db.query("insert into conversations (id, listing_id, buyer_id, seller_id, buyer_pinned_at) values ('c-pin', 'l1', 'buyer', 'seller', now())");
+    await db.query("insert into messages (id, conversation_id, sender_id, content, kind, edited_at) values ('m-edit', 'c-pin', 'buyer', 'Merhaba', 'text', now())");
+    await assert.rejects(
+      db.query("insert into messages (id, conversation_id, sender_id, content, kind) values ('m-bad', 'c-pin', 'buyer', 'X', 'voice')"),
+    );
+  } finally {
+    await db.close();
+  }
+});

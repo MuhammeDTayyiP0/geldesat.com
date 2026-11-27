@@ -1,12 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { UnauthorizedError } from "@/lib/auth/verify.server";
 import { errorStatus, publicErrorMessage } from "@/lib/server/errors";
+import { rateLimit, viewerKey } from "@/lib/server/helpers";
 import { assertMobileJsonWrite } from "@/lib/server/mobile-auth";
 import { BodyTooLargeError, readLimited } from "@/lib/server/request-body";
 import {
   archiveConversation,
   deleteConversation,
   deleteMessage,
+  editMessage,
   getChatTemplates,
   getThread,
   listBlockedUsers,
@@ -15,6 +17,8 @@ import {
   loadOlderMessages,
   markConversationUnread,
   markThreadRead,
+  muteConversation,
+  pinConversation,
   pollThread,
   reportConversation,
   respondOffer,
@@ -41,6 +45,7 @@ import {
   getMe,
   myCreditOrders,
   myStoreApplication,
+  quickUpdatePrice,
   submitStoreApplication,
   updateProfile,
   upsertStore,
@@ -51,6 +56,7 @@ import {
   autocompleteSuggestions,
   browseCategories,
   getCategory,
+  getCategoryPriceStats,
   getLegal,
   getListingsByIds,
   getSiteSettings,
@@ -81,6 +87,7 @@ const FUNCTIONS: Record<string, ServerFn> = {
   autocompleteSuggestions,
   browseCategories,
   getCategory,
+  getCategoryPriceStats,
   getLegal,
   getListingsByIds,
   getSiteSettings,
@@ -98,6 +105,7 @@ const FUNCTIONS: Record<string, ServerFn> = {
   getMe,
   myFollowedSellers,
   myStoreApplication,
+  quickUpdatePrice,
   submitStoreApplication,
   unfollowSeller,
   updateProfile,
@@ -137,8 +145,11 @@ const FUNCTIONS: Record<string, ServerFn> = {
   sendOffer,
   respondOffer,
   deleteMessage,
+  editMessage,
   archiveConversation,
   markConversationUnread,
+  muteConversation,
+  pinConversation,
   deleteConversation,
   reportConversation,
   searchMessages,
@@ -157,6 +168,11 @@ export const Route = createFileRoute("/api/mobile/rpc/$fn")({
       POST: async ({ request, params }) => {
         const csrfError = assertMobileJsonWrite(request);
         if (csrfError) return csrfError;
+        try {
+          rateLimit(`mobile-rpc:${viewerKey(request.headers)}`, 180, 60_000);
+        } catch (error) {
+          return Response.json({ success: false, error: publicErrorMessage(error, "Çok fazla istek.") }, { status: errorStatus(error, 429) });
+        }
         const fn = Object.hasOwn(FUNCTIONS, params.fn) ? FUNCTIONS[params.fn] : undefined;
         if (!fn) return Response.json({ success: false, error: "İşlem bulunamadı." }, { status: 404 });
         let body: { data?: unknown } = {};

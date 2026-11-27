@@ -75,9 +75,7 @@ test("multipartResponse signs manifest parts in Expo Updates v1 SFV format", asy
     );
 
     process.env.OTA_CODE_SIGNING_PRIVATE_KEY = "malformed-pem-key";
-    const badRes = multipartResponse([{ name: "manifest", body: { id: "u1" } }], 1, { sign: true });
-    const badText = await badRes.text();
-    assert.equal(badText.includes("expo-signature:"), false);
+    assert.throws(() => multipartResponse([{ name: "manifest", body: { id: "u1" } }], 1, { sign: true }));
   } finally {
     if (prevKey === undefined) delete process.env.OTA_CODE_SIGNING_PRIVATE_KEY;
     else process.env.OTA_CODE_SIGNING_PRIVATE_KEY = prevKey;

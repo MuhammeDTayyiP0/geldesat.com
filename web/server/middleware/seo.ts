@@ -76,7 +76,13 @@ async function cachedXmlResponse(key: string, maxAge: number, build: () => Promi
   if (hit && now - hit.at < SITEMAP_CACHE_TTL_MS) {
     return xmlResponse(hit.body, maxAge, hit.status);
   }
-  const body = await build();
+  let body: string;
+  try {
+    body = await build();
+  } catch (err) {
+    console.error(`[SEO] sitemap ${key} failed:`, err);
+    return new Response("Service Unavailable", { status: 503, headers: { "Cache-Control": "no-store" } });
+  }
   if (sitemapCache.size >= 1100) {
     for (const [k, v] of sitemapCache) {
       if (now - v.at >= SITEMAP_CACHE_TTL_MS) sitemapCache.delete(k);
@@ -191,7 +197,7 @@ async function buildCategoriesSitemap(): Promise<string> {
     );
   } catch (err) {
     console.error("[SEO] buildCategoriesSitemap error:", err);
-    return wrapUrlset([]);
+    throw err;
   }
 }
 
@@ -202,6 +208,13 @@ async function buildListingsSitemap(page: number): Promise<string> {
   try {
     const { getSql } = await import("../../src/lib/db");
     const sql = await getSql();
+    if (page > 1) {
+      const countRes = await sql.query<{ c: string | number }>(
+        "SELECT count(*)::bigint as c FROM listings WHERE status = 'ACTIVE' AND (expires_at IS NULL OR expires_at > now())",
+      );
+      const totalPages = Math.max(1, Math.ceil(Number(countRes[0]?.c ?? 0) / LISTINGS_PER_PAGE));
+      if (page > totalPages) throw new SitemapNotFoundError();
+    }
     const listings = await sql.query<{
       slug: string;
       title: string;
@@ -245,10 +258,13 @@ async function buildListingsSitemap(page: number): Promise<string> {
       }),
     );
   } catch (err) {
+    if (err instanceof SitemapNotFoundError) throw err;
     console.error("[SEO] buildListingsSitemap error:", err);
-    return wrapUrlset([]);
+    throw err;
   }
 }
+
+class SitemapNotFoundError extends Error {}
 
 /**
  * /sitemap-stores.xml — kept for the sitemap index, but empty: a store is shown
@@ -287,7 +303,7 @@ async function buildSellersSitemap(): Promise<string> {
     );
   } catch (err) {
     console.error("[SEO] buildSellersSitemap error:", err);
-    return wrapUrlset([]);
+    throw err;
   }
 }
 
@@ -370,7 +386,14 @@ export default async function seoMiddleware(
     if (!Number.isInteger(pageNum) || pageNum < 1 || pageNum > 1000) {
       return new Response("Not Found", { status: 404, headers: { "Cache-Control": "no-store" } });
     }
-    return cachedXmlResponse(`/sitemap-listings-${pageNum}.xml`, 1800, () => buildListingsSitemap(pageNum));
+    try {
+      return await cachedXmlResponse(`/sitemap-listings-${pageNum}.xml`, 1800, () => buildListingsSitemap(pageNum));
+    } catch (err) {
+      if (err instanceof SitemapNotFoundError) {
+        return new Response("Not Found", { status: 404, headers: { "Cache-Control": "no-store" } });
+      }
+      throw err;
+    }
   }
 
   if (path === "/sitemap-stores.xml") {

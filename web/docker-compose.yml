@@ -13,6 +13,11 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   web:
     build:
@@ -26,9 +31,11 @@ services:
     ports:
       - "${GELDESAT_PORT:-3000}:3000"
     environment:
+      # POSTGRES_PASSWORD URL-reserved karakterler (@ : / # % ?) içermemelidir.
       DATABASE_URL: postgres://geldesat:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD gerekli}@db:5432/geldesat
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://127.0.0.1:3000}
-      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET gerekli}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
+      AUTH_SECRET: ${AUTH_SECRET:-}
       ADMIN_EMAILS: ${ADMIN_EMAILS:-}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
@@ -56,6 +63,11 @@ services:
       timeout: 5s
       start_period: 20s
       retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   geldesat_pg:

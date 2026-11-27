@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { AppState } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { Alert, AppState } from 'react-native';
 import * as Updates from 'expo-updates';
 
 /**
@@ -29,7 +29,9 @@ export function updateMessage(manifest: unknown): string | null {
 }
 
 function isCritical(update: Updates.UseUpdatesReturnType['downloadedUpdate']): boolean {
-  if (!update?.manifest) return false;
+  if (!update) return false;
+  if (update.type === 'rollback') return true;
+  if (!update.manifest) return false;
   return geldesatExtra(update.manifest)?.critical === true;
 }
 
@@ -55,6 +57,7 @@ export async function checkNow(): Promise<boolean> {
 /** Mounted once, in the root layout. Does nothing in development builds. */
 export function useOtaUpdates() {
   const { isUpdatePending, downloadedUpdate } = Updates.useUpdates();
+  const promptedRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!Updates.isEnabled || __DEV__) return;
@@ -69,7 +72,19 @@ export function useOtaUpdates() {
 
   useEffect(() => {
     if (!Updates.isEnabled || __DEV__) return;
-    if (isUpdatePending && isCritical(downloadedUpdate)) void Updates.reloadAsync().catch(() => undefined);
+    if (!isUpdatePending || !isCritical(downloadedUpdate)) return;
+    const key = downloadedUpdate?.type === 'rollback' ? 'rollback' : (downloadedUpdate?.updateId ?? 'critical');
+    if (promptedRef.current === key) return;
+    promptedRef.current = key;
+    const note = downloadedUpdate?.manifest ? updateMessage(downloadedUpdate.manifest) : null;
+    Alert.alert(
+      'Önemli güncelleme hazır',
+      note ?? 'Uygulamanın sorunsuz çalışması için yeni güncelleme indirildi. Şimdi yeniden başlatmak ister misiniz?',
+      [
+        { text: 'Sonra', style: 'cancel' },
+        { text: 'Şimdi yeniden başlat', onPress: () => void Updates.reloadAsync().catch(() => undefined) },
+      ],
+    );
   }, [isUpdatePending, downloadedUpdate]);
 }
 

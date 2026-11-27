@@ -8,6 +8,7 @@ import { favoriteIds } from "@/lib/server/social";
 const EMPTY: ReadonlySet<string> = new Set();
 let ids: ReadonlySet<string> = EMPTY;
 let loadedFor: string | null = null;
+let hydratedFor: string | null = null;
 const listeners = new Set<() => void>();
 
 function emit() {
@@ -32,8 +33,9 @@ export function setFavorite(listingId: string, favorite: boolean): void {
 export function useFavoriteIds(userId: string | null | undefined): ReadonlySet<string> {
   useEffect(() => {
     if (!userId) {
-      if (loadedFor) {
+      if (loadedFor || hydratedFor) {
         loadedFor = null;
+        hydratedFor = null;
         ids = EMPTY;
         emit();
       }
@@ -45,6 +47,7 @@ export function useFavoriteIds(userId: string | null | undefined): ReadonlySet<s
       .then((rows) => {
         if (loadedFor !== userId) return;
         ids = new Set(rows);
+        hydratedFor = userId;
         emit();
       })
       .catch(() => {
@@ -52,4 +55,8 @@ export function useFavoriteIds(userId: string | null | undefined): ReadonlySet<s
       });
   }, [userId]);
   return useSyncExternalStore(subscribe, () => ids, () => EMPTY);
+}
+
+export function useFavoritesHydrated(userId: string | null | undefined): boolean {
+  return useSyncExternalStore(subscribe, () => Boolean(userId && hydratedFor === userId), () => false);
 }

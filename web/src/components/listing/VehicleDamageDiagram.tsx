@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { CheckCircle2, Paintbrush, RotateCcw, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
@@ -252,6 +252,9 @@ export function VehicleDamageDiagram({
     onChange(createEmptyDamageData());
   }
 
+  const svgUid = useId().replace(/:/g, "");
+  const shadowGradId = `carShadow-${svgUid}`;
+  const glassGradId = `glassGrad-${svgUid}`;
   const changedParts = DAMAGE_PARTS.filter((p) => value.parts[p.id] !== "orijinal");
   const isCleanCar = changedParts.length === 0;
   const activeBrushSpec = activeBrush ? STATE_BY_KEY.get(activeBrush) : undefined;
@@ -374,16 +377,16 @@ export function VehicleDamageDiagram({
           <svg
             viewBox="0 0 300 440"
             className="h-auto w-full max-w-[244px] select-none"
-            role="img"
+            role={readOnly ? "img" : "group"}
             aria-label="Araç boya ve değişen şeması"
           >
             <defs>
-              <radialGradient id="webCarShadow" cx="50%" cy="50%" r="50%">
+              <radialGradient id={shadowGradId} cx="50%" cy="50%" r="50%">
                 <stop offset="0%" stopColor="#0f172a" stopOpacity="0.22" />
                 <stop offset="70%" stopColor="#0f172a" stopOpacity="0.08" />
                 <stop offset="100%" stopColor="#0f172a" stopOpacity="0" />
               </radialGradient>
-              <linearGradient id="webGlassGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+              <linearGradient id={glassGradId} x1="0%" y1="0%" x2="0%" y2="100%">
                 <stop offset="0%" stopColor="#334155" stopOpacity="0.48" />
                 <stop offset="50%" stopColor="#1e293b" stopOpacity="0.62" />
                 <stop offset="100%" stopColor="#475569" stopOpacity="0.42" />
@@ -391,7 +394,7 @@ export function VehicleDamageDiagram({
             </defs>
 
             {/* Soft ground drop shadow */}
-            <ellipse cx="150" cy="226" rx="126" ry="204" fill="url(#webCarShadow)" />
+            <ellipse cx="150" cy="226" rx="126" ry="204" fill={`url(#${shadowGradId})`} />
 
             {/* Wheels / tires */}
             <g>
@@ -489,11 +492,11 @@ export function VehicleDamageDiagram({
               <path d="M192 72 L186 128" className="stroke-border/45" strokeWidth="1" strokeLinecap="round" />
               <rect x="108" y="186" width="84" height="86" rx="14" className="fill-none stroke-border/45" strokeWidth="1" strokeDasharray="3 3" />
               {/* Windshield & rear glass */}
-              <path d="M94 140 Q150 132 206 140 L199 169 Q150 163 101 169 Z" fill="url(#webGlassGrad)" className="stroke-border" strokeWidth="1.2" />
-              <path d="M101 294 Q150 299 199 294 L206 318 Q150 324 94 318 Z" fill="url(#webGlassGrad)" className="stroke-border" strokeWidth="1.2" />
+              <path d="M94 140 Q150 132 206 140 L199 169 Q150 163 101 169 Z" fill={`url(#${glassGradId})`} className="stroke-border" strokeWidth="1.2" />
+              <path d="M101 294 Q150 299 199 294 L206 318 Q150 324 94 318 Z" fill={`url(#${glassGradId})`} className="stroke-border" strokeWidth="1.2" />
               {/* Side window strips */}
-              <path d="M88 158 L94 176 L94 288 L88 308 Z" fill="url(#webGlassGrad)" opacity="0.6" />
-              <path d="M212 158 L206 176 L206 288 L212 308 Z" fill="url(#webGlassGrad)" opacity="0.6" />
+              <path d="M88 158 L94 176 L94 288 L88 308 Z" fill={`url(#${glassGradId})`} opacity="0.6" />
+              <path d="M212 158 L206 176 L206 288 L212 308 Z" fill={`url(#${glassGradId})`} opacity="0.6" />
               {/* Door handles */}
               <line x1="48" y1="192" x2="48" y2="206" className="stroke-border" strokeWidth="2" strokeLinecap="round" />
               <line x1="48" y1="278" x2="48" y2="292" className="stroke-border" strokeWidth="2" strokeLinecap="round" />

@@ -91,7 +91,7 @@ export default function NotificationsScreen() {
               tintColor={c.primary}
             />
           }
-          ItemSeparatorComponent={() => <Divider inset={72} />}
+          ItemSeparatorComponent={ListSeparator}
           contentContainerStyle={query.data?.notifications.length ? { paddingBottom: insets.bottom + space.xxl } : styles.flexGrow}
           ListEmptyComponent={
             <EmptyState icon={Bell} title="Bildirim yok" message="Mesaj, favori ve ilan durumu bildirimleriniz burada görünür." />
@@ -126,6 +126,8 @@ export default function NotificationsScreen() {
     </View>
   );
 }
+
+const ListSeparator = () => <Divider inset={72} />;
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },

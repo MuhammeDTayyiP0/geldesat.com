@@ -27,6 +27,9 @@ export type CatalogSearch = {
   sellerType?: "owner" | "store";
   /** "1": only listings with a recent price drop. */
   priceDropped?: string;
+  nearLat?: string;
+  nearLng?: string;
+  maxDistanceKm?: string;
 };
 
 type SearchCategoryNode = { id: string; parent_id: string | null };
@@ -99,6 +102,9 @@ export function parseSearch(s: Record<string, unknown>): CatalogSearch {
     withPhotos: s.withPhotos === "1" || s.withPhotos === 1 || s.withPhotos === true ? "1" : undefined,
     sellerType: SELLER_TYPES.find((t) => t === rawSellerType),
     priceDropped: s.priceDropped === "1" || s.priceDropped === 1 || s.priceDropped === true ? "1" : undefined,
+    nearLat: str("nearLat"),
+    nearLng: str("nearLng"),
+    maxDistanceKm: str("maxDistanceKm"),
   };
 }
 
@@ -136,11 +142,19 @@ export function foldTr(text: string): string {
     .replace(/û/g, "u");
 }
 
-const SORTS = ["date_desc", "date_asc", "price_asc", "price_desc", "views_desc"] as const;
+const SORTS = ["date_desc", "date_asc", "price_asc", "price_desc", "views_desc", "distance"] as const;
 
 export function toFilters(s: CatalogSearch) {
   // Links can hold anything: bad values fall back to defaults instead of failing the page.
   const n = (v?: string) => (v && Number.isFinite(Number(v)) && Number(v) >= 0 ? Number(v) : undefined);
+  const coord = (v?: string, min = -180, max = 180) => {
+    if (!v) return undefined;
+    const num = Number(v);
+    return Number.isFinite(num) && num >= min && num <= max ? num : undefined;
+  };
+  const nearLat = coord(s.nearLat, -90, 90);
+  const nearLng = coord(s.nearLng, -180, 180);
+  const maxDistanceKm = n(s.maxDistanceKm);
   const page = Math.trunc(n(s.page) ?? 1);
   const postedWithin = POSTED_WITHIN.find((d) => d === s.postedWithin);
   const sellerType = SELLER_TYPES.find((t) => t === s.sellerType);
@@ -167,6 +181,13 @@ export function toFilters(s: CatalogSearch) {
     withPhotos: s.withPhotos === "1" || undefined,
     sellerType,
     priceDropped: s.priceDropped === "1" || undefined,
+    ...(nearLat != null && nearLng != null
+      ? {
+          nearLat,
+          nearLng,
+          ...(maxDistanceKm && maxDistanceKm >= 1 && maxDistanceKm <= 500 ? { maxDistanceKm } : {}),
+        }
+      : {}),
     limit: 20,
   };
 }

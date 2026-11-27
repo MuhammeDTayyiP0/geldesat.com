@@ -12,8 +12,10 @@ export function formatPrice(value: number | string, currency = "TRY") {
   const n = typeof value === "string" ? Number(value) : value;
   if (!Number.isFinite(n)) return "—";
   if (currency === "TRY") return `${priceFormatter.format(n)} ₺`;
+  const sign = n < 0 ? "-" : "";
+  const absFormatted = priceFormatter.format(Math.abs(n));
   const symbol = currency === "USD" ? "$" : currency === "EUR" ? "€" : `${currency} `;
-  return `${symbol}${priceFormatter.format(n)}`;
+  return `${sign}${symbol}${absFormatted}`;
 }
 
 export function formatNumber(value: number | string) {
@@ -25,7 +27,7 @@ export function formatNumber(value: number | string) {
 export function formatDate(value: string | Date) {
   const d = typeof value === "string" ? new Date(value) : value;
   if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString("tr-TR", { day: "numeric", month: "short", year: "numeric" });
+  return d.toLocaleDateString("tr-TR", { day: "numeric", month: "short", year: "numeric", timeZone: "Europe/Istanbul" });
 }
 
 /** Past its end date: still ACTIVE in the database but no longer shown to anyone. */

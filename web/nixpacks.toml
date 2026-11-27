@@ -12,4 +12,4 @@ cmds = ["npm install -g npm@11 && npm ci"]
 cmds = ["npm run build && npm prune --omit=dev"]
 
 [start]
-cmd = "npm run start:prod"
+cmd = "sh ./docker-entrypoint.sh"

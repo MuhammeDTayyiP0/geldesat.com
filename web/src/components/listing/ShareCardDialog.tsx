@@ -590,7 +590,7 @@ export function ShareCardDialog({
       // Left metadata block
       ctx.fillStyle = "#475569";
       ctx.font = '600 28px "IBM Plex Sans", -apple-system, BlinkMacSystemFont, sans-serif';
-      ctx.fillText(locationText, contentX, footerY + 34);
+      ctx.fillText(locationText, contentX, footerY + 34, Math.max(220, cardW - 320));
 
       ctx.fillStyle = "#64748b";
       ctx.font = '500 24px "IBM Plex Sans", -apple-system, BlinkMacSystemFont, sans-serif';

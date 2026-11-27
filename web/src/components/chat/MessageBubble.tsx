@@ -1,5 +1,6 @@
 import { useRef, useState, type TouchEvent } from "react";
-import { AlertTriangle, Check, CheckCheck, Clock3, Copy, Flag, HandCoins, MapPin, MoreHorizontal, Reply, Trash2 } from "lucide-react";
+import { AlertTriangle, Check, CheckCheck, Clock3, Copy, Flag, HandCoins, MapPin, MoreHorizontal, Pencil, Reply, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { DropdownMenu, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { MenuContent, MenuItem } from "@/components/chat/ChatUi";
 import { chatImageUrl, DELETE_WINDOW_MS, linkify, mapsUrl, messageRisk, previewText, type ChatMessage } from "@/lib/chat-shared";
@@ -90,6 +91,7 @@ export function MessageBubble({
   onReply,
   onInfo,
   onJumpTo,
+  onEdit,
   onDelete,
   onReport,
   onRespondOffer,
@@ -109,6 +111,7 @@ export function MessageBubble({
   onReply: () => void;
   onInfo?: () => void;
   onJumpTo: (messageId: string) => void;
+  onEdit?: () => void;
   onDelete: () => void;
   onReport: () => void;
   onRespondOffer: (accept: boolean) => Promise<void>;
@@ -265,6 +268,7 @@ export function MessageBubble({
           ) : null}
           {body}
           <div className={cn("mt-0.5 flex select-none items-center justify-end gap-1 text-[11px]", mine ? "text-primary-fg/75" : "text-subtle")}>
+            {m.edited_at && !m.deleted ? <span className="italic opacity-80">(düzenlendi)</span> : null}
             <span>{clock(m.created_at)}</span>
             {mine && !m.deleted ? (
               failed ? (
@@ -308,8 +312,20 @@ export function MessageBubble({
               </MenuItem>
             ) : null}
             {m.kind === "text" && m.content !== LISTING_PHOTO_MSG ? (
-              <MenuItem onSelect={() => void navigator.clipboard?.writeText(m.content).catch(() => undefined)}>
+              <MenuItem
+                onSelect={() => {
+                  void navigator.clipboard
+                    ?.writeText(m.content)
+                    .then(() => toast.success("Kopyalandı"))
+                    .catch(() => undefined);
+                }}
+              >
                 <Copy /> Kopyala
+              </MenuItem>
+            ) : null}
+            {onEdit ? (
+              <MenuItem onSelect={onEdit}>
+                <Pencil /> Düzenle
               </MenuItem>
             ) : null}
             {canDelete ? (

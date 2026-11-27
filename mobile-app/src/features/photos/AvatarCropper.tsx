@@ -4,7 +4,7 @@ import { Image } from 'expo-image';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GestureDetector, GestureHandlerRootView, usePanGesture, usePinchGesture, useSimultaneousGestures, useTapGesture } from 'react-native-gesture-handler';
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 import Svg, { Circle, Defs, Mask, Rect } from 'react-native-svg';
 import { FlipHorizontal2, RotateCcw, RotateCw, X, ZoomIn, ZoomOut } from 'lucide-react-native';
@@ -85,6 +85,7 @@ function CropperBody({
   const savedTx = useSharedValue(0);
   const savedTy = useSharedValue(0);
   const gridOpacity = useSharedValue(0);
+  const isPinching = useSharedValue(false);
 
   const clampOffset = (nx: number, ny: number, s: number) => {
     'worklet';
@@ -99,16 +100,19 @@ function CropperBody({
   const pan = usePanGesture({
     onActivate: () => {
       'worklet';
+      if (isPinching.value) return;
       gridOpacity.value = withTiming(1, { duration: 120 });
     },
     onUpdate: (e) => {
       'worklet';
+      if (isPinching.value) return;
       const c = clampOffset(savedTx.value + e.translationX, savedTy.value + e.translationY, scale.value);
       tx.value = c.x;
       ty.value = c.y;
     },
     onDeactivate: () => {
       'worklet';
+      if (isPinching.value) return;
       const c = clampOffset(tx.value, ty.value, scale.value);
       tx.value = c.x;
       ty.value = c.y;
@@ -121,6 +125,9 @@ function CropperBody({
   const pinch = usePinchGesture({
     onActivate: () => {
       'worklet';
+      isPinching.value = true;
+      savedTx.value = tx.value;
+      savedTy.value = ty.value;
       gridOpacity.value = withTiming(1, { duration: 120 });
     },
     onUpdate: (e) => {
@@ -133,6 +140,7 @@ function CropperBody({
     },
     onDeactivate: () => {
       'worklet';
+      isPinching.value = false;
       const nextScale = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, scale.value));
       scale.value = nextScale;
       savedScale.value = nextScale;
@@ -240,11 +248,18 @@ function CropperBody({
 
   const handleConfirm = async () => {
     if (transforming || cropping || busy) return;
+    if (!workingPhoto.width || !workingPhoto.height) {
+      toast.error('Fotoğraf boyutları okunamadı');
+      return;
+    }
     setCropping(true);
     try {
-      const s = scale.get();
-      const curTx = tx.get();
-      const curTy = ty.get();
+      cancelAnimation(scale);
+      cancelAnimation(tx);
+      cancelAnimation(ty);
+      const s = savedScale.get();
+      const curTx = savedTx.get();
+      const curTy = savedTy.get();
       const dispW = baseW * s;
       const dispH = baseH * s;
       const imgLeft = (stageSize - dispW) / 2 + curTx;

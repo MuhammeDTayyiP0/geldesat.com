@@ -54,6 +54,25 @@ export function cleanAttrs(raw: AttrValues, rules: AttrRule[], existing: AttrVal
       if (rule.type === "SELECT" && rule.options?.length && !rule.options.includes(text)) {
         throw new Error(`"${name}" için listeden bir seçenek seçin.`);
       }
+      if (rule.type === "MULTI" && rule.options?.length) {
+        const prevItems = new Set(
+          String(existing[name] ?? "")
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean),
+        );
+        const items = text
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+        for (const item of items) {
+          if (!rule.options.includes(item) && !prevItems.has(item)) {
+            throw new Error(`"${name}" için listeden geçerli seçenekler seçin.`);
+          }
+        }
+        clean[name] = items.join(", ");
+        continue;
+      }
     }
     clean[name] = typeof value === "string" ? text : value;
   }

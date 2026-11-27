@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
+import { geo } from '@/api/endpoints';
 import { TURKEY_CITIES } from '@/data/locations';
 
 const KEY = 'geldesat.nearbyCity.v1';
@@ -63,17 +64,20 @@ export function useNearbyCity() {
     try {
       const perm = await Location.requestForegroundPermissionsAsync();
       if (!perm.granted) return { error: 'Konum izni verilmedi. Şehrinizi listeden seçebilirsiniz.' };
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const pos = await Promise.race([
-        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low }),
-        new Promise<never>((_, reject) => {
-          timer = setTimeout(() => reject(new Error('timeout')), 10_000);
-        }),
-      ]).finally(() => {
-        if (timer !== undefined) clearTimeout(timer);
-      });
-      const places = await Location.reverseGeocodeAsync({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
-      const found = places.map((p) => matchCity(p.region) ?? matchCity(p.city) ?? matchCity(p.subregion)).find(Boolean) ?? null;
+      let pos = await Location.getLastKnownPositionAsync({ maxAge: 60_000 }).catch(() => null);
+      if (!pos) {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        pos = await Promise.race([
+          Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(() => reject(new Error('timeout')), 10_000);
+          }),
+        ]).finally(() => {
+          if (timer !== undefined) clearTimeout(timer);
+        });
+      }
+      const rev = await geo.reverseFull(pos.coords.latitude, pos.coords.longitude);
+      const found = matchCity(rev.city) ?? null;
       if (!found) return { error: 'Konumunuz bir ile eşleştirilemedi. Şehrinizi listeden seçin.' };
       await setCity(found);
       return { city: found };

@@ -46,8 +46,11 @@ function NavRow({ item, active, count }: { item: AccountNavItem; active: boolean
 /** "Ayarlar" opens the settings page; while one of its pages is shown, its sub-pages are listed below. */
 function SettingsGroup({ pathname }: { pathname: string }) {
   const savedSearchesOn = useFlag("kayitli_aramalar");
+  const followOn = useFlag("satici_takip");
   const inside = pathname === "/ayarlar" || pathname.startsWith("/ayarlar/");
-  const items = SETTINGS_ITEMS.filter((item) => item.to !== "/ayarlar/kayitli-aramalar" || savedSearchesOn);
+  const items = SETTINGS_ITEMS.filter(
+    (item) => (item.to !== "/ayarlar/kayitli-aramalar" || savedSearchesOn) && (item.to !== "/ayarlar/takip-ettiklerim" || followOn),
+  );
   return (
     <div>
       <Link
@@ -191,7 +194,10 @@ export function AccountShell({
 /** Rows of one menu section, as a rounded list. */
 export function MenuRows({ items, counts }: { items: AccountNavItem[]; counts?: Record<"messages" | "notifications", number> }) {
   const savedSearchesOn = useFlag("kayitli_aramalar");
-  const visible = items.filter((item) => item.to !== "/ayarlar/kayitli-aramalar" || savedSearchesOn);
+  const followOn = useFlag("satici_takip");
+  const visible = items.filter(
+    (item) => (item.to !== "/ayarlar/kayitli-aramalar" || savedSearchesOn) && (item.to !== "/ayarlar/takip-ettiklerim" || followOn),
+  );
   return (
     <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface">
       {visible.map((item) => {

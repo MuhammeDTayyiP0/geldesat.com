@@ -12,7 +12,7 @@ import {
   Search,
   User,
 } from "lucide-react";
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { SignedIn, SignedOut } from "@/lib/auth/gates";
 import { subscribeChatStream } from "@/lib/chat-stream";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
@@ -56,6 +56,18 @@ export function Navbar({ className }: NavbarProps) {
   });
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const allCategoriesOpenedAtRef = useRef(0);
+
+  useEffect(() => {
+    return () => {
+      if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    };
+  }, []);
+
+  const closeMenusImmediate = useCallback(() => {
+    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    setHoveredCategory(null);
+    setAllCategoriesHovered(false);
+  }, []);
 
   // Kategori şeridi taşıyorsa sağ kenarda solma efekti göster
   const stripRef = useRef<HTMLDivElement>(null);
@@ -163,13 +175,6 @@ export function Navbar({ className }: NavbarProps) {
     }, 150);
   }
 
-  function handleAllCategoriesMouseLeave() {
-    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
-    hoverTimeoutRef.current = setTimeout(() => {
-      setAllCategoriesHovered(false);
-    }, 150);
-  }
-
   return (
     <header className={cn("site-header sticky top-0 z-40 w-full bg-surface shadow-xs", className)}>
       {/* =========================================================================
@@ -187,6 +192,7 @@ export function Navbar({ className }: NavbarProps) {
               }}
               className="grid size-10 place-items-center rounded-lg text-muted hover:bg-elevated hover:text-fg md:hidden"
               aria-label="Menüyü Aç"
+              aria-expanded={mobileDrawerOpen}
             >
               <Menu className="size-6" />
             </button>
@@ -213,6 +219,7 @@ export function Navbar({ className }: NavbarProps) {
                 mobileSearchOpen && "bg-elevated text-primary",
               )}
               aria-label="Arama Yap"
+              aria-expanded={mobileSearchOpen}
             >
               <Search className="size-5" />
             </button>
@@ -428,8 +435,8 @@ export function Navbar({ className }: NavbarProps) {
 
         {/* Hover Mega Menü Açılır Panelleri */}
         <Suspense fallback={null}>
-          {allCategoriesHovered && <AllCategoriesMegaMenu onClose={handleAllCategoriesMouseLeave} />}
-          {hoveredCategory && <MegaMenuOverlay activeCategory={hoveredCategory} onClose={handleCategoryMouseLeave} />}
+          {allCategoriesHovered && <AllCategoriesMegaMenu onClose={closeMenusImmediate} />}
+          {hoveredCategory && <MegaMenuOverlay activeCategory={hoveredCategory} onClose={closeMenusImmediate} />}
         </Suspense>
       </nav>
 

@@ -13,6 +13,7 @@ export function UserAccountDropdown({ admin }: { admin: boolean }) {
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (!open) return;
     function handleClickOutside(e: MouseEvent) {
       if (!menuRef.current?.contains(e.target as Node)) {
         setOpen(false);
@@ -27,7 +28,7 @@ export function UserAccountDropdown({ admin }: { admin: boolean }) {
       document.removeEventListener("mousedown", handleClickOutside);
       document.removeEventListener("keydown", handleEscape);
     };
-  }, []);
+  }, [open]);
 
   const displayName = user?.displayName || user?.primaryEmail?.split("@")[0] || "Kullanıcı";
   const userInitial = displayName.charAt(0).toLocaleUpperCase("tr");

@@ -4,7 +4,10 @@ import { getSql } from "@/lib/db";
 import { liveSql } from "@/lib/listing-status";
 import { cleanAttrs, type AttrValues } from "@/lib/listing-attrs";
 import { asJson, listingSlug, num } from "@/lib/utils";
+import { getCategoryTree } from "../category-cache";
+import { notifySellerFollowers } from "../follows";
 import { inheritedAttributes, notify } from "../helpers";
+import { notifyMatchingSavedSearches } from "../saved-searches";
 import { deleteUnusedListingImages } from "../upload.server";
 import { adminMiddleware, audit, auditMany, likeTerm, paged, paging, PageInput, strOrNull, ts, tsOrNull, Where } from "./common";
 import { mapAudit } from "./dashboard";
@@ -92,11 +95,11 @@ export const adminListListings = createServerFn({ method: "POST" })
     else if (data.status === "EXPIRED") w.add("l.status = 'ACTIVE' and l.expires_at <= now()");
     else if (data.status !== "ALL") w.add(`l.status = ${w.param(data.status)}`);
     if (data.q) {
-      const q = data.q.replace(/^#/, "");
-      if (/^\d{4,15}$/.test(q)) w.add(`(l.listing_no = ${w.param(q)}::bigint or l.title ilike ${w.param(likeTerm(q))})`);
+      const q = data.q.replace(/^#/, "").replace(/\s+/g, "");
+      if (/^\d{4,15}$/.test(q)) w.add(`(l.listing_no = ${w.param(q)}::bigint or l.title ilike ${w.param(likeTerm(data.q))})`);
       else {
-        const like = w.param(likeTerm(q));
-        w.add(`(l.title ilike ${like} or p.display_name ilike ${like} or l.id = ${w.param(q)})`);
+        const like = w.param(likeTerm(data.q));
+        w.add(`(l.title ilike ${like} or p.display_name ilike ${like} or l.id = ${w.param(data.q)})`);
       }
     }
     if (data.categoryId) {
@@ -153,7 +156,7 @@ export const adminListingDetail = createServerFn({ method: "POST" })
     const sql = await getSql();
     const rows = await sql.query<Record<string, unknown>>(
       `select ${ROW_SELECT}, l.description, l.images, l.attrs, l.neighborhood, l.phone_override, l.store_id,
-              (select count(*) from phone_reveals pr where pr.listing_id = l.id) as phone_reveals,
+              (select count(distinct pr.viewer_id) from phone_reveals pr where pr.listing_id = l.id) as phone_reveals,
               (select count(*) from conversations cv where cv.listing_id = l.id) as conversations
        ${ROW_FROM} where l.id = $1`,
       [data.id],
@@ -171,7 +174,7 @@ export const adminListingDetail = createServerFn({ method: "POST" })
       conversations: num(x.conversations),
     };
     const userId = listing.user_id;
-    const [path, seller, reports, history, log, categoryAttributes] = await Promise.all([
+    const [path, seller, reports, history, log, categoryAttributes, activeBoosts] = await Promise.all([
       sql.query<{ id: string; name: string }>(
         `with recursive chain as (
            select id, name, parent_id, 0 as depth from categories where id = $1
@@ -212,12 +215,22 @@ export const adminListingDetail = createServerFn({ method: "POST" })
         [data.id],
       ),
       inheritedAttributes(listing.category_id),
+      sql.query<{ id: string; kind: string; starts_at: unknown; ends_at: unknown }>(
+        "select id, kind, starts_at, ends_at from boosts where listing_id = $1 and ends_at > now() order by ends_at desc",
+        [data.id],
+      ),
     ]);
     const s = seller[0];
     return {
       listing,
       path,
       categoryAttributes,
+      boosts: activeBoosts.map((b) => ({
+        id: b.id,
+        kind: b.kind,
+        starts_at: ts(b.starts_at),
+        ends_at: ts(b.ends_at),
+      })),
       seller: s
         ? {
             user_id: String(s.user_id),
@@ -303,10 +316,20 @@ export const adminListingsAction = createServerFn({ method: "POST" })
         listing_no: number;
         images: unknown;
         status: string;
+        category_id: string;
+        city: string | null;
+        district: string | null;
+        neighborhood: string | null;
+        price: string | number;
+        attrs: unknown;
+        store_id: string | null;
+        seller_name: string | null;
         owner_banned: boolean;
         owner_closing: boolean;
       }>(
         `select l.id, l.user_id, l.slug, l.title, l.listing_no, l.images, l.status,
+                l.category_id, l.city, l.district, l.neighborhood, l.price, l.attrs, l.store_id,
+                p.display_name as seller_name,
                 (p.banned_at is not null) as owner_banned,
                 (p.deletion_requested_at is not null) as owner_closing
          from listings l left join profiles p on p.user_id = l.user_id
@@ -404,7 +427,7 @@ export const adminListingsAction = createServerFn({ method: "POST" })
           const res = await tx.query<{ id: string }>("update listings set featured_until = null where id = any($1::text[]) returning id", [ids]);
           updatedIds = res.map((r) => r.id);
           if (updatedIds.length) {
-            await tx.query("update boosts set ends_at = now() where listing_id = any($1::text[]) and ends_at > now()", [updatedIds]);
+            await tx.query("update boosts set ends_at = now() where listing_id = any($1::text[]) and kind = 'VITRIN' and ends_at > now()", [updatedIds]);
           }
           break;
         }
@@ -498,6 +521,36 @@ export const adminListingsAction = createServerFn({ method: "POST" })
       );
     }
 
+    if (GOES_LIVE.has(data.action)) {
+      const tree = await getCategoryTree();
+      for (const r of actedRows) {
+        if (r.status === "ACTIVE") continue;
+        const cat = tree.byId.get(r.category_id);
+        void notifyMatchingSavedSearches(sql, {
+          id: r.id,
+          title: r.title,
+          slug: r.slug,
+          categoryId: r.category_id,
+          categorySlug: cat?.slug ?? "",
+          city: r.city ?? "",
+          district: r.district ?? "",
+          neighborhood: r.neighborhood ?? null,
+          price: num(r.price),
+          userId: r.user_id,
+          hasImages: asJson<string[]>(r.images, []).length > 0,
+          isStore: Boolean(r.store_id),
+          attrs: asJson<Record<string, unknown>>(r.attrs, {}),
+        }).catch((err) => console.warn("[saved-searches] admin approve notify failed", err));
+        void notifySellerFollowers(sql, {
+          id: r.id,
+          title: r.title,
+          slug: r.slug,
+          userId: r.user_id,
+          sellerName: r.seller_name || "Satıcı",
+        }).catch((err) => console.warn("[follows] admin approve notify failed", err));
+      }
+    }
+
     return { ok: true as const, count: actedRows.length, summary };
   });
 
@@ -534,6 +587,10 @@ export const adminUpdateListing = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     const sql = await getSql();
+    const preRows = data.attrs !== undefined
+      ? await sql.query<{ category_id: string }>("select category_id from listings where id = $1", [data.id])
+      : [];
+    const attrDefs = data.attrs !== undefined && preRows[0] ? await inheritedAttributes(preRows[0].category_id) : null;
     const { cur, slug, nextCurrency, curImages, nextImages } = await sql.transaction(async (tx) => {
       const rows = await tx.query<{
         user_id: string;
@@ -568,7 +625,7 @@ export const adminUpdateListing = createServerFn({ method: "POST" })
       const existingAttrs = asJson<AttrValues>(cur.attrs, {});
       const nextAttrs =
         data.attrs !== undefined
-          ? cleanAttrs(normalizeAdminAttrs(data.attrs), await inheritedAttributes(cur.category_id), existingAttrs)
+          ? cleanAttrs(normalizeAdminAttrs(data.attrs), attrDefs ?? [], existingAttrs)
           : existingAttrs;
 
       await tx.query(
@@ -615,4 +672,30 @@ export const adminListingCities = createServerFn({ method: "GET" })
       "select city, count(*) as n from listings where city is not null and city <> '' group by city order by city",
     );
     return rows.map((r) => ({ city: r.city, n: num(r.n) }));
+  });
+
+export const adminCancelBoost = createServerFn({ method: "POST" })
+  .middleware([adminMiddleware])
+  .validator(z.object({ boostId: z.string().max(200), listingId: z.string().max(200) }))
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    const cancelled = await sql.transaction(async (tx) => {
+      const rows = await tx.query<{ id: string; kind: string }>(
+        "update boosts set ends_at = now() where id = $1 and listing_id = $2 and ends_at > now() returning id, kind",
+        [data.boostId, data.listingId],
+      );
+      if (!rows[0]) throw new Error("Aktif doping bulunamadı.");
+      if (rows[0].kind === "VITRIN") {
+        const remaining = await tx.query<{ id: string }>(
+          "select id from boosts where listing_id = $1 and kind = 'VITRIN' and ends_at > now() limit 1",
+          [data.listingId],
+        );
+        if (!remaining[0]) {
+          await tx.query("update listings set featured_until = null where id = $1", [data.listingId]);
+        }
+      }
+      return rows[0];
+    });
+    await audit(sql, context.adminId, "listing.unboost", "listing", data.listingId, `Doping (${cancelled.kind}) iptal edildi`);
+    return { ok: true as const };
   });

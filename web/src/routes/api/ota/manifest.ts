@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getSql } from "@/lib/db";
+import { RateLimitError } from "@/lib/server/errors";
+import { rateLimit, viewerKey } from "@/lib/server/helpers";
 import {
   CHANNEL_PATTERN,
   RUNTIME_PATTERN,
@@ -33,6 +35,17 @@ export const Route = createFileRoute("/api/ota/manifest")({
   server: {
     handlers: {
       GET: async ({ request }) => {
+        try {
+          rateLimit(`ota-manifest:${viewerKey(request.headers)}`, 120, 60_000);
+        } catch (err) {
+          if (err instanceof RateLimitError) {
+            return Response.json(
+              { error: err.message },
+              { status: 429, headers: { "Cache-Control": "no-store" } },
+            );
+          }
+          throw err;
+        }
         const url = new URL(request.url);
         const header = (name: string) => request.headers.get(name) ?? url.searchParams.get(name);
         const protocolVersion = Number(header("expo-protocol-version") ?? 0) === 1 ? 1 : 0;
@@ -44,15 +57,15 @@ export const Route = createFileRoute("/api/ota/manifest")({
         const embeddedId = header("expo-embedded-update-id")?.toLowerCase() ?? null;
         const clientId = header("eas-client-id")?.slice(0, 80) || null;
 
-        if (platform !== "ios" && platform !== "android") return Response.json({ error: "expo-platform ios ya da android olmalı" }, { status: 400 });
-        if (!RUNTIME_PATTERN.test(runtimeVersion)) return Response.json({ error: "Geçersiz expo-runtime-version" }, { status: 400 });
-        if (!CHANNEL_PATTERN.test(channel)) return Response.json({ error: "Geçersiz expo-channel-name" }, { status: 400 });
+        if (platform !== "ios" && platform !== "android") return Response.json({ error: "expo-platform ios ya da android olmalı" }, { status: 400, headers: { "Cache-Control": "no-store" } });
+        if (!RUNTIME_PATTERN.test(runtimeVersion)) return Response.json({ error: "Geçersiz expo-runtime-version" }, { status: 400, headers: { "Cache-Control": "no-store" } });
+        if (!CHANNEL_PATTERN.test(channel)) return Response.json({ error: "Geçersiz expo-channel-name" }, { status: 400, headers: { "Cache-Control": "no-store" } });
 
         try {
           const rows = await candidateUpdates(runtimeVersion, platform as OtaPlatform, channel);
           const picked = pickUpdate(rows, clientId);
           // Protocol 0 clients cannot receive directives: "nothing new" is a 404 for them.
-          const nothing = () => (protocolVersion === 1 ? multipartResponse([{ name: "directive", body: { type: "noUpdateAvailable" } }], 1) : new Response(null, { status: 404 }));
+          const nothing = () => (protocolVersion === 1 ? multipartResponse([{ name: "directive", body: { type: "noUpdateAvailable" } }], 1) : new Response(null, { status: 404, headers: { "Cache-Control": "no-store" } }));
 
           if (!picked) return nothing();
 
@@ -62,7 +75,7 @@ export const Route = createFileRoute("/api/ota/manifest")({
           if (running && new Date(running.created_at) > new Date(picked.created_at)) return nothing();
 
           if (picked.kind === "rollback") {
-            if (protocolVersion !== 1) return new Response(null, { status: 404 });
+            if (protocolVersion !== 1) return new Response(null, { status: 404, headers: { "Cache-Control": "no-store" } });
             // Already on the built-in code.
             if (!currentId || (embeddedId && currentId === embeddedId)) return nothing();
             return multipartResponse([{ name: "directive", body: rollbackDirective(picked) }], 1);
@@ -79,7 +92,7 @@ export const Route = createFileRoute("/api/ota/manifest")({
           );
         } catch (err) {
           console.error("[ota] manifest failed:", err);
-          return Response.json({ error: "Güncelleme bilgisi alınamadı" }, { status: 500 });
+          return Response.json({ error: "Güncelleme bilgisi alınamadı" }, { status: 500, headers: { "Cache-Control": "no-store" } });
         }
       },
     },

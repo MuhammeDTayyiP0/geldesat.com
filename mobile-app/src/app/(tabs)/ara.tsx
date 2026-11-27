@@ -50,8 +50,10 @@ export default function SearchTab() {
   useFocusEffect(
     useCallback(() => {
       if (!focus) return;
-      const t = setTimeout(() => inputRef.current?.focus(), 250);
-      router.setParams({ focus: undefined });
+      const t = setTimeout(() => {
+        inputRef.current?.focus();
+        router.setParams({ focus: undefined });
+      }, 150);
       return () => clearTimeout(t);
     }, [focus, router]),
   );

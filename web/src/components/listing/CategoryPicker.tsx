@@ -118,12 +118,12 @@ function CategoryDirectory({ items, counts, onPick, placeholder, showIcons }: Di
 
   function rowLabel(c: CategoryRow) {
     if (!showIcons) return <span className="truncate font-medium">{c.name}</span>;
-    const { icon: Icon, tint } = categoryVisual(c.icon);
+    const { icon: Icon, tint, darkTint } = categoryVisual(c.icon);
     return (
       <span className="flex min-w-0 items-center gap-3">
         <span
-          className="grid size-9 shrink-0 place-items-center rounded-xl"
-          style={{ backgroundColor: `${tint}1a`, color: tint }}
+          className="category-chip-icon grid size-9 shrink-0 place-items-center rounded-xl"
+          style={{ ["--cat-tint" as string]: tint, ["--cat-tint-dark" as string]: darkTint }}
           aria-hidden="true"
         >
           <Icon className="size-5" />

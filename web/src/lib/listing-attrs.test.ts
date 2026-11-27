@@ -6,6 +6,7 @@ const rules = [
   { name: "Kilometre", type: "NUMBER" },
   { name: "Yıl", type: "NUMBER" },
   { name: "Renk", type: "SELECT", options: ["Beyaz", "Siyah"] },
+  { name: "Özellikler", type: "MULTI", options: ["ABS", "Klima", "Sunroof"] },
   { name: "Not", type: "TEXT" },
 ];
 const now = new Date("2026-11-07");
@@ -43,4 +44,13 @@ test("vehicle damage payload (_damage) is preserved when valid JSON and dropped 
   const valid = JSON.stringify({ p: "0123000000000", t: 15000 });
   assert.deepEqual(cleanAttrs({ _damage: valid }, rules, {}, now), { _damage: valid });
   assert.deepEqual(cleanAttrs({ _damage: "not-json" }, rules, {}, now), {});
+});
+
+test("multi attributes accept valid options, reject unknown ones, and keep legacy options on edit", () => {
+  assert.deepEqual(cleanAttrs({ Özellikler: "ABS, Klima" }, rules, {}, now), { Özellikler: "ABS, Klima" });
+  assert.throws(() => cleanAttrs({ Özellikler: "ABS, UçanHalı" }, rules, {}, now), /listeden geçerli seçenekler/);
+  assert.deepEqual(
+    cleanAttrs({ Özellikler: "ABS, EskiÖzellik" }, rules, { Özellikler: "EskiÖzellik" }, now),
+    { Özellikler: "ABS, EskiÖzellik" },
+  );
 });

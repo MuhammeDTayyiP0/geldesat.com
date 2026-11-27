@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { FlipHorizontal2, Loader2, RotateCcw, RotateCw, ZoomIn, ZoomOut } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { errorText } from "@/lib/error-text";
 
 export type AvatarCropperDialogProps = {
   /** Selected image file to preview and crop; null keeps the dialog closed. */
@@ -112,15 +114,22 @@ export function AvatarCropperDialog({
     [nat.w, nat.h, rotation, stageSize],
   );
 
+  const stateRef = useRef({ zoom, tx, ty });
+  stateRef.current = { zoom, tx, ty };
+  const clampOffsetRef = useRef(clampOffset);
+  clampOffsetRef.current = clampOffset;
+
   const applyZoom = useCallback(
     (nextZoom: number) => {
       const z = clamp(Number(nextZoom.toFixed(2)), MIN_ZOOM, MAX_ZOOM);
+      const { tx: cx, ty: cy } = stateRef.current;
+      const c = clampOffset(cx, cy, z);
+      stateRef.current = { zoom: z, tx: c.x, ty: c.y };
       setZoom(z);
-      const c = clampOffset(tx, ty, z);
       setTx(c.x);
       setTy(c.y);
     },
-    [clampOffset, tx, ty],
+    [clampOffset],
   );
 
   useEffect(() => {
@@ -129,16 +138,17 @@ export function AvatarCropperDialog({
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       const delta = -e.deltaY * 0.0025;
-      setZoom((prev) => {
-        const next = clamp(Number((prev + delta).toFixed(2)), MIN_ZOOM, MAX_ZOOM);
-        setTx((cx) => clampOffset(cx, ty, next).x);
-        setTy((cy) => clampOffset(tx, cy, next).y);
-        return next;
-      });
+      const cur = stateRef.current;
+      const next = clamp(Number((cur.zoom + delta).toFixed(2)), MIN_ZOOM, MAX_ZOOM);
+      const c = clampOffsetRef.current(cur.tx, cur.ty, next);
+      stateRef.current = { zoom: next, tx: c.x, ty: c.y };
+      setZoom(next);
+      setTx(c.x);
+      setTy(c.y);
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
-  }, [objectUrl, decodeError, clampOffset, tx, ty]);
+  }, [objectUrl, decodeError]);
 
   function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
     if (!nat.w || busy || exporting) return;
@@ -150,7 +160,7 @@ export function AvatarCropperDialog({
       pinchStartRef.current = null;
     } else if (pointersRef.current.size === 2) {
       const [a, b] = Array.from(pointersRef.current.values());
-      pinchStartRef.current = { dist: Math.max(1, pointerDistance(a, b)), zoom };
+      pinchStartRef.current = { dist: Math.max(1, pointerDistance(a, b)), zoom: stateRef.current.zoom };
       lastDragRef.current = null;
     }
   }
@@ -159,22 +169,43 @@ export function AvatarCropperDialog({
     if (!pointersRef.current.has(e.pointerId)) return;
     pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
+    const cur = stateRef.current;
     if (pointersRef.current.size === 1 && lastDragRef.current) {
       const dx = e.clientX - lastDragRef.current.x;
       const dy = e.clientY - lastDragRef.current.y;
       lastDragRef.current = { x: e.clientX, y: e.clientY };
-      const c = clampOffset(tx + dx, ty + dy, zoom);
+      const c = clampOffset(cur.tx + dx, cur.ty + dy, cur.zoom);
+      stateRef.current = { zoom: cur.zoom, tx: c.x, ty: c.y };
       setTx(c.x);
       setTy(c.y);
     } else if (pointersRef.current.size === 2 && pinchStartRef.current) {
       const [a, b] = Array.from(pointersRef.current.values());
       const dist = pointerDistance(a, b);
       const next = clamp(Number(((dist / pinchStartRef.current.dist) * pinchStartRef.current.zoom).toFixed(2)), MIN_ZOOM, MAX_ZOOM);
+      const c = clampOffset(cur.tx, cur.ty, next);
+      stateRef.current = { zoom: next, tx: c.x, ty: c.y };
       setZoom(next);
-      const c = clampOffset(tx, ty, next);
       setTx(c.x);
       setTy(c.y);
     }
+  }
+
+  function onStageKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (!nat.w || busy || exporting) return;
+    const step = e.shiftKey ? 24 : 8;
+    const cur = stateRef.current;
+    let dx = 0;
+    let dy = 0;
+    if (e.key === "ArrowLeft") dx = -step;
+    else if (e.key === "ArrowRight") dx = step;
+    else if (e.key === "ArrowUp") dy = -step;
+    else if (e.key === "ArrowDown") dy = step;
+    else return;
+    e.preventDefault();
+    const c = clampOffset(cur.tx + dx, cur.ty + dy, cur.zoom);
+    stateRef.current = { zoom: cur.zoom, tx: c.x, ty: c.y };
+    setTx(c.x);
+    setTy(c.y);
   }
 
   function onPointerUp(e: React.PointerEvent<HTMLDivElement>) {
@@ -235,10 +266,13 @@ export function AvatarCropperDialog({
       const ctx = canvas.getContext("2d");
       if (!ctx) throw new Error("Görsel işlenemedi.");
 
+      const keepAlpha = shape === "rounded" || file.type === "image/png" || file.type === "image/webp";
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "high";
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, OUT_SIZE, OUT_SIZE);
+      if (!keepAlpha) {
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, OUT_SIZE, OUT_SIZE);
+      }
 
       ctx.translate(OUT_SIZE / 2 + tx * k, OUT_SIZE / 2 + ty * k);
       ctx.scale(zoom * (flipX ? -1 : 1), zoom);
@@ -247,12 +281,16 @@ export function AvatarCropperDialog({
       const drawH = nat.h * baseScale * k;
       ctx.drawImage(imgEl, -drawW / 2, -drawH / 2, drawW, drawH);
 
-      const blob = await new Promise<Blob>((resolve, reject) =>
-        canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("Görsel kaydedilemedi."))), "image/jpeg", 0.92),
-      );
+      const encode = (mime: string) =>
+        new Promise<Blob | null>((resolve) => canvas.toBlob((b) => resolve(b), mime, 0.92));
+      let blob = keepAlpha ? await encode("image/webp") : await encode("image/jpeg");
+      if (!blob && keepAlpha) blob = await encode("image/png");
+      if (!blob) throw new Error("Görsel kaydedilemedi.");
       canvas.width = 0;
       canvas.height = 0;
       await onConfirm(blob);
+    } catch (err) {
+      toast.error(errorText(err, "Görsel işlenemedi"));
     } finally {
       setExporting(false);
     }
@@ -286,12 +324,18 @@ export function AvatarCropperDialog({
           <div className="space-y-4">
             <div
               ref={stageRef}
+              tabIndex={0}
+              role="application"
+              aria-label="Fotoğraf konumlandırma alanı (ok tuşlarıyla kaydırabilirsiniz)"
+              onKeyDown={onStageKeyDown}
               onPointerDown={onPointerDown}
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
               onPointerCancel={onPointerUp}
               onDoubleClick={handleDoubleClick}
-              className="relative mx-auto aspect-square w-full max-w-[300px] touch-none select-none overflow-hidden rounded-2xl bg-black/90 cursor-grab active:cursor-grabbing"
+              className={`relative mx-auto aspect-square w-full max-w-[300px] touch-none select-none overflow-hidden rounded-2xl cursor-grab active:cursor-grabbing focus:outline-none focus:ring-2 focus:ring-primary/50 ${
+                shape === "rounded" ? "bg-elevated" : "bg-black/90"
+              }`}
             >
               {objectUrl ? (
                 <div className="grid size-full place-items-center">

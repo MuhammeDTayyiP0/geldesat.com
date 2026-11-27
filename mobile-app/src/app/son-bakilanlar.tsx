@@ -66,7 +66,7 @@ export default function RecentScreen() {
           data={rows}
           keyExtractor={(l) => l.id}
           refreshControl={<RefreshControl refreshing={query.isRefetching} onRefresh={() => void query.refetch()} tintColor={c.primary} />}
-          ItemSeparatorComponent={() => <Divider inset={space.lg + 84 + space.md} />}
+          ItemSeparatorComponent={ListSeparator}
           contentContainerStyle={rows.length ? [styles.list, { paddingBottom: insets.bottom + space.xxl }] : styles.flexGrow}
           ListHeaderComponent={
             rows.length ? (
@@ -141,6 +141,8 @@ function RecentRow({ item, onOpen, onRemove }: { item: RecentListing; onOpen: ()
     </View>
   );
 }
+
+const ListSeparator = () => <Divider inset={space.lg + 84 + space.md} />;
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },

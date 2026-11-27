@@ -1,6 +1,6 @@
 import { AppState, type AppStateStatus } from 'react-native';
 import { API_BASE_URL } from '@/lib/config';
-import { getToken } from '@/auth/session';
+import { clearSession, getToken } from '@/auth/session';
 
 /**
  * One shared /api/chat/stream connection (server-sent events) for the app,
@@ -76,7 +76,7 @@ function close() {
 
 function dispatch(block: string) {
   const data = block
-    .split('\n')
+    .split(/\r?\n/)
     .filter((line) => line.startsWith('data:'))
     .map((line) => line.slice(5).trimStart())
     .join('\n');
@@ -129,11 +129,11 @@ function sync(force = false, skipNotify = false) {
     const text = request.responseText;
     buffer += text.slice(seen);
     seen = text.length;
-    const blocks = buffer.split('\n\n');
+    const blocks = buffer.split(/\r?\n\r?\n/);
     buffer = blocks.pop() ?? '';
     for (const block of blocks) dispatch(block);
     if (seen >= MAX_BUFFER_BYTES) {
-      sync(true, true);
+      sync(true, false);
     }
   };
   request.onreadystatechange = () => {
@@ -141,7 +141,11 @@ function sync(force = false, skipNotify = false) {
     xhr = null;
     currentUrl = '';
     // 401/403: the session or thread is gone; do not hammer the server.
-    if (request.status === 401 || request.status === 403) return;
+    if (request.status === 401) {
+      if (token && getToken() === token) void clearSession();
+      return;
+    }
+    if (request.status === 403) return;
     scheduleRetry();
   };
   request.onerror = () => {

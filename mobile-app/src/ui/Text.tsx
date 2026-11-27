@@ -1,4 +1,4 @@
-import { Text as RNText, type TextProps as RNTextProps, type TextStyle } from 'react-native';
+import { Text as RNText, StyleSheet, type TextProps as RNTextProps, type TextStyle } from 'react-native';
 import { FONT_FAMILY } from './fonts';
 import { font, useTheme, type Colors } from './theme';
 
@@ -42,12 +42,39 @@ function toneColor(c: Colors, tone: Tone): string {
 
 export type TextProps = RNTextProps & { variant?: Variant; tone?: Tone; center?: boolean };
 
+function fontForWeight(weight: TextStyle['fontWeight']): string | undefined {
+  switch (weight) {
+    case '500':
+      return FONT_FAMILY.medium;
+    case '600':
+      return FONT_FAMILY.semibold;
+    case '700':
+    case '800':
+    case '900':
+    case 'bold':
+      return FONT_FAMILY.bold;
+    case '400':
+    case 'normal':
+      return FONT_FAMILY.regular;
+    default:
+      return undefined;
+  }
+}
+
 export function Text({ variant = 'body', tone = 'default', center, style, ...rest }: TextProps) {
   const { c } = useTheme();
+  const flat = style ? (StyleSheet.flatten(style) as TextStyle | undefined) : undefined;
+  const mappedFamily = flat?.fontWeight ? fontForWeight(flat.fontWeight) : undefined;
   return (
     <RNText
       {...rest}
-      style={[VARIANTS[variant], { color: toneColor(c, tone) }, center && { textAlign: 'center' }, style]}
+      style={[
+        VARIANTS[variant],
+        { color: toneColor(c, tone) },
+        center && { textAlign: 'center' },
+        style,
+        mappedFamily ? { fontFamily: mappedFamily, fontWeight: undefined } : undefined,
+      ]}
     />
   );
 }

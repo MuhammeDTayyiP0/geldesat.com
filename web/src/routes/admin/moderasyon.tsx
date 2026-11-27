@@ -184,54 +184,56 @@ function Reviewer({
   }
 
   // Keyboard shortcuts while no text field has focus.
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      const t = e.target as HTMLElement | null;
-      if (e.key === "Escape") {
-        setRejecting(false);
-        return;
-      }
-      if (e.ctrlKey || e.metaKey || e.altKey || busy || e.repeat || !q.data) return;
-      if (document.querySelector("[role=dialog]")) return;
-      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) {
-        // "R, then 1-7": with the box still empty a digit picks a ready reason.
-        const preset = t === reasonRef.current && !reasonRef.current.value && /^[1-7]$/.test(e.key) ? REJECT_REASONS[Number(e.key) - 1] : undefined;
-        if (preset) {
-          e.preventDefault();
-          void decide("reject", preset);
-        }
-        return;
-      }
-      const key = e.key.toLowerCase();
-      if (key === "a") {
-        if (rejecting || q.data.seller?.banned) return;
-        e.preventDefault();
-        void decide("approve");
-      } else if (key === "r") {
-        e.preventDefault();
-        openReject();
-      } else if (key === "j" || e.key === "ArrowDown") {
-        e.preventDefault();
-        onStep(1);
-      } else if (key === "k" || e.key === "ArrowUp") {
-        e.preventDefault();
-        onStep(-1);
-      } else if (e.key === "ArrowRight") {
-        setPhoto((p) => Math.min(p + 1, Math.max(0, (q.data?.listing.images.length ?? 1) - 1)));
-      } else if (e.key === "ArrowLeft") {
-        setPhoto((p) => Math.max(0, p - 1));
-      } else if (rejecting && /^[1-7]$/.test(e.key)) {
-        const preset = REJECT_REASONS[Number(e.key) - 1];
-        if (preset) void decide("reject", preset);
-      } else if (key === "c") {
-        void act([id], "move");
-      } else if (key === "e") {
-        openListing(id);
-      }
+  const onKeyRef = useRef<(e: KeyboardEvent) => void>(() => {});
+  onKeyRef.current = (e: KeyboardEvent) => {
+    const t = e.target as HTMLElement | null;
+    if (e.key === "Escape") {
+      setRejecting(false);
+      return;
     }
+    if (e.ctrlKey || e.metaKey || e.altKey || busy || e.repeat || !q.data) return;
+    if (document.querySelector("[role=dialog]")) return;
+    if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) {
+      // "R, then 1-7": with the box still empty a digit picks a ready reason.
+      const preset = t === reasonRef.current && !reasonRef.current.value && /^[1-7]$/.test(e.key) ? REJECT_REASONS[Number(e.key) - 1] : undefined;
+      if (preset) {
+        e.preventDefault();
+        void decide("reject", preset);
+      }
+      return;
+    }
+    const key = e.key.toLowerCase();
+    if (key === "a") {
+      if (rejecting || q.data.seller?.banned) return;
+      e.preventDefault();
+      void decide("approve");
+    } else if (key === "r") {
+      e.preventDefault();
+      openReject();
+    } else if (key === "j" || e.key === "ArrowDown") {
+      e.preventDefault();
+      onStep(1);
+    } else if (key === "k" || e.key === "ArrowUp") {
+      e.preventDefault();
+      onStep(-1);
+    } else if (e.key === "ArrowRight") {
+      setPhoto((p) => Math.min(p + 1, Math.max(0, (q.data?.listing.images.length ?? 1) - 1)));
+    } else if (e.key === "ArrowLeft") {
+      setPhoto((p) => Math.max(0, p - 1));
+    } else if (rejecting && /^[1-7]$/.test(e.key)) {
+      const preset = REJECT_REASONS[Number(e.key) - 1];
+      if (preset) void decide("reject", preset);
+    } else if (key === "c") {
+      void act([id], "move");
+    } else if (key === "e") {
+      openListing(id);
+    }
+  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => onKeyRef.current(e);
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  });
+  }, []);
 
   if (q.isLoading) {
     return (
@@ -284,17 +286,17 @@ function Reviewer({
         </div>
 
         <div className="grid gap-0 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
-          <div className="border-b border-border bg-ink/[0.03] p-4 xl:border-b-0 xl:border-r">
+          <div className="border-b border-border bg-elevated/40 p-4 xl:border-b-0 xl:border-r">
             {current ? (
               <>
                 <button
                   type="button"
                   onClick={() => setLightboxOpen(true)}
-                  className="group relative block w-full overflow-hidden rounded-xl border border-border bg-black/5"
+                  className="group relative block w-full overflow-hidden rounded-xl border border-border bg-elevated/40"
                   aria-label="Fotoğrafı büyüt"
                 >
                   <img src={photoSrc(current, 800)} alt="" className="mx-auto aspect-[4/3] w-full object-contain" />
-                  <span className="absolute right-2.5 top-2.5 inline-flex items-center gap-1 rounded-lg bg-ink/70 px-2 py-1 text-[11px] font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
+                  <span className="absolute right-2.5 top-2.5 inline-flex items-center gap-1 rounded-lg bg-black/70 px-2 py-1 text-[11px] font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
                     <ZoomIn className="size-3.5" /> Büyüt
                   </span>
                 </button>

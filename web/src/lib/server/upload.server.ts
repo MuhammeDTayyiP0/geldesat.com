@@ -1,13 +1,17 @@
 import { randomUUID } from "node:crypto";
 import { getSql, type Sql } from "@/lib/db";
 import { rateLimit } from "./helpers";
+import { evictImageVariants } from "./image-serve.server";
 
 /** Photos uploaded but not yet attached to any listing, per user, per day. */
 const PENDING_IMAGE_CAP = 60;
 const ORPHAN_SQL = `not exists (
   select 1 from listings l
   where l.images @> jsonb_build_array('/api/mobile/images/' || i.id)
-     or l.images @> jsonb_build_array('/uploads/' || i.storage_key))`;
+     or l.images @> jsonb_build_array('/uploads/' || i.storage_key)
+) and not exists (
+  select 1 from stores s where s.logo_url = '/uploads/' || i.storage_key
+)`;
 
 let lastOrphanSweep = 0;
 
@@ -15,7 +19,10 @@ let lastOrphanSweep = 0;
 async function sweepOrphanImages(sql: Sql): Promise<void> {
   if (Date.now() - lastOrphanSweep < 60 * 60_000) return;
   lastOrphanSweep = Date.now();
-  await sql.query(`delete from mobile_listing_images i where i.created_at < now() - interval '24 hours' and ${ORPHAN_SQL}`);
+  const removed = await sql.query<{ id: string; storage_key: string }>(
+    `delete from mobile_listing_images i where i.created_at < now() - interval '24 hours' and ${ORPHAN_SQL} returning i.id, i.storage_key`,
+  );
+  if (removed.length) evictImageVariants(removed.flatMap((r) => [r.id, r.storage_key]));
 }
 
 /** Throttle uploads and cap unattached photos so the database cannot be filled with junk. */
@@ -101,7 +108,7 @@ export async function deleteUnusedListingImages(sql: Sql, userId: string, urls: 
     ),
   ];
   if (!keys.length) return;
-  await sql.query(
+  const removed = await sql.query<{ id: string; storage_key: string }>(
     `delete from mobile_listing_images i
      where i.user_id = $1
        and (i.storage_key = any($2::text[]) or i.id = any($2::text[]))
@@ -109,7 +116,12 @@ export async function deleteUnusedListingImages(sql: Sql, userId: string, urls: 
          select 1 from listings l
          where l.images @> jsonb_build_array('/uploads/' || i.storage_key)
             or l.images @> jsonb_build_array('/api/mobile/images/' || i.id)
-       )`,
+       )
+       and not exists (
+         select 1 from stores s where s.logo_url = '/uploads/' || i.storage_key
+       )
+     returning i.id, i.storage_key`,
     [userId, keys],
   );
+  if (removed.length) evictImageVariants(removed.flatMap((r) => [r.id, r.storage_key]));
 }

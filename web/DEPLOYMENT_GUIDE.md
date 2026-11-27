@@ -29,11 +29,18 @@ En az şunlar gerekli:
 |---|---|
 | `DATABASE_URL` | 1. adımdaki Postgres adresi. Yoksa uygulama başlamaz. |
 | `BETTER_AUTH_URL` | `https://www.geldesat.com` (sonunda `/` yok) |
-| `BETTER_AUTH_SECRET` | `openssl rand -hex 32` çıktısı. Yoksa uygulama başlamaz. |
+| `BETTER_AUTH_SECRET` | `openssl rand -hex 32` çıktısı (`AUTH_SECRET` da desteklenir). Yoksa uygulama başlamaz. |
 | `ADMIN_EMAILS` | Yönetici e-postası (doğrulanmış hesap olmalı) |
+| `CRON_SECRET` | Zamanlanmış görev (`/api/cron/sweep` ve `scripts/cron.mjs`) gizli anahtarı |
+| `TRUSTED_IP_HEADER` / `TRUSTED_PROXY_HOPS` | Ters vekil arkasında gerçek istemci IP'sini okumak için |
+| `DB_POOL_MAX` | Postgres bağlantı havuzu üst sınırı (varsayılan `10`) |
+| `APPLE_TEAM_ID` / `ANDROID_SHA256_FINGERPRINTS` | iOS Universal Links & Android App Links doğrulama dosyaları için |
+| `OTA_PUBLISH_TOKEN` / `OTA_CODE_SIGNING_PRIVATE_KEY` | Mobil OTA güncelleme yayını ve imzalama anahtarı |
 
 `VITE_GOOGLE_AUTH_ENABLED` derleme sırasında okunur: Coolify'da **Build
-Variable** olarak işaretleyin.
+Variable** olarak işaretleyin. Zamanlanmış görevleri harici olarak çalıştırmak
+için `CRON_SECRET` tanımlayıp `node scripts/cron.mjs` komutunu periyodik
+olarak (örn. saatlik) tetikleyin.
 
 ## 4. Yönetici hesabı
 

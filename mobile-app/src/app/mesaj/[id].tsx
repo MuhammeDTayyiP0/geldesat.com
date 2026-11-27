@@ -12,6 +12,8 @@ import { useQuery } from '@tanstack/react-query';
 import {
   Archive,
   Ban,
+  Bell,
+  BellOff,
   Check,
   CheckCheck,
   ChevronDown,
@@ -25,6 +27,9 @@ import {
   MailOpen,
   MapPin,
   MoreVertical,
+  Pencil,
+  Pin,
+  PinOff,
   Plus,
   Reply,
   Search,
@@ -42,12 +47,11 @@ import { useSession } from '@/auth/session';
 import { Bubble } from '@/features/chat/Bubble';
 import { SwipeToReply } from '@/features/chat/SwipeToReply';
 import { LocationPicker } from '@/features/chat/LocationPicker';
-import { BUYER_QUICK_REPLIES, CHAT_REPORT_REASONS, DELETE_WINDOW_MS, LISTING_PHOTO_MSG, SELLER_QUICK_REPLIES, previewText } from '@/features/chat/shared';
+import { BUYER_QUICK_REPLIES, CHAT_REPORT_REASONS, DELETE_WINDOW_MS, EDIT_WINDOW_MS, LISTING_PHOTO_MSG, SELLER_QUICK_REPLIES, previewText } from '@/features/chat/shared';
 import { onStreamResume, subscribeChatStream } from '@/features/chat/stream';
 import { PhotoViewer } from '@/features/listing/Gallery';
 import { PhotoReview } from '@/features/photos/PhotoReview';
 import { mediaUrl } from '@/lib/config';
-import { useFlag } from '@/lib/flags';
 import { dayLabel, formatPrice, formatTime, lastSeenLabel, maskThousands, parseMasked } from '@/lib/format';
 import { pickPhotos, preparePhoto, type PickedPhoto } from '@/lib/photos';
 import {
@@ -114,7 +118,10 @@ export default function ChatScreen() {
   // The keyboard covers the home indicator, so the composer drops that inset while it is up.
   const keyboardUp = useKeyboardState((k) => k.isVisible);
   const router = useRouter();
-  const offerOn = useFlag('ilan_teklif_ver');
+  const goBackOrInbox = useCallback(() => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/mesajlar');
+  }, [router]);
   const session = useSession();
   const me = session.status === 'signedIn' ? session.user.id : '';
   const token = session.status === 'signedIn' ? session.token : '';
@@ -137,6 +144,7 @@ export default function ChatScreen() {
   const [highlight, setHighlight] = useState<string | null>(null);
   const [text, setText] = useState('');
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
+  const [editingMsg, setEditingMsg] = useState<ChatMessage | null>(null);
   const [sending, setSending] = useState(false);
   /** Shown above the box while photos upload ("Fotoğraflar gönderiliyor (2/3)…"). */
   const [uploadNote, setUploadNote] = useState<string | null>(null);
@@ -178,6 +186,7 @@ export default function ChatScreen() {
   };
   const [selected, setSelected] = useState<ChatMessage | null>(null);
   const [selectedDeletable, setSelectedDeletable] = useState(false);
+  const [selectedEditable, setSelectedEditable] = useState(false);
   const [away, setAway] = useState(false);
   const [unseen, setUnseen] = useState(0);
   const awayRef = useRef(false);
@@ -206,10 +215,7 @@ export default function ChatScreen() {
 
   const data = thread.data;
   const conv = data?.conversation;
-  const currency =
-    (conv as (NonNullable<typeof conv> & { listing_currency?: string; currency?: string }) | undefined)?.listing_currency ??
-    (conv as (NonNullable<typeof conv> & { listing_currency?: string; currency?: string }) | undefined)?.currency ??
-    'TRY';
+  const currency = conv?.listing_currency ?? conv?.currency ?? 'TRY';
   // sohbet_v2: the first unread message from when the chat opened gets a divider, and the list starts there.
   const firstUnreadId = data?.firstUnreadId ?? null;
 
@@ -269,7 +275,8 @@ export default function ChatScreen() {
     try {
       const res = await thread.refetch();
       if (res.data) {
-        setMessages(res.data.messages);
+        const pending = messagesRef.current.filter((m) => m.pending);
+        setMessages(pending.length ? mergeMessages(pending, res.data.messages) : res.data.messages);
         setHasMore(res.data.hasMore);
         setJumped(false);
         jumpedRef.current = false;
@@ -398,7 +405,10 @@ export default function ChatScreen() {
     }
   };
 
-  const appendOwn = (msg: ChatMessage) => setMessages((list) => sortMessages([...list, msg]));
+  const appendOwn = (msg: ChatMessage) => {
+    setMessages((list) => sortMessages([...list, msg]));
+    if (jumpedRef.current) void backToLatest();
+  };
 
   /**
    * Send a message. `fromInput`: the text came from the box; a quick reply leaves
@@ -408,6 +418,19 @@ export default function ChatScreen() {
   const send = async (content: string, { fromInput = true, retry }: { fromInput?: boolean; retry?: ChatMessage } = {}) => {
     const value = content.trim();
     if (!value) return;
+    if (fromInput && !retry && editingMsg) {
+      const target = editingMsg;
+      setEditingMsg(null);
+      setText('');
+      try {
+        const res = await chat.editMessage(target.id, value);
+        setMessages((list) => mergeMessages(list, [res.message]));
+        toast.success('Mesaj düzenlendi');
+      } catch (e) {
+        toast.error(errorMessage(e));
+      }
+      return;
+    }
     const reply = retry ? (retry.reply ? messagesRef.current.find((m) => m.id === retry.reply?.id) ?? null : null) : replyTo;
     const clientId = retry?.client_id ?? newClientId();
     if (!retry) {
@@ -561,6 +584,13 @@ export default function ChatScreen() {
       void Haptics.selectionAsync();
       setSelected(m);
       setSelectedDeletable(m.sender_id === me && Date.now() - new Date(m.created_at).getTime() < DELETE_WINDOW_MS);
+      setSelectedEditable(
+        m.sender_id === me &&
+          !m.deleted &&
+          m.kind === 'text' &&
+          m.content !== LISTING_PHOTO_MSG &&
+          Date.now() - new Date(m.created_at).getTime() <= EDIT_WINDOW_MS,
+      );
       setSheet('actions');
     },
     [me],
@@ -599,6 +629,7 @@ export default function ChatScreen() {
           highlighted={highlight === item.message.id}
           otherName={conv?.other_name ?? ''}
           listingImage={conv?.listing_image ?? null}
+          listingCurrency={currency}
           onSwipeReply={handleSwipeReply}
           onSwipeInfo={openInfo}
           onLongPress={openActions}
@@ -615,6 +646,7 @@ export default function ChatScreen() {
       c.elevated,
       conv?.listing_image,
       conv?.other_name,
+      currency,
       data?.showReads,
       handleSwipeReply,
       highlight,
@@ -713,7 +745,7 @@ export default function ChatScreen() {
               ) : null}
             </Text>
           </View>
-          {offerOn && buying && conv.listing_status === 'ACTIVE' && !blocked ? (
+          {buying && conv.listing_status === 'ACTIVE' && !blocked ? (
             <Button
               title="Teklif"
               icon={HandCoins}
@@ -877,6 +909,29 @@ export default function ChatScreen() {
                 renderItem={({ item }) => <Chip label={item} onPress={() => void send(item, { fromInput: false })} />}
               />
             ) : null}
+            {editingMsg ? (
+              <View style={[styles.replyBar, { backgroundColor: c.elevated, borderLeftColor: c.primary }]}>
+                <Pencil size={14} color={c.primary} />
+                <View style={styles.flex}>
+                  <Text variant="small" tone="primary">
+                    Mesaj düzenleniyor
+                  </Text>
+                  <Text variant="caption" tone="muted" numberOfLines={1}>
+                    {editingMsg.content}
+                  </Text>
+                </View>
+                <Pressable
+                  accessibilityLabel="Düzenlemeyi iptal et"
+                  hitSlop={8}
+                  onPress={() => {
+                    setEditingMsg(null);
+                    setText('');
+                  }}
+                >
+                  <X size={16} color={c.subtle} />
+                </Pressable>
+              </View>
+            ) : null}
             {replyTo ? (
               <View style={[styles.replyBar, { backgroundColor: c.elevated, borderLeftColor: c.primary }]}>
                 <View style={styles.flex}>
@@ -934,7 +989,7 @@ export default function ChatScreen() {
           <ListRow icon={ImagePlus} label="Galeriden fotoğraf" onPress={() => thenClose(() => void sendPhoto('library'))} />
           <ListRow icon={ImagePlus} label="Fotoğraf çek" onPress={() => thenClose(() => void sendPhoto('camera'))} />
           <ListRow icon={MapPin} label="Buluşma noktası paylaş" onPress={() => thenClose(() => setSheet('location'))} />
-          {offerOn && buying && conv.listing_status === 'ACTIVE' ? (
+          {buying && conv.listing_status === 'ACTIVE' ? (
             <ListRow
               icon={HandCoins}
               label="Teklif ver"
@@ -959,10 +1014,15 @@ export default function ChatScreen() {
           const msg = await chat.offer(id, amount, counterTo?.id);
           setMessages((list) =>
             sortMessages([
-              ...list.map((m) => (m.kind === 'offer' && m.meta?.status === 'pending' ? { ...m, meta: { ...m.meta, status: m.id === counterTo?.id ? ('countered' as const) : ('withdrawn' as const) } } : m)),
+              ...list.map((m) =>
+                m.kind === 'offer' && m.meta?.status === 'pending' && (m.id === counterTo?.id || m.sender_id === me)
+                  ? { ...m, meta: { ...m.meta, status: m.id === counterTo?.id ? ('countered' as const) : ('withdrawn' as const) } }
+                  : m,
+              ),
               msg,
             ]),
           );
+          if (jumpedRef.current) void backToLatest();
           setSheet(null);
           toast.success(counterTo ? 'Karşı teklif gönderildi' : 'Teklif gönderildi');
         }}
@@ -1021,6 +1081,20 @@ export default function ChatScreen() {
                 }}
               />
             ) : null}
+            {selectedEditable ? (
+              <ListRow
+                icon={Pencil}
+                label="Düzenle"
+                onPress={() =>
+                  thenClose(() => {
+                    setReplyTo(null);
+                    setEditingMsg(selected);
+                    setText(selected.content);
+                    inputRef.current?.focus();
+                  })
+                }
+              />
+            ) : null}
             {selectedDeletable ? (
               <ListRow
                 icon={Trash2}
@@ -1057,6 +1131,40 @@ export default function ChatScreen() {
             />
           ) : null}
           <ListRow
+            icon={conv.pinned ? PinOff : Pin}
+            label={conv.pinned ? 'Sabitlemeyi kaldır' : 'Sohbeti sabitle'}
+            onPress={() =>
+              thenClose(async () => {
+                try {
+                  const next = !conv.pinned;
+                  await chat.pin(id, next);
+                  toast.success(next ? 'Sohbet sabitlendi' : 'Sabitleme kaldırıldı');
+                  void queryClient.invalidateQueries({ queryKey: keys.inbox });
+                  void queryClient.invalidateQueries({ queryKey: keys.thread(id) });
+                } catch (e) {
+                  toast.error(errorMessage(e));
+                }
+              })
+            }
+          />
+          <ListRow
+            icon={conv.muted ? Bell : BellOff}
+            label={conv.muted ? 'Bildirimleri aç' : 'Sohbeti sessize al'}
+            onPress={() =>
+              thenClose(async () => {
+                try {
+                  const next = !conv.muted;
+                  await chat.mute(id, next);
+                  toast.success(next ? 'Sohbet sessize alındı' : 'Bildirimler açıldı');
+                  void queryClient.invalidateQueries({ queryKey: keys.inbox });
+                  void queryClient.invalidateQueries({ queryKey: keys.thread(id) });
+                } catch (e) {
+                  toast.error(errorMessage(e));
+                }
+              })
+            }
+          />
+          <ListRow
             icon={MailOpen}
             label="Okunmadı olarak işaretle"
             onPress={() =>
@@ -1065,7 +1173,7 @@ export default function ChatScreen() {
                   await chat.markUnread(id, true);
                   void queryClient.invalidateQueries({ queryKey: keys.inbox });
                   void queryClient.invalidateQueries({ queryKey: keys.counts });
-                  router.back();
+                  goBackOrInbox();
                 } catch (e) {
                   toast.error(errorMessage(e));
                 }
@@ -1082,7 +1190,7 @@ export default function ChatScreen() {
                   toast.success('Sohbet arşivlendi');
                   void queryClient.invalidateQueries({ queryKey: keys.inbox });
                   void queryClient.invalidateQueries({ queryKey: keys.counts });
-                  router.back();
+                  goBackOrInbox();
                 } catch (e) {
                   toast.error(errorMessage(e));
                 }
@@ -1137,7 +1245,7 @@ export default function ChatScreen() {
                 try {
                   await chat.remove(id);
                   void queryClient.invalidateQueries({ queryKey: keys.inbox });
-                  router.back();
+                  goBackOrInbox();
                 } catch (e) {
                   toast.error(errorMessage(e));
                 }
@@ -1180,6 +1288,7 @@ const MessageRow = memo(function MessageRow({
   highlighted,
   otherName,
   listingImage,
+  listingCurrency,
   onSwipeReply,
   onSwipeInfo,
   onLongPress,
@@ -1198,6 +1307,7 @@ const MessageRow = memo(function MessageRow({
   highlighted: boolean;
   otherName: string;
   listingImage: string | null;
+  listingCurrency: string;
   onSwipeReply: (m: ChatMessage) => void;
   onSwipeInfo: (m: ChatMessage) => void;
   onLongPress: (m: ChatMessage) => void;
@@ -1209,6 +1319,45 @@ const MessageRow = memo(function MessageRow({
 }) {
   const handleReply = useCallback(() => onSwipeReply(message), [onSwipeReply, message]);
   const handleInfo = useCallback(() => onSwipeInfo(message), [onSwipeInfo, message]);
+  const renderBubble = useCallback(
+    (onBubbleLayout: Parameters<Parameters<typeof SwipeToReply>[0]['children']>[0]) => (
+      <Bubble
+        message={message}
+        mine={mine}
+        showReads={showReads}
+        authHeaders={authHeaders}
+        grouped={grouped}
+        highlighted={highlighted}
+        otherName={otherName}
+        listingImage={listingImage}
+        listingCurrency={listingCurrency}
+        onLongPress={onLongPress}
+        onInfo={onInfo}
+        onRetry={onRetry}
+        onOpenImage={onOpenImage}
+        onQuotePress={onQuotePress}
+        onOffer={onOffer}
+        onLayout={onBubbleLayout}
+      />
+    ),
+    [
+      authHeaders,
+      grouped,
+      highlighted,
+      listingCurrency,
+      listingImage,
+      message,
+      mine,
+      onInfo,
+      onLongPress,
+      onOffer,
+      onOpenImage,
+      onQuotePress,
+      onRetry,
+      otherName,
+      showReads,
+    ],
+  );
   return (
     <SwipeToReply
       mine={mine}
@@ -1216,25 +1365,7 @@ const MessageRow = memo(function MessageRow({
       onReply={handleReply}
       onInfo={mine && !message.deleted ? handleInfo : undefined}
     >
-      {(onBubbleLayout) => (
-        <Bubble
-          message={message}
-          mine={mine}
-          showReads={showReads}
-          authHeaders={authHeaders}
-          grouped={grouped}
-          highlighted={highlighted}
-          otherName={otherName}
-          listingImage={listingImage}
-          onLongPress={onLongPress}
-          onInfo={onInfo}
-          onRetry={onRetry}
-          onOpenImage={onOpenImage}
-          onQuotePress={onQuotePress}
-          onOffer={onOffer}
-          onLayout={onBubbleLayout}
-        />
-      )}
+      {renderBubble}
     </SwipeToReply>
   );
 });
@@ -1306,7 +1437,7 @@ function OfferComposer({
         />
       }
     >
-      <Input label="Tutar" keyboardType="number-pad" value={amount} onChangeText={(t) => setAmount(maskThousands(t))} suffix={currencySymbol} autoFocus placeholder="0" />
+      <Input label="Tutar" keyboardType="number-pad" value={amount} onChangeText={(t) => setAmount(maskThousands(t))} suffix={currencySymbol} placeholder="0" />
       {suggestions.length ? (
         <View style={styles.chips}>
           {suggestions.map((s) => (
@@ -1390,7 +1521,6 @@ function SearchSheet({ visible, onClose, conversationId, onPick }: { visible: bo
         onChangeText={setQ}
         returnKeyType="search"
         onSubmitEditing={() => setTerm(q.trim())}
-        autoFocus
       />
       {results.isFetching ? <ActivityIndicator /> : null}
       {results.data?.length === 0 ? (

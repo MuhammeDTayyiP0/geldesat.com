@@ -80,7 +80,7 @@ export function stepError(
   step: StepKey,
   draft: Draft,
   attributes: AttrDef[],
-  context: { profilePhone?: boolean; attributesFailed?: boolean } = {},
+  context: { profilePhone?: boolean; attributesFailed?: boolean; attributesLoading?: boolean } = {},
 ): string | null {
   switch (step) {
     case 'category':
@@ -104,6 +104,7 @@ export function stepError(
     }
     case 'attributes': {
       if (context.attributesFailed) return 'Özellikler yüklenemedi. Tekrar deneyin.';
+      if (context.attributesLoading) return 'Kategori özellikleri yükleniyor, lütfen bekleyin.';
       const missing = attributes.find((a) => a.required && (draft.attrs[a.name] === undefined || draft.attrs[a.name] === ''));
       if (missing) return `“${missing.name}” alanını doldurun.`;
       // Same range as the site and the server.

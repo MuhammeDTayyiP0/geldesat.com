@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { getSql } from "@/lib/db";
 import { deleteUnusedListingImages, MAX_UPLOAD_BYTES, saveListingImage } from "@/lib/server/upload.server";
 import { errorStatus, publicErrorMessage } from "@/lib/server/errors";
+import { rateLimit } from "@/lib/server/helpers";
 import { limitedFormData, readJson } from "@/lib/server/request-body";
 import { authorizeUpload as authorize, json } from "@/lib/server/upload-auth.server";
 
@@ -29,6 +30,7 @@ export const Route = createFileRoute("/api/upload")({
         const auth = await authorize(request);
         if (auth instanceof Response) return auth;
         try {
+          rateLimit(`upload-del:${auth.userId}`, 60, 10 * 60_000);
           const { url } = (await readJson(request, 32 * 1024)) as { url?: unknown };
           if (typeof url !== "string" || url.length > 200) return json({ error: "Geçersiz istek" }, 400);
           await deleteUnusedListingImages(await getSql(), auth.userId, [url]);

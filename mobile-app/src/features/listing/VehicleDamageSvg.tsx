@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Svg, { Defs, Ellipse, G, Line, LinearGradient, Path, RadialGradient, Rect, Stop, Text as SvgText } from 'react-native-svg';
 import { CheckCircle2, Paintbrush, RotateCcw, ShieldCheck } from 'lucide-react-native';
@@ -327,6 +327,10 @@ export function VehicleDamageSvg({
     return dark ? spec.dark : spec.light;
   };
 
+  const svgUid = useId().replace(/:/g, '');
+  const shadowGradId = `mobCarShadow-${svgUid}`;
+  const glassGradId = `mobGlassGrad-${svgUid}`;
+
   function updatePart(id: DamagePartId, state: DamagePartState) {
     if (readOnly || !onChange) return;
     onChange({
@@ -491,12 +495,12 @@ export function VehicleDamageSvg({
           accessibilityLabel="Araç boya ve değişen şeması"
         >
           <Defs>
-            <RadialGradient id="mobCarShadow" cx="50%" cy="50%" r="50%">
+            <RadialGradient id={shadowGradId} cx="50%" cy="50%" r="50%">
               <Stop offset="0%" stopColor="#0f172a" stopOpacity={dark ? 0.45 : 0.22} />
               <Stop offset="70%" stopColor="#0f172a" stopOpacity={dark ? 0.18 : 0.08} />
               <Stop offset="100%" stopColor="#0f172a" stopOpacity={0} />
             </RadialGradient>
-            <LinearGradient id="mobGlassGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <LinearGradient id={glassGradId} x1="0%" y1="0%" x2="0%" y2="100%">
               <Stop offset="0%" stopColor="#334155" stopOpacity={0.5} />
               <Stop offset="50%" stopColor="#1e293b" stopOpacity={0.65} />
               <Stop offset="100%" stopColor="#475569" stopOpacity={0.45} />
@@ -504,7 +508,7 @@ export function VehicleDamageSvg({
           </Defs>
 
           {/* Soft ground drop shadow */}
-          <Ellipse cx={150} cy={226} rx={126} ry={204} fill="url(#mobCarShadow)" />
+          <Ellipse cx={150} cy={226} rx={126} ry={204} fill={`url(#${shadowGradId})`} />
 
           {/* Wheels / tires */}
           <Rect x={30} y={76} width={12} height={52} rx={5.5} fill={dark ? '#334155' : '#1e293b'} fillOpacity={0.82} stroke={c.border} strokeWidth={1} />
@@ -596,10 +600,10 @@ export function VehicleDamageSvg({
           <Path d="M108 72 L114 128" stroke={c.border} strokeOpacity={0.45} strokeWidth={1} strokeLinecap="round" />
           <Path d="M192 72 L186 128" stroke={c.border} strokeOpacity={0.45} strokeWidth={1} strokeLinecap="round" />
           <Rect x={108} y={186} width={84} height={86} rx={14} fill="none" stroke={c.border} strokeOpacity={0.45} strokeWidth={1} strokeDasharray="3 3" />
-          <Path d="M94 140 Q150 132 206 140 L199 169 Q150 163 101 169 Z" fill="url(#mobGlassGrad)" stroke={c.border} strokeWidth={1.2} />
-          <Path d="M101 294 Q150 299 199 294 L206 318 Q150 324 94 318 Z" fill="url(#mobGlassGrad)" stroke={c.border} strokeWidth={1.2} />
-          <Path d="M88 158 L94 176 L94 288 L88 308 Z" fill="url(#mobGlassGrad)" opacity={0.6} />
-          <Path d="M212 158 L206 176 L206 288 L212 308 Z" fill="url(#mobGlassGrad)" opacity={0.6} />
+          <Path d="M94 140 Q150 132 206 140 L199 169 Q150 163 101 169 Z" fill={`url(#${glassGradId})`} stroke={c.border} strokeWidth={1.2} />
+          <Path d="M101 294 Q150 299 199 294 L206 318 Q150 324 94 318 Z" fill={`url(#${glassGradId})`} stroke={c.border} strokeWidth={1.2} />
+          <Path d="M88 158 L94 176 L94 288 L88 308 Z" fill={`url(#${glassGradId})`} opacity={0.6} />
+          <Path d="M212 158 L206 176 L206 288 L212 308 Z" fill={`url(#${glassGradId})`} opacity={0.6} />
           <Line x1={48} y1={192} x2={48} y2={206} stroke={c.border} strokeWidth={2} strokeLinecap="round" />
           <Line x1={48} y1={278} x2={48} y2={292} stroke={c.border} strokeWidth={2} strokeLinecap="round" />
           <Line x1={252} y1={192} x2={252} y2={206} stroke={c.border} strokeWidth={2} strokeLinecap="round" />

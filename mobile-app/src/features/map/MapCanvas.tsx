@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, type ComponentType, type Ref } from 'react';
 import { Linking, StyleSheet } from 'react-native';
 import { WebView as RNWebView, type WebViewProps } from 'react-native-webview';
+import { SITE_URL } from '@/lib/config';
 import { mapHtml, type MapCenter, type MapEvent, type MapMarker } from './mapHtml';
 
 export type MapCanvasHandle = { flyTo: (lat: number, lng: number, zoom?: number) => void };
@@ -54,12 +55,12 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas(
   return (
     <WebView
       ref={web}
-      source={{ html, baseUrl: 'https://www.geldesat.com' }}
+      source={{ html, baseUrl: SITE_URL }}
       originWhitelist={['*']}
       style={StyleSheet.absoluteFill}
       onShouldStartLoadWithRequest={(req) => {
         if (req.url === 'about:blank' || req.url.startsWith('data:')) return true;
-        if ((req.url === 'https://www.geldesat.com' || req.url === 'https://www.geldesat.com/') && req.navigationType !== 'click') {
+        if ((req.url === SITE_URL || req.url === `${SITE_URL}/`) && req.navigationType !== 'click') {
           return true;
         }
         if (/^https?:\/\//i.test(req.url)) {
@@ -90,6 +91,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas(
       }}
       javaScriptEnabled
       domStorageEnabled
+      nestedScrollEnabled
       scrollEnabled={false}
       overScrollMode="never"
       bounces={false}

@@ -32,6 +32,11 @@ export async function followSellerRecord(
     [sellerId],
   );
   if (!target[0]) throw new Error("Satıcı bulunamadı.");
+  const blocked = await sql.query<{ blocker_id: string }>(
+    "select blocker_id from user_blocks where (blocker_id=$1 and blocked_id=$2) or (blocker_id=$2 and blocked_id=$1) limit 1",
+    [followerId, sellerId],
+  );
+  if (blocked[0]) throw new Error("Bu kullanıcı takip edilemiyor.");
   await ensureProfile(followerId);
   await sql.query(
     "insert into seller_follows (follower_id, seller_id) values ($1, $2) on conflict (follower_id, seller_id) do nothing",
@@ -125,6 +130,11 @@ export async function notifySellerFollowers(
        and sf.follower_id <> $1
        and p.deletion_requested_at is null
        and p.banned_at is null
+       and not exists (
+         select 1 from user_blocks b
+         where (b.blocker_id = $1 and b.blocked_id = sf.follower_id)
+            or (b.blocker_id = sf.follower_id and b.blocked_id = $1)
+       )
      order by sf.created_at desc
      limit 500`,
     [listing.userId],

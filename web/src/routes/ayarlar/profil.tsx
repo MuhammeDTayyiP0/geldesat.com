@@ -30,6 +30,7 @@ const EMPTY: Form = { name: "", phone: "", city: "", district: "", bio: "" };
 function ProfileSettings() {
   const { user, isPending } = useCurrentUserState();
   const [failed, setFailed] = useState(false);
+  const [retry, setRetry] = useState(0);
   const [saved, setSaved] = useState<Form | null>(null);
   const [form, setForm] = useState<Form>(EMPTY);
   const [avatar, setAvatar] = useState<string | null>(null);
@@ -56,9 +57,21 @@ function ProfileSettings() {
       })
       .catch(() => setFailed(true));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- load once per signed-in user
-  }, [user?.id]);
+  }, [user?.id, retry]);
 
-  if (failed) return <AccountShell title="Profil bilgileri"><ErrorState message="Profiliniz yüklenemedi. Sayfayı yenileyip tekrar deneyin." /></AccountShell>;
+  if (failed) {
+    return (
+      <AccountShell title="Profil bilgileri">
+        <ErrorState
+          message="Profiliniz yüklenemedi. Tekrar deneyin."
+          onRetry={() => {
+            setFailed(false);
+            setRetry((r) => r + 1);
+          }}
+        />
+      </AccountShell>
+    );
+  }
   if (isPending || (user && !saved)) return <BrandSpinner fullPage text="Profil yükleniyor…" />;
   if (!user) return <RedirectToSignIn />;
 
@@ -99,6 +112,7 @@ function ProfileSettings() {
     try {
       const url = await uploadAvatar(blob);
       setAvatar(url);
+      await authClient.getSession({ query: { disableCookieCache: true } }).catch(() => undefined);
       setPendingFile(null);
       toast.success("Profil fotoğrafı güncellendi");
     } catch (err) {
@@ -113,6 +127,7 @@ function ProfileSettings() {
     try {
       await removeAvatar();
       setAvatar(null);
+      await authClient.getSession({ query: { disableCookieCache: true } }).catch(() => undefined);
       toast.success("Profil fotoğrafı kaldırıldı");
     } catch (err) {
       toast.error(errorText(err, "Kaldırılamadı"));

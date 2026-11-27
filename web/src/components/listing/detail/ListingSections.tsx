@@ -71,12 +71,14 @@ export function StatusBanner({
   isOwner,
   onRenew,
   busy,
+  rejectionReason,
 }: {
   status: string;
   expired: boolean;
   isOwner: boolean;
   onRenew: () => void;
   busy: boolean;
+  rejectionReason?: string | null;
 }) {
   let title: string | null = null;
   let body: ReactNode = null;
@@ -87,11 +89,18 @@ export function StatusBanner({
     title = "Bu ilan yayına uygun bulunmadı.";
     body = (
       <>
-        Gerekçeyi{" "}
-        <Link to="/bildirimler" className="font-semibold underline">
-          bildirimlerinizde
-        </Link>{" "}
-        görebilirsiniz. İlanı düzenleyip tekrar onaya gönderebilirsiniz.
+        {rejectionReason ? (
+          <span className="block font-medium text-warn">Gerekçe: {rejectionReason}</span>
+        ) : (
+          <>
+            Gerekçeyi{" "}
+            <Link to="/bildirimler" className="font-semibold underline">
+              bildirimlerinizde
+            </Link>{" "}
+            görebilirsiniz.
+          </>
+        )}{" "}
+        İlanı düzenleyip tekrar onaya gönderebilirsiniz.
       </>
     );
   } else if (status === "SOLD") {
@@ -172,8 +181,9 @@ function AttrValue({ value }: { value: string }) {
 export function SpecsSection({ attrs, units = {} }: { attrs: Record<string, string | number>; units?: Record<string, string> }) {
   const entries = Object.entries(attrs).filter(([, v]) => v !== "" && v != null);
   if (!entries.length) return null;
-  const single = entries.filter(([, v]) => !String(v).includes(", "));
-  const multi = entries.filter(([, v]) => String(v).includes(", "));
+  const isMulti = (v: string | number) => Array.isArray(v) || String(v).split(", ").length >= 3;
+  const single = entries.filter(([, v]) => !isMulti(v));
+  const multi = entries.filter(([, v]) => isMulti(v));
   return (
     <Section title="Özellikler">
       {single.length ? (

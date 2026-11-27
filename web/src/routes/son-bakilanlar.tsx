@@ -27,7 +27,7 @@ export const Route = createFileRoute("/son-bakilanlar")({
 function viewedLabel(iso: string): string {
   const days = (Date.now() - new Date(iso).getTime()) / 86_400_000;
   if (days < 1 / 1440) return "az önce baktınız";
-  if (days > 30) return `${new Date(iso).toLocaleDateString("tr-TR", { day: "numeric", month: "short", year: "numeric" })} tarihinde baktınız`;
+  if (days >= 30) return `${new Date(iso).toLocaleDateString("tr-TR", { day: "numeric", month: "short", year: "numeric" })} tarihinde baktınız`;
   return `${listingAge(iso)} baktınız`;
 }
 

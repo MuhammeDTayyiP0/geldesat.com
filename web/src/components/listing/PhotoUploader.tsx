@@ -82,6 +82,8 @@ export function PhotoUploader({ images, setImages, originals, onBusyChange, onEr
   const batch = useRef({ added: 0, failed: 0 });
   const pendingRef = useRef(pending);
   pendingRef.current = pending;
+  const imagesRef = useRef(images);
+  imagesRef.current = images;
 
   const used = images.length + pending.length;
   const slotsLeft = MAX_PHOTOS - used;
@@ -291,6 +293,10 @@ export function PhotoUploader({ images, setImages, originals, onBusyChange, onEr
     setRotating(url);
     try {
       const next = await uploadPhoto(await preparePhoto(original.file, rotate));
+      if (!imagesRef.current.includes(url)) {
+        discardPhoto(next);
+        return;
+      }
       originals.delete(url);
       originals.set(next, { file: original.file, rotate });
       setImages((prev) => prev.map((u) => (u === url ? next : u)));

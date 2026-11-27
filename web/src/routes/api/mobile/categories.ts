@@ -11,7 +11,7 @@ export const Route = createFileRoute("/api/mobile/categories")({
           // Same shape and order as before: roots first, then by sort order and name.
           const rows = tree.rows
             .map(({ id, name, slug, parent_id, icon, sort_order }) => ({ id, name, slug, parent_id, icon, sort_order }))
-            .sort((x, y) => (x.parent_id === null ? 0 : 1) - (y.parent_id === null ? 0 : 1) || (x.parent_id ?? "").localeCompare(y.parent_id ?? "") || x.sort_order - y.sort_order || x.name.localeCompare(y.name));
+            .sort((x, y) => (x.parent_id === null ? 0 : 1) - (y.parent_id === null ? 0 : 1) || (x.parent_id ?? "").localeCompare(y.parent_id ?? "") || x.sort_order - y.sort_order || x.name.localeCompare(y.name, "tr"));
 
           return new Response(
             JSON.stringify({

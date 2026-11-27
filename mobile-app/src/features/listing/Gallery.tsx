@@ -75,7 +75,8 @@ export function PhotoViewer({
 function ViewerBody({ images, start, onClose, headers }: { images: string[]; start: number; onClose: () => void; headers?: Record<string, string> }) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const [index, setIndex] = useState(start);
+  const safeStart = images.length > 0 ? Math.max(0, Math.min(start, images.length - 1)) : 0;
+  const [index, setIndex] = useState(safeStart);
   const [zoomed, setZoomed] = useState(false);
   return (
     <GestureHandlerRootView style={styles.viewer}>
@@ -84,7 +85,7 @@ function ViewerBody({ images, start, onClose, headers }: { images: string[]; sta
         horizontal
         pagingEnabled
         scrollEnabled={!zoomed}
-        initialScrollIndex={start}
+        initialScrollIndex={images.length > 0 ? safeStart : undefined}
         getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
         showsHorizontalScrollIndicator={false}
         keyExtractor={(item, i) => `${item}-${i}`}
@@ -122,6 +123,7 @@ function ZoomableImage({
   const ty = useSharedValue(0);
   const savedTx = useSharedValue(0);
   const savedTy = useSharedValue(0);
+  const isPinching = useSharedValue(false);
   const [zoomed, setZoomed] = useState(false);
 
   const notifyZoom = useCallback(
@@ -152,12 +154,19 @@ function ZoomableImage({
   };
 
   const pinch = usePinchGesture({
+    onActivate: () => {
+      'worklet';
+      isPinching.value = true;
+      savedTx.value = tx.value;
+      savedTy.value = ty.value;
+    },
     onUpdate: (e) => {
       'worklet';
       scale.value = Math.min(4, Math.max(1, savedScale.value * e.scale));
     },
     onDeactivate: () => {
       'worklet';
+      isPinching.value = false;
       savedScale.value = scale.value;
       if (scale.value < 1.05) reset();
       else {
@@ -173,11 +182,13 @@ function ZoomableImage({
     enabled: zoomed,
     onUpdate: (e) => {
       'worklet';
+      if (isPinching.value) return;
       tx.value = savedTx.value + e.translationX;
       ty.value = savedTy.value + e.translationY;
     },
     onDeactivate: () => {
       'worklet';
+      if (isPinching.value) return;
       clampTranslate(scale.value);
       savedTx.value = tx.value;
       savedTy.value = ty.value;

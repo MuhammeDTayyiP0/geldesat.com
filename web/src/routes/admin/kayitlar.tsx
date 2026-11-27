@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, Download, History, RefreshCw } from "lucide-react";
@@ -8,9 +8,14 @@ import { adminListAudit } from "@/lib/server/admin/content";
 import { useSheets } from "@/components/admin/hooks";
 import { actionTone, dateTime, relative, TARGET_LABEL } from "@/components/admin/format";
 import { downloadCsv, int, str } from "@/components/admin/search";
-import { Avatar, Card, EmptyState, ErrorState, PageHeader, Pagination, Pill, SearchInput, SelectBox, SkeletonRows, Table, Td, Th } from "@/components/admin/ui";
+import { Avatar, Card, EmptyState, ErrorState, InlineQueryError, PageHeader, Pagination, Pill, SearchInput, SelectBox, SkeletonRows, Table, Td, Th } from "@/components/admin/ui";
 
 type Search = { q?: string; type?: string; admin?: string; targetId?: string; from?: string; to?: string; page?: number };
+
+function dateStr(v: unknown): string | undefined {
+  const s = str(v, 20);
+  return s && /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : undefined;
+}
 
 export const Route = createFileRoute("/admin/kayitlar")({
   validateSearch: (s: Record<string, unknown>): Search => ({
@@ -18,8 +23,8 @@ export const Route = createFileRoute("/admin/kayitlar")({
     type: str(s.type, 40),
     admin: str(s.admin),
     targetId: str(s.targetId, 200),
-    from: str(s.from, 40),
-    to: str(s.to, 40),
+    from: dateStr(s.from),
+    to: dateStr(s.to),
     page: int(s.page, 1, 100_000),
   }),
   component: AuditPage,
@@ -41,6 +46,12 @@ function AuditPage() {
     pageSize: 50,
   };
   const q = useQuery({ queryKey: ["admin", "audit", filter], queryFn: () => adminListAudit({ data: filter }), placeholderData: keepPreviousData });
+  const lastPage = q.data?.pages;
+  useEffect(() => {
+    if (lastPage && filter.page > lastPage) {
+      void navigate({ search: (prev) => ({ ...prev, page: lastPage > 1 ? lastPage : undefined }), replace: true });
+    }
+  }, [lastPage, filter.page, navigate]);
   const { openListing, openUser } = useSheets();
   const [open, setOpen] = useState<string | null>(null);
   const rows = q.data?.rows ?? [];
@@ -120,6 +131,7 @@ function AuditPage() {
             </button>
           </div>
         ) : null}
+        {q.isError && q.data ? <InlineQueryError error={q.error} onRetry={() => void q.refetch()} /> : null}
         {q.error && !q.data ? (
           <ErrorState error={q.error} onRetry={() => void q.refetch()} />
         ) : q.isLoading ? (

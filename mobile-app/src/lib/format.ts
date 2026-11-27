@@ -89,6 +89,7 @@ export function lastSeenLabel(online: boolean, lastSeen: string | null): string 
   if (online) return 'Çevrimiçi';
   if (!lastSeen) return '';
   const d = new Date(lastSeen);
+  if (Number.isNaN(d.getTime())) return '';
   const today = startOfDay(new Date());
   if (d.getTime() >= today) return `Son görülme bugün ${formatTime(d)}`;
   if (d.getTime() >= today - 86_400_000) return `Son görülme dün ${formatTime(d)}`;

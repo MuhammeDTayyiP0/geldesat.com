@@ -38,6 +38,8 @@ export type Listing = {
   store_slug?: string;
   boosts?: string[];
   rejection_reason?: string | null;
+  previous_price?: number | null;
+  distance_km?: number | null;
   /** My listings only: what the server accepts for this listing right now. */
   ownerActions?: OwnerAction[];
 };
@@ -131,9 +133,21 @@ export type SearchFilters = {
   priceDropped?: boolean;
   userId?: string;
   storeId?: string;
+  nearLat?: number;
+  nearLng?: number;
+  maxDistanceKm?: number;
 };
 
-export type SortKey = 'date_desc' | 'date_asc' | 'price_asc' | 'price_desc' | 'views_desc';
+export type SortKey = 'date_desc' | 'date_asc' | 'price_asc' | 'price_desc' | 'views_desc' | 'distance';
+
+export type CategoryPriceStats = {
+  count: number;
+  p25: number;
+  median: number;
+  p75: number;
+  currency: string;
+  cityScoped: boolean;
+};
 
 export type SearchResult = { result: ListingPage; inferredCategorySlug: string | null };
 
@@ -253,6 +267,7 @@ export type ChatMessage = {
   meta: {
     image_id?: string;
     amount?: number;
+    currency?: string;
     status?: OfferStatus;
     counter?: boolean;
     lat?: number;
@@ -262,6 +277,7 @@ export type ChatMessage = {
   deleted: boolean;
   reply: { id: string; sender_id: string; content: string; kind: string } | null;
   created_at: string;
+  edited_at?: string | null;
   read_at: string | null;
   /** This app's own id for a message it sent (retries, swapping the "sending" bubble). */
   client_id?: string;
@@ -278,6 +294,7 @@ export type Conversation = {
   listing_image: string | null;
   listing_status: string;
   price: number;
+  currency?: string;
   other_id: string;
   other_name: string;
   other_avatar: string | null;
@@ -285,6 +302,8 @@ export type Conversation = {
   other_online: boolean;
   archived: boolean;
   marked_unread: boolean;
+  pinned?: boolean;
+  muted?: boolean;
   last_content: string;
   last_kind: string;
   last_deleted: boolean;
@@ -302,6 +321,8 @@ export type Thread = {
     listing_slug: string;
     listing_image: string | null;
     listing_price: number | null;
+    listing_currency?: string;
+    currency?: string;
     listing_status: string;
     other_id: string;
     other_name: string;
@@ -311,6 +332,8 @@ export type Thread = {
     other_last_seen: string | null;
     buyer_id: string;
     seller_id: string;
+    pinned?: boolean;
+    muted?: boolean;
   };
   messages: ChatMessage[];
   hasMore: boolean;

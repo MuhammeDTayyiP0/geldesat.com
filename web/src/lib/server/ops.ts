@@ -7,7 +7,6 @@ let running = false;
 export async function sweepExpiryReminders(force = false): Promise<number> {
   if (running || (!force && Date.now() - lastSweep < 60_000)) return 0;
   running = true;
-  lastSweep = Date.now();
   try {
     const sql = await getSql();
     // Claim due listings atomically under row locks so concurrent cron + traffic sweeps never duplicate notifications.
@@ -28,16 +27,23 @@ export async function sweepExpiryReminders(force = false): Promise<number> {
       }
       return picked;
     });
-    for (const r of rows) {
-      await notify(
-        r.user_id,
-        "expiry",
-        "İlanınızın süresi dolmak üzere",
-        `${r.title} — İlanlarım’dan 30 gün uzatabilirsiniz.`,
-        `/ilan/${r.slug}`,
-      );
+    lastSweep = Date.now();
+    const settled = await Promise.allSettled(
+      rows.map((r) =>
+        notify(
+          r.user_id,
+          "expiry",
+          "İlanınızın süresi dolmak üzere",
+          `${r.title} — İlanlarım’dan 30 gün uzatabilirsiniz.`,
+          `/ilan/${r.slug}`,
+        ),
+      ),
+    );
+    const failedIds = rows.filter((_, i) => settled[i]?.status === "rejected").map((r) => r.id);
+    if (failedIds.length) {
+      await sql.query("update listings set expiry_notified_at = null where id = any($1::text[])", [failedIds]).catch(() => undefined);
     }
-    return rows.length;
+    return rows.length - failedIds.length;
   } finally {
     running = false;
   }

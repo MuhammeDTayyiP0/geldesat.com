@@ -155,7 +155,7 @@ function CategoriesPage() {
 
   const roots = index?.children.get(null)?.length ?? 0;
   let maxDepth = 0;
-  if (index) {
+  if (index && index.byId.size > 0) {
     let maxVal = 0;
     for (const d of index.depth.values()) {
       if (d > maxVal) maxVal = d;

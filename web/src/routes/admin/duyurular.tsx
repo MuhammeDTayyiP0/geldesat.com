@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { adminAudienceSizes, adminBroadcast, adminListAudit } from "@/lib/server/admin/content";
 import { useRunner } from "@/components/admin/hooks";
 import { dateTime, n, relative } from "@/components/admin/format";
-import { ErrorState, Card, CardHead, EmptyState, Field, FieldGroup, inputClass, PageHeader, Spinner, textareaClass, useConfirm } from "@/components/admin/ui";
+import { ErrorState, InlineQueryError, Card, CardHead, EmptyState, Field, FieldGroup, inputClass, PageHeader, Spinner, textareaClass, useConfirm } from "@/components/admin/ui";
 
 export const Route = createFileRoute("/admin/duyurular")({
   component: BroadcastPage,
@@ -139,7 +139,7 @@ function BroadcastPage() {
                   <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-subtle">
                     <Smartphone className="size-3.5" /> Telefon kilit ekranı
                   </p>
-                  <div className="rounded-2xl bg-ink/90 p-3 text-white shadow-lg">
+                  <div className="rounded-2xl border border-white/10 bg-[#1a2232] p-3 text-white shadow-lg">
                     <p className="text-[10px] uppercase tracking-wide text-white/50">GeldeSat · şimdi</p>
                     <p className="mt-0.5 truncate text-sm font-semibold">{title || "Duyuru başlığı"}</p>
                     <p className="line-clamp-2 text-xs text-white/80">{body || "Mesaj metni"}</p>
@@ -151,6 +151,11 @@ function BroadcastPage() {
 
           <Card>
             <CardHead title="Gönderim geçmişi" />
+            {history.isError && history.data ? (
+              <div className="p-3 pb-0">
+                <InlineQueryError error={history.error} onRetry={() => void history.refetch()} />
+              </div>
+            ) : null}
             {history.data?.rows.length ? (
               <ul className="divide-y divide-border">
                 {history.data.rows.map((h) => {
@@ -171,7 +176,7 @@ function BroadcastPage() {
                   );
                 })}
               </ul>
-            ) : history.error ? (
+            ) : history.error && !history.data ? (
               <ErrorState error={history.error} onRetry={() => void history.refetch()} />
             ) : history.isLoading ? (
               <div className="p-4 text-sm text-muted">Yükleniyor…</div>

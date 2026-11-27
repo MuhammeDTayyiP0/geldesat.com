@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { getSql } from "@/lib/db";
 import { errorStatus, publicErrorMessage } from "@/lib/server/errors";
 import { rateLimit } from "@/lib/server/helpers";
+import { evictImageVariants } from "@/lib/server/image-serve.server";
 import { limitedFormData } from "@/lib/server/request-body";
 import { authorizeUpload, json } from "@/lib/server/upload-auth.server";
 import { assertImageBytes, MAX_UPLOAD_BYTES } from "@/lib/server/upload.server";
@@ -37,10 +38,14 @@ export const Route = createFileRoute("/api/store-logo")({
             throw new Error("Fotoğraf işlenemedi. Farklı bir fotoğraf deneyin.");
           }
           const storeId = stores[0].id;
-          const oldKey = stores[0].logo_url?.match(/^\/uploads\/(store_[^/]+)$/)?.[1] ?? null;
-          const storageKey = `store_${storeId}_${Date.now()}.webp`;
+          const storageKey = `store_${storeId}_${Date.now()}_${randomUUID().slice(0, 8)}.webp`;
           const url = `/uploads/${storageKey}`;
-          await sql.transaction(async (tx) => {
+          const evictedKey = await sql.transaction(async (tx) => {
+            const locked = await tx.query<{ id: string; logo_url: string | null }>(
+              "select id, logo_url from stores where id=$1 for update",
+              [storeId],
+            );
+            const oldKey = locked[0]?.logo_url?.match(/^\/uploads\/(store_[^/]+)$/)?.[1] ?? null;
             await tx.query(
               "insert into mobile_listing_images (id,user_id,storage_key,mime_type,data) values ($1,$2,$3,'image/webp',$4)",
               [randomUUID(), auth.userId, storageKey, data],
@@ -52,7 +57,9 @@ export const Route = createFileRoute("/api/store-logo")({
                 oldKey,
               ]);
             }
+            return oldKey;
           });
+          if (evictedKey) evictImageVariants([evictedKey]);
           return json({ url });
         } catch (err) {
           return json({ error: publicErrorMessage(err, "Logo yüklenemedi.") }, errorStatus(err, 400));
@@ -63,14 +70,15 @@ export const Route = createFileRoute("/api/store-logo")({
         const auth = await authorizeUpload(request);
         if (auth instanceof Response) return auth;
         try {
+          rateLimit(`store-logo-del:${auth.userId}`, 20, 10 * 60_000);
           const sql = await getSql();
-          const stores = await sql.query<{ id: string; logo_url: string | null }>(
-            "select id, logo_url from stores where user_id=$1 limit 1",
-            [auth.userId],
-          );
-          if (!stores[0]) return json({ error: "Mağaza bulunamadı." }, 404);
-          const oldKey = stores[0].logo_url?.match(/^\/uploads\/(store_[^/]+)$/)?.[1] ?? null;
-          await sql.transaction(async (tx) => {
+          const evictedKey = await sql.transaction(async (tx) => {
+            const stores = await tx.query<{ id: string; logo_url: string | null }>(
+              "select id, logo_url from stores where user_id=$1 limit 1 for update",
+              [auth.userId],
+            );
+            if (!stores[0]) return undefined;
+            const oldKey = stores[0].logo_url?.match(/^\/uploads\/(store_[^/]+)$/)?.[1] ?? null;
             await tx.query("update stores set logo_url=null where id=$1", [stores[0].id]);
             if (oldKey) {
               await tx.query("delete from mobile_listing_images where user_id=$1 and storage_key=$2", [
@@ -78,7 +86,10 @@ export const Route = createFileRoute("/api/store-logo")({
                 oldKey,
               ]);
             }
+            return oldKey;
           });
+          if (evictedKey === undefined) return json({ error: "Mağaza bulunamadı." }, 404);
+          if (evictedKey) evictImageVariants([evictedKey]);
           return json({ ok: true });
         } catch (err) {
           return json({ error: publicErrorMessage(err, "Logo kaldırılamadı.") }, errorStatus(err, 400));

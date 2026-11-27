@@ -59,7 +59,7 @@ export const adminListReports = createServerFn({ method: "POST" })
                 coalesce(l.listing_no::text, r.listing_snapshot->>'listing_no') as listing_no, l.status as listing_status, l.expires_at as listing_expires_at,
                 coalesce(case when l.id is not null and jsonb_array_length(l.images) > 0 then l.images->>0 end, r.listing_snapshot->>'cover') as cover,
                 coalesce(rp.display_name, 'Üye') as reporter_name, tp.user_id as target_id, tp.display_name as target_name,
-                (tp.banned_at is not null) as target_banned, r.evidence,
+                (tp.banned_at is not null) as target_banned, tp.role as target_role, r.evidence,
                 (select count(*) from reports r2 where r2.listing_id = r.listing_id and r.listing_id is not null
                    and r2.conversation_id is null and r2.status = 'OPEN') as same_listing_reports
          ${from} ${w.sql} order by ${orderExpr} limit ${limit} offset ${offset}`,
@@ -146,6 +146,7 @@ export const adminListReports = createServerFn({ method: "POST" })
             reported_user_id: strOrNull(r.target_id),
             reported_user_name: strOrNull(r.target_name) ?? (r.conversation_id ? "Silinmiş kullanıcı" : null),
             reported_user_banned: Boolean(r.target_banned),
+            reported_user_role: strOrNull(r.target_role),
             same_listing_reports: num(r.same_listing_reports),
             messages: excerpts.get(String(r.id)) ?? [],
           };
@@ -232,13 +233,13 @@ export const adminResolveReports = createServerFn({ method: "POST" })
 
     await Promise.all(
       listings.map((l) => {
-        const why = note || rows.find((r) => r.listing_id === l.id)?.reason || "Yayın kurallarına aykırılık";
+        const why = note || rows.find((r) => !r.conversation_id && r.listing_id === l.id)?.reason || "Yayın kurallarına aykırılık";
         return notify(l.user_id, "listing", "İlanınız yayından kaldırıldı", `"${l.title}" şikayet incelemesi sonucunda kaldırıldı. Gerekçe: ${why}`, `/ilan/${l.slug}`);
       }),
     );
     await auditMany(sql, context.adminId, [
       ...listings.map((l) => {
-        const why = note || rows.find((r) => r.listing_id === l.id)?.reason || "Yayın kurallarına aykırılık";
+        const why = note || rows.find((r) => !r.conversation_id && r.listing_id === l.id)?.reason || "Yayın kurallarına aykırılık";
         return {
           action: "listing.reject",
           targetType: "listing" as const,

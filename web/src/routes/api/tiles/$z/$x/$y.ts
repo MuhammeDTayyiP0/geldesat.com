@@ -48,6 +48,9 @@ export const Route = createFileRoute("/api/tiles/$z/$x/$y")({
   server: {
     handlers: {
       GET: async ({ request, params }) => {
+        if (!/^\d+$/.test(params.z) || !/^\d+$/.test(params.x) || !/^\d+(\.png)?$/.test(params.y)) {
+          return new Response(null, { status: 400 });
+        }
         const z = Number(params.z);
         const x = Number(params.x);
         const y = Number(params.y.replace(/\.png$/, ""));

@@ -63,6 +63,8 @@ export const Route = createFileRoute("/satici/$id")({
     const desc = about
       ? about.slice(0, 160)
       : `${seller.name} kullanıcısının GeldeSat üzerindeki tüm aktif ilanlarını inceleyin.${seller.rating_count > 0 ? ` Değerlendirme Puanı: ${seller.rating_avg.toFixed(1)}/5 (${seller.rating_count} yorum).` : ""} Güvenli alışveriş ve hızlı iletişim.`;
+    const rawImg = store?.logo || seller.avatar;
+    const ogImage = rawImg ? (rawImg.startsWith("http") ? rawImg : `${BASE}${rawImg.startsWith("/") ? "" : "/"}${rawImg}`) : `${BASE}/og.jpg`;
     return {
       meta: [
         { title },
@@ -74,11 +76,11 @@ export const Route = createFileRoute("/satici/$id")({
         { property: "og:url", content: pageUrl },
         { property: "og:title", content: title },
         { property: "og:description", content: desc },
-        { property: "og:image", content: `${BASE}/og.jpg` },
+        { property: "og:image", content: ogImage },
         { name: "twitter:card", content: "summary" },
         { name: "twitter:title", content: title },
         { name: "twitter:description", content: desc },
-        { name: "twitter:image", content: `${BASE}/og.jpg` },
+        { name: "twitter:image", content: ogImage },
       ],
       links: [{ rel: "canonical", href: pageUrl }],
       scripts: [
@@ -185,7 +187,7 @@ function SellerPage() {
   }, [seller.id, firstListings, seller.reviews, seller.listing_count, seller.rating_count]);
 
   useEffect(() => {
-    if (!takipAcik || isOwner) {
+    if (!takipAcik) {
       setFollowState(null);
       return;
     }
@@ -200,7 +202,7 @@ function SellerPage() {
     return () => {
       cancelled = true;
     };
-  }, [takipAcik, isOwner, seller.id]);
+  }, [takipAcik, seller.id, user?.id]);
 
   const hasFilter = Boolean(q.trim() || category);
 

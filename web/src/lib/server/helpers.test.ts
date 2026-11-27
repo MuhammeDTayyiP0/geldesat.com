@@ -45,7 +45,12 @@ test("viewerKey prioritizes userId, TRUSTED_IP_HEADER, x-real-ip, and x-forwarde
   delete process.env.TRUSTED_PROXY_HOPS;
 
   assert.equal(viewerKey(new Headers()), "ip:unknown");
+  assert.equal(viewerKey(new Headers({ "x-real-ip": "10.0.0.5", "x-forwarded-for": "9.9.9.9" })), "ip:9.9.9.9");
+  assert.equal(viewerKey(new Headers({ "x-real-ip": "10.0.0.5" })), "ip:10.0.0.5");
+
+  process.env.TRUSTED_IP_HEADER = "x-real-ip";
   assert.equal(viewerKey(new Headers({ "x-real-ip": "10.0.0.5", "x-forwarded-for": "9.9.9.9" })), "ip:10.0.0.5");
+  delete process.env.TRUSTED_IP_HEADER;
 
   // Default TRUSTED_PROXY_HOPS = 1 picks rightmost entry
   assert.equal(viewerKey(new Headers({ "x-forwarded-for": "1.1.1.1, 2.2.2.2, 3.3.3.3" })), "ip:3.3.3.3");

@@ -25,15 +25,28 @@ function BlockedUsers() {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
+  const [retry, setRetry] = useState(0);
 
   useEffect(() => {
     if (!user) return;
     listBlockedUsers()
       .then(setRows)
       .catch(() => setFailed(true));
-  }, [user]);
+  }, [user, retry]);
 
-  if (failed) return <AccountShell title="Engellenenler"><ErrorState message="Liste yüklenemedi. Sayfayı yenileyip tekrar deneyin." /></AccountShell>;
+  if (failed) {
+    return (
+      <AccountShell title="Engellenenler">
+        <ErrorState
+          message="Liste yüklenemedi. Tekrar deneyin."
+          onRetry={() => {
+            setFailed(false);
+            setRetry((r) => r + 1);
+          }}
+        />
+      </AccountShell>
+    );
+  }
   if (isPending || (user && !rows)) return <BrandSpinner fullPage text="Yükleniyor…" />;
   if (!user || !rows) return <RedirectToSignIn />;
 

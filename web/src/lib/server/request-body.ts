@@ -59,5 +59,10 @@ export async function readLimited(request: Request, maxBytes: number, message?: 
 
 export async function limitedFormData(request: Request, maxBytes: number, message?: string): Promise<FormData> {
   const bytes = await readLimited(request, maxBytes, message);
-  return new Response(bytes, { headers: { "Content-Type": request.headers.get("content-type") ?? "" } }).formData();
+  try {
+    return await new Response(bytes, { headers: { "Content-Type": request.headers.get("content-type") ?? "" } }).formData();
+  } catch (err) {
+    if (err instanceof TypeError) throw new BadRequestError("Geçersiz yükleme isteği.");
+    throw err;
+  }
 }

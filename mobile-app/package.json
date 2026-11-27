@@ -53,7 +53,11 @@
     "ios": "expo run:ios",
     "typecheck": "tsc --noEmit",
     "lint": "expo lint",
+    "test": "node scripts/run-mobile-tests.mjs",
     "ota": "node scripts/ota-publish.mjs"
+  },
+  "engines": {
+    "node": ">=22.18"
   },
   "private": true
 }

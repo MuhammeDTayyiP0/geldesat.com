@@ -96,7 +96,7 @@ export function useConfig() {
     },
     enabled: session.status !== 'loading',
     // The saved copy only stands in for the account it was fetched for.
-    placeholderData: (previous) => previous ?? cachedConfig(userId),
+    placeholderData: () => cachedConfig(userId),
     staleTime: 5 * 60_000,
     refetchOnWindowFocus: true,
   });
@@ -117,7 +117,7 @@ export function useRoots() {
 }
 
 /** Queries that look the same to everyone; all others belong to the signed-in account. */
-const PUBLIC_QUERIES = new Set(['config', 'stats', 'categories', 'search', 'rail', 'seller', 'store', 'legal', 'cityCounts', 'mapListings', 'compare']);
+const PUBLIC_QUERIES = new Set(['stats', 'categories', 'search', 'rail', 'seller', 'store', 'legal', 'cityCounts', 'mapListings', 'compare']);
 
 /**
  * Clear everything tied to the signed-in account (sign-out, expired session,

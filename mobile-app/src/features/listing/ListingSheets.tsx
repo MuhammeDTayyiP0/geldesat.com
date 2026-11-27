@@ -123,7 +123,6 @@ export function OfferSheet({ listing, visible, onClose }: { listing: Listing; vi
         value={amount}
         onChangeText={(t) => setAmount(maskThousands(t))}
         suffix={currencySuffix}
-        autoFocus
         style={styles.amount}
       />
       <View style={styles.chips}>

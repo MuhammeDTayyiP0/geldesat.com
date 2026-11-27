@@ -1,5 +1,5 @@
 import { toast } from "sonner";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -25,11 +25,11 @@ import { Button } from "@/components/ui/button";
 import { TURKEY_CITIES } from "@/lib/data/locations";
 import { photoSrc } from "@/lib/images";
 import { cn } from "@/lib/utils";
-import { adminListingDetail, adminUpdateListing, type AdminListingDetail } from "@/lib/server/admin/listings";
+import { adminCancelBoost, adminListingDetail, adminUpdateListing, type AdminListingDetail } from "@/lib/server/admin/listings";
 import { useListingActions, useRunner, useSheets } from "./hooks";
 import { dateTime, listingStatus, money, n, relative } from "./format";
 import { AuditList } from "./AuditList";
-import { Avatar, ErrorState, Field, FieldGroup, inputClass, KeyValue, Menu, MenuItem, MenuSeparator, MiniStat, Pill, SheetHeader, Spinner, TabBar, textareaClass } from "./ui";
+import { Avatar, ErrorState, Field, FieldGroup, inputClass, KeyValue, Menu, MenuItem, MenuSeparator, MiniStat, Pill, SheetHeader, Spinner, TabBar, textareaClass, useConfirm } from "./ui";
 
 function moveItem<T>(arr: T[], from: number, to: number): T[] {
   if (to < 0 || to >= arr.length || from === to) return arr;
@@ -50,14 +50,41 @@ function parsePrice(text: string): number | null {
 
 export function ListingSheetBody({ id, canGoBack }: { id: string; canGoBack: boolean }) {
   const { back, close, openUser } = useSheets();
+  const { run, busy } = useRunner();
+  const { confirm } = useConfirm();
   const query = useQuery({ queryKey: ["admin", "listing", id], queryFn: () => adminListingDetail({ data: { id } }) });
   const [tab, setTab] = useState<"overview" | "seller" | "reports" | "history">("overview");
   const [editing, setEditing] = useState(false);
+  const [editDirty, setEditDirty] = useState(false);
+
+  async function confirmDiscard(): Promise<boolean> {
+    if (!editing || !editDirty) return true;
+    return confirm({
+      title: "Kaydedilmemiş değişiklikler",
+      body: "İlan düzenlemesindeki değişiklikler kaydedilmedi. Çıkmak istediğinize emin misiniz?",
+      confirmLabel: "Vazgeç ve çık",
+      danger: true,
+    });
+  }
+
+  async function handleClose() {
+    if (!(await confirmDiscard())) return;
+    setEditing(false);
+    setEditDirty(false);
+    close();
+  }
+
+  async function handleBack() {
+    if (!(await confirmDiscard())) return;
+    setEditing(false);
+    setEditDirty(false);
+    back();
+  }
 
   if (query.isLoading) {
     return (
       <>
-        <SheetHeader onClose={close}>
+        <SheetHeader onClose={handleClose}>
           <div className="h-5 w-48 animate-pulse rounded bg-elevated" />
         </SheetHeader>
         <div className="flex flex-1 items-center justify-center gap-2 text-sm text-muted">
@@ -69,7 +96,7 @@ export function ListingSheetBody({ id, canGoBack }: { id: string; canGoBack: boo
   if (query.error && !query.data) {
     return (
       <>
-        <SheetHeader onClose={close}>
+        <SheetHeader onClose={handleClose}>
           <span className="font-semibold">İlan</span>
         </SheetHeader>
         <ErrorState error={query.error} onRetry={() => void query.refetch()} />
@@ -84,10 +111,10 @@ export function ListingSheetBody({ id, canGoBack }: { id: string; canGoBack: boo
 
   return (
     <>
-      <SheetHeader onClose={close}>
+      <SheetHeader onClose={handleClose}>
         <div className="flex items-start gap-3">
           {canGoBack ? (
-            <button type="button" onClick={back} className="mt-0.5 rounded-lg p-1 text-muted hover:bg-elevated hover:text-fg" aria-label="Geri">
+            <button type="button" onClick={handleBack} className="mt-0.5 rounded-lg p-1 text-muted hover:bg-elevated hover:text-fg" aria-label="Geri">
               <ArrowLeft className="size-4" />
             </button>
           ) : null}
@@ -114,8 +141,12 @@ export function ListingSheetBody({ id, canGoBack }: { id: string; canGoBack: boo
       <TabBar
         value={tab}
         onChange={(next) => {
-          setEditing(false);
-          setTab(next);
+          void confirmDiscard().then((ok) => {
+            if (!ok) return;
+            setEditing(false);
+            setEditDirty(false);
+            setTab(next);
+          });
         }}
         items={[
           { value: "overview", label: "Genel" },
@@ -126,7 +157,23 @@ export function ListingSheetBody({ id, canGoBack }: { id: string; canGoBack: boo
       />
 
       <div className="min-h-0 flex-1 overflow-y-auto p-5">
-        {editing ? <EditListingForm detail={d} onDone={() => setEditing(false)} /> : null}
+        {editing ? (
+          <EditListingForm
+            detail={d}
+            onDirtyChange={setEditDirty}
+            onCancel={() => {
+              void confirmDiscard().then((ok) => {
+                if (!ok) return;
+                setEditing(false);
+                setEditDirty(false);
+              });
+            }}
+            onDone={() => {
+              setEditing(false);
+              setEditDirty(false);
+            }}
+          />
+        ) : null}
 
         {tab === "overview" && !editing ? (
           <div className="space-y-5">
@@ -156,6 +203,45 @@ export function ListingSheetBody({ id, canGoBack }: { id: string; canGoBack: boo
               <MiniStat label="Telefon gösterimi" value={n(l.phone_reveals)} />
               <MiniStat label="Mesajlaşma" value={n(l.conversations)} />
             </div>
+
+            {d.boosts?.length ? (
+              <section className="rounded-xl border border-border bg-surface p-4">
+                <h3 className="mb-2.5 text-xs font-semibold uppercase tracking-wide text-muted">Aktif dopingler</h3>
+                <ul className="divide-y divide-border">
+                  {d.boosts.map((b) => (
+                    <li key={b.id} className="flex items-center justify-between gap-3 py-2 text-sm first:pt-0 last:pb-0">
+                      <div>
+                        <span className="font-medium text-fg">{b.kind}</span>
+                        <span className="ml-2 text-xs text-muted">Bitiş: {dateTime(b.ends_at)}</span>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-danger"
+                        disabled={busy}
+                        onClick={() => {
+                          void confirm({
+                            title: "Doping iptal edilsin mi?",
+                            body: `${b.kind} dopingi hemen sonlandırılacak.`,
+                            confirmLabel: "İptal et",
+                            danger: true,
+                          }).then((ok) => {
+                            if (!ok) return;
+                            void run(
+                              () => adminCancelBoost({ data: { boostId: b.id, listingId: l.id } }),
+                              "Doping iptal edildi.",
+                              [["admin", "listing", l.id], ["admin", "listings"]],
+                            );
+                          });
+                        }}
+                      >
+                        İptal et
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
 
             <section className="rounded-xl border border-border bg-surface p-4">
               <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted">İlan bilgileri</h3>
@@ -363,7 +449,16 @@ function ListingActionBar({ detail, onEdit }: { detail: AdminListingDetail; onEd
   );
 }
 
-function EditListingForm({ detail, onDone }: { detail: AdminListingDetail; onDone: () => void }) {
+function EditListingForm({
+  detail,
+  onDirtyChange,
+  onDone,
+}: {
+  detail: AdminListingDetail;
+  onDirtyChange: (dirty: boolean) => void;
+  onCancel: () => void;
+  onDone: () => void;
+}) {
   const l = detail.listing;
   const { run, busy } = useRunner();
   const [title, setTitle] = useState(l.title);
@@ -380,6 +475,18 @@ function EditListingForm({ detail, onDone }: { detail: AdminListingDetail; onDon
     }
     return init;
   });
+
+  useEffect(() => {
+    const dirty =
+      title !== l.title ||
+      description !== l.description ||
+      price !== String(l.price) ||
+      currency !== (l.currency === "USD" || l.currency === "EUR" ? l.currency : "TRY") ||
+      city !== (l.city ?? "") ||
+      district !== (l.district ?? "") ||
+      JSON.stringify(images) !== JSON.stringify(l.images);
+    onDirtyChange(dirty);
+  }, [title, description, price, currency, city, district, images, l, onDirtyChange]);
   const selectedCity = TURKEY_CITIES.find((c) => c.name === city);
   const districts = selectedCity?.districts ?? [];
   const cityHasLegacy = Boolean(city && !selectedCity);

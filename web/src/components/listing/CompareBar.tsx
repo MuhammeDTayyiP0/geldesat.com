@@ -1,9 +1,9 @@
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { ArrowLeftRight, ImageIcon, Trash2, X } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { photoSrc } from "@/lib/images";
-import { formatPrice } from "@/lib/utils";
+import { cn, formatPrice } from "@/lib/utils";
 
 export const COMPARE_STORAGE_KEY = "geldesat.compare.v1";
 export const MAX_COMPARE_ITEMS = 4;
@@ -131,8 +131,17 @@ export function clearCompare(): void {
 export function CompareBar() {
   const items = useCompareList();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const [cookieOpen, setCookieOpen] = useState(false);
+
+  useEffect(() => {
+    const sync = () => setCookieOpen(document.documentElement.dataset.cookieBanner === "1");
+    sync();
+    window.addEventListener("geldesat:ui-bars", sync);
+    return () => window.removeEventListener("geldesat:ui-bars", sync);
+  }, []);
 
   if (
+    cookieOpen ||
     items.length < 1 ||
     pathname === "/karsilastir" ||
     pathname.startsWith("/ilan-ver") ||
@@ -141,10 +150,17 @@ export function CompareBar() {
     return null;
   }
 
+  const isListingDetail = pathname.startsWith("/ilan/");
+
   return (
     <aside
       aria-label="Karşılaştırma listesi"
-      className="fixed bottom-20 left-1/2 z-40 w-[calc(100%-1.5rem)] max-w-3xl -translate-x-1/2 md:bottom-5"
+      className={cn(
+        "fixed left-1/2 z-40 w-[calc(100%-1.5rem)] max-w-3xl -translate-x-1/2",
+        isListingDetail
+          ? "bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] lg:bottom-5"
+          : "bottom-[calc(5.25rem+env(safe-area-inset-bottom,0px))] md:bottom-5",
+      )}
     >
       <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-2xl border border-border bg-surface/95 px-3.5 py-2.5 shadow-lg backdrop-blur-md">
         <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto [scrollbar-width:none]">
@@ -153,11 +169,11 @@ export function CompareBar() {
               key={item.id}
               className="flex max-w-[170px] shrink-0 items-center gap-2 rounded-xl border border-border bg-elevated/70 py-1 pl-1 pr-1.5"
             >
-              <div className="relative size-8 shrink-0 overflow-hidden rounded-lg bg-elevated">
+              <div className="relative grid size-8 shrink-0 place-items-center overflow-hidden rounded-lg bg-elevated">
                 {item.image ? (
                   <img src={photoSrc(item.image, 240)} alt="" className="size-full object-cover" />
                 ) : (
-                  <ImageIcon className="m-auto size-4 text-subtle" />
+                  <ImageIcon className="size-4 text-subtle" />
                 )}
               </div>
               <div className="min-w-0">

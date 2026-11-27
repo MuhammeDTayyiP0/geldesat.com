@@ -41,7 +41,7 @@ function BlockedUsersScreen() {
         <FlatList
           data={query.data ?? []}
           keyExtractor={(u) => u.id}
-          ItemSeparatorComponent={() => <Divider inset={72} />}
+          ItemSeparatorComponent={ListSeparator}
           contentContainerStyle={[query.data?.length ? undefined : styles.grow, { paddingBottom: insets.bottom }]}
           ListEmptyComponent={<EmptyState icon={Ban} title="Engellediğiniz kimse yok" message="Engellediğiniz kişiler size mesaj gönderemez." />}
           renderItem={({ item }) => (
@@ -61,6 +61,8 @@ function BlockedUsersScreen() {
     </View>
   );
 }
+
+const ListSeparator = () => <Divider inset={72} />;
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },

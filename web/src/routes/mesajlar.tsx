@@ -1,9 +1,9 @@
 import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { errorText } from "@/lib/error-text";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Archive, ArchiveRestore, ImageIcon, Mail, MailOpen, MessageCircle, MoreHorizontal, Search, Trash2 } from "lucide-react";
+import { Archive, ArchiveRestore, Bell, BellOff, ImageIcon, Mail, MailOpen, MessageCircle, MoreHorizontal, Pin, PinOff, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { archiveConversation, deleteConversation, listConversations, markConversationUnread } from "@/lib/server/chat";
+import { archiveConversation, deleteConversation, listConversations, markConversationUnread, muteConversation, pinConversation } from "@/lib/server/chat";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { BrandSpinner } from "@/components/brand/BrandSpinner";
@@ -11,7 +11,7 @@ import { DropdownMenu, DropdownMenuSeparator, DropdownMenuTrigger } from "@/comp
 import { ChatAvatar, ConfirmDialog, MenuContent, MenuItem } from "@/components/chat/ChatUi";
 import { inboxTime, previewText } from "@/lib/chat-shared";
 import { photoSrc } from "@/lib/images";
-import { cn, formatPrice } from "@/lib/utils";
+import { cn, formatPrice, pingInbox } from "@/lib/utils";
 
 export const Route = createFileRoute("/mesajlar")({
   head: () => ({ meta: [{ title: "Mesajlarım | GeldeSat" }, { name: "robots", content: "noindex,nofollow" }] }),
@@ -45,6 +45,8 @@ function MessagesLayout() {
   });
   const activeRef = useRef(activeId);
   activeRef.current = activeId;
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
 
   useEffect(() => {
     if (!user) return;
@@ -75,11 +77,14 @@ function MessagesLayout() {
       const detail = (e as CustomEvent<{ type?: string; conversationId?: string; message?: { sender_id: string; content: string; kind?: string; created_at: string } }>).detail;
       if (detail?.type === "new_message" && detail.message && detail.conversationId) {
         const { conversationId, message } = detail;
-        let known = false;
+        const known = rowsRef.current.some((c) => c.id === conversationId);
+        if (!known) {
+          reloadSoon();
+          return;
+        }
         setRows((prev) => {
           const idx = prev.findIndex((c) => c.id === conversationId);
           if (idx === -1) return prev;
-          known = true;
           const item = prev[idx];
           const updated: Conv = {
             ...item,
@@ -93,7 +98,6 @@ function MessagesLayout() {
           };
           return [updated, ...prev.filter((_, i) => i !== idx)];
         });
-        if (!known) reloadSoon();
         return;
       }
       reloadSoon();
@@ -263,7 +267,11 @@ function MessagesLayout() {
                     </span>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-baseline justify-between gap-2">
-                        <p className={cn("truncate text-[15px]", flagged ? "font-bold" : "font-medium", c.other_closed && "text-muted")}>{c.other_name}</p>
+                        <p className={cn("flex min-w-0 items-center gap-1 text-[15px]", flagged ? "font-bold" : "font-medium", c.other_closed && "text-muted")}>
+                          {c.pinned ? <Pin className="size-3.5 shrink-0 text-primary" aria-label="Sabitlendi" /> : null}
+                          {c.muted ? <BellOff className="size-3.5 shrink-0 text-subtle" aria-label="Sessize alındı" /> : null}
+                          <span className="truncate">{c.other_name}</span>
+                        </p>
                         <span className={cn("shrink-0 text-[11px] tabular-nums", flagged ? "font-semibold text-primary" : "text-subtle")}>
                           {inboxTime(c.updated_at)}
                         </span>
@@ -304,6 +312,30 @@ function MessagesLayout() {
                           <Mail /> Okunmadı olarak işaretle
                         </MenuItem>
                       )}
+                      <MenuItem
+                        onSelect={() =>
+                          void act(
+                            c,
+                            () => pinConversation({ data: { conversationId: c.id, pinned: !c.pinned } }),
+                            { pinned: !c.pinned },
+                            c.pinned ? "Sabitleme kaldırıldı" : "Sohbet sabitlendi",
+                          ).then(() => pingInbox())
+                        }
+                      >
+                        {c.pinned ? <PinOff /> : <Pin />} {c.pinned ? "Sabitlemeyi kaldır" : "Sabitle"}
+                      </MenuItem>
+                      <MenuItem
+                        onSelect={() =>
+                          void act(
+                            c,
+                            () => muteConversation({ data: { conversationId: c.id, muted: !c.muted } }),
+                            { muted: !c.muted },
+                            c.muted ? "Bildirimler açıldı" : "Sohbet sessize alındı",
+                          )
+                        }
+                      >
+                        {c.muted ? <Bell /> : <BellOff />} {c.muted ? "Sesi aç" : "Sessize al"}
+                      </MenuItem>
                       <MenuItem
                         onSelect={() =>
                           void act(

@@ -6,6 +6,7 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { BrandSpinner } from "@/components/brand/BrandSpinner";
 import { AccountShell, MenuRows, SignOutButton, UserAvatar } from "@/components/account/AccountShell";
 import { SETTINGS_SECTIONS, useAccountMeta } from "@/components/account/account-nav";
+import { useFlag } from "@/lib/use-flag";
 
 export const Route = createFileRoute("/ayarlar/")({
   head: () => ({ meta: [{ title: "Ayarlar | GeldeSat" }, { name: "robots", content: "noindex,nofollow" }] }),
@@ -16,18 +17,27 @@ export const Route = createFileRoute("/ayarlar/")({
 function SettingsHome() {
   const { user, isPending } = useCurrentUserState();
   const { admin } = useAccountMeta();
+  const savedSearchesOn = useFlag("kayitli_aramalar");
+  const followOn = useFlag("satici_takip");
   const [q, setQ] = useState("");
 
   if (isPending) return <BrandSpinner fullPage text="Yükleniyor…" />;
   if (!user) return <RedirectToSignIn />;
 
   const term = q.trim().toLocaleLowerCase("tr");
-  const sections = SETTINGS_SECTIONS.map((section) => ({
-    ...section,
-    items: term
-      ? section.items.filter((i) => `${i.label} ${i.hint ?? ""}`.toLocaleLowerCase("tr").includes(term))
-      : section.items,
-  })).filter((section) => section.items.length);
+  const sections = SETTINGS_SECTIONS.map((section) => {
+    const visible = section.items.filter(
+      (i) =>
+        (i.to !== "/ayarlar/kayitli-aramalar" || savedSearchesOn) &&
+        (i.to !== "/ayarlar/takip-ettiklerim" || followOn),
+    );
+    return {
+      ...section,
+      items: term
+        ? visible.filter((i) => `${i.label} ${i.hint ?? ""}`.toLocaleLowerCase("tr").includes(term))
+        : visible,
+    };
+  }).filter((section) => section.items.length);
   const name = user.displayName || user.primaryEmail?.split("@")[0] || "Hesabım";
   const matches = (words: string) => !term || words.toLocaleLowerCase("tr").includes(term);
   const showHelp = matches("yardım destek iletişim kullanım koşulları gizlilik yönetim paneli");

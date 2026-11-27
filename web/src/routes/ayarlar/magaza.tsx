@@ -71,9 +71,20 @@ function normalizeCurrency(raw: string | undefined): "TRY" | "USD" | "EUR" {
 }
 
 function normalizePrice(raw: string | undefined): number {
-  const cleaned = (raw ?? "").replace(/[\s_]/g, "").replace(/,/g, ".");
-  const n = Number(cleaned);
-  return Number.isFinite(n) ? n : 0;
+  const cleaned = (raw ?? "").replace(/[\s_₺$€]|TL/gi, "").trim();
+  if (!cleaned) return Number.NaN;
+  let normalized = cleaned;
+  if (/^\d{1,3}(\.\d{3})+(,\d{1,2})?$/.test(cleaned)) {
+    normalized = cleaned.replace(/\./g, "").replace(",", ".");
+  } else if (/^\d{1,3}(,\d{3})+(\.\d{1,2})?$/.test(cleaned)) {
+    normalized = cleaned.replace(/,/g, "");
+  } else if (/^\d+(,\d{1,2})$/.test(cleaned)) {
+    normalized = cleaned.replace(",", ".");
+  } else if (!/^\d+(\.\d+)?$/.test(cleaned)) {
+    return Number.NaN;
+  }
+  const n = Number(normalized);
+  return Number.isFinite(n) ? n : Number.NaN;
 }
 
 function normalizeHeaderKey(header: string): keyof BulkRow | null {
@@ -247,6 +258,7 @@ function StoreSettings() {
   const [logoBusy, setLogoBusy] = useState(false);
   const [pendingLogo, setPendingLogo] = useState<File | null>(null);
   const [failed, setFailed] = useState(false);
+  const [retry, setRetry] = useState(0);
   const logoInputRef = useRef<HTMLInputElement>(null);
 
   const [rawImport, setRawImport] = useState("");
@@ -294,9 +306,22 @@ function StoreSettings() {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once per signed-in user
+  }, [user?.id, retry]);
 
-  if (failed) return <AccountShell title="Mağaza"><ErrorState message="Mağaza bilgileri yüklenemedi. Sayfayı yenileyip tekrar deneyin." /></AccountShell>;
+  if (failed) {
+    return (
+      <AccountShell title="Mağaza">
+        <ErrorState
+          message="Mağaza bilgileri yüklenemedi. Tekrar deneyin."
+          onRetry={() => {
+            setFailed(false);
+            setRetry((r) => r + 1);
+          }}
+        />
+      </AccountShell>
+    );
+  }
   if (isPending || (user && !loaded)) return <BrandSpinner fullPage text="Yükleniyor…" />;
   if (!user) return <RedirectToSignIn />;
 
@@ -452,12 +477,12 @@ function StoreSettings() {
                   <p className="mt-1 text-sm text-muted">
                     <span className="font-medium text-fg">{application.name}</span> için yaptığınız başvuru ekibimiz tarafından değerlendiriliyor.
                   </p>
-                  <dl className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted">
-                    {application.city ? <div>İl: {application.city}</div> : null}
-                    {application.phone ? <div>Telefon: {application.phone}</div> : null}
-                    {application.tax_no ? <div>Vergi / TC No: {application.tax_no}</div> : null}
-                    <div>Başvuru: {formatDate(application.created_at)}</div>
-                  </dl>
+                  <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted">
+                    {application.city ? <span>İl: {application.city}</span> : null}
+                    {application.phone ? <span>Telefon: {application.phone}</span> : null}
+                    {application.tax_no ? <span>Vergi / TC No: {application.tax_no}</span> : null}
+                    <span>Başvuru: {formatDate(application.created_at)}</span>
+                  </div>
                 </div>
               </div>
             </div>

@@ -29,15 +29,28 @@ function PrivacySettings() {
   const [state, setState] = useState<{ phone_visibility: PhoneVisibility; show_whatsapp: boolean; read_receipts: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [retry, setRetry] = useState(0);
 
   useEffect(() => {
     if (!user) return;
     getAccountSettings()
       .then((s) => setState({ phone_visibility: s.phone_visibility, show_whatsapp: s.show_whatsapp, read_receipts: s.read_receipts }))
       .catch(() => setFailed(true));
-  }, [user]);
+  }, [user, retry]);
 
-  if (failed) return <AccountShell title="Gizlilik"><ErrorState message="Ayarlarınız yüklenemedi. Sayfayı yenileyip tekrar deneyin." /></AccountShell>;
+  if (failed) {
+    return (
+      <AccountShell title="Gizlilik">
+        <ErrorState
+          message="Ayarlarınız yüklenemedi. Tekrar deneyin."
+          onRetry={() => {
+            setFailed(false);
+            setRetry((r) => r + 1);
+          }}
+        />
+      </AccountShell>
+    );
+  }
   if (isPending || (user && !state)) return <BrandSpinner fullPage text="Yükleniyor…" />;
   if (!user || !state) return <RedirectToSignIn />;
 

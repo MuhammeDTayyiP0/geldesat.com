@@ -1,4 +1,5 @@
 import type { Sql } from "@/lib/db";
+import { evictImageVariants } from "./image-serve.server";
 
 /** Days a chat stays stored (unseen) once it is gone on both sides. */
 export const CHAT_RETENTION_DAYS = 60;
@@ -17,7 +18,7 @@ export async function purgeUserData(
   userId: string,
   { deleteListings = true, includeAuth = true, forbidAdmin = false }: { deleteListings?: boolean; includeAuth?: boolean; forbidAdmin?: boolean } = {},
 ): Promise<void> {
-  await sql.transaction(async (tx) => {
+  const evicted = await sql.transaction(async (tx) => {
     if (forbidAdmin) {
       const cur = (await tx.query<{ role: string }>("select role from profiles where user_id = $1 for update", [userId]))[0];
       if (!cur) throw new Error("Kullanıcı bulunamadı.");
@@ -48,17 +49,22 @@ export async function purgeUserData(
       [userId, CHAT_RETENTION_DAYS],
     );
 
+    let removedImages: { id: string; storage_key: string }[] = [];
     if (deleteListings) {
       await tx.query("delete from listings where user_id=$1", [userId]);
-      await tx.query("delete from mobile_listing_images where user_id=$1", [userId]);
+      removedImages = await tx.query<{ id: string; storage_key: string }>(
+        "delete from mobile_listing_images where user_id=$1 returning id, storage_key",
+        [userId],
+      );
     } else {
       // Kept listings still reference the user's photos, so those stay.
       await tx.query("update listings set status='INACTIVE' where user_id=$1", [userId]);
-      await tx.query(
+      removedImages = await tx.query<{ id: string; storage_key: string }>(
         `delete from mobile_listing_images i where i.user_id=$1 and not exists (
            select 1 from listings l where l.user_id=$1 and (
              l.images @> jsonb_build_array('/api/mobile/images/' || i.id) or
-             l.images @> jsonb_build_array('/uploads/' || i.storage_key)))`,
+             l.images @> jsonb_build_array('/uploads/' || i.storage_key)))
+         returning i.id, i.storage_key`,
         [userId],
       );
     }
@@ -71,5 +77,7 @@ export async function purgeUserData(
       await tx.query('delete from "account" where "userId"=$1', [userId]);
       await tx.query('delete from "user" where id=$1', [userId]);
     }
+    return removedImages;
   });
+  if (evicted.length) evictImageVariants(evicted.flatMap((r) => [r.id, r.storage_key]));
 }

@@ -8,6 +8,16 @@
  */
 @import "tailwindcss" source("./");
 @import "tw-animate-css";
+@custom-variant dark {
+  &:where([data-theme="dark"], [data-theme="dark"] *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(:not([data-theme="light"], [data-theme="light"] *)) {
+      @slot;
+    }
+  }
+}
 /* Self-hosted IBM Plex Sans (one variable file per script; browsers fetch only the ranges a page uses). */
 @import "@fontsource-variable/ibm-plex-sans/wght.css";
 
@@ -241,7 +251,8 @@ html {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23a3abb8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 }
 
-:root[data-theme="dark"] .leaflet-tile-pane {
+:root[data-theme="dark"] .leaflet-tile-pane,
+:root[data-theme="dark"] .map-thumb-tiles {
   filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.92);
 }
 :root[data-theme="dark"] .leaflet-container {
@@ -263,7 +274,8 @@ html {
   :root:not([data-theme="light"]) .admin-select {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23a3abb8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   }
-  :root:not([data-theme="light"]) .leaflet-tile-pane {
+  :root:not([data-theme="light"]) .leaflet-tile-pane,
+  :root:not([data-theme="light"]) .map-thumb-tiles {
     filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.92);
   }
   :root:not([data-theme="light"]) .leaflet-container {

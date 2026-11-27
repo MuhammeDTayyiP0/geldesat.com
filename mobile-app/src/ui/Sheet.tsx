@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
+import { useReanimatedKeyboardAnimation, useKeyboardState } from 'react-native-keyboard-controller';
 import { GestureDetector, GestureHandlerRootView, usePanGesture } from 'react-native-gesture-handler';
 import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
@@ -69,7 +69,7 @@ export function Sheet({ visible, onClose, title, subtitle, children, footer, tal
   useEffect(() => {
     if (visible) {
       offset.set(withTiming(0, { duration: 280, easing: Easing.out(Easing.cubic) }));
-    } else {
+    } else if (wasMounted.current) {
       offset.set(
         withTiming(height, { duration: 220, easing: Easing.in(Easing.cubic) }, (finished) => {
           if (finished) scheduleOnRN(setMounted, false);
@@ -98,6 +98,8 @@ export function Sheet({ visible, onClose, title, subtitle, children, footer, tal
   // Lift the sheet with the keyboard (negative height while it is open) on both
   // iOS and Android: the sheet is absolutely positioned, so KeyboardAvoidingView
   // padding cannot move it inside an edge-to-edge Modal.
+  const keyboardUp = useKeyboardState((k) => k.isVisible);
+  const bottomPad = keyboardUp ? space.md : insets.bottom + space.md;
   const keyboard = useReanimatedKeyboardAnimation();
   const sheetStyle = useAnimatedStyle(() => {
     const kb = keyboard.height.get();
@@ -121,7 +123,7 @@ export function Sheet({ visible, onClose, title, subtitle, children, footer, tal
           <Animated.View
             style={[
               styles.sheet,
-              { backgroundColor: c.surface, paddingBottom: footer ? 0 : insets.bottom + space.md },
+              { backgroundColor: c.surface, paddingBottom: footer ? 0 : bottomPad },
               sheetStyle,
             ]}
           >
@@ -158,7 +160,7 @@ export function Sheet({ visible, onClose, title, subtitle, children, footer, tal
               <View style={[styles.flex, styles.bodyFixed]}>{children}</View>
             )}
             {footer ? (
-              <View style={[styles.footer, { borderTopColor: c.border, paddingBottom: insets.bottom + space.md }]}>{footer}</View>
+              <View style={[styles.footer, { borderTopColor: c.border, paddingBottom: bottomPad }]}>{footer}</View>
             ) : null}
           </Animated.View>
         </View>

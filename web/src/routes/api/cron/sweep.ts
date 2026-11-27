@@ -43,7 +43,10 @@ export const Route = createFileRoute("/api/cron/sweep")({
         }
         const ok = Object.values(results).every((r) => r === "ok");
         if (ok) await setAppConfig("cron_last_run", new Date().toISOString()).catch(() => undefined);
-        return Response.json({ ok, results }, { status: ok ? 200 : 500 });
+        return Response.json(
+          { ok, results },
+          { status: ok ? 200 : 500, headers: { "Cache-Control": "private, no-store" } },
+        );
       },
     },
   },

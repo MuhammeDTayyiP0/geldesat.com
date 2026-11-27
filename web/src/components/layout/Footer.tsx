@@ -86,13 +86,17 @@ export function Footer() {
             <span className="text-sm font-medium">{company}</span>
           </div>
           <a href={`mailto:${email}`} className="block text-sm text-primary-fg/80 hover:text-white">{email}</a>
-          {phone ? <p className="text-sm text-primary-fg/80">{phone}</p> : null}
+          {phone ? (
+            <a href={`tel:${phone.replace(/[^+\d]/g, "")}`} className="block text-sm text-primary-fg/80 hover:text-white">
+              {phone}
+            </a>
+          ) : null}
           <p className="text-sm text-primary-fg/80">Adana, Türkiye</p>
         </div>
       </div>
       <div className="border-t border-primary-fg/10 px-4 py-4">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 text-xs text-primary-fg/65 sm:flex-row">
-          <p className="text-center sm:text-left">
+          <p className="text-center sm:text-left" suppressHydrationWarning>
             © {new Date().getFullYear()} {company}. İlanlar kullanıcılar tarafından yayınlanır. GeldeSat alım satımın tarafı değildir.
           </p>
           <div className="inline-flex items-center gap-0.5 rounded-lg border border-primary-fg/15 bg-white/5 p-0.5" role="group" aria-label="Tema seçimi">

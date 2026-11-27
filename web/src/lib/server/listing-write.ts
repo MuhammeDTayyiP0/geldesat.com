@@ -3,7 +3,7 @@ import { getSql } from "@/lib/db";
 import { cleanAttrs, type AttrValues } from "@/lib/listing-attrs";
 import { needsReReview, sameAttrs } from "@/lib/listing-status";
 import { asJson, formatPrice, listingSlug, newId, num } from "@/lib/utils";
-import { inheritedAttributes, ensureProfile, rateLimit, assertImages, notify, normalizeTrPhone } from "./helpers";
+import { inheritedAttributes, ensureProfile, isActiveAdmin, rateLimit, assertImages, notify, normalizeTrPhone } from "./helpers";
 import { deleteUnusedListingImages } from "./upload.server";
 import { getAppConfig } from "./config";
 import { audit } from "./admin/common";
@@ -47,10 +47,11 @@ export async function saveListingRecord(userId: string, data: ListingInputData) 
   const sql = await getSql();
   const me = await ensureProfile(userId);
   if (!me) throw new Error("Profil yok");
-  const profile = await sql.query<{ phone: string | null; role: string; deletion_requested_at: string | null }>(
-    "select phone, role, deletion_requested_at from profiles where user_id = $1",
+  const profile = await sql.query<{ phone: string | null; role: string; banned_at: string | null; deletion_requested_at: string | null }>(
+    "select phone, role, banned_at, deletion_requested_at from profiles where user_id = $1",
     [userId],
   );
+  if (profile[0]?.banned_at) throw new Error("Hesabınız askıya alınmış. İlan işlemi yapamazsınız.");
   if (profile[0]?.deletion_requested_at) throw new Error("Hesabınız silinme sürecinde. İlan vermek için önce hesabınızı geri alın.");
   if (!profile[0]?.phone && !data.phone) throw new Error("İlan vermek için profilinize telefon ekleyin.");
   // Only an explicit per-listing number is stored; otherwise the listing shows
@@ -59,7 +60,7 @@ export async function saveListingRecord(userId: string, data: ListingInputData) 
   // The form starts filled with the profile number; that is not a choice to keep
   // it forever, so listings follow the profile when it changes.
   const phoneOverride = typedPhone && typedPhone !== profile[0]?.phone ? typedPhone : null;
-  const isAdmin = profile[0]?.role === "ADMIN";
+  const isAdmin = isActiveAdmin(profile[0]);
   // Admin console policy: first_free (first listing goes live), all (everything is reviewed), none (no review).
   const { mode } = await getAppConfig<{ mode: "first_free" | "all" | "none" }>("moderation", { mode: "first_free" });
   const existing = data.id
@@ -171,9 +172,10 @@ export async function saveListingRecord(userId: string, data: ListingInputData) 
         listingNo: locked.listing_no,
         userId: locked.user_id,
         nextCurrency,
+        lockedImages,
       };
     });
-    await deleteUnusedListingImages(sql, ownerId, existingImages.filter((image) => !data.images.includes(image)));
+    await deleteUnusedListingImages(sql, ownerId, txResult.lockedImages.filter((image) => !data.images.includes(image)));
     if (isAdmin && txResult.userId !== userId) {
       await audit(sql, userId, "listing.edit", "listing", data.id, `#${txResult.listingNo} "${data.title}" site üzerinden düzenlendi`, { from: txResult.prevStatus, to: txResult.nextStatus });
     }

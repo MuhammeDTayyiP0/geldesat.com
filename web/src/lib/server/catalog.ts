@@ -41,7 +41,10 @@ const Filters = z.object({
   minPrice: z.number().optional(),
   maxPrice: z.number().optional(),
   // "newest" ignores vitrin promotion, for the home feed under the vitrin rail.
-  sort: z.enum(["date_desc", "date_asc", "price_asc", "price_desc", "views_desc", "newest"]).optional(),
+  sort: z.enum(["date_desc", "date_asc", "price_asc", "price_desc", "views_desc", "newest", "distance"]).optional(),
+  nearLat: z.number().min(-90).max(90).optional(),
+  nearLng: z.number().min(-180).max(180).optional(),
+  maxDistanceKm: z.number().min(1).max(500).optional(),
   page: z.number().int().min(1).optional(),
   limit: z.number().int().min(1).max(48).optional(),
   attrs: z.record(z.string(), z.union([z.string(), z.array(z.string()), z.number()])).optional(),
@@ -191,19 +194,43 @@ export async function searchListings(f: SearchFilters): Promise<{
   }
 
   const where = conds.length ? `where ${conds.join(" and ")}` : "";
+  const hasGeo =
+    typeof f.nearLat === "number" &&
+    Number.isFinite(f.nearLat) &&
+    typeof f.nearLng === "number" &&
+    Number.isFinite(f.nearLng);
+  let distanceSelect = "";
+  let distanceOrderExpr = "";
+  if (hasGeo) {
+    params.push(f.nearLat);
+    const latP = `$${params.length}`;
+    params.push(f.nearLng);
+    const lngP = `$${params.length}`;
+    const haversine = `(case when l.lat is not null and l.lng is not null then 6371.0 * acos(least(1.0, greatest(-1.0, cos(radians(${latP})) * cos(radians(l.lat)) * cos(radians(l.lng) - radians(${lngP})) + sin(radians(${latP})) * sin(radians(l.lat))))) else null end)`;
+    distanceSelect = `, ${haversine} as distance_km`;
+    distanceOrderExpr = haversine;
+    if (typeof f.maxDistanceKm === "number" && Number.isFinite(f.maxDistanceKm) && f.maxDistanceKm > 0) {
+      params.push(Math.min(500, f.maxDistanceKm));
+      const kmP = `$${params.length}`;
+      conds.push(`l.lat is not null and l.lng is not null and ${haversine} <= ${kmP}`);
+    }
+  }
+  const finalWhere = conds.length ? `where ${conds.join(" and ")}` : "";
   const sort = f.sort ?? "date_desc";
   const order =
-    sort === "price_asc"
-      ? "l.price asc, l.created_at desc"
-      : sort === "price_desc"
-        ? "l.price desc, l.created_at desc"
-        : sort === "date_asc"
-          ? "l.created_at asc"
-          : sort === "views_desc"
-            ? "l.view_count desc, l.created_at desc"
-            : sort === "newest"
-              ? "l.created_at desc"
-              : `(l.featured_until is not null and l.featured_until > now()) desc, l.created_at desc`;
+    sort === "distance" && distanceOrderExpr
+      ? `${distanceOrderExpr} asc nulls last, l.created_at desc`
+      : sort === "price_asc"
+        ? "l.price asc, l.created_at desc"
+        : sort === "price_desc"
+          ? "l.price desc, l.created_at desc"
+          : sort === "date_asc"
+            ? "l.created_at asc"
+            : sort === "views_desc"
+              ? "l.view_count desc, l.created_at desc"
+              : sort === "newest"
+                ? "l.created_at desc"
+                : `(l.featured_until is not null and l.featured_until > now()) desc, l.created_at desc`;
 
   // Snapshot params before appending limit/offset so COUNT uses the right set
   const countParams = [...params];
@@ -220,11 +247,11 @@ export async function searchListings(f: SearchFilters): Promise<{
       : sql.query<{ n: number }>(
           `select count(*)::int as n
            from listings l
-           ${where}`,
+           ${finalWhere}`,
           countParams,
         ),
     sql.query<Record<string, unknown>>(
-      `select ${listingSelect("", true)},
+      `select ${listingSelect(distanceSelect, true)},
          coalesce((
            select json_agg(b.kind) from boosts b
            where b.listing_id = l.id and b.ends_at > now()
@@ -233,7 +260,7 @@ export async function searchListings(f: SearchFilters): Promise<{
        join categories c on c.id = l.category_id
        left join profiles p on p.user_id = l.user_id
        left join stores s on s.id = l.store_id
-       ${where}
+       ${finalWhere}
        order by ${order}, l.id
        limit $${lim} offset $${off}`,
       params,
@@ -585,7 +612,7 @@ export const getListing = createServerFn({ method: "POST" })
       ? "l.listing_no = $1::bigint"
       : "lower(l.slug) = lower($1) or lower(l.legacy_slug) = lower($1) or l.id = $1";
     const rows = await sql.query<Record<string, unknown>>(
-      `select ${listingSelect()}, l.phone_override, p.phone as profile_phone, p.avatar_url as profile_avatar,
+      `select ${listingSelect()}, l.rejection_reason, l.phone_override, p.phone as profile_phone, p.avatar_url as profile_avatar,
          coalesce(p.phone_visibility, 'members') as phone_visibility, coalesce(p.show_whatsapp, true) as show_whatsapp,
          (l.approved_at is not null) as approved,
          (select count(*)::int from favorites where listing_id = l.id) as fav_count,
@@ -608,12 +635,12 @@ export const getListing = createServerFn({ method: "POST" })
       const sessionUser = await getSessionUser();
       if (!sessionUser) return null;
       // Sahibi mi veya admin mi kontrol et
-      const profile = await sql.query<{ role: string }>(
-        "select role from profiles where user_id=$1",
+      const profile = await sql.query<{ role: string; banned_at: unknown; deletion_requested_at: unknown }>(
+        "select role, banned_at, deletion_requested_at from profiles where user_id=$1",
         [sessionUser.id],
       );
       const isOwner = listing.user_id === sessionUser.id;
-      const isAdmin = profile[0]?.role === "ADMIN";
+      const isAdmin = Boolean(profile[0] && profile[0].role === "ADMIN" && profile[0].banned_at == null && profile[0].deletion_requested_at == null);
       if (!isOwner && !isAdmin) return null;
     }
     // Everything below depends only on the listing row, so fetch it in parallel.
@@ -626,7 +653,7 @@ export const getListing = createServerFn({ method: "POST" })
         page: 1,
         skipCount: true,
       }).then((r) => r.listings.filter((x) => x.id !== listing.id));
-    const [tree, history, similarNarrow, seller, responseStats, reviewRows] = await Promise.all([
+    const [tree, history, similarNarrow, seller, responseStats, reviewRows, attrDefs] = await Promise.all([
       getCategoryTree(),
       sql.query<{ price: string | number; recorded_at: string }>(
         "select price, recorded_at from price_history where listing_id = $1 order by recorded_at asc",
@@ -634,7 +661,7 @@ export const getListing = createServerFn({ method: "POST" })
       ),
       similarOf(true),
       sql.query<Record<string, unknown>>(
-        `select p.user_id, p.display_name, p.city, p.created_at, p.avatar_url, p.bio,
+        `select p.user_id, p.display_name, p.city, p.created_at, p.avatar_url, p.bio, p.banned_at, p.deletion_requested_at,
                 (select count(*)::int from listings where user_id = p.user_id and status = 'ACTIVE' and (expires_at is null or expires_at > now())) as listing_count,
                 (select coalesce(avg(rating),0) from reviews where seller_id = p.user_id) as rating_avg,
                 (select count(*)::int from reviews where seller_id = p.user_id) as rating_count
@@ -648,6 +675,7 @@ export const getListing = createServerFn({ method: "POST" })
          where r.seller_id = $1 order by r.created_at desc limit 3`,
         [listing.user_id],
       ),
+      inheritedAttributes(listing.category_id),
     ]);
     const path = categoryPath(tree, listing.category_id) as CategoryRow[];
     const filteredSimilar = similarNarrow.length > 0 || listing.price <= 0 ? similarNarrow : await similarOf(false);
@@ -658,18 +686,19 @@ export const getListing = createServerFn({ method: "POST" })
         (typeof rows[0].phone_override === "string" && rows[0].phone_override.trim()) ||
         (typeof rows[0].profile_phone === "string" && rows[0].profile_phone.trim())
       );
+    const sellerHidden = Boolean(seller[0]?.banned_at || seller[0]?.deletion_requested_at);
     return {
       listing: {
         ...listing,
         // Units live on the category's attributes, not on the saved values.
         attr_units: Object.fromEntries(
-          (await inheritedAttributes(listing.category_id)).flatMap((a) => (a.unit ? [[a.name, a.unit] as const] : [])),
+          attrDefs.flatMap((a) => (a.unit ? [[a.name, a.unit] as const] : [])),
         ) as Record<string, string>,
       },
       path,
       history: history.map((h) => ({ price: num(h.price), at: asIso(h.recorded_at) })),
       similar: filteredSimilar.slice(0, 4),
-      seller: seller[0]
+      seller: seller[0] && !sellerHidden
         ? {
             id: String(seller[0].user_id),
             name: String(seller[0].display_name ?? "Satıcı"),
@@ -713,9 +742,9 @@ export const incrementView = createServerFn({ method: "POST" })
     // One view per visitor and listing every 30 minutes, so reloads or a script
     // cannot inflate the "most viewed" ordering.
     const request = getRequest();
-    const viewer = request ? viewerKey(request.headers) : "unknown";
-    rateLimit(`view-req:${viewer}`, 120, 60_000);
     const user = await getSessionUser().catch(() => null);
+    const viewer = request ? viewerKey(request.headers, user?.id) : user ? `u:${user.id}` : "unknown";
+    rateLimit(`view-req:${viewer}`, 120, 60_000);
     // Signed-in visitors get the listing on their "Son baktıklarım" list every time.
     if (user) await recordListingView(user.id, data.id);
     if (!firstInWindow(`view:${data.id}:${viewer}`, 30 * 60_000)) return { ok: true };
@@ -801,3 +830,68 @@ export const getSiteSettings = createServerFn({ method: "GET" }).handler(async (
   const { company_name, support_email, support_phone } = await loadSiteSettings();
   return { company_name, support_email, support_phone };
 });
+
+/** Median & quartile price range for similar active listings in a category (city-scoped when >=3 results exist). */
+export const getCategoryPriceStats = createServerFn({ method: "POST" })
+  .validator(
+    z.object({
+      categoryId: z.string().min(1),
+      city: z.string().optional(),
+      currency: z.enum(["TRY", "USD", "EUR"]).optional(),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const sql = await getSql();
+    const ids = await subtreeIds(data.categoryId);
+    if (!ids.length) return null;
+    const currency = data.currency ?? "TRY";
+    const queryStats = async (cityFilter?: string) => {
+      const params: unknown[] = [ids, currency];
+      let cityCond = "";
+      if (cityFilter) {
+        params.push(cityFilter);
+        cityCond = `and l.city = $${params.length}`;
+      }
+      const rows = await sql.query<{ count: number; p25: number | null; median: number | null; p75: number | null }>(
+        `select count(*)::int as count,
+                percentile_cont(0.25) within group (order by l.price)::float8 as p25,
+                percentile_cont(0.5) within group (order by l.price)::float8 as median,
+                percentile_cont(0.75) within group (order by l.price)::float8 as p75
+         from listings l
+         where l.status = 'ACTIVE'
+           and (l.expires_at is null or l.expires_at > now())
+           and l.category_id = any($1::text[])
+           and l.currency = $2
+           and l.price > 0
+           ${cityCond}`,
+        params,
+      );
+      return rows[0];
+    };
+    const cityTrim = data.city?.trim() || "";
+    if (cityTrim) {
+      const cityStats = await queryStats(cityTrim);
+      if (cityStats && cityStats.count >= 3 && cityStats.p25 != null && cityStats.median != null && cityStats.p75 != null) {
+        return {
+          count: cityStats.count,
+          p25: Math.round(cityStats.p25),
+          median: Math.round(cityStats.median),
+          p75: Math.round(cityStats.p75),
+          currency,
+          cityScoped: true,
+        };
+      }
+    }
+    const national = await queryStats();
+    if (!national || national.count < 3 || national.p25 == null || national.median == null || national.p75 == null) {
+      return null;
+    }
+    return {
+      count: national.count,
+      p25: Math.round(national.p25),
+      median: Math.round(national.median),
+      p75: Math.round(national.p75),
+      currency,
+      cityScoped: false,
+    };
+  });

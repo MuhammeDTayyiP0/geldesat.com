@@ -39,6 +39,7 @@ export function useThemePref(initial: ThemePref): ThemePref {
 
 export function setThemePref(pref: ThemePref) {
   current = pref;
-  document.cookie = `${THEME_COOKIE}=${pref}; Path=/; Max-Age=${ONE_YEAR}; SameSite=Lax; Secure`;
+  const secure = typeof location !== "undefined" && location.protocol === "https:" ? "; Secure" : "";
+  document.cookie = `${THEME_COOKIE}=${pref}; Path=/; Max-Age=${ONE_YEAR}; SameSite=Lax${secure}`;
   for (const listener of listeners) listener();
 }

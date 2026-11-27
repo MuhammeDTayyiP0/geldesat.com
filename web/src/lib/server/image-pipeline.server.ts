@@ -207,37 +207,69 @@ const HEIF_WORKER_CODE = `
     });
 `;
 
-function decodeHeifInWorker(input: Uint8Array): Promise<{ width: number; height: number; data: Uint8Array }> {
-  return new Promise((resolve, reject) => {
-    const worker = new Worker(HEIF_WORKER_CODE, {
-      eval: true,
-      workerData: { buffer: input },
-      resourceLimits: { maxOldGenerationSizeMb: 256 },
-    });
-    let settled = false;
-    const finish = (err: Error | null, result?: { width: number; height: number; data: Uint8Array }) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      void worker.terminate();
-      if (err) reject(err);
-      else resolve(result!);
-    };
-    const timer = setTimeout(() => {
-      finish(new Error("HEIC decode timed out"));
-    }, HEIF_DECODE_TIMEOUT_MS);
-    worker.once("message", (msg: { width?: number; height?: number; data?: Uint8Array; error?: string }) => {
-      if (msg.error || !msg.data || !msg.width || !msg.height) {
-        finish(new Error(msg.error ?? "HEIC decode failed"));
-        return;
-      }
-      finish(null, { width: msg.width, height: msg.height, data: msg.data });
-    });
-    worker.once("error", (err) => finish(err instanceof Error ? err : new Error(String(err))));
-    worker.once("exit", (code) => {
-      if (!settled && code !== 0) finish(new Error(`HEIC worker exited with code ${code}`));
+const HEIF_MAX_CONCURRENT = 2;
+const HEIF_MAX_WAITING = 8;
+let heifActive = 0;
+const heifWaiters: Array<() => void> = [];
+
+function acquireHeifSlot(): Promise<void> {
+  if (heifActive < HEIF_MAX_CONCURRENT) {
+    heifActive += 1;
+    return Promise.resolve();
+  }
+  if (heifWaiters.length >= HEIF_MAX_WAITING) {
+    return Promise.reject(new Error("Sunucu şu an yoğun, lütfen tekrar deneyin."));
+  }
+  return new Promise((resolve) => {
+    heifWaiters.push(() => {
+      heifActive += 1;
+      resolve();
     });
   });
+}
+
+function releaseHeifSlot(): void {
+  heifActive = Math.max(0, heifActive - 1);
+  const next = heifWaiters.shift();
+  if (next) next();
+}
+
+async function decodeHeifInWorker(input: Uint8Array): Promise<{ width: number; height: number; data: Uint8Array }> {
+  await acquireHeifSlot();
+  try {
+    return await new Promise((resolve, reject) => {
+      const worker = new Worker(HEIF_WORKER_CODE, {
+        eval: true,
+        workerData: { buffer: input },
+        resourceLimits: { maxOldGenerationSizeMb: 256 },
+      });
+      let settled = false;
+      const finish = (err: Error | null, result?: { width: number; height: number; data: Uint8Array }) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        void worker.terminate();
+        if (err) reject(err);
+        else resolve(result!);
+      };
+      const timer = setTimeout(() => {
+        finish(new Error("HEIC decode timed out"));
+      }, HEIF_DECODE_TIMEOUT_MS);
+      worker.once("message", (msg: { width?: number; height?: number; data?: Uint8Array; error?: string }) => {
+        if (msg.error || !msg.data || !msg.width || !msg.height) {
+          finish(new Error(msg.error ?? "HEIC decode failed"));
+          return;
+        }
+        finish(null, { width: msg.width, height: msg.height, data: msg.data });
+      });
+      worker.once("error", (err) => finish(err instanceof Error ? err : new Error(String(err))));
+      worker.once("exit", (code) => {
+        if (!settled) finish(new Error(`HEIC worker exited with code ${code}`));
+      });
+    });
+  } finally {
+    releaseHeifSlot();
+  }
 }
 
 /**
@@ -330,7 +362,11 @@ export async function processChatPhoto(input: Uint8Array): Promise<Buffer> {
   const h = Math.max(1, Math.round(srcH * scale));
   const prepared = base.resize({ width: w, height: h, fit: "fill" }).flatten({ background: "#ffffff" });
   // Very small images (stickers, screenshots of a few lines) skip the watermark.
-  const resized = await (Math.min(w, h) >= 200 ? prepared.composite([{ input: chatWatermarkSvg(w, h) }]) : prepared).toBuffer();
+  // Encode as lossless intermediate PNG so raw HEIC pixels and non-PNG inputs
+  // share the same format before the WebP quality loop.
+  const resized = await (Math.min(w, h) >= 200 ? prepared.composite([{ input: chatWatermarkSvg(w, h) }]) : prepared)
+    .png({ compressionLevel: 1 })
+    .toBuffer();
 
   for (const quality of [78, 70, 62]) {
     const out = await sharp(resized).webp({ quality, effort: 4, smartSubsample: true }).toBuffer();

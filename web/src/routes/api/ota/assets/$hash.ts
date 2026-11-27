@@ -84,6 +84,8 @@ export const Route = createFileRoute("/api/ota/assets/$hash")({
             "content-type": entry.type,
             "cache-control": "public, max-age=31536000, immutable",
             "x-content-type-options": "nosniff",
+            "content-security-policy": "sandbox; default-src 'none'",
+            "content-disposition": "attachment",
             vary: "accept-encoding",
             ...(gzip ? { "content-encoding": "gzip" } : {}),
           },

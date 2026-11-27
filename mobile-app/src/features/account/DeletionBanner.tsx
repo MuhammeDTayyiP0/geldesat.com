@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaInsetsContext, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import { errorMessage } from '@/api/client';
 import { account } from '@/api/endpoints';
@@ -10,7 +10,7 @@ import { formatDate } from '@/lib/format';
 import { Button, Text, hairline, space, toast, useTheme } from '@/ui';
 
 /** Global alert bar shown while the signed-in account is scheduled for 30-day deletion. */
-export function DeletionBanner() {
+export function DeletionBanner({ children }: { children?: ReactNode }) {
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
   const session = useSession();
@@ -24,7 +24,7 @@ export function DeletionBanner() {
   });
 
   const purgeAt = session.status === 'signedIn' ? deletion.data?.purgeAt : null;
-  if (!purgeAt) return null;
+  if (!purgeAt) return <>{children}</>;
 
   const restore = async () => {
     if (busy) return;
@@ -43,22 +43,27 @@ export function DeletionBanner() {
   };
 
   return (
-    <View
-      accessibilityRole="alert"
-      style={[
-        styles.bar,
-        {
-          paddingTop: insets.top + space.xs,
-          backgroundColor: c.dangerSoft,
-          borderBottomColor: c.danger,
-        },
-      ]}
-    >
-      <Text variant="caption" tone="danger" style={styles.flex}>
-        Hesabınız {formatDate(purgeAt)} tarihinde silinecek; ilanlarınız şu an gizli.
-      </Text>
-      <Button title="Geri al" size="sm" loading={busy} onPress={() => void restore()} />
-    </View>
+    <>
+      <View
+        accessibilityRole="alert"
+        style={[
+          styles.bar,
+          {
+            paddingTop: insets.top + space.xs,
+            backgroundColor: c.dangerSoft,
+            borderBottomColor: c.danger,
+          },
+        ]}
+      >
+        <Text variant="caption" tone="danger" style={styles.flex}>
+          Hesabınız {formatDate(purgeAt)} tarihinde silinecek; ilanlarınız şu an gizli.
+        </Text>
+        <Button title="Geri al" size="sm" loading={busy} onPress={() => void restore()} />
+      </View>
+      <SafeAreaInsetsContext.Provider value={{ ...insets, top: 0 }}>
+        {children}
+      </SafeAreaInsetsContext.Provider>
+    </>
   );
 }
 

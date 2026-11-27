@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { keepPreviousData, useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { Check, Coins, CreditCard, Download, Plus, TrendingUp, Wallet, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { adminCreditLedger, adminListCreditOrders, adminResolveCreditOrder } from "@/lib/server/admin/business";
 import { adminGrantCredits, adminListUsers, adminUserDetail } from "@/lib/server/admin/users";
 import { useRunner, useSheets } from "@/components/admin/hooks";
@@ -14,6 +15,7 @@ import {
   EmptyState,
   ErrorState,
   Field,
+  InlineQueryError,
   inputClass,
   Modal,
   PageHeader,
@@ -114,6 +116,11 @@ function Orders({
   const { confirm, prompt } = useConfirm();
   const { openUser } = useSheets();
   const rows = query.data?.rows ?? [];
+  const lastPage = query.data?.pages;
+  const currentPage = search.page ?? 1;
+  useEffect(() => {
+    if (lastPage && currentPage > lastPage) set({ page: lastPage > 1 ? lastPage : undefined }, false);
+  }, [lastPage, currentPage, set]);
 
   function exportCsv() {
     downloadCsv(
@@ -158,6 +165,7 @@ function Orders({
           <Download className="size-4" /> CSV (bu sayfa)
         </Button>
       </div>
+      {query.isError && query.data ? <InlineQueryError error={query.error} onRetry={() => void query.refetch()} /> : null}
       {query.error && !query.data ? (
         <ErrorState error={query.error} onRetry={() => void query.refetch()} />
       ) : query.isLoading ? (
@@ -254,6 +262,11 @@ function Ledger({ search, set }: { search: Search; set: (patch: Partial<Search>,
   });
   const { openUser } = useSheets();
   const rows = q.data?.rows ?? [];
+  const lastPage = q.data?.pages;
+  const currentPage = search.page ?? 1;
+  useEffect(() => {
+    if (lastPage && currentPage > lastPage) set({ page: lastPage > 1 ? lastPage : undefined }, false);
+  }, [lastPage, currentPage, set]);
 
   function exportCsv() {
     downloadCsv(
@@ -280,6 +293,7 @@ function Ledger({ search, set }: { search: Search; set: (patch: Partial<Search>,
           <Download className="size-4" /> CSV (bu sayfa)
         </Button>
       </div>
+      {q.isError && q.data ? <InlineQueryError error={q.error} onRetry={() => void q.refetch()} /> : null}
       {q.error && !q.data ? (
         <ErrorState error={q.error} onRetry={() => void q.refetch()} />
       ) : q.isLoading ? (
@@ -330,6 +344,7 @@ function describeLedger(reason: string) {
 }
 
 function GrantModal({ onClose }: { onClose: () => void }) {
+  const { user: currentUser } = useCurrentUserState();
   const [q, setQ] = useState("");
   const [user, setUser] = useState<{ user_id: string; display_name: string; email: string | null } | null>(null);
   const [amount, setAmount] = useState("10");
@@ -408,15 +423,26 @@ function GrantModal({ onClose }: { onClose: () => void }) {
               <p className="mt-1.5 text-xs text-muted">Eşleşen üye bulunamadı.</p>
             ) : users.data?.rows.length ? (
               <ul className="mt-1 divide-y divide-border overflow-hidden rounded-lg border border-border">
-                {users.data.rows.map((u) => (
-                  <li key={u.user_id}>
-                    <button type="button" onClick={() => setUser(u)} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-elevated">
-                      <Avatar name={u.display_name} src={u.avatar_url} size={24} />
-                      <span className="flex-1 truncate font-medium">{u.display_name}</span>
-                      <span className="truncate text-xs text-muted">{u.email}</span>
-                    </button>
-                  </li>
-                ))}
+                {users.data.rows.map((u) => {
+                  const isSelf = u.user_id === currentUser?.id;
+                  return (
+                    <li key={u.user_id}>
+                      <button
+                        type="button"
+                        disabled={isSelf}
+                        onClick={() => setUser(u)}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-elevated disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <Avatar name={u.display_name} src={u.avatar_url} size={24} />
+                        <span className="flex-1 truncate font-medium">
+                          {u.display_name}
+                          {isSelf ? " (kendi hesabınız)" : ""}
+                        </span>
+                        <span className="truncate text-xs text-muted">{u.email}</span>
+                      </button>
+                    </li>
+                  );
+                })}
               </ul>
             ) : null}
           </Field>

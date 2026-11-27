@@ -141,6 +141,7 @@ export function Filters({
         <div className="grid grid-cols-2 gap-2">
           <Input
             type="number"
+            min={0}
             inputMode="numeric"
             pattern="[0-9]*"
             placeholder="En Az"
@@ -150,6 +151,7 @@ export function Filters({
           />
           <Input
             type="number"
+            min={0}
             inputMode="numeric"
             pattern="[0-9]*"
             placeholder="En Çok"
@@ -167,6 +169,7 @@ export function Filters({
             <div className="grid grid-cols-2 gap-2">
               <Input
                 type="number"
+                min={0}
                 inputMode="numeric"
                 pattern="[0-9]*"
                 placeholder="Min Yıl"
@@ -176,6 +179,7 @@ export function Filters({
               />
               <Input
                 type="number"
+                min={0}
                 inputMode="numeric"
                 pattern="[0-9]*"
                 placeholder="Max Yıl"
@@ -190,6 +194,7 @@ export function Filters({
             <div className="grid grid-cols-2 gap-2">
               <Input
                 type="number"
+                min={0}
                 inputMode="numeric"
                 pattern="[0-9]*"
                 placeholder="Min KM"
@@ -199,6 +204,7 @@ export function Filters({
               />
               <Input
                 type="number"
+                min={0}
                 inputMode="numeric"
                 pattern="[0-9]*"
                 placeholder="Max KM"
@@ -217,6 +223,7 @@ export function Filters({
           <div className="grid grid-cols-2 gap-2">
             <Input
               type="number"
+              min={0}
               inputMode="numeric"
               pattern="[0-9]*"
               placeholder="Min m²"
@@ -226,6 +233,7 @@ export function Filters({
             />
             <Input
               type="number"
+              min={0}
               inputMode="numeric"
               pattern="[0-9]*"
               placeholder="Max m²"
@@ -414,8 +422,10 @@ export function Filters({
 
       {!hideSort ? (
         <div>
-          <Label className="text-xs font-semibold uppercase tracking-wider text-muted">Sıralama</Label>
-          <Select value={value.sort ?? "date_desc"} onChange={(e) => set("sort", e.target.value)}>
+          <Label htmlFor="filter-sort-select" className="text-xs font-semibold uppercase tracking-wider text-muted">
+            Sıralama
+          </Label>
+          <Select id="filter-sort-select" value={value.sort ?? "date_desc"} onChange={(e) => set("sort", e.target.value)}>
             <option value="date_desc">En Yeni İlanlar</option>
             <option value="date_asc">En Eski İlanlar</option>
             <option value="price_asc">Fiyat: Düşükten Yükseğe</option>

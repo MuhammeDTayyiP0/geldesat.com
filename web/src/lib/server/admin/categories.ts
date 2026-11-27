@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { getSql, type Sql } from "@/lib/db";
 import { asJson, num, slugify } from "@/lib/utils";
+import { clearCategoryCache } from "../category-cache";
 import { adminMiddleware, audit } from "./common";
 
 type QuerySql = Pick<Sql, "query">;
@@ -240,6 +241,7 @@ export const adminCreateCategories = createServerFn({ method: "POST" })
       }
       return { parentName, created };
     });
+    clearCategoryCache();
     await audit(
       sql,
       context.adminId,
@@ -268,21 +270,25 @@ export const adminUpdateCategory = createServerFn({ method: "POST" })
     if (!slug) throw new Error("Geçerli bir adres (slug) girin.");
     const changes: string[] = [];
     await sql.transaction(async (tx) => {
-      const rows = await tx.query<{ name: string; slug: string; icon: string | null }>(
-        "select name, slug, icon from categories where id = $1 for update",
+      await tx.query("select pg_advisory_xact_lock(hashtext('category-move'))");
+      const rows = await tx.query<{ name: string; slug: string; icon: string | null; parent_id: string | null }>(
+        "select name, slug, icon, parent_id from categories where id = $1 for update",
         [data.id],
       );
       const cur = rows[0];
       if (!cur) throw new Error("Kategori bulunamadı.");
-      if (data.name.trim() !== cur.name) {
-        const twin = await tx.query(
-          "select 1 from categories c join categories me on me.id = $1 where c.id <> me.id and c.parent_id is not distinct from me.parent_id and lower(c.name) = lower($2) limit 1",
-          [data.id, data.name.trim()],
+      if (data.name.trim().toLocaleLowerCase("tr") !== cur.name.toLocaleLowerCase("tr")) {
+        const sibs = await tx.query<{ name: string }>(
+          "select name from categories where id <> $1 and parent_id is not distinct from $2",
+          [data.id, cur.parent_id],
         );
-        if (twin[0]) throw new Error("Bu üst kategoride aynı adda bir kategori var.");
+        const targetLower = data.name.trim().toLocaleLowerCase("tr");
+        if (sibs.some((s) => s.name.toLocaleLowerCase("tr") === targetLower)) {
+          throw new Error("Bu üst kategoride aynı adda bir kategori var.");
+        }
       }
       if (slug !== cur.slug) {
-        const taken = await tx.query<{ id: string }>("select id from categories where slug = $1 and id <> $2", [slug, data.id]);
+        const taken = await tx.query<{ id: string }>("select id from categories where (slug = $1 or id = $1) and id <> $2", [slug, data.id]);
         if (taken[0]) throw new Error("Bu adres başka bir kategoride kullanılıyor.");
         // Links to the old address keep working.
         await tx.query(
@@ -296,6 +302,7 @@ export const adminUpdateCategory = createServerFn({ method: "POST" })
       if (cur.slug !== slug) changes.push(`adres ${cur.slug} → ${slug}`);
       if ((cur.icon ?? null) !== (data.icon || null)) changes.push("ikon");
     });
+    clearCategoryCache();
     if (changes.length) {
       await audit(sql, context.adminId, "category.edit", "category", data.id, `${data.name}: ${changes.join(", ")}`);
     }
@@ -330,6 +337,7 @@ export const adminMoveCategory = createServerFn({ method: "POST" })
       await renumber(tx, sibs);
       return { cur, newParentName, oldParentName };
     });
+    clearCategoryCache();
     if (cur.parent_id !== data.parentId) {
       await audit(sql, context.adminId, "category.move", "category", data.id, `"${cur.name}" ${oldParentName ?? "?"} → ${newParentName} altına taşındı`, {
         from: cur.parent_id,
@@ -387,6 +395,7 @@ export const adminReorderCategories = createServerFn({ method: "POST" })
       await renumber(tx, ordered);
       return name;
     });
+    clearCategoryCache();
     const label = { manual: "elle sıralandı", alpha: "A→Z sıralandı", alpha_desc: "Z→A sıralandı", listings: "ilan sayısına göre sıralandı" }[data.mode];
     await audit(sql, context.adminId, "category.reorder", "category", data.parentId, `${parentName} alt kategorileri ${label}`);
     return { ok: true as const };
@@ -422,6 +431,7 @@ export const adminDeleteCategory = createServerFn({ method: "POST" })
       await tx.query("delete from categories where id = $1", [data.id]);
       return { name, ids, listingCount, targetName };
     });
+    clearCategoryCache();
     await audit(
       sql,
       context.adminId,
@@ -466,13 +476,13 @@ export const adminSetCategoryAttributes = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     const sql = await getSql();
-    const name = await nameOf(sql, data.categoryId);
     const unique = [...new Map(data.items.map((i) => [i.attributeId, i])).values()];
-    if (unique.length) {
-      const found = await sql.query<{ id: string }>("select id from attribute_defs where id = any($1::text[])", [unique.map((i) => i.attributeId)]);
-      if (found.length !== unique.length) throw new Error("Bazı özellikler bulunamadı.");
-    }
-    await sql.transaction(async (tx) => {
+    const name = await sql.transaction(async (tx) => {
+      const catName = await nameOf(tx, data.categoryId);
+      if (unique.length) {
+        const found = await tx.query<{ id: string }>("select id from attribute_defs where id = any($1::text[])", [unique.map((i) => i.attributeId)]);
+        if (found.length !== unique.length) throw new Error("Bazı özellikler bulunamadı.");
+      }
       await tx.query("delete from category_attributes where category_id = $1", [data.categoryId]);
       for (const item of unique) {
         await tx.query("insert into category_attributes (category_id, attribute_id, required) values ($1,$2,$3)", [
@@ -481,7 +491,9 @@ export const adminSetCategoryAttributes = createServerFn({ method: "POST" })
           item.required,
         ]);
       }
+      return catName;
     });
+    clearCategoryCache();
     await audit(sql, context.adminId, "category.attributes", "category", data.categoryId, `"${name}" özellikleri güncellendi (${unique.length} özellik)`);
     return { ok: true as const };
   });

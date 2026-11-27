@@ -16,7 +16,7 @@ export const Route = createFileRoute("/api/mobile/reviews")({
           if (!userId) return Response.json({ success: false, error: "Puan vermek için giriş yapın." }, { status: 401 });
           const body = (await readJson(request)) as { listingId?: unknown; rating?: unknown; comment?: unknown };
           const listingId = typeof body.listingId === "string" ? body.listingId : "";
-          const rating = Number(body.rating);
+          const rating = typeof body.rating === "number" ? body.rating : NaN;
           const comment = typeof body.comment === "string" ? body.comment.trim().slice(0, 400) : "";
           if (!listingId || !Number.isInteger(rating) || rating < 1 || rating > 5) {
             return Response.json({ success: false, error: "İlan ve 1–5 arası puan gereklidir." }, { status: 400 });

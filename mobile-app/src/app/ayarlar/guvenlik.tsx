@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Platform, Share, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useQuery } from '@tanstack/react-query';
@@ -9,8 +9,10 @@ import { ApiError, errorMessage, timedFetch } from '@/api/client';
 import { account } from '@/api/endpoints';
 import { keys, queryClient } from '@/api/queries';
 import { changePassword, requestPasswordReset, sendVerificationEmail, signOut, signOutOtherDevices } from '@/auth/auth';
-import { getToken, useSession } from '@/auth/session';
+import { clearSession, getToken, useSession } from '@/auth/session';
+import { clearLocalPushRegistration } from '@/lib/push';
 import { API_BASE_URL, SITE_URL } from '@/lib/config';
+import { exportAccountData } from '@/features/account/exportData';
 import { formatDate, timeAgo } from '@/lib/format';
 import { Badge, Button, Card, Header, Input, ListRow, RowGroup, Sheet, Text, confirm, space, toast, useTheme } from '@/ui';
 import { RequireSignIn } from '@/auth/RequireSignIn';
@@ -35,16 +37,21 @@ const AUTH_ORIGIN_HEADERS = { Origin: SITE_URL, Referer: `${SITE_URL}/` };
 
 async function authFetch<T>(path: string, body?: unknown): Promise<T> {
   const token = getToken();
+  if (!token) throw new ApiError('Oturum süresi doldu, lütfen yeniden giriş yapın.', 401);
   const response = await timedFetch(`${API_BASE_URL}/api/auth${path}`, {
     method: body === undefined ? 'GET' : 'POST',
     headers: {
       Accept: 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      Authorization: `Bearer ${token}`,
       ...(body === undefined ? {} : { 'Content-Type': 'application/json', ...AUTH_ORIGIN_HEADERS }),
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   const data = (await response.json().catch(() => null)) as ({ message?: string; error?: string } & T) | null;
+  if (response.status === 401 && getToken() === token) {
+    void clearSession();
+    void clearLocalPushRegistration();
+  }
   if (!response.ok) {
     throw new ApiError(data?.message || data?.error || 'İşlem tamamlanamadı.', response.status);
   }
@@ -156,34 +163,7 @@ function SecuritySettings() {
     if (exporting) return;
     setExporting(true);
     try {
-      const token = getToken();
-      const res = await timedFetch(`${API_BASE_URL}/api/hesap/verilerim`, {
-        method: 'GET',
-        headers: {
-          Accept: 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-      });
-      if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(
-          body?.error ||
-            (res.status === 429
-              ? 'Çok sık indirme denediniz. Biraz sonra tekrar deneyin.'
-              : 'Verileriniz hazırlanamadı.'),
-        );
-      }
-      const text = await res.text();
-      if (Platform.OS === 'web' && typeof document !== 'undefined') {
-        const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'geldesat-verilerim.json';
-        a.click();
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-      } else {
-        await Share.share({ title: 'geldesat-verilerim.json', message: text });
-      }
+      await exportAccountData();
     } catch (e) {
       toast.error(errorMessage(e, 'Verileriniz indirilemedi.'));
     } finally {
@@ -447,6 +427,7 @@ function DeleteAccountSheet({
   const [password, setPassword] = useState('');
   const [word, setWord] = useState('');
   const [busy, setBusy] = useState(false);
+  const [confirmStep, setConfirmStep] = useState(false);
   const deletedRef = useRef(false);
   const wordOk = word.trim().toLocaleUpperCase('tr').replace(/I/g, 'İ') === CONFIRM_WORD;
   const ready = wordOk && (!hasPassword || password.length > 0);
@@ -457,6 +438,7 @@ function DeleteAccountSheet({
       onDismissed={() => {
         setPassword('');
         setWord('');
+        setConfirmStep(false);
         if (!deletedRef.current) return;
         deletedRef.current = false;
         void onDeleted();
@@ -464,7 +446,7 @@ function DeleteAccountSheet({
       title="Hesabımı sil"
       footer={
         <Button
-          title="Hesabımı sil"
+          title={confirmStep ? 'Evet, hesabımı kalıcı sil' : 'Hesabımı sil'}
           variant="danger"
           block
           style={styles.flex}
@@ -472,18 +454,16 @@ function DeleteAccountSheet({
           loading={busy}
           onPress={async () => {
             if (!ready) return;
-            const ok = await confirm({
-              title: 'Emin misiniz?',
-              message: 'İlanlarınız hemen gizlenir ve hesabınız 30 gün sonra kalıcı olarak silinir.',
-              confirmText: 'Sil',
-              destructive: true,
-            });
-            if (!ok) return;
+            if (!confirmStep) {
+              setConfirmStep(true);
+              return;
+            }
             setBusy(true);
             try {
               await account.requestDeletion(hasPassword ? password : undefined);
               setPassword('');
               setWord('');
+              setConfirmStep(false);
               deletedRef.current = true;
               onClose();
             } catch (e) {

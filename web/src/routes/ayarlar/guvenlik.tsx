@@ -38,6 +38,7 @@ function SecuritySettings() {
   const [emailOpen, setEmailOpen] = useState(false);
   const [newEmail, setNewEmail] = useState("");
   const [emailBusy, setEmailBusy] = useState(false);
+  const [sessionBusy, setSessionBusy] = useState<string | null>(null);
   const [sessionsFailed, setSessionsFailed] = useState(false);
 
   async function loadSessions() {
@@ -87,23 +88,39 @@ function SecuritySettings() {
       toast.success("Onay bağlantısı gönderildi. Değişiklik onaylanınca geçerli olur.");
       setEmailOpen(false);
       setNewEmail("");
+    } catch (err) {
+      toast.error(errorText(err, "E-posta değiştirilemedi"));
     } finally {
       setEmailBusy(false);
     }
   }
 
   async function closeSession(token: string) {
-    const { error } = await authClient.revokeSession({ token });
-    if (error) return toast.error(authErrorText(error, "Oturum kapatılamadı"));
-    toast.success("Oturum kapatıldı");
-    void loadSessions().catch(() => setSessionsFailed(true));
+    setSessionBusy(token);
+    try {
+      const { error } = await authClient.revokeSession({ token });
+      if (error) return toast.error(authErrorText(error, "Oturum kapatılamadı"));
+      toast.success("Oturum kapatıldı");
+      void loadSessions().catch(() => setSessionsFailed(true));
+    } catch (err) {
+      toast.error(errorText(err, "Oturum kapatılamadı"));
+    } finally {
+      setSessionBusy(null);
+    }
   }
 
   async function signOutOthers() {
-    const { error } = await authClient.revokeOtherSessions();
-    if (error) return toast.error(authErrorText(error, "Oturumlar kapatılamadı"));
-    toast.success("Diğer cihazlardaki oturumlar kapatıldı");
-    void loadSessions().catch(() => setSessionsFailed(true));
+    setSessionBusy("all");
+    try {
+      const { error } = await authClient.revokeOtherSessions();
+      if (error) return toast.error(authErrorText(error, "Oturumlar kapatılamadı"));
+      toast.success("Diğer cihazlardaki oturumlar kapatıldı");
+      void loadSessions().catch(() => setSessionsFailed(true));
+    } catch (err) {
+      toast.error(errorText(err, "Oturumlar kapatılamadı"));
+    } finally {
+      setSessionBusy(null);
+    }
   }
 
   return (
@@ -165,7 +182,7 @@ function SecuritySettings() {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-base font-semibold">Açık oturumlar</h2>
             {sessions && sessions.length > 1 ? (
-              <Button size="sm" variant="outline" onClick={() => void signOutOthers()}>
+              <Button size="sm" variant="outline" disabled={sessionBusy !== null} onClick={() => void signOutOthers()}>
                 Diğer cihazlardan çıkış yap
               </Button>
             ) : null}
@@ -191,7 +208,7 @@ function SecuritySettings() {
                       <p className="text-xs text-muted">Son oturum yenileme: {timeAgo(String(s.updatedAt))}</p>
                     </div>
                     {current ? null : (
-                      <Button size="sm" variant="ghost" onClick={() => void closeSession(s.token)}>
+                      <Button size="sm" variant="ghost" disabled={sessionBusy !== null} onClick={() => void closeSession(s.token)}>
                         Kapat
                       </Button>
                     )}

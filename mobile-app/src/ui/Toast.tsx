@@ -49,7 +49,8 @@ export function ToastHost({ active = true }: { active?: boolean }) {
     if (!active) return;
     hosts.push(show);
     return () => {
-      hosts.splice(hosts.indexOf(show), 1);
+      const idx = hosts.indexOf(show);
+      if (idx >= 0) hosts.splice(idx, 1);
     };
   }, [anim, active]);
 

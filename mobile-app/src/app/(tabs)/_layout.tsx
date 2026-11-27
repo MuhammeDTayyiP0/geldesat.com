@@ -34,7 +34,15 @@ function TabBar({ state, emitter, navigateToTab }: BottomTabBarProps) {
   const { data: counts } = useCounts();
 
   return (
-    <View style={[styles.bar, { backgroundColor: c.surface, borderTopColor: c.border, paddingBottom: Math.max(insets.bottom, space.sm) }]}>
+    <View pointerEvents="box-none">
+      <View
+        pointerEvents="none"
+        style={[
+          StyleSheet.absoluteFill,
+          { top: 22, backgroundColor: c.surface, borderTopWidth: hairline, borderTopColor: c.border },
+        ]}
+      />
+      <View pointerEvents="box-none" style={[styles.bar, { paddingBottom: Math.max(insets.bottom, space.sm) }]}>
       {state.routes.map((route, index) => {
         const tab = TABS[route.name];
         if (!tab) return null;
@@ -90,12 +98,13 @@ function TabBar({ state, emitter, navigateToTab }: BottomTabBarProps) {
           </Pressable>
         );
       })}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  bar: { flexDirection: 'row', borderTopWidth: hairline, paddingTop: space.sm },
+  bar: { flexDirection: 'row', paddingTop: 22 + space.sm },
   item: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', gap: 3, minHeight: 48 },
   post: { width: 50, height: 50, borderRadius: 25, alignItems: 'center', justifyContent: 'center', marginTop: -22 },
   postLabel: { fontWeight: '700' },

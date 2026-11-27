@@ -347,22 +347,34 @@ export function buildListingSeo(input: ListingSeoInput): ListingSeoOutput {
     const n = p.name.toLocaleLowerCase("tr");
     return s.includes("motosiklet") || n.includes("motosiklet");
   });
+  const isCar = path.some((p) => {
+    const s = p.slug.toLocaleLowerCase("tr");
+    const n = p.name.toLocaleLowerCase("tr");
+    return s.includes("otomobil") || s.includes("araba") || n.includes("otomobil");
+  });
   const isVehicle =
     isMotorcycle ||
+    isCar ||
     path.some((p) => {
       const s = p.slug.toLocaleLowerCase("tr");
       const n = p.name.toLocaleLowerCase("tr");
-      return s.includes("vasita") || s.includes("otomobil") || n.includes("vasıta") || n.includes("otomobil");
+      return s.includes("vasita") || n.includes("vasıta");
     });
 
   const isRealEstate = path.some((p) => {
     const s = p.slug.toLocaleLowerCase("tr");
     const n = p.name.toLocaleLowerCase("tr");
-    return s.includes("emlak") || n.includes("emlak") || s.includes("konut") || s.includes("arsa");
+    return s.includes("emlak") || n.includes("emlak") || s.includes("konut") || n.includes("arsa");
   });
 
-  const datePublished = listing.created_at ? new Date(listing.created_at).toISOString() : undefined;
-  const dateModified = listing.updated_at ? new Date(listing.updated_at).toISOString() : datePublished;
+  const datePublished =
+    listing.created_at && Number.isFinite(Date.parse(String(listing.created_at)))
+      ? new Date(listing.created_at).toISOString()
+      : undefined;
+  const dateModified =
+    listing.updated_at && Number.isFinite(Date.parse(String(listing.updated_at)))
+      ? new Date(listing.updated_at).toISOString()
+      : datePublished;
 
   const baseOffer = {
     "@type": "Offer",
@@ -408,7 +420,7 @@ export function buildListingSeo(input: ListingSeoInput): ListingSeoOutput {
 
     structuredData = {
       "@context": "https://schema.org/",
-      "@type": isMotorcycle ? "Motorcycle" : "Car",
+      "@type": isMotorcycle ? "Motorcycle" : isCar ? "Car" : "Vehicle",
       name: listing.title,
       description,
       url: pageUrl,

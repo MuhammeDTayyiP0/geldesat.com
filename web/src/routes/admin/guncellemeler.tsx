@@ -5,7 +5,7 @@ import { AlertTriangle, ChevronDown, ChevronUp, History, Pause, Percent, Play, R
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { adminListOtaUpdates, adminRepublishOta, adminRollbackOtaToEmbedded, adminSetOtaRollout, type AdminOtaUpdate } from "@/lib/server/admin/ota";
+import { adminListOtaUpdates, adminOtaUpdateErrors, adminRepublishOta, adminRollbackOtaToEmbedded, adminSetOtaRollout, type AdminOtaUpdate } from "@/lib/server/admin/ota";
 import { useRunner } from "@/components/admin/hooks";
 import { bytes, dateTime, relative } from "@/components/admin/format";
 import { Card, CardHead, EmptyState, ErrorState, Menu, MenuItem, MenuLabel, MenuSeparator, PageHeader, Pill, SearchInput, Segmented, SkeletonRows, Table, Td, Th, useConfirm } from "@/components/admin/ui";
@@ -26,8 +26,14 @@ function OtaPage() {
   const [selectedUpdateFilter, setSelectedUpdateFilter] = useState<{ label: string; ids: string[] } | null>(null);
   const [expandedErrors, setExpandedErrors] = useState<Set<string>>(new Set());
 
+  const filteredUpdateErrorsQuery = useQuery({
+    queryKey: ["admin", "ota", "errors", selectedUpdateFilter?.ids ?? []],
+    queryFn: () => adminOtaUpdateErrors({ data: { updateIds: selectedUpdateFilter!.ids } }),
+    enabled: Boolean(selectedUpdateFilter?.ids.length),
+  });
+
   const filteredErrors = useMemo(() => {
-    const errors = q.data?.recentErrors ?? [];
+    const errors = selectedUpdateFilter ? (filteredUpdateErrorsQuery.data ?? q.data?.recentErrors ?? []) : (q.data?.recentErrors ?? []);
     const needle = errorQuery.trim().toLocaleLowerCase("tr");
     const allowedIds = selectedUpdateFilter ? new Set(selectedUpdateFilter.ids.map((id) => id.toLowerCase())) : null;
     return errors.filter((e) => {
@@ -43,7 +49,7 @@ function OtaPage() {
       }
       return true;
     });
-  }, [q.data?.recentErrors, platformFilter, fatalOnly, selectedUpdateFilter, errorQuery]);
+  }, [q.data?.recentErrors, filteredUpdateErrorsQuery.data, platformFilter, fatalOnly, selectedUpdateFilter, errorQuery]);
 
   function toggleErrorStack(id: string) {
     setExpandedErrors((prev) => {

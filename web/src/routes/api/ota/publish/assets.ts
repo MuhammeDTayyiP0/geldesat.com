@@ -6,6 +6,14 @@ import { BodyTooLargeError, limitedFormData, readJson } from "@/lib/server/reque
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
 const MAX_FORM_BYTES = 120 * 1024 * 1024;
+const MAX_HASH_CHECK = 2000;
+const SAFE_ASSET_MIME =
+  /^(?:application\/(?:javascript|x-javascript|json|octet-stream)|text\/javascript|image\/(?:png|jpeg|webp|gif)|font\/(?:ttf|otf|woff|woff2)|audio\/[a-z0-9.+-]+|video\/[a-z0-9.+-]+)$/i;
+
+function safeAssetContentType(raw: string | undefined): string {
+  const mime = (raw ?? "").split(";")[0]?.trim().toLowerCase() ?? "";
+  return SAFE_ASSET_MIME.test(mime) ? mime.slice(0, 100) : "application/octet-stream";
+}
 
 /**
  * Upload step of `mobile-app/scripts/ota-publish.mjs`.
@@ -26,6 +34,9 @@ export const Route = createFileRoute("/api/ota/publish/assets")({
             body = (await readJson(request, 512 * 1024)) as { hashes?: unknown };
           } catch (err) {
             return Response.json({ success: false, error: err instanceof BodyTooLargeError ? err.message : "İstek okunamadı." }, { status: errorStatus(err, 400) });
+          }
+          if (Array.isArray(body?.hashes) && body.hashes.length > MAX_HASH_CHECK) {
+            return Response.json({ success: false, error: `Tek seferde en fazla ${MAX_HASH_CHECK} hash kontrol edilebilir.` }, { status: 400 });
           }
           const hashes = Array.isArray(body?.hashes) ? body.hashes.filter((h): h is string => typeof h === "string" && HASH_PATTERN.test(h)) : [];
           if (!hashes.length) return Response.json({ success: true, missing: [] });
@@ -52,7 +63,7 @@ export const Route = createFileRoute("/api/ota/publish/assets")({
           if (sha256Base64Url(data) !== hash) return Response.json({ success: false, error: `Dosya içeriği hash ile uyuşmuyor: ${hash}` }, { status: 400 });
           await sql.query("insert into ota_assets (hash, content_type, data) values ($1, $2, $3) on conflict (hash) do nothing", [
             hash,
-            (value.type || "application/octet-stream").slice(0, 100),
+            safeAssetContentType(value.type),
             Buffer.from(data),
           ]);
           stored += 1;

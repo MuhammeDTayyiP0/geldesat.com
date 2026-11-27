@@ -8,13 +8,16 @@ import {
   ChevronRight,
   LayoutGrid,
   List as ListIcon,
+  LocateFixed,
   MapPin,
   RotateCcw,
   Search,
   SlidersHorizontal,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useCompareList } from "@/components/listing/CompareBar";
 import { useViewPreference } from "@/lib/use-view-pref";
 import { getCategory, listCategoryRoots, searchCatalogWithContext } from "@/lib/server/catalog";
 import { attrsToSearch, normalizeFilterRanges, parseAttrs, parseSearch, toFilters, type CatalogSearch } from "@/lib/search-params";
@@ -34,6 +37,7 @@ const SORT_OPTIONS = [
   { value: "price_asc", label: "Fiyat: Düşükten Yükseğe" },
   { value: "price_desc", label: "Fiyat: Yüksekten Düşüğe" },
   { value: "views_desc", label: "En Çok İncelenenler" },
+  { value: "distance", label: "En Yakın İlanlar" },
 ];
 
 /** Filters that only exist inside a category (year, km, m², its options). */
@@ -161,25 +165,40 @@ function SearchPage() {
     return () => root.classList.remove("mobile-nav-lock");
   }, [mobileFilterOpen, mobileSortOpen]);
 
+  const compareCount = useCompareList().length;
+  const filterTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sortTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (filterTimerRef.current) clearTimeout(filterTimerRef.current);
+      if (sortTimerRef.current) clearTimeout(sortTimerRef.current);
+    };
+  }, []);
+
   function openFilterDrawer() {
+    if (filterTimerRef.current) clearTimeout(filterTimerRef.current);
     setFilters(initial);
     setMobileFilterOpen(true);
     requestAnimationFrame(() => requestAnimationFrame(() => setMobileFilterVisible(true)));
   }
 
   function closeFilterDrawer() {
+    if (filterTimerRef.current) clearTimeout(filterTimerRef.current);
     setMobileFilterVisible(false);
-    setTimeout(() => setMobileFilterOpen(false), 280);
+    filterTimerRef.current = setTimeout(() => setMobileFilterOpen(false), 280);
   }
 
   function openSortDrawer() {
+    if (sortTimerRef.current) clearTimeout(sortTimerRef.current);
     setMobileSortOpen(true);
     requestAnimationFrame(() => requestAnimationFrame(() => setMobileSortVisible(true)));
   }
 
   function closeSortDrawer() {
+    if (sortTimerRef.current) clearTimeout(sortTimerRef.current);
     setMobileSortVisible(false);
-    setTimeout(() => setMobileSortOpen(false), 280);
+    sortTimerRef.current = setTimeout(() => setMobileSortOpen(false), 280);
   }
 
   function apply(extra?: Partial<CatalogSearch>, values: FilterState = filters) {
@@ -472,6 +491,7 @@ function SearchPage() {
           ) : null}
           {(currentCategory ? categoryChildren : categoryRoots).length > 0 ? (
             <CategoryButtons
+              key={currentCategory?.id ?? "root"}
               items={currentCategory ? categoryChildren : categoryRoots}
               onPick={(category) => apply({ category: category.slug })}
             />
@@ -488,7 +508,56 @@ function SearchPage() {
           <p className="text-xs text-muted sm:text-sm">{formatNumber(result.total)} ilan listeleniyor</p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant={search.nearLat && search.nearLng ? "default" : "outline"}
+            size="sm"
+            className="flex items-center gap-1.5 rounded-lg text-xs font-semibold"
+            onClick={() => {
+              if (search.nearLat && search.nearLng) {
+                apply({
+                  nearLat: undefined,
+                  nearLng: undefined,
+                  maxDistanceKm: undefined,
+                  sort: search.sort === "distance" ? "date_desc" : search.sort,
+                });
+                return;
+              }
+              if (typeof navigator === "undefined" || !navigator.geolocation) {
+                toast.error("Tarayıcınız konum özelliğini desteklemiyor.");
+                return;
+              }
+              navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                  apply({
+                    nearLat: pos.coords.latitude.toFixed(5),
+                    nearLng: pos.coords.longitude.toFixed(5),
+                    sort: "distance",
+                    page: "1",
+                  });
+                },
+                () => toast.error("Konum izni alınamadı."),
+                { enableHighAccuracy: false, timeout: 10_000, maximumAge: 60_000 },
+              );
+            }}
+          >
+            <LocateFixed className="size-3.5" />
+            <span>{search.nearLat && search.nearLng ? "Yakınımda" : "Yakınımdakiler"}</span>
+          </Button>
+          {search.nearLat && search.nearLng ? (
+            <select
+              aria-label="Mesafe yarıçapı"
+              value={search.maxDistanceKm ?? ""}
+              onChange={(e) => apply({ maxDistanceKm: e.target.value || undefined, page: "1" })}
+              className="h-8 rounded-lg border border-border bg-surface px-2 text-xs font-medium text-fg"
+            >
+              <option value="">Tüm mesafeler</option>
+              <option value="10">10 km</option>
+              <option value="25">25 km</option>
+              <option value="50">50 km</option>
+            </select>
+          ) : null}
           <SaveSearchButton
             search={search}
             categoryName={currentCategory && !categoryInferred ? currentCategory.name : undefined}
@@ -538,6 +607,7 @@ function SearchPage() {
           <div className="flex rounded-lg border border-border bg-surface p-0.5 shadow-2xs">
             <button
               type="button"
+              aria-pressed={view === "grid"}
               className={cn(
                 "grid size-8 place-items-center rounded-md transition-colors",
                 view === "grid" ? "bg-elevated text-primary font-semibold shadow-2xs" : "text-muted hover:text-fg",
@@ -550,6 +620,7 @@ function SearchPage() {
             </button>
             <button
               type="button"
+              aria-pressed={view === "list"}
               className={cn(
                 "grid size-8 place-items-center rounded-md transition-colors",
                 view === "list" ? "bg-elevated text-primary font-semibold shadow-2xs" : "text-muted hover:text-fg",
@@ -666,7 +737,14 @@ function SearchPage() {
       </div>
 
       {/* 6. Mobil Kayan / Yapışkan Eylem Çubuğu (Floating Sticky Bar) */}
-      <div className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] md:bottom-4 left-1/2 z-30 flex -translate-x-1/2 items-center gap-1 rounded-full border border-border bg-surface/95 p-1.5 shadow-2xl backdrop-blur-md lg:hidden">
+      <div
+        className={cn(
+          "fixed left-1/2 z-30 flex -translate-x-1/2 items-center gap-1 rounded-full border border-border bg-surface/95 p-1.5 shadow-2xl backdrop-blur-md lg:hidden",
+          compareCount > 0
+            ? "bottom-[calc(9.75rem+env(safe-area-inset-bottom,0px))] md:bottom-20"
+            : "bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] md:bottom-4",
+        )}
+      >
         <button
           type="button"
           onClick={openFilterDrawer}

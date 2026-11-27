@@ -75,6 +75,11 @@ export const Bubble = memo(function Bubble({
 
   const footer = (
     <View style={styles.footer}>
+      {m.edited_at && !m.deleted ? (
+        <Text variant="small" style={{ color: sub, fontStyle: 'italic' }}>
+          (düzenlendi)
+        </Text>
+      ) : null}
       <Text variant="small" style={{ color: sub }}>
         {formatTime(m.created_at)}
       </Text>
@@ -114,7 +119,7 @@ export const Bubble = memo(function Bubble({
           </Text>
         </View>
         <Text variant="title" style={{ color: fg }}>
-          {formatPrice(m.meta.amount, (m.meta as { currency?: string }).currency ?? listingCurrency)}
+          {formatPrice(m.meta.amount, m.meta.currency ?? listingCurrency)}
         </Text>
         {/* On your own (blue) bubble green and red were unreadable: white there. */}
         <Text variant="small" style={{ color: mine ? '#ffffff' : status.tone === 'ok' ? c.ok : status.tone === 'danger' ? c.danger : sub, fontWeight: '700' }}>

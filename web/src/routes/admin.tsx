@@ -30,9 +30,9 @@ function AdminErrorBoundary({ error, reset }: { error: unknown; reset: () => voi
   const router = useRouter();
   const message = error instanceof Error ? error.message : "Beklenmeyen bir hata oluştu.";
   return (
-    <AdminShell>
-      <div className="mx-auto my-12 max-w-lg rounded-xl border border-danger-text/30 bg-surface p-6 text-center shadow-sm">
-        <div className="mx-auto mb-3 grid size-11 place-items-center rounded-full bg-danger-soft text-danger-text">
+    <div className="min-h-screen bg-bg px-4 py-12 text-fg">
+      <div className="mx-auto max-w-lg rounded-xl border border-danger/30 bg-surface p-6 text-center shadow-sm">
+        <div className="mx-auto mb-3 grid size-11 place-items-center rounded-full bg-danger/10 text-danger">
           <AlertTriangle className="size-5" />
         </div>
         <h2 className="text-base font-semibold text-fg">Bu sayfa yüklenemedi</h2>
@@ -51,7 +51,7 @@ function AdminErrorBoundary({ error, reset }: { error: unknown; reset: () => voi
           </button>
         </div>
       </div>
-    </AdminShell>
+    </div>
   );
 }
 

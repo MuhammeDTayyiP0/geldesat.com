@@ -492,6 +492,21 @@ export function Checkbox({
   );
 }
 
+/** Inline banner shown when a cached/previous query fails to refresh. */
+export function InlineQueryError({ error, onRetry }: { error: unknown; onRetry: () => void }) {
+  return (
+    <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-danger/25 bg-danger/5 px-3.5 py-2.5 text-sm text-danger">
+      <div className="flex min-w-0 items-center gap-2">
+        <AlertTriangle className="size-4 shrink-0" />
+        <span className="truncate">{errorText(error)}</span>
+      </div>
+      <Button size="sm" variant="outline" onClick={onRetry}>
+        Tekrar dene
+      </Button>
+    </div>
+  );
+}
+
 /** Floating bar for actions on the selected rows. */
 export function BulkBar({ count, onClear, children }: { count: number; onClear: () => void; children: ReactNode }) {
   if (!count) return null;
@@ -507,12 +522,16 @@ export function BulkBar({ count, onClear, children }: { count: number; onClear: 
   );
 }
 
-export function BulkButton({ children, onClick, danger }: { children: ReactNode; onClick: () => void; danger?: boolean }) {
+export function BulkButton({ children, onClick, danger, disabled }: { children: ReactNode; onClick: () => void; danger?: boolean; disabled?: boolean }) {
   return (
     <button
       type="button"
+      disabled={disabled}
       onClick={onClick}
-      className={cn("inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold transition-colors", danger ? "text-red-300 hover:bg-red-500/20" : "hover:bg-white/10")}
+      className={cn(
+        "inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+        danger ? "text-red-300 hover:bg-red-500/20" : "hover:bg-white/10",
+      )}
     >
       {children}
     </button>

@@ -8,7 +8,7 @@ import { adminDeleteReviews, adminListReviews } from "@/lib/server/admin/moderat
 import { useRunner, useSheets } from "@/components/admin/hooks";
 import { dateTime, n, relative } from "@/components/admin/format";
 import { int, str } from "@/components/admin/search";
-import { BulkBar, BulkButton, Card, Checkbox, EmptyState, ErrorState, PageHeader, Pagination, SearchInput, SkeletonRows, Table, Td, Th, useConfirm } from "@/components/admin/ui";
+import { BulkBar, BulkButton, Card, Checkbox, EmptyState, ErrorState, InlineQueryError, PageHeader, Pagination, SearchInput, SkeletonRows, Table, Td, Th, useConfirm } from "@/components/admin/ui";
 
 type Search = { q?: string; rating?: number; page?: number };
 
@@ -111,6 +111,7 @@ function ReviewsPage() {
             </Button>
           ) : null}
         </div>
+        {query.isError && query.data ? <InlineQueryError error={query.error} onRetry={() => void query.refetch()} /> : null}
         {query.error && !query.data ? (
           <ErrorState error={query.error} onRetry={() => void query.refetch()} />
         ) : query.isLoading ? (

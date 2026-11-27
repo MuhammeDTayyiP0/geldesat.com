@@ -110,7 +110,12 @@ export const adminDeletePage = createServerFn({ method: "POST" })
       throw new Error("Bu sayfaya site içinden bağlantı veriliyor; silinemez.");
     }
     const sql = await getSql();
-    const rows = await sql.query<{ title: string }>("delete from legal_pages where slug = $1 returning title", [data.slug]);
+    const rows = await sql.transaction(async (tx) => {
+      const deleted = await tx.query<{ title: string }>("delete from legal_pages where slug = $1 returning title", [data.slug]);
+      if (!deleted[0]) return deleted;
+      await tx.query("delete from legal_page_revisions where slug = $1", [data.slug]);
+      return deleted;
+    });
     if (!rows[0]) throw new Error("Sayfa bulunamadı.");
     await audit(sql, context.adminId, "page.delete", "page", data.slug, `Sayfa "${rows[0].title}" silindi`);
     return { ok: true as const };
@@ -131,7 +136,7 @@ const AUDIENCE_SQL: Record<keyof typeof AUDIENCES, string> = {
   active_30d: "select user_id from profiles where banned_at is null and deletion_requested_at is null and last_seen_at > now() - interval '30 days'",
   sellers: "select p.user_id from profiles p where p.banned_at is null and p.deletion_requested_at is null and exists (select 1 from listings l where l.user_id = p.user_id)",
   stores: "select p.user_id from profiles p join stores s on s.user_id = p.user_id where p.banned_at is null and p.deletion_requested_at is null",
-  admins: "select user_id from profiles where role = 'ADMIN'",
+  admins: "select user_id from profiles where role = 'ADMIN' and banned_at is null and deletion_requested_at is null",
 };
 
 const wantsSystem = (channel: "inapp" | "push") =>
@@ -352,7 +357,15 @@ export const adminSaveAppConfig = createServerFn({ method: "POST" })
   .middleware([adminMiddleware])
   .validator(ConfigInput)
   .handler(async ({ context, data }) => {
-    const value = data.key === "mobile_app" ? { ...data.value, announcement: data.value.announcement || null } : data.value;
+    const value =
+      data.key === "mobile_app"
+        ? {
+            ...data.value,
+            announcement: data.value.announcement || null,
+            ios_store_url: data.value.ios_store_url || null,
+            android_store_url: data.value.android_store_url || null,
+          }
+        : data.value;
     await setAppConfig(data.key, value);
     const sql = await getSql();
     await audit(sql, context.adminId, `settings.${data.key}`, "settings", data.key, `${CONFIG_LABEL[data.key]} güncellendi`, { value });
@@ -360,6 +373,8 @@ export const adminSaveAppConfig = createServerFn({ method: "POST" })
   });
 
 /* ───────────────────────────── Audit log ───────────────────────────── */
+
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?)?$/;
 
 export const adminListAudit = createServerFn({ method: "POST" })
   .middleware([adminMiddleware])
@@ -369,8 +384,8 @@ export const adminListAudit = createServerFn({ method: "POST" })
       targetType: z.string().max(40).optional(),
       adminId: z.string().max(200).optional(),
       targetId: z.string().max(200).optional(),
-      from: z.string().trim().max(40).optional(),
-      to: z.string().trim().max(40).optional(),
+      from: z.union([z.literal(""), z.string().trim().regex(ISO_DATE_RE, "Geçersiz başlangıç tarihi")]).optional(),
+      to: z.union([z.literal(""), z.string().trim().regex(ISO_DATE_RE, "Geçersiz bitiş tarihi")]).optional(),
       ...PageInput,
     }),
   )
@@ -485,7 +500,7 @@ export const adminSystemInfo = createServerFn({ method: "GET" })
         { key: "mail", label: "E-posta gönderimi (SMTP)", ok: mailConfigured },
         { key: "google", label: "Google ile giriş", ok: env("GOOGLE_CLIENT_ID") && env("GOOGLE_CLIENT_SECRET") },
         { key: "cron", label: "Zamanlanmış görevler (CRON_SECRET)", ok: env("CRON_SECRET") },
-        { key: "ota", label: "Uygulama güncellemeleri (OTA_PUBLISH_TOKEN)", ok: env("OTA_PUBLISH_TOKEN") },
+        { key: "ota", label: "Uygulama güncellemeleri (OTA_PUBLISH_TOKEN)", ok: (process.env.OTA_PUBLISH_TOKEN?.trim().length ?? 0) >= 24 },
         { key: "admins", label: "Önyükleme yöneticileri (ADMIN_EMAILS)", ok: env("ADMIN_EMAILS") },
       ],
       runtime: {

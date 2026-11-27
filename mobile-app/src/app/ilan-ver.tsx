@@ -15,6 +15,7 @@ import {
   ChevronRight,
   Info,
   LayoutGrid,
+  Lightbulb,
   LocateFixed,
   MapPin,
   Phone,
@@ -56,9 +57,9 @@ import { Badge, Button, Card, Chip, Divider, EmptyState, ErrorState, IconButton,
 import { Image } from 'expo-image';
 
 const CURRENCY_OPTIONS: { value: Currency; label: string }[] = [
-  { value: 'TRY', label: '₺ TRY' },
-  { value: 'USD', label: '$ USD' },
-  { value: 'EUR', label: '€ EUR' },
+  { value: 'TRY', label: '₺' },
+  { value: 'USD', label: '$' },
+  { value: 'EUR', label: '€' },
 ];
 const CURRENCY_SUFFIX: Record<Currency, string> = { TRY: '₺', USD: '$', EUR: '€' };
 const UPLOAD_CONCURRENCY = 3;
@@ -227,6 +228,8 @@ function editSnapshotOf(d: Draft): string {
     city: d.city,
     district: d.district,
     neighborhood: d.neighborhood,
+    lat: d.lat ?? null,
+    lng: d.lng ?? null,
     phone: d.phone,
   });
 }
@@ -297,6 +300,18 @@ function PostForm({ editId, copyFrom, owner }: { editId?: string; copyFrom?: str
   const copiedRef = useRef(false);
 
   const leaf = draft.path[draft.path.length - 1];
+  const priceStatsQuery = useQuery({
+    queryKey: ['priceStats', leaf?.id ?? '', draft.city, draft.currency ?? 'TRY'],
+    queryFn: () =>
+      catalog.priceStats({
+        categoryId: leaf!.id,
+        city: draft.city || undefined,
+        currency: draft.currency ?? 'TRY',
+      }),
+    enabled: !!leaf?.id && leaf.has_children === false,
+    staleTime: 5 * 60_000,
+  });
+  const priceStats = priceStatsQuery.data ?? null;
   const isVehicleCategory = useMemo(() => isDamageVehicleCategory(draft.path), [draft.path]);
   const placeholders = useMemo(() => getCategoryPlaceholders(draft.path), [draft.path]);
   const attrsQuery = useQuery({
@@ -311,13 +326,21 @@ function PostForm({ editId, copyFrom, owner }: { editId?: string; copyFrom?: str
     attributes.length > 0 ||
     (damageOn && isVehicleCategory && leaf?.has_children === false) ||
     (!!leaf && leaf.has_children === false && (attrsQuery.isLoading || attrsQuery.isError));
-  const stepContext = { profilePhone: me.data ? !!me.data.profile?.phone : undefined, attributesFailed: attrsQuery.isError && !attrsQuery.data };
+  const stepContext = {
+    profilePhone: me.data ? !!me.data.profile?.phone : undefined,
+    attributesFailed: attrsQuery.isError && !attrsQuery.data,
+    attributesLoading: attrsQuery.isLoading,
+  };
 
   const steps: StepKey[] = useMemo(
     () => ['category', 'photos', 'details', ...(showAttributes ? (['attributes'] as const) : []), 'location', 'preview'],
     [showAttributes],
   );
   const stepIndex = steps.indexOf(step);
+
+  if (step === 'attributes' && !showAttributes) {
+    setStep('location');
+  }
   const quality = useMemo(() => computeListingQuality(draft, attributes), [draft, attributes]);
 
   const setStepAndTrack = useCallback(
@@ -448,7 +471,18 @@ function PostForm({ editId, copyFrom, owner }: { editId?: string; copyFrom?: str
   // Keep a draft of new listings so an interrupted post is not lost.
   useEffect(() => {
     if (editId || !ready || !hydrated || offeredDraft) return;
-    const t = setTimeout(() => void saveDraft({ ...draft, step }, owner), 600);
+    const t = setTimeout(
+      () =>
+        void saveDraft(
+          {
+            ...draft,
+            photos: draft.photos.map((p) => (p.status === 'done' ? { ...p, source: undefined } : p)),
+            step,
+          },
+          owner,
+        ),
+      600,
+    );
     return () => clearTimeout(t);
   }, [draft, step, editId, ready, hydrated, offeredDraft, owner]);
 
@@ -529,7 +563,7 @@ function PostForm({ editId, copyFrom, owner }: { editId?: string; copyFrom?: str
         void uploads.discardListingPhoto(url);
         return;
       }
-      setPhoto(key, { status: 'done', url, uploadedAt: Date.now(), source: undefined });
+      setPhoto(key, { status: 'done', url, uploadedAt: Date.now() });
     } catch (e) {
       if (!controller.signal.aborted) setPhoto(key, { status: 'error', error: errorMessage(e) });
     } finally {
@@ -638,10 +672,13 @@ function PostForm({ editId, copyFrom, owner }: { editId?: string; copyFrom?: str
         toast.info('Konum izni verilmedi. Haritadan manuel seçebilirsiniz.');
         return;
       }
-      const pos = await Promise.race([
-        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High }),
-        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 12_000)),
-      ]);
+      let pos = await Location.getLastKnownPositionAsync({ maxAge: 60_000 }).catch(() => null);
+      if (!pos) {
+        pos = await Promise.race([
+          Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 12_000)),
+        ]);
+      }
       const lat = pos.coords.latitude;
       const lng = pos.coords.longitude;
       const res = await geo
@@ -1060,6 +1097,18 @@ function PostForm({ editId, copyFrom, owner }: { editId?: string; copyFrom?: str
                 <Segmented value={currency} onChange={(next) => update({ currency: next })} options={CURRENCY_OPTIONS} />
               </View>
             </View>
+            {priceStats ? (
+              <View style={[styles.priceHintBox, { backgroundColor: c.elevated }]}>
+                <Lightbulb size={14} color={c.primary} />
+                <Text variant="caption" tone="muted" style={styles.flex}>
+                  Benzer {priceStats.count} ilan ({priceStats.cityScoped ? draft.city : 'Türkiye'}):{' '}
+                  <Text variant="caption" style={{ color: c.fg, fontWeight: '600' }}>
+                    {formatPrice(priceStats.p25, priceStats.currency)} – {formatPrice(priceStats.p75, priceStats.currency)}
+                  </Text>{' '}
+                  (ort. {formatPrice(priceStats.median, priceStats.currency)})
+                </Text>
+              </View>
+            ) : null}
             <Input
               label="Açıklama"
               required
@@ -1490,6 +1539,7 @@ function CategoryStep({
   }, [children, searching]);
 
   const pickCategory = (cat: Category) => {
+    if (level.isPlaceholderData) return;
     const base = leafPicked ? path.slice(0, -1) : path;
     const nextPath = [...base, cat];
     onPath(nextPath);
@@ -1516,7 +1566,16 @@ function CategoryStep({
             globalBusy ? (
               <ActivityIndicator size="small" color={c.primary} />
             ) : globalQ ? (
-              <Pressable accessibilityRole="button" accessibilityLabel="Aramayı temizle" hitSlop={8} onPress={() => setGlobalQ('')}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Aramayı temizle"
+                hitSlop={8}
+                onPress={() => {
+                  setGlobalQ('');
+                  setGlobalResults([]);
+                  setGlobalBusy(false);
+                }}
+              >
                 <X size={16} color={c.subtle} />
               </Pressable>
             ) : undefined
@@ -1650,7 +1709,7 @@ function CategoryStep({
             onLayout={(e) => {
               listOffsetY.current = e.nativeEvent.layout.y;
             }}
-            style={[styles.catList, { backgroundColor: c.surface, borderColor: c.border }]}
+            style={[styles.catList, { backgroundColor: c.surface, borderColor: c.border }, level.isPlaceholderData && { opacity: 0.5 }]}
           >
             {shown.length === 0 ? (
               <Text tone="muted" style={styles.emptyCat}>
@@ -2034,8 +2093,9 @@ const styles = StyleSheet.create({
   qualityBar: { height: 6, borderRadius: 3 },
   stickyLetterWrap: { paddingHorizontal: space.lg, paddingVertical: space.xs, borderBottomWidth: hairline },
   priceRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm },
+  priceHintBox: { flexDirection: 'row', alignItems: 'center', gap: space.xs, paddingHorizontal: space.md, paddingVertical: space.sm, borderRadius: radius.md },
   priceInputWrap: { flex: 1 },
-  currencyCompactWrap: { gap: space.xs + 2, minWidth: 168 },
+  currencyCompactWrap: { gap: space.xs + 2, minWidth: 112 },
   currencyWrap: { gap: space.xs + 2 },
   currencyLabel: { marginLeft: 2 },
   gpsRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: space.sm },

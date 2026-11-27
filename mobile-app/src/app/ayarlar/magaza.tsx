@@ -276,9 +276,11 @@ function StoreSettings() {
 
   const save = async () => {
     if (name.trim().length < 3) return toast.error('Mağaza adı en az 3 karakter olmalı.');
+    const digits = cleanPhone(phone);
+    if (digits && !/^0\d{10}$/.test(digits)) return toast.error('Telefon numarası 0 ile başlayan 11 hane olmalı.');
     setBusy(true);
     try {
-      await account.updateStore({ name: name.trim(), description: description.trim() || undefined, city: city || undefined, phone: cleanPhone(phone) || undefined });
+      await account.updateStore({ name: name.trim(), description: description.trim() || undefined, city: city || undefined, phone: digits || undefined });
       await queryClient.invalidateQueries({ queryKey: keys.me });
       toast.success('Mağaza bilgileri kaydedildi');
     } catch (e) {

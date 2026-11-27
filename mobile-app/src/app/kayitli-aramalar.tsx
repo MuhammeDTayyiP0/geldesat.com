@@ -9,6 +9,7 @@ import { keys, queryClient } from '@/api/queries';
 import type { SavedSearch, SavedSearchFilters } from '@/api/types';
 import { useSession } from '@/auth/session';
 import { POSTED_WITHIN_OPTIONS, SELLER_TYPE_OPTIONS } from '@/features/search/filters';
+import { useFlag } from '@/lib/flags';
 import { formatNumber, formatPrice, timeAgo } from '@/lib/format';
 import { Button, Card, Divider, EmptyState, ErrorState, Header, IconButton, Loading, Text, confirm, space, toast, useTheme } from '@/ui';
 
@@ -118,11 +119,12 @@ export default function SavedSearchesScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const session = useSession();
+  const kayitliAramalar = useFlag('kayitli_aramalar');
 
   const query = useQuery({
     queryKey: keys.savedSearches,
     queryFn: savedSearches.list,
-    enabled: session.status === 'signedIn',
+    enabled: kayitliAramalar && session.status === 'signedIn',
   });
   const rows = query.data ?? [];
 
@@ -169,9 +171,11 @@ export default function SavedSearchesScreen() {
 
   return (
     <View style={[styles.flex, { backgroundColor: c.bg }]}>
-      <Header title="Kayıtlı aramalarım" subtitle={rows.length ? `${rows.length} arama` : undefined} />
+      <Header title="Kayıtlı aramalarım" subtitle={kayitliAramalar && rows.length ? `${rows.length} arama` : undefined} />
 
-      {session.status !== 'signedIn' ? (
+      {!kayitliAramalar ? (
+        <EmptyState icon={Bookmark} title="Kayıtlı aramalar kapalı" message="Bu özellik şu anda kullanıma kapalı." />
+      ) : session.status !== 'signedIn' ? (
         <EmptyState icon={Bookmark} title="Giriş yapın" action={<Button title="Giriş yap" onPress={() => router.push('/giris')} />} />
       ) : query.isLoading ? (
         <Loading />

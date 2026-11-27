@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Check, ExternalLink, Inbox, LayoutList, Pencil, Plus, Store, Trash2, User, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { TURKEY_CITIES } from "@/lib/data/locations";
 import { slugify } from "@/lib/utils";
 import {
   adminDeleteStore,
@@ -24,6 +25,7 @@ import {
   EmptyState,
   ErrorState,
   Field,
+  InlineQueryError,
   inputClass,
   Menu,
   MenuItem,
@@ -49,13 +51,13 @@ const TABS = ["stores", "applications"] as const;
 const APP_STATUSES = ["ALL", "PENDING", "APPROVED", "REJECTED"] as const;
 type StorePlan = (typeof STORE_PLANS)[number];
 
-type Search = { tab?: (typeof TABS)[number]; q?: string; plan?: string; status?: (typeof APP_STATUSES)[number]; page?: number };
+type Search = { tab?: (typeof TABS)[number]; q?: string; plan?: StorePlan; status?: (typeof APP_STATUSES)[number]; page?: number };
 
 export const Route = createFileRoute("/admin/magazalar")({
   validateSearch: (s: Record<string, unknown>): Search => ({
     tab: oneOf(s.tab, TABS),
     q: str(s.q),
-    plan: str(s.plan, 20),
+    plan: oneOf(s.plan, STORE_PLANS),
     status: oneOf(s.status, APP_STATUSES),
     page: int(s.page, 1, 100_000),
   }),
@@ -93,6 +95,13 @@ function StoresPage() {
   const { run } = useRunner();
   const { confirm } = useConfirm();
   const rows = query.data?.rows ?? [];
+  const activePages = tab === "stores" ? query.data?.pages : appsQuery.data?.pages;
+  const activePage = search.page ?? 1;
+  useEffect(() => {
+    if (activePages && activePage > activePages) {
+      void navigate({ search: (prev) => ({ ...prev, page: activePages > 1 ? activePages : undefined }), replace: true });
+    }
+  }, [activePages, activePage, navigate]);
 
   return (
     <div className="mx-auto max-w-[1400px]">
@@ -122,10 +131,11 @@ function StoresPage() {
               <SelectBox
                 label="Paket"
                 value={search.plan ?? ""}
-                onChange={(v) => set({ plan: v || undefined })}
+                onChange={(v) => set({ plan: oneOf(v, STORE_PLANS) })}
                 options={[{ value: "", label: "Tüm paketler" }, ...STORE_PLANS.map((p) => ({ value: p, label: PLAN_LABEL[p] }))]}
               />
             </div>
+            {query.isError && query.data ? <InlineQueryError error={query.error} onRetry={() => void query.refetch()} /> : null}
             {query.error && !query.data ? (
               <ErrorState error={query.error} onRetry={() => void query.refetch()} />
             ) : query.isLoading ? (
@@ -332,6 +342,7 @@ function ApplicationsTab({
         />
         <SearchInput value={search.q ?? ""} onChange={(q) => set({ q: q || undefined })} placeholder="Mağaza adı, üye, e-posta veya vergi no" className="ml-auto w-full sm:w-80" />
       </div>
+      {error && hasData ? <InlineQueryError error={error} onRetry={onRetry} /> : null}
       {error && !hasData ? (
         <ErrorState error={error} onRetry={onRetry} />
       ) : isLoading ? (
@@ -370,6 +381,7 @@ function ApplicationsTab({
                     </button>
                     <div className="mt-1 flex flex-wrap gap-1">
                       {a.applicant_banned ? <Pill tone="danger">Askıda</Pill> : null}
+                      {a.applicant_closing ? <Pill tone="warn">Silinme sürecinde</Pill> : null}
                       {a.existing_store_id ? <Pill tone="primary">Mağazası var</Pill> : null}
                     </div>
                   </Td>
@@ -416,8 +428,8 @@ function ApplicationsTab({
                         <Button
                           size="sm"
                           className="h-8 bg-ok-solid text-white hover:bg-ok-solid/90"
-                          disabled={busy || a.applicant_banned}
-                          title={a.applicant_banned ? "Askıda olan üyenin başvurusu onaylanamaz" : undefined}
+                          disabled={busy || a.applicant_banned || a.applicant_closing}
+                          title={a.applicant_banned ? "Askıda olan üyenin başvurusu onaylanamaz" : a.applicant_closing ? "Hesabını silme sürecindeki üyenin başvurusu onaylanamaz" : undefined}
                           onClick={() => void approve(a)}
                         >
                           <Check className="size-3.5" /> Onayla
@@ -627,7 +639,17 @@ function StoreModal({ store, onClose }: { store: AdminStoreRow | null; onClose: 
           </select>
         </Field>
         <Field label="İl">
-          <input value={form.city} onChange={set("city")} maxLength={40} className={inputClass} />
+          <select value={form.city} onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))} className="admin-select h-10 w-full">
+            <option value="">Seçilmedi</option>
+            {form.city && !TURKEY_CITIES.some((c) => c.name === form.city) ? (
+              <option value={form.city}>{form.city}</option>
+            ) : null}
+            {TURKEY_CITIES.map((c) => (
+              <option key={c.name} value={c.name}>
+                {c.name}
+              </option>
+            ))}
+          </select>
         </Field>
         <Field label="Mağaza telefonu" className="sm:col-span-2">
           <input value={form.phone} onChange={set("phone")} maxLength={20} className={inputClass} placeholder="05xx xxx xx xx" />

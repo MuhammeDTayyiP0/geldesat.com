@@ -32,5 +32,6 @@ export function mediaUrl(path: string | null | undefined, width?: PhotoWidth): s
 }
 
 export function webUrl(path: string): string {
+  if (/^https?:\/\//i.test(path)) return path;
   return `${SITE_URL}${path.startsWith('/') ? '' : '/'}${path}`;
 }

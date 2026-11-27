@@ -55,8 +55,11 @@ export async function loadFlagRules(): Promise<FlagRules> {
 async function isAdminAccount(userId: string): Promise<boolean> {
   try {
     const sql = await getSql();
-    const rows = await sql.query<{ role: string }>("select role from profiles where user_id = $1", [userId]);
-    return rows[0]?.role === "ADMIN";
+    const rows = await sql.query<{ role: string; banned_at: unknown; deletion_requested_at: unknown }>(
+      "select role, banned_at, deletion_requested_at from profiles where user_id = $1",
+      [userId],
+    );
+    return Boolean(rows[0] && rows[0].role === "ADMIN" && rows[0].banned_at == null && rows[0].deletion_requested_at == null);
   } catch {
     return false;
   }

@@ -4,9 +4,10 @@ import { useFlag } from "@/lib/use-flag";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { errorText } from "@/lib/error-text";
 import { useEffect, useMemo, useState } from "react";
-import { CircleCheck, Copy, Eye, EyeOff, Heart, ImageIcon, LayoutGrid, MessageCircle, MoreVertical, Pencil, Phone, Plus, RefreshCw, Rocket, Trash2 } from "lucide-react";
+import { CircleCheck, Copy, Eye, EyeOff, Heart, ImageIcon, LayoutGrid, MessageCircle, MoreVertical, Pencil, Phone, Plus, RefreshCw, Rocket, Trash2, TrendingDown } from "lucide-react";
 import { toast } from "sonner";
-import { deleteListing, myListings, renewListing, setListingStatus } from "@/lib/server/account";
+import { deleteListing, myListings, quickUpdatePrice, renewListing, setListingStatus } from "@/lib/server/account";
+import { Input } from "@/components/ui/input";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -67,6 +68,8 @@ function Mine() {
   const [loadFailed, setLoadFailed] = useState(false);
   const [tab, setTab] = useState<Tab>("live");
   const [toDelete, setToDelete] = useState<MyListing | null>(null);
+  const [priceTarget, setPriceTarget] = useState<MyListing | null>(null);
+  const [priceInput, setPriceInput] = useState("");
   const [busy, setBusy] = useState(false);
 
   function reload() {
@@ -106,14 +109,16 @@ function Mine() {
   if (!isPending && !user) return <RedirectToSignIn />;
 
   /** Run an owner action, report the server's answer and refresh the list. */
-  async function act(run: () => Promise<unknown>, done: string) {
+  async function act(run: () => Promise<unknown>, done: string): Promise<boolean> {
     setBusy(true);
     try {
       await run();
       toast.success(done);
       reload();
+      return true;
     } catch (e) {
       toast.error(errorText(e, "İşlem başarısız oldu"));
+      return false;
     } finally {
       setBusy(false);
     }
@@ -209,6 +214,10 @@ function Mine() {
               showStats={istatistikler}
               onStatus={(status, done) => void act(() => setListingStatus({ data: { id: l.id, status } }), done)}
               onRenew={() => void act(() => renewListing({ data: { id: l.id } }), "İlan süresi 30 gün uzatıldı")}
+              onDropPrice={() => {
+                setPriceTarget(l);
+                setPriceInput(String(Math.max(1, Math.round(l.price * 0.9))));
+              }}
               onDelete={() => setToDelete(l)}
             />
           ))}
@@ -233,10 +242,68 @@ function Mine() {
               onClick={() => {
                 const target = toDelete;
                 if (!target) return;
-                void act(() => deleteListing({ data: { id: target.id } }), "İlan silindi").then(() => setToDelete(null));
+                void act(() => deleteListing({ data: { id: target.id } }), "İlan silindi").then((ok) => {
+                  if (ok) setToDelete(null);
+                });
               }}
             >
               {busy ? "Siliniyor…" : "Evet, sil"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(priceTarget)} onOpenChange={(o) => !busy && !o && setPriceTarget(null)}>
+        <DialogContent className="border-border bg-surface">
+          <DialogHeader>
+            <DialogTitle>Fiyatı hızlı güncelle</DialogTitle>
+            <DialogDescription>
+              {priceTarget ? `Mevcut fiyat: ${formatPrice(priceTarget.price, priceTarget.currency)}. Fiyatı düşürdüğünüzde ilanı favorileyen alıcılara bildirim gider.` : ""}
+            </DialogDescription>
+          </DialogHeader>
+          {priceTarget ? (
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-2">
+                {[5, 10, 15].map((pct) => {
+                  const next = Math.max(1, Math.round(priceTarget.price * (1 - pct / 100)));
+                  return (
+                    <Button
+                      key={pct}
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setPriceInput(String(next))}
+                    >
+                      -%{pct} ({formatPrice(next, priceTarget.currency)})
+                    </Button>
+                  );
+                })}
+              </div>
+              <Input
+                inputMode="numeric"
+                aria-label="Yeni fiyat"
+                value={priceInput ? formatNumber(priceInput) : ""}
+                onChange={(e) => setPriceInput(e.target.value.replace(/\D/g, "").replace(/^0+/, "").slice(0, 10))}
+                className="text-lg font-semibold tabular-nums"
+              />
+            </div>
+          ) : null}
+          <DialogFooter className="gap-2">
+            <Button variant="ghost" disabled={busy} onClick={() => setPriceTarget(null)}>
+              Vazgeç
+            </Button>
+            <Button
+              disabled={busy || !priceTarget || !(Number(priceInput) >= 1)}
+              onClick={async () => {
+                if (!priceTarget) return;
+                const nextPrice = Number(priceInput);
+                if (!Number.isFinite(nextPrice) || nextPrice < 1) return;
+                const targetId = priceTarget.id;
+                const ok = await act(() => quickUpdatePrice({ data: { id: targetId, price: nextPrice } }), "Fiyat güncellendi");
+                if (ok) setPriceTarget(null);
+              }}
+            >
+              Kaydet
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -251,6 +318,7 @@ function MyListingRow({
   showStats,
   onStatus,
   onRenew,
+  onDropPrice,
   onDelete,
 }: {
   listing: MyListing;
@@ -258,6 +326,7 @@ function MyListingRow({
   showStats: boolean;
   onStatus: (status: "ACTIVE" | "INACTIVE" | "SOLD", done: string) => void;
   onRenew: () => void;
+  onDropPrice: () => void;
   onDelete: () => void;
 }) {
   const nav = useNavigate();
@@ -322,6 +391,11 @@ function MyListingRow({
         ) : null}
         {live && left != null && left > 0 && left <= 7 ? <p className="text-xs text-warn">{left} gün içinde süresi doluyor</p> : null}
         <div className="flex flex-wrap items-center gap-2 pt-0.5">
+          {live ? (
+            <Button size="sm" variant="outline" className="h-8 text-xs" disabled={busy} onClick={onDropPrice}>
+              <TrendingDown className="size-3.5" /> Fiyatı düşür
+            </Button>
+          ) : null}
           {expired && l.status === "ACTIVE" ? (
             <Button size="sm" variant="outline" className="h-8" disabled={busy} onClick={onRenew}>
               <RefreshCw className="size-3.5" /> Yenile ve yayına al

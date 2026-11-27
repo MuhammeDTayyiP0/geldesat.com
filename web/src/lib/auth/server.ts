@@ -8,6 +8,7 @@ import { randomBytes } from "node:crypto";
 import { Pool } from "pg";
 import { ensureDbReady, getPglite, getSql } from "../db";
 import { mailConfigured, sendEmailChangeMail, sendPasswordResetMail, sendVerificationMail } from "../server/mail";
+import { disconnectUserStreams } from "../server/chat-bus";
 import { pgliteDialect } from "./pglite-dialect";
 
 void ensureDbReady();
@@ -50,18 +51,22 @@ const databaseUrl = env("DATABASE_URL");
 const googleClientId = env("GOOGLE_CLIENT_ID");
 const googleClientSecret = env("GOOGLE_CLIENT_SECRET");
 export const googleAuthConfigured = Boolean(googleClientId && googleClientSecret);
+const authGlobal = globalThis as typeof globalThis & { __geldesatAuthPool__?: Pool };
 const authPool = databaseUrl
-  ? new Pool({
-      connectionString: databaseUrl,
-      max: 10,
-      idleTimeoutMillis: 30_000,
-      connectionTimeoutMillis: 10_000,
-      statement_timeout: 15_000,
-    })
+  ? (authGlobal.__geldesatAuthPool__ ??= (() => {
+      const p = new Pool({
+        connectionString: databaseUrl,
+        max: 10,
+        idleTimeoutMillis: 30_000,
+        connectionTimeoutMillis: 10_000,
+        statement_timeout: 15_000,
+      });
+      p.on("error", (err) => {
+        console.error("[auth] pg pool error:", err.message);
+      });
+      return p;
+    })())
   : null;
-authPool?.on("error", (err) => {
-  console.error("[auth] pg pool error:", err.message);
-});
 const database = authPool ?? { dialect: pgliteDialect(() => getPglite()), type: "postgres" as const };
 
 export const SESSION_TOKEN_COOKIE = "__Host-geldesat-auth.session_token";
@@ -159,6 +164,11 @@ export const auth = betterAuth({
           if (rows[0]?.banned) {
             throw new APIError("FORBIDDEN", { message: "Hesabınız askıya alındı. Destek için destek@geldesat.com adresine yazın." });
           }
+        },
+      },
+      delete: {
+        after: async (session) => {
+          if (session?.userId) disconnectUserStreams(session.userId);
         },
       },
     },

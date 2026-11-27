@@ -55,6 +55,7 @@ export interface Sql {
  */
 const globalRef = globalThis as typeof globalThis & {
   __pgSqlPromise__?: Promise<Sql>;
+  __pgPool__?: import("pg").Pool;
   __pgliteInstance__?: Promise<import("@electric-sql/pglite").PGlite>;
   __pgliteMigrateChain__?: Promise<void>;
 };
@@ -113,6 +114,7 @@ function createPostgresSql(): Promise<Sql> {
     // A full pool or a stuck query fails instead of holding requests forever.
     const pool = new Pool({ connectionString: databaseUrl, max, idleTimeoutMillis: 30_000, connectionTimeoutMillis: 10_000, statement_timeout: 30_000 });
     pool.on("error", (err) => console.error("[db] idle client error", err));
+    globalRef.__pgPool__ = pool;
     return toSql(
       async <T>(text: string, params: unknown[]) => {
         const res = await pool.query(text, params);
@@ -174,20 +176,25 @@ async function createPgliteSql(): Promise<Sql> {
   // passes serialized on a global chain so concurrent callers never
   // double-apply.
   const migrate = async (): Promise<void> => {
-    const migrations = import.meta.glob("/migrations/*.sql", {
-      query: "?raw",
-      import: "default",
-      eager: true,
-    }) as Record<string, string>;
+    const { readdir, readFile, stat } = await import("node:fs/promises");
+    const { dirname, join } = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    const cwdMigrations = join(process.cwd(), "migrations");
+    const fallbackMigrations = join(dirname(fileURLToPath(import.meta.url)), "../../migrations");
+    const migrationsDir = await stat(cwdMigrations)
+      .then((s) => (s.isDirectory() ? cwdMigrations : fallbackMigrations))
+      .catch(() => fallbackMigrations);
+    const entries = await readdir(migrationsDir).catch(() => [] as string[]);
     const doneRows = await pg.query<{ name: string }>(
       "select name from _migrations",
     );
     const done = doneRows.rows.map((r) => r.name);
-    for (const { name, path } of pendingMigrations(Object.keys(migrations), done)) {
+    for (const { name } of pendingMigrations(entries, done)) {
+      const text = await readFile(join(migrationsDir, name), "utf8");
       // Apply + record atomically (parity with scripts/migrate.mjs) so a failed
       // statement can't leave a file half-applied but untracked.
       await pg.transaction(async (tx) => {
-        await tx.exec(migrations[path]);
+        await tx.exec(text);
         await tx.query("insert into _migrations (name) values ($1)", [name]);
       });
     }
@@ -201,7 +208,7 @@ async function createPgliteSql(): Promise<Sql> {
   return pgliteSql(pg);
 }
 
-function pgliteSql(pg: import("@electric-sql/pglite").PGlite): Sql {
+export function pgliteSql(pg: import("@electric-sql/pglite").PGlite): Sql {
   return toSql(
     async <T>(text: string, params: unknown[]) => {
       const result = await pg.query<T>(text, params);
@@ -245,6 +252,33 @@ export function getSql(): Promise<Sql> {
     throw err;
   });
   return sqlPromise;
+}
+
+/**
+ * Acquire a session-level Postgres advisory lock on a single dedicated pool
+ * client, run `fn`, and release the lock on that exact same client.
+ * Returns `false` if another worker already holds the lock.
+ */
+export async function withAdvisoryLock(key: string, fn: (sql: Sql) => Promise<void>): Promise<boolean> {
+  const sql = await getSql();
+  if (dbSource !== "postgres" || !globalRef.__pgPool__) {
+    await fn(sql);
+    return true;
+  }
+  const client = await globalRef.__pgPool__.connect();
+  let locked = false;
+  try {
+    const res = await client.query<{ ok: boolean }>("select pg_try_advisory_lock(hashtext($1)) as ok", [key]);
+    locked = Boolean(res.rows[0]?.ok);
+    if (!locked) return false;
+    await fn(sql);
+    return true;
+  } finally {
+    if (locked) {
+      await client.query("select pg_advisory_unlock(hashtext($1))", [key]).catch(() => undefined);
+    }
+    client.release();
+  }
 }
 
 /**

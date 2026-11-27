@@ -4,6 +4,8 @@
  * Run: node scripts/generate-catalog.mjs
  */
 import { writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { CARS, SUVS, MOTOS, MINIVANS, TRUCKS, PICKUPS_LIGHT } from "./vehicle-models.mjs";
 
 
@@ -790,5 +792,6 @@ for (const c of cats) {
   slugs.set(c.slug, c.id);
 }
 
-writeFileSync("/workspace/migrations/0012_series_groups.sql", lines.join("\n") + "\n");
+const outPath = join(dirname(fileURLToPath(import.meta.url)), "..", "migrations", "0012_series_groups.sql");
+writeFileSync(outPath, lines.join("\n") + "\n");
 console.log(`wrote 0012_series_groups.sql (${cats.length} cats, ${attrs.length} attrs, ${uniqLinks.length} links)`);

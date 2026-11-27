@@ -2,7 +2,8 @@ import { Pagination } from "@/components/listing/Pagination";
 import { useModalPanel } from "@/lib/use-modal-panel";
 import { createFileRoute, Link, useNavigate, notFound } from "@tanstack/react-router";
 import { ArrowUpDown, Check, ChevronRight, LayoutGrid, List as ListIcon, MapPin, SlidersHorizontal, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useCompareList } from "@/components/listing/CompareBar";
 import { useViewPreference } from "@/lib/use-view-pref";
 import { getCategory, searchCatalog } from "@/lib/server/catalog";
 import { attrsToSearch, normalizeFilterRanges, parseAttrs, parseSearch, toFilters } from "@/lib/search-params";
@@ -154,14 +155,26 @@ function CategoryPage() {
     return () => root.classList.remove("mobile-nav-lock");
   }, [mobile, sortOpen]);
 
+  const compareCount = useCompareList().length;
+  const mobileTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (mobileTimerRef.current) clearTimeout(mobileTimerRef.current);
+    };
+  }, []);
+
   function openMobile() {
+    if (mobileTimerRef.current) clearTimeout(mobileTimerRef.current);
+    setFilters(initial);
     setMobile(true);
     requestAnimationFrame(() => requestAnimationFrame(() => setMobileVisible(true)));
   }
 
   function closeMobile() {
+    if (mobileTimerRef.current) clearTimeout(mobileTimerRef.current);
     setMobileVisible(false);
-    setTimeout(() => setMobile(false), 300);
+    setFilters(initial);
+    mobileTimerRef.current = setTimeout(() => setMobile(false), 300);
   }
 
   function resetFilters() {
@@ -368,6 +381,7 @@ function CategoryPage() {
           <div className="flex rounded-md border border-border">
             <button
               type="button"
+              aria-pressed={view === "list"}
               className={`grid size-11 place-items-center ${view === "list" ? "bg-elevated" : ""}`}
               onClick={() => setView("list")}
               aria-label="Liste"
@@ -376,6 +390,7 @@ function CategoryPage() {
             </button>
             <button
               type="button"
+              aria-pressed={view === "grid"}
               className={`grid size-11 place-items-center ${view === "grid" ? "bg-elevated" : ""}`}
               onClick={() => setView("grid")}
               aria-label="Izgara"
@@ -447,7 +462,13 @@ function CategoryPage() {
         </div>
       </div>
       {/* Mobil Kayan / Yapışkan Eylem Çubuğu (Floating Sticky Bar) */}
-      <div className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] md:bottom-4 left-1/2 z-30 flex -translate-x-1/2 items-center gap-1 rounded-full border border-border bg-surface/95 p-1.5 shadow-2xl backdrop-blur-md lg:hidden">
+      <div
+        className={`fixed left-1/2 z-30 flex -translate-x-1/2 items-center gap-1 rounded-full border border-border bg-surface/95 p-1.5 shadow-2xl backdrop-blur-md lg:hidden ${
+          compareCount > 0
+            ? "bottom-[calc(9.75rem+env(safe-area-inset-bottom,0px))] md:bottom-20"
+            : "bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] md:bottom-4"
+        }`}
+      >
         <button
           type="button"
           onClick={openMobile}
@@ -543,7 +564,7 @@ function CategoryPage() {
                   apply(undefined, checked);
                 }}
               >
-                Filtreleri Uygula ({result.total} İlan)
+                Filtreleri Uygula
               </Button>
             </div>
           </div>

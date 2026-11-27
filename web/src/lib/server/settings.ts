@@ -4,7 +4,7 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { asIso, asJson } from "@/lib/utils";
 import { NOTIFY_TYPES, resolveNotifyPrefs, type PhoneVisibility } from "@/lib/notification-prefs";
-import { ensureProfile, rateLimit } from "./helpers";
+import { ensureProfile, LIVE_PUSH_TOKEN, rateLimit } from "./helpers";
 import { mailConfigured } from "./mail";
 
 /** Privacy and notification settings for the signed-in user. */
@@ -16,7 +16,7 @@ export const getAccountSettings = createServerFn({ method: "GET" })
     const rows = await sql.query<{ phone_visibility: string; show_whatsapp: boolean; read_receipts: boolean; notify_prefs: unknown; push_devices: number; message_email: boolean; email_verified: boolean }>(
       `select p.phone_visibility, p.show_whatsapp, p.read_receipts, p.notify_prefs, p.message_email,
               coalesce((select u."emailVerified" from "user" u where u.id = p.user_id), false) as email_verified,
-              (select count(*)::int from mobile_push_tokens t where t.user_id = p.user_id) as push_devices
+              (select count(*)::int from mobile_push_tokens t where t.user_id = p.user_id and ${LIVE_PUSH_TOKEN}) as push_devices
        from profiles p where p.user_id = $1`,
       [context.userId],
     );

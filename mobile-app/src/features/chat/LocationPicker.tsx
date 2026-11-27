@@ -78,6 +78,7 @@ function PickerBody({
   const [searching, setSearching] = useState(false);
   const [busy, setBusy] = useState<'pin' | 'mine' | null>(null);
   const lookup = useRef(0);
+  const searchSeq = useRef(0);
   const ready = useRef(false);
   const keepPickedName = useRef(false);
 
@@ -89,11 +90,14 @@ function PickerBody({
         if (fly) toast.info('Konum izni verilmedi. Haritayı kaydırarak bir yer seçebilirsiniz.');
         return;
       }
-      // A phone without a fix would wait forever: give up after 15 seconds.
-      const pos = await Promise.race([
-        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High }),
-        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 15_000)),
-      ]);
+      // Try recent cached fix first, then Balanced accuracy (works with coarse location too).
+      let pos = await Location.getLastKnownPositionAsync({ maxAge: 60_000 }).catch(() => null);
+      if (!pos) {
+        pos = await Promise.race([
+          Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 15_000)),
+        ]);
+      }
       const here = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy ?? null };
       setMine(here);
       if (fly) map.current?.flyTo(here.lat, here.lng, 17);
@@ -161,14 +165,29 @@ function PickerBody({
   // Place search, debounced.
   useEffect(() => {
     const term = q.trim();
-    if (term.length < 2) return;
+    const seq = ++searchSeq.current;
+    if (term.length < 2) {
+      const t = setTimeout(() => {
+        if (seq === searchSeq.current) {
+          setResults([]);
+          setSearching(false);
+        }
+      }, 0);
+      return () => clearTimeout(t);
+    }
     const t = setTimeout(() => {
       setSearching(true);
       geo
         .search(term, center ?? undefined)
-        .then(setResults)
-        .catch(() => setResults([]))
-        .finally(() => setSearching(false));
+        .then((res) => {
+          if (seq === searchSeq.current) setResults(res);
+        })
+        .catch(() => {
+          if (seq === searchSeq.current) setResults([]);
+        })
+        .finally(() => {
+          if (seq === searchSeq.current) setSearching(false);
+        });
     }, 450);
     return () => clearTimeout(t);
     // Searching near the current view, but not re-running on every pan.
@@ -178,9 +197,22 @@ function PickerBody({
   const pick = (p: GeoPlace) => {
     setQ('');
     setResults([]);
-    lookup.current++;
+    const id = ++lookup.current;
     keepPickedName.current = true;
     setLabel(p.label);
+    if (p.city || p.district || p.neighborhood) {
+      setAddress({ city: p.city ?? null, district: p.district ?? null, neighborhood: p.neighborhood ?? null });
+    } else {
+      setAddress({});
+      void geo
+        .reverseFull(p.lat, p.lng)
+        .then((res) => {
+          if (id === lookup.current) {
+            setAddress({ city: res.city, district: res.district, neighborhood: res.neighborhood });
+          }
+        })
+        .catch(() => undefined);
+    }
     map.current?.flyTo(p.lat, p.lng, 17);
   };
 

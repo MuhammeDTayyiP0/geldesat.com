@@ -9,8 +9,8 @@ import { TILE_ATTRIBUTION, TILE_URL, TURKEY_CENTER } from "@/lib/map-tiles";
 import { cn } from "@/lib/utils";
 import "leaflet/dist/leaflet.css";
 
-type Place = { label: string; lat: number; lng: number };
 type AddressParts = { city?: string | null; district?: string | null; neighborhood?: string | null };
+type Place = { label: string; lat: number; lng: number } & AddressParts;
 
 async function geo<T>(params: Record<string, string>): Promise<T> {
   const res = await fetch(`/api/geo?${new URLSearchParams(params)}`);
@@ -29,6 +29,7 @@ export function LocationPicker({
   onSend,
   title = "Konum gönder",
   subtitle = "Haritayı kaydırarak buluşma noktasını seçin",
+  labelTitle = "Buluşma noktası",
   confirmLabel = "Bu konumu gönder",
   footnote = "Kalabalık ve herkese açık bir yer seçin; ev adresinizi paylaşmayın.",
   initialCenter = null,
@@ -40,6 +41,7 @@ export function LocationPicker({
   onSend: (place: { label: string; lat: number; lng: number } & AddressParts) => void | Promise<void>;
   title?: string;
   subtitle?: string;
+  labelTitle?: string;
   confirmLabel?: string;
   footnote?: string;
   initialCenter?: { lat: number; lng: number; zoom?: number } | null;
@@ -66,6 +68,7 @@ export function LocationPicker({
     if (!open) return;
     let cancelled = false;
     let instance: LeafletMap | null = null;
+    let invalidateTimer: ReturnType<typeof setTimeout> | null = null;
     void import("leaflet").then((L) => {
       if (cancelled || !mapEl.current) return;
       const startLat = initialCenter?.lat ?? TURKEY_CENTER.lat;
@@ -85,7 +88,9 @@ export function LocationPicker({
       });
       map.current = instance;
       if (initialCenter) setCenter({ lat: initialCenter.lat, lng: initialCenter.lng });
-      setTimeout(() => instance?.invalidateSize(), 150);
+      invalidateTimer = setTimeout(() => {
+        if (!cancelled) instance?.invalidateSize();
+      }, 150);
       if (initialCenter) {
         // Already positioned on an existing pin.
       } else if (initialQuery && initialQuery.trim().length >= 2) {
@@ -101,6 +106,7 @@ export function LocationPicker({
     });
     return () => {
       cancelled = true;
+      if (invalidateTimer) clearTimeout(invalidateTimer);
       instance?.remove();
       map.current = null;
       setCenter(null);
@@ -194,6 +200,7 @@ export function LocationPicker({
     lookup.current++;
     keepPickedName.current = true;
     setLabel(p.label);
+    setAddress({ city: p.city ?? null, district: p.district ?? null, neighborhood: p.neighborhood ?? null });
     map.current?.flyTo([p.lat, p.lng], 17, { duration: 0.8 });
   }
 
@@ -279,7 +286,7 @@ export function LocationPicker({
               <MapPin className="size-5" />
             </span>
             <div className="min-w-0 flex-1">
-              <p className="text-xs text-muted">{zoomedIn ? "Buluşma noktası" : "Bir yer seçmek için yakınlaştırın"}</p>
+              <p className="text-xs text-muted">{zoomedIn ? labelTitle : "Bir yer seçmek için yakınlaştırın"}</p>
               <input
                 value={resolving ? "Adres bulunuyor…" : label}
                 onChange={(e) => setLabel(e.target.value.slice(0, 120))}

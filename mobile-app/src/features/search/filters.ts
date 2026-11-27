@@ -23,6 +23,9 @@ export type FilterState = {
   withPhotos?: boolean;
   sellerType?: 'owner' | 'store';
   priceDropped?: boolean;
+  nearLat?: number;
+  nearLng?: number;
+  maxDistanceKm?: number;
   attrs: Record<string, string[]>;
 };
 
@@ -45,6 +48,7 @@ export const SORTS: { value: SortKey; label: string }[] = [
   { value: 'price_asc', label: 'Fiyat: düşükten yükseğe' },
   { value: 'price_desc', label: 'Fiyat: yüksekten düşüğe' },
   { value: 'views_desc', label: 'En çok incelenenler' },
+  { value: 'distance', label: 'En yakın' },
 ];
 
 const num = (v?: string) => {
@@ -111,6 +115,13 @@ export function toSearchFilters(state: FilterState, page: number, limit: number)
     withPhotos: state.withPhotos || undefined,
     sellerType: state.sellerType || undefined,
     priceDropped: state.priceDropped || undefined,
+    ...(state.nearLat != null && state.nearLng != null
+      ? {
+          nearLat: state.nearLat,
+          nearLng: state.nearLng,
+          ...(state.maxDistanceKm != null ? { maxDistanceKm: state.maxDistanceKm } : {}),
+        }
+      : {}),
     attrs: Object.keys(attrs).length ? attrs : undefined,
     page,
     limit,
@@ -133,6 +144,7 @@ export function activeFilterCount(state: FilterState): number {
   if (state.withPhotos) n++;
   if (state.sellerType) n++;
   if (state.priceDropped) n++;
+  if (state.nearLat != null && state.nearLng != null) n++;
   n += Object.values(state.attrs).filter((v) => v.length).length;
   return n;
 }

@@ -4,15 +4,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Image } from 'expo-image';
-import { CircleCheck, Copy, Eye, EyeOff, Heart, ImageOff, LayoutGrid, MessageCircle, MoreVertical, Pencil, Phone, Plus, RefreshCw, Rocket, Trash2 } from 'lucide-react-native';
+import { CircleCheck, Copy, Eye, EyeOff, Heart, ImageOff, LayoutGrid, MessageCircle, MoreVertical, Pencil, Phone, Plus, RefreshCw, Rocket, Trash2, TrendingDown } from 'lucide-react-native';
 import { errorMessage } from '@/api/client';
 import { myListings } from '@/api/endpoints';
 import { keys, queryClient } from '@/api/queries';
 import type { Listing, OwnerAction } from '@/api/types';
 import { useSession } from '@/auth/session';
 import { mediaUrl } from '@/lib/config';
-import { daysUntil, formatDate, formatNumber, formatPrice, isListingExpired, listingStatusLabel } from '@/lib/format';
-import { Badge, Button, Card, Chip, EmptyState, ErrorState, Header, ListRow, Loading, RowGroup, Sheet, Text, confirm, hairline, radius, space, toast, useTheme } from '@/ui';
+import { daysUntil, formatDate, formatNumber, formatPrice, isListingExpired, listingStatusLabel, maskThousands, parseMasked } from '@/lib/format';
+import { Badge, Button, Card, Chip, EmptyState, ErrorState, Header, Input, ListRow, Loading, RowGroup, Sheet, Text, confirm, hairline, radius, space, toast, useTheme } from '@/ui';
 import { useFlag } from '@/lib/flags';
 
 type Tab = 'live' | 'pending' | 'off' | 'sold' | 'rejected';
@@ -61,6 +61,8 @@ export default function MyListingsScreen() {
   const session = useSession();
   const [tab, setTab] = useState<Tab>('live');
   const [menu, setMenu] = useState<Listing | null>(null);
+  const [priceTarget, setPriceTarget] = useState<Listing | null>(null);
+  const [priceInput, setPriceInput] = useState('');
   const query = useQuery({ queryKey: keys.myListings, queryFn: myListings.list, enabled: session.status === 'signedIn' });
 
   const groups = useMemo(() => {
@@ -100,6 +102,17 @@ export default function MyListingsScreen() {
         SOLD: 'İlan satıldı olarak işaretlendi',
       };
       toast.success(messages[body.action === 'status' ? body.status : body.action] ?? 'Güncellendi');
+    },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+
+  const updatePrice = useMutation({
+    mutationFn: ({ id, price }: { id: string; price: number }) => myListings.quickUpdatePrice(id, price),
+    onSuccess: (_res, { id }) => {
+      void queryClient.invalidateQueries({ queryKey: keys.myListings });
+      void queryClient.invalidateQueries({ queryKey: keys.listing(id) });
+      setPriceTarget(null);
+      toast.success('Fiyat güncellendi');
     },
     onError: (e) => toast.error(errorMessage(e)),
   });
@@ -257,6 +270,20 @@ export default function MyListingsScreen() {
             {menuActions.has('renew') ? (
               <ListRow icon={RefreshCw} label="Süreyi 30 gün uzat" onPress={() => void run(menu, { action: 'renew' })} />
             ) : null}
+            {menu.status === 'ACTIVE' && !isExpired(menu) ? (
+              <ListRow
+                icon={TrendingDown}
+                label="Fiyatı düşür"
+                detail="Favorileyen alıcılara bildirim gider"
+                onPress={() => {
+                  const target = menu;
+                  thenGo(() => {
+                    setPriceTarget(target);
+                    setPriceInput(maskThousands(String(Math.max(1, Math.round(target.price * 0.9)))));
+                  });
+                }}
+              />
+            ) : null}
             {menu.status === 'ACTIVE' && !isExpired(menu) && dopingOn ? (
               <ListRow
                 icon={Rocket}
@@ -266,6 +293,50 @@ export default function MyListingsScreen() {
             ) : null}
             {menuActions.has('delete') ? <ListRow icon={Trash2} label="Sil" danger onPress={() => void run(menu, { action: 'delete' })} /> : null}
           </RowGroup>
+        ) : null}
+      </Sheet>
+
+      <Sheet
+        visible={!!priceTarget}
+        onClose={() => !updatePrice.isPending && setPriceTarget(null)}
+        title="Fiyatı hızlı güncelle"
+        subtitle={priceTarget ? `Mevcut: ${formatPrice(priceTarget.price, priceTarget.currency)}` : undefined}
+      >
+        {priceTarget ? (
+          <View style={styles.priceSheet}>
+            <Text variant="caption" tone="muted">
+              Fiyatı düşürdüğünüzde ilanı favorileyen alıcılara bildirim gider.
+            </Text>
+            <View style={styles.presets}>
+              {[5, 10, 15].map((pct) => {
+                const next = Math.max(1, Math.round(priceTarget.price * (1 - pct / 100)));
+                return (
+                  <Chip
+                    key={pct}
+                    label={`-%${pct}`}
+                    selected={parseMasked(priceInput) === next}
+                    onPress={() => setPriceInput(maskThousands(String(next)))}
+                  />
+                );
+              })}
+            </View>
+            <Input
+              label="Yeni fiyat"
+              keyboardType="number-pad"
+              value={priceInput}
+              onChangeText={(t) => setPriceInput(maskThousands(t))}
+            />
+            <Button
+              title="Kaydet"
+              block
+              loading={updatePrice.isPending}
+              disabled={!((parseMasked(priceInput) ?? 0) >= 1)}
+              onPress={() => {
+                const nextPrice = parseMasked(priceInput);
+                if (nextPrice != null && nextPrice >= 1) updatePrice.mutate({ id: priceTarget.id, price: nextPrice });
+              }}
+            />
+          </View>
         ) : null}
       </Sheet>
     </View>
@@ -405,4 +476,6 @@ const styles = StyleSheet.create({
   more: { width: 44, alignItems: 'center', paddingTop: space.md },
   rejectBanner: { paddingHorizontal: space.md, paddingVertical: space.sm, borderTopWidth: hairline },
   rowFooter: { paddingHorizontal: space.md, paddingVertical: space.sm, borderTopWidth: hairline, alignItems: 'flex-start' },
+  priceSheet: { gap: space.md },
+  presets: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
 });

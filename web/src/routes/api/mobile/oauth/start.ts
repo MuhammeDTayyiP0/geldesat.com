@@ -11,7 +11,7 @@ export const Route = createFileRoute("/api/mobile/oauth/start")({
       /** Opened in the app's auth browser: starts Google sign-in and sets the OAuth state cookie there. */
       GET: async ({ request }) => {
         try {
-          rateLimit(`mobile-oauth:${viewerKey(request.headers)}`, 30, 10 * 60_000);
+          rateLimit(`mobile-oauth-start:${viewerKey(request.headers)}`, 30, 10 * 60_000);
           const url = new URL(request.url);
           const challenge = url.searchParams.get("challenge");
           if (!googleAuthConfigured) return text("Google ile giriş şu an kullanılamıyor.", 503);
@@ -38,5 +38,5 @@ export const Route = createFileRoute("/api/mobile/oauth/start")({
 });
 
 function text(message: string, status: number) {
-  return new Response(message, { status, headers: { "Content-Type": "text/plain; charset=utf-8" } });
+  return new Response(message, { status, headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "private, no-store" } });
 }

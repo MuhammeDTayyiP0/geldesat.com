@@ -12,7 +12,7 @@ export const STORE_PLANS = ["BASIC", "PRO", "PREMIUM"] as const;
 
 export const adminListStores = createServerFn({ method: "POST" })
   .middleware([adminMiddleware])
-  .validator(z.object({ q: z.string().trim().max(120).optional(), plan: z.string().max(20).optional(), ...PageInput }))
+  .validator(z.object({ q: z.string().trim().max(120).optional(), plan: z.union([z.enum(STORE_PLANS), z.literal("")]).optional(), ...PageInput }))
   .handler(async ({ data }) => {
     const sql = await getSql();
     const w = new Where();
@@ -67,7 +67,10 @@ function normalizeStorePhone(raw: string | null): string | null {
   try {
     return normalizeTrPhone(raw);
   } catch {
-    return raw.trim();
+    const digits = raw.replace(/\D/g, "");
+    if (/^0\d{10}$/.test(digits)) return digits;
+    if (/^90\d{10}$/.test(digits)) return `0${digits.slice(2)}`;
+    throw new Error("Geçerli bir Türkiye telefon numarası girin.");
   }
 }
 
@@ -91,7 +94,7 @@ export const adminSaveStore = createServerFn({ method: "POST" })
     const sql = await getSql();
     const slug = slugify(data.slug || data.name);
     if (!slug) throw new Error("Geçerli bir mağaza adresi girin.");
-    const phone = data.phone ? normalizeTrPhone(data.phone) : null;
+    const phone = data.phone ? normalizeStorePhone(data.phone) : null;
 
     if (data.id) {
       const cur = await sql.transaction(async (tx) => {
@@ -165,10 +168,14 @@ export const adminDeleteStore = createServerFn({ method: "POST" })
   .validator(z.object({ id: z.string().max(200) }))
   .handler(async ({ context, data }) => {
     const sql = await getSql();
-    const cur = (await sql.query<Record<string, unknown> & { name: string; user_id: string }>("select * from stores where id = $1", [data.id]))[0];
-    if (!cur) throw new Error("Mağaza bulunamadı.");
     // Listings stay with the member; they just lose the store badge (on delete set null).
-    await sql.query("delete from stores where id = $1", [data.id]);
+    const cur = (
+      await sql.query<Record<string, unknown> & { name: string; user_id: string }>(
+        "delete from stores where id = $1 returning *",
+        [data.id],
+      )
+    )[0];
+    if (!cur) throw new Error("Mağaza bulunamadı.");
     await audit(sql, context.adminId, "store.delete", "store", data.id, `Mağaza "${cur.name}" kapatıldı`, {
       owner: cur.user_id,
       slug: cur.slug,
@@ -211,6 +218,7 @@ export const adminListStoreApplications = createServerFn({ method: "POST" })
                 u.email as applicant_email,
                 p.avatar_url as applicant_avatar,
                 (p.banned_at is not null) as applicant_banned,
+                (p.deletion_requested_at is not null) as applicant_closing,
                 rb.display_name as reviewed_by_name,
                 s.id as existing_store_id,
                 s.slug as existing_store_slug
@@ -249,6 +257,7 @@ export const adminListStoreApplications = createServerFn({ method: "POST" })
           applicant_email: strOrNull(r.applicant_email),
           applicant_avatar: strOrNull(r.applicant_avatar),
           applicant_banned: Boolean(r.applicant_banned),
+          applicant_closing: Boolean(r.applicant_closing),
           existing_store_id: strOrNull(r.existing_store_id),
           existing_store_slug: strOrNull(r.existing_store_slug),
         })),
@@ -330,6 +339,7 @@ export const adminResolveStoreApplication = createServerFn({ method: "POST" })
             const taken = await tx.query<{ id: string }>("select id from stores where lower(slug) = lower($1) limit 1", [candidate]);
             if (taken[0]) continue;
             const newStoreId = newId("str");
+            await tx.query("savepoint sp_store_insert");
             try {
               inserted = await tx.query<{ id: string; slug: string }>(
                 `insert into stores (id, user_id, name, slug, city, phone, plan)
@@ -338,8 +348,10 @@ export const adminResolveStoreApplication = createServerFn({ method: "POST" })
                  returning id, slug`,
                 [newStoreId, app.user_id, app.name, candidate, app.city || null, normalizedPhone, data.plan],
               );
+              await tx.query("release savepoint sp_store_insert");
               break;
             } catch (err) {
+              await tx.query("rollback to savepoint sp_store_insert");
               if (isUniqueError(err) && attempt < 5) continue;
               throw err;
             }
@@ -352,8 +364,9 @@ export const adminResolveStoreApplication = createServerFn({ method: "POST" })
             const fallback = (
               await tx.query<{ id: string; slug: string }>("select id, slug from stores where user_id = $1 limit 1", [app.user_id])
             )[0];
-            storeId = fallback?.id ?? null;
-            storeSlug = fallback?.slug ?? null;
+            if (!fallback) throw new Error("Mağaza oluşturulamadı, lütfen tekrar deneyin.");
+            storeId = fallback.id;
+            storeSlug = fallback.slug;
           }
         }
       }

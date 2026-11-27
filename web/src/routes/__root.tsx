@@ -86,7 +86,7 @@ export const Route = createRootRoute({
           "@type": "Organization",
           name: APP_NAME,
           url: BASE,
-          logo: `${BASE}/og.jpg`,
+          logo: `${BASE}/pwa-icon.png`,
           image: `${BASE}/og.jpg`,
           sameAs: [],
           contactPoint: [

@@ -27,14 +27,16 @@ export const Route = createFileRoute("/api/mobile/client-errors")({
     handlers: {
       POST: async ({ request }) => {
         try {
-          rateLimit(`client-errors:${viewerKey(request.headers)}`, 30, 60 * 60_000);
-          rateLimit("client-errors:global", 600, 60 * 60_000);
+          const ipKey = viewerKey(request.headers);
+          rateLimit(`client-errors:${ipKey}`, 30, 60 * 60_000);
           const parsed = z.object({ errors: z.array(Report).min(1).max(10) }).safeParse(await readJson(request, 64 * 1024));
           if (!parsed.success) return Response.json({ success: false, error: "Rapor okunamadı." }, { status: 400 });
           const sql = await getSql();
           for (const e of parsed.data.errors) {
+            rateLimit("client-errors:global", 3000, 60 * 60_000);
             const updateId = e.updateId?.trim().toLowerCase() || null;
-            const dedupKey = `client-err:${updateId ?? ""}:${e.platform}:${e.screen ?? ""}:${e.message.slice(0, 160)}`;
+            const deviceScope = e.deviceId?.trim() || ipKey;
+            const dedupKey = `client-err:${deviceScope}:${updateId ?? ""}:${e.platform}:${e.screen ?? ""}:${e.message.slice(0, 160)}`;
             if (!firstInWindow(dedupKey, 10 * 60_000)) continue;
             await sql.query(
               `insert into client_errors (platform, app_version, update_id, device_id, fatal, message, stack, screen)

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
 import { asIso, asJson, formatPrice, newId, num } from "@/lib/utils";
-import { DELETE_WINDOW_MS, DELETED_MESSAGE_TEXT, MAX_TEMPLATE_LENGTH, MAX_TEMPLATES, type ChatMessage, type OfferStatus } from "@/lib/chat-shared";
+import { DELETE_WINDOW_MS, DELETED_MESSAGE_TEXT, EDIT_WINDOW_MS, MAX_TEMPLATE_LENGTH, MAX_TEMPLATES, type ChatMessage, type OfferStatus } from "@/lib/chat-shared";
 import { ensureProfile, firstInWindow, notify, rateLimit, resetWindow } from "./helpers";
 import { chatVisibleTo, DELETED_USER_NAME, hideConversationFor, isClosedAccount, reopenConversation } from "./retention";
 import {
@@ -19,7 +19,7 @@ import {
 /** Messages per page when opening a chat or scrolling back. */
 const THREAD_PAGE = 60;
 /** Message columns, plus the quoted message (if replying) as JSON; valid in SELECT and RETURNING. */
-const MSG_COLUMNS = `id, sender_id, content, kind, meta, deleted_at, created_at, read_at, reply_to, client_id,
+const MSG_COLUMNS = `id, sender_id, content, kind, meta, deleted_at, created_at, edited_at, read_at, reply_to, client_id,
   (select json_build_object('id', r.id, 'sender_id', r.sender_id, 'kind', r.kind,
           'content', case when r.deleted_at is null then r.content else '${DELETED_MESSAGE_TEXT}' end)
    from messages r where r.id = messages.reply_to) as reply`;
@@ -36,6 +36,7 @@ export function mapMsg(m: Record<string, unknown>, hideRead = false): ChatMessag
     meta: deleted ? null : (asJson<ChatMessage["meta"]>(m.meta, null) ?? null),
     deleted,
     created_at: asIso(m.created_at),
+    edited_at: !deleted && m.edited_at ? asIso(m.edited_at) : null,
     read_at: !hideRead && m.read_at ? asIso(m.read_at) : null,
     reply: deleted ? null : asJson<ChatMessage["reply"]>(m.reply, null),
     // Lets the sender's app swap its "sending…" bubble for this one, also when the live event arrives first.
@@ -132,8 +133,12 @@ async function emitDelivered(sql: Sql, conv: Conv, senderId: string, msg: ChatMe
   broadcastUserInbox(receiver, { type: "new_message", conversationId: conv.id, message: msg });
   broadcastUserInbox(senderId, { type: "inbox_ping", conversationId: conv.id });
   if (!isViewingConversation(receiver, conv.id) && firstInWindow(`msgnotify:${receiver}:${conv.id}`, 2 * 60_000)) {
-    const sender = (await sql.query<{ display_name: string | null }>("select display_name from profiles where user_id=$1", [senderId]))[0];
-    await notify(receiver, "message", sender?.display_name ? `${sender.display_name} size yazdı` : "Yeni mesaj", contentPreview.slice(0, 80), `/mesajlar/${conv.id}`);
+    const muteCol = conv.buyer_id === receiver ? "buyer_muted_until" : "seller_muted_until";
+    const mutedRow = (await sql.query<{ muted: boolean }>(`select (${muteCol} is not null and ${muteCol} > now()) as muted from conversations where id=$1`, [conv.id]))[0];
+    if (!mutedRow?.muted) {
+      const sender = (await sql.query<{ display_name: string | null }>("select display_name from profiles where user_id=$1", [senderId]))[0];
+      await notify(receiver, "message", sender?.display_name ? `${sender.display_name} size yazdı` : "Yeni mesaj", contentPreview.slice(0, 80), `/mesajlar/${conv.id}`);
+    }
   }
 }
 
@@ -176,15 +181,21 @@ export const startConversation = createServerFn({ method: "POST" })
     if (!listing[0] || listing[0].status !== "ACTIVE") throw new Error("İlan bulunamadı");
     if (listing[0].user_id === context.userId) throw new Error("Kendi ilanınıza mesaj gönderemezsiniz.");
     await assertCanMessage(sql, context.userId, listing[0].user_id);
-    await sql.query(
-      `insert into conversations (id, listing_id, buyer_id, seller_id) values ($1,$2,$3,$4)
-       on conflict (listing_id, buyer_id) do update set updated_at = now()`,
-      [newId("cnv"), data.listingId, context.userId, listing[0].user_id],
-    );
-    const conv = (await sql.query<Conv>(
-      "select id, buyer_id, seller_id, listing_id from conversations where listing_id=$1 and buyer_id=$2",
-      [data.listingId, context.userId],
-    ))[0];
+    const conv = await sql.transaction(async (tx) => {
+      await tx.query(
+        `insert into conversations (id, listing_id, buyer_id, seller_id) values ($1,$2,$3,$4)
+         on conflict (listing_id, buyer_id) do update set updated_at = now()`,
+        [newId("cnv"), data.listingId, context.userId, listing[0].user_id],
+      );
+      const c = (
+        await tx.query<Conv>(
+          "select id, buyer_id, seller_id, listing_id from conversations where listing_id=$1 and buyer_id=$2",
+          [data.listingId, context.userId],
+        )
+      )[0];
+      if (!c) throw new Error("Konuşma başlatılamadı.");
+      return c;
+    });
     if (data.content) await deliver(sql, conv, context.userId, { content: data.content });
     if (data.offer !== undefined) await deliverOffer(sql, conv, context.userId, data.offer, undefined, listing[0].currency ?? "TRY");
     return { conversationId: conv.id };
@@ -304,40 +315,50 @@ export const respondOffer = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ messageId: z.string(), accept: z.boolean() }))
   .handler(async ({ context, data }) => {
+    rateLimit(`offer-reply:${context.userId}`, 30, 60_000);
     const sql = await getSql();
-    const rows = await sql.query<{ conversation_id: string; sender_id: string; meta: unknown; currency: string | null }>(
-      `select m.conversation_id, m.sender_id, m.meta, l.currency
-       from messages m
-       join conversations cv on cv.id = m.conversation_id
-       left join listings l on l.id = cv.listing_id
-       where m.id=$1 and m.kind='offer' and m.deleted_at is null`,
-      [data.messageId],
-    );
-    if (!rows[0]) throw new Error("Teklif bulunamadı");
-    const conv = await myConversation(sql, rows[0].conversation_id, context.userId);
-    if (rows[0].sender_id === context.userId) throw new Error("Kendi teklifinize yanıt veremezsiniz.");
-    const offerer = rows[0].sender_id;
-    await assertCanMessage(sql, context.userId, offerer);
-    const meta = asJson<{ amount?: number; status?: OfferStatus }>(rows[0].meta, {});
-    if (meta.status !== "pending") throw new Error("Bu teklif artık geçerli değil.");
-    if (data.accept) {
-      const listing = conv.listing_id
-        ? (await sql.query<{ status: string }>("select status from listings where id=$1 and (expires_at is null or expires_at > now())", [conv.listing_id]))[0]
-        : undefined;
-      if (listing?.status !== "ACTIVE") throw new Error("İlan artık yayında olmadığı için teklif kabul edilemez.");
-    }
-    const status: OfferStatus = data.accept ? "accepted" : "rejected";
-    // Only a still pending offer changes, so a withdrawal arriving first wins.
-    const updated = await sql.query<Record<string, unknown>>(
-      `update messages set meta = jsonb_set(meta, '{status}', to_jsonb($2::text))
-       where id=$1 and meta->>'status' = 'pending' returning ${MSG_COLUMNS}`,
-      [data.messageId, status],
-    );
-    if (!updated[0]) throw new Error("Bu teklif artık geçerli değil.");
-    const msg = mapMsg(updated[0]);
+    const { conv, offerer, meta, currency, updatedRow } = await sql.transaction(async (tx) => {
+      const rows = await tx.query<{ conversation_id: string; sender_id: string; meta: unknown; currency: string | null }>(
+        `select m.conversation_id, m.sender_id, m.meta, l.currency
+         from messages m
+         join conversations cv on cv.id = m.conversation_id
+         left join listings l on l.id = cv.listing_id
+         where m.id=$1 and m.kind='offer' and m.deleted_at is null
+         for update of m`,
+        [data.messageId],
+      );
+      if (!rows[0]) throw new Error("Teklif bulunamadı");
+      const convRow = await myConversation(tx as unknown as Sql, rows[0].conversation_id, context.userId);
+      await tx.query("select id from conversations where id=$1 for update", [convRow.id]);
+      if (rows[0].sender_id === context.userId) throw new Error("Kendi teklifinize yanıt veremezsiniz.");
+      const offererId = rows[0].sender_id;
+      await assertCanMessage(tx as unknown as Sql, context.userId, offererId);
+      const parsedMeta = asJson<{ amount?: number; status?: OfferStatus }>(rows[0].meta, {});
+      if (parsedMeta.status !== "pending") throw new Error("Bu teklif artık geçerli değil.");
+      if (data.accept) {
+        const listing = convRow.listing_id
+          ? (await tx.query<{ status: string }>("select status from listings where id=$1 and (expires_at is null or expires_at > now())", [convRow.listing_id]))[0]
+          : undefined;
+        if (listing?.status !== "ACTIVE") throw new Error("İlan artık yayında olmadığı için teklif kabul edilemez.");
+      }
+      const status: OfferStatus = data.accept ? "accepted" : "rejected";
+      const updated = await tx.query<Record<string, unknown>>(
+        `update messages set meta = jsonb_set(meta, '{status}', to_jsonb($2::text))
+         where id=$1 and meta->>'status' = 'pending' returning ${MSG_COLUMNS}`,
+        [data.messageId, status],
+      );
+      if (!updated[0]) throw new Error("Bu teklif artık geçerli değil.");
+      return {
+        conv: convRow,
+        offerer: offererId,
+        meta: parsedMeta,
+        currency: rows[0].currency ?? "TRY",
+        updatedRow: updated[0],
+      };
+    });
+    const msg = mapMsg(updatedRow);
     broadcastChatUpdate(conv.id, msg);
     broadcastUserInbox(offerer, { type: "inbox_ping", conversationId: conv.id });
-    const currency = rows[0].currency ?? "TRY";
     await notify(
       offerer,
       "message",
@@ -353,36 +374,48 @@ export const deleteMessage = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ messageId: z.string() }))
   .handler(async ({ context, data }) => {
+    rateLimit(`msg-del:${context.userId}`, 30, 60_000);
     const sql = await getSql();
-    const rows = await sql.query<{ conversation_id: string; sender_id: string; created_at: string; kind: string; meta: unknown; content: string }>(
-      "select conversation_id, sender_id, created_at, kind, meta, content from messages where id=$1 and deleted_at is null",
-      [data.messageId],
-    );
-    const m = rows[0];
-    if (!m || m.sender_id !== context.userId) throw new Error("Mesaj bulunamadı");
-    if (Date.now() - new Date(m.created_at).getTime() > DELETE_WINDOW_MS) throw new Error("Mesajlar yalnızca gönderildikten sonraki 1 saat içinde silinebilir.");
-    if (m.kind === "image") {
-      const imageId = asJson<{ image_id?: string }>(m.meta, {}).image_id;
-      // While a report on this chat is open the photo stays as evidence, unseen by the two people.
-      const reported = await sql.query("select 1 from reports where conversation_id=$1 and status='OPEN' limit 1", [m.conversation_id]);
-      if (imageId && !reported[0]) await sql.query("delete from chat_images where id=$1", [imageId]);
-    }
-    // A deleted IBAN or phone must not live on in the bell list or the push preview.
-    const conv = (await sql.query<Conv>("select id, buyer_id, seller_id, listing_id from conversations where id=$1", [m.conversation_id]))[0];
-    const receiver = conv ? otherOf(conv, context.userId) : null;
-    if (receiver && m.kind !== "image") {
-      await sql.query(
-        "update notifications set body=$1 where user_id=$2 and type='message' and link=$3 and body=$4",
-        [DELETED_MESSAGE_TEXT, receiver, `/mesajlar/${m.conversation_id}`, m.content.slice(0, 80)],
+    const { conversationId, receiver, updatedRow } = await sql.transaction(async (tx) => {
+      const rows = await tx.query<{ conversation_id: string; sender_id: string; created_at: string; kind: string; meta: unknown; content: string }>(
+        "select conversation_id, sender_id, created_at, kind, meta, content from messages where id=$1 and deleted_at is null for update",
+        [data.messageId],
       );
-    }
-    const updated = await sql.query<Record<string, unknown>>(
-      `update messages set deleted_at=now(), content=$2, meta=null where id=$1 returning ${MSG_COLUMNS}`,
-      [data.messageId, DELETED_MESSAGE_TEXT],
-    );
-    const msg = mapMsg(updated[0]);
-    broadcastChatUpdate(m.conversation_id, msg);
-    if (receiver) broadcastUserInbox(receiver, { type: "inbox_ping", conversationId: m.conversation_id });
+      const m = rows[0];
+      if (!m || m.sender_id !== context.userId) throw new Error("Mesaj bulunamadı");
+      if (Date.now() - new Date(m.created_at).getTime() > DELETE_WINDOW_MS) {
+        throw new Error("Mesajlar yalnızca gönderildikten sonraki 1 saat içinde silinebilir.");
+      }
+      if (m.kind === "offer") {
+        const offerStatus = asJson<{ status?: string }>(m.meta, {}).status;
+        if (offerStatus && offerStatus !== "pending") {
+          throw new Error("Sonuçlanmış teklif kartları silinemez.");
+        }
+      }
+      if (m.kind === "image") {
+        const imageId = asJson<{ image_id?: string }>(m.meta, {}).image_id;
+        // While a report on this chat is open the photo stays as evidence, unseen by the two people.
+        const reported = await tx.query("select 1 from reports where conversation_id=$1 and status='OPEN' limit 1", [m.conversation_id]);
+        if (imageId && !reported[0]) await tx.query("delete from chat_images where id=$1", [imageId]);
+      }
+      // A deleted IBAN or phone must not live on in the bell list or the push preview.
+      const conv = (await tx.query<Conv>("select id, buyer_id, seller_id, listing_id from conversations where id=$1", [m.conversation_id]))[0];
+      const otherUserId = conv ? otherOf(conv, context.userId) : null;
+      if (otherUserId && m.kind !== "image") {
+        await tx.query(
+          "update notifications set body=$1 where user_id=$2 and type='message' and link=$3 and body=$4",
+          [DELETED_MESSAGE_TEXT, otherUserId, `/mesajlar/${m.conversation_id}`, m.content.slice(0, 80)],
+        );
+      }
+      const updated = await tx.query<Record<string, unknown>>(
+        `update messages set deleted_at=now(), content=$2, meta=null where id=$1 returning ${MSG_COLUMNS}`,
+        [data.messageId, DELETED_MESSAGE_TEXT],
+      );
+      return { conversationId: m.conversation_id, receiver: otherUserId, updatedRow: updated[0] };
+    });
+    const msg = mapMsg(updatedRow);
+    broadcastChatUpdate(conversationId, msg);
+    if (receiver) broadcastUserInbox(receiver, { type: "inbox_ping", conversationId });
     return msg;
   });
 
@@ -398,8 +431,15 @@ export const listConversations = createServerFn({ method: "GET" })
               case when cv.buyer_id = $1 then cv.seller_id else cv.buyer_id end as other_id,
               case when cv.buyer_id = $1 then cv.buyer_archived_at else cv.seller_archived_at end as archived_at,
               case when cv.buyer_id = $1 then cv.buyer_marked_unread else cv.seller_marked_unread end as marked_unread,
+              case when cv.buyer_id = $1 then cv.buyer_pinned_at else cv.seller_pinned_at end as pinned_at,
+              case when cv.buyer_id = $1 then (cv.buyer_muted_until is not null and cv.buyer_muted_until > now()) else (cv.seller_muted_until is not null and cv.seller_muted_until > now()) end as muted,
               lm.content as last_content, lm.kind as last_kind, lm.sender_id as last_sender_id, lm.deleted_at as last_deleted,
-              coalesce(u.n, 0) as unread
+              coalesce(u.n, 0) as unread,
+              exists (
+                select 1 from user_blocks b
+                where (b.blocker_id = $1 and b.blocked_id = case when cv.buyer_id = $1 then cv.seller_id else cv.buyer_id end)
+                   or (b.blocked_id = $1 and b.blocker_id = case when cv.buyer_id = $1 then cv.seller_id else cv.buyer_id end)
+              ) as other_blocked
        from conversations cv
        left join listings l on l.id = cv.listing_id
        left join profiles op on op.user_id = case when cv.buyer_id = $1 then cv.seller_id else cv.buyer_id end
@@ -412,7 +452,7 @@ export const listConversations = createServerFn({ method: "GET" })
          where m.conversation_id = cv.id and m.sender_id <> $1 and m.read_at is null
        ) u on true
        where (cv.buyer_id = $1 or cv.seller_id = $1) and ${chatVisibleTo("$1")}
-       order by cv.updated_at desc
+       order by (case when cv.buyer_id = $1 then cv.buyer_pinned_at else cv.seller_pinned_at end) desc nulls last, cv.updated_at desc
        limit 300`,
       [context.userId],
     );
@@ -430,9 +470,11 @@ export const listConversations = createServerFn({ method: "GET" })
       other_name: r.other_name == null ? DELETED_USER_NAME : String(r.other_name),
       other_avatar: r.other_avatar ? String(r.other_avatar) : null,
       other_closed: r.other_name == null || r.other_closing != null,
-      other_online: r.other_name != null && isOnline(String(r.other_id)),
+      other_online: r.other_name != null && r.other_closing == null && !r.other_blocked && isOnline(String(r.other_id)),
       archived: r.archived_at != null,
       marked_unread: Boolean(r.marked_unread),
+      pinned: r.pinned_at != null,
+      muted: Boolean(r.muted),
       last_content: r.last_content == null ? "" : String(r.last_content),
       last_kind: String(r.last_kind ?? "text"),
       last_deleted: r.last_deleted != null,
@@ -454,7 +496,9 @@ export const getThread = createServerFn({ method: "POST" })
       `select l.title, l.slug, l.images, l.price, l.currency, l.status as listing_status,
               op.display_name as other_name, op.avatar_url as other_avatar, op.last_seen_at as other_last_seen,
               coalesce(op.deletion_requested_at, op.banned_at) as other_closing, coalesce(op.read_receipts, true) as other_receipts,
-              coalesce(mp.read_receipts, true) as my_receipts
+              coalesce(mp.read_receipts, true) as my_receipts,
+              case when cv.buyer_id = $3 then cv.buyer_pinned_at is not null else cv.seller_pinned_at is not null end as pinned,
+              case when cv.buyer_id = $3 then (cv.buyer_muted_until is not null and cv.buyer_muted_until > now()) else (cv.seller_muted_until is not null and cv.seller_muted_until > now()) end as muted
        from conversations cv
        left join listings l on l.id = cv.listing_id
        left join profiles op on op.user_id = $2
@@ -497,6 +541,8 @@ export const getThread = createServerFn({ method: "POST" })
         other_last_seen: !blocked && h.other_last_seen ? asIso(h.other_last_seen) : null,
         buyer_id: conv.buyer_id,
         seller_id: conv.seller_id,
+        pinned: Boolean(h.pinned),
+        muted: Boolean(h.muted),
       },
       messages,
       hasMore,
@@ -627,7 +673,20 @@ export const markConversationUnread = createServerFn({ method: "POST" })
     const conv = await myConversation(sql, data.conversationId, context.userId);
     if (!data.unread) {
       // "Okundu" means the messages too; otherwise the badge stays.
-      await sql.query("update messages set read_at=now() where conversation_id=$1 and sender_id<>$2 and read_at is null", [conv.id, context.userId]);
+      const reads = await sql.query<{ id: string; read_at: unknown }>(
+        "update messages set read_at=now() where conversation_id=$1 and sender_id<>$2 and read_at is null returning id, read_at",
+        [conv.id, context.userId],
+      );
+      await sql.query("update notifications set read_at=now() where user_id=$1 and type='message' and link=$2 and read_at is null", [
+        context.userId,
+        `/mesajlar/${conv.id}`,
+      ]);
+      if (reads.length) {
+        broadcastChatRead(
+          conv.id,
+          reads.map((r) => ({ id: r.id, read_at: asIso(r.read_at) })),
+        );
+      }
     }
     await sql.query(`update conversations set ${sideOf(conv, context.userId)}_marked_unread=$2 where id=$1`, [conv.id, data.unread]);
     broadcastUserInbox(context.userId, { type: "inbox_ping", conversationId: conv.id });
@@ -697,10 +756,15 @@ export const reportConversation = createServerFn({ method: "POST" })
         created_at: asIso(m.created_at),
       })),
     };
-    await sql.query(
-      "insert into reports (id, listing_id, reporter_id, reason, details, conversation_id, message_id, evidence) values ($1,$2,$3,$4,$5,$6,$7,$8::jsonb)",
-      [newId("rep"), conv.listing_id, context.userId, data.reason, data.details || null, conv.id, messageId, JSON.stringify(evidence)],
-    );
+    try {
+      await sql.query(
+        "insert into reports (id, listing_id, reporter_id, reason, details, conversation_id, message_id, evidence) values ($1,$2,$3,$4,$5,$6,$7,$8::jsonb)",
+        [newId("rep"), conv.listing_id, context.userId, data.reason, data.details || null, conv.id, messageId, JSON.stringify(evidence)],
+      );
+    } catch (err) {
+      if (typeof err === "object" && err !== null && (err as { code?: string }).code === "23505") return { ok: true };
+      throw err;
+    }
     return { ok: true };
   });
 
@@ -877,3 +941,65 @@ export async function getSellerResponseStats(
     avgReplyMinutes: Math.max(0, Math.round(row.avg_minutes)),
   };
 }
+
+export const pinConversation = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ conversationId: z.string(), pinned: z.boolean() }))
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    const conv = await myConversation(sql, data.conversationId, context.userId);
+    const col = `${sideOf(conv, context.userId)}_pinned_at`;
+    await sql.query(`update conversations set ${col}=${data.pinned ? "now()" : "null"} where id=$1`, [conv.id]);
+    return { ok: true, pinned: data.pinned };
+  });
+
+export const muteConversation = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ conversationId: z.string(), muted: z.boolean() }))
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    const conv = await myConversation(sql, data.conversationId, context.userId);
+    const col = `${sideOf(conv, context.userId)}_muted_until`;
+    await sql.query(
+      `update conversations set ${col}=${data.muted ? "now() + interval '100 years'" : "null"} where id=$1`,
+      [conv.id],
+    );
+    return { ok: true, muted: data.muted };
+  });
+
+export const editMessage = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ messageId: z.string(), content: z.string().trim().min(1).max(2000) }))
+  .handler(async ({ context, data }) => {
+    rateLimit(`chat-edit:${context.userId}`, 30, 60_000);
+    const sql = await getSql();
+    const result = await sql.transaction(async (tx) => {
+      const rows = await tx.query<{
+        id: string;
+        conversation_id: string;
+        sender_id: string;
+        created_at: string;
+        kind: string;
+      }>(
+        "select id, conversation_id, sender_id, created_at, kind from messages where id=$1 and deleted_at is null for update",
+        [data.messageId],
+      );
+      const m = rows[0];
+      if (!m) throw new Error("Mesaj bulunamadı.");
+      if (m.sender_id !== context.userId) throw new Error("Yalnızca kendi mesajınızı düzenleyebilirsiniz.");
+      if (m.kind !== "text") throw new Error("Yalnızca metin mesajları düzenlenebilir.");
+      if (Date.now() - new Date(m.created_at).getTime() > EDIT_WINDOW_MS) {
+        throw new Error("Mesajlar yalnızca ilk 15 dakika içinde düzenlenebilir.");
+      }
+      const updated = await tx.query<Record<string, unknown>>(
+        `update messages set content=$2, edited_at=now(), updated_at=now() where id=$1 returning ${MSG_COLUMNS}`,
+        [data.messageId, data.content],
+      );
+      return {
+        conversationId: m.conversation_id,
+        message: mapMsg(updated[0]),
+      };
+    });
+    broadcastChatUpdate(result.conversationId, result.message);
+    return { message: result.message };
+  });

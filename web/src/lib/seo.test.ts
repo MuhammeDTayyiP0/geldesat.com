@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
+import seoMiddleware from "../../server/middleware/seo";
 import { buildCategorySeo, buildListingSeo, isListingIndexable, jsonLd } from "./seo";
 import type { ListingCard } from "./server/helpers";
 
@@ -102,16 +103,13 @@ test("listing SEO omits unverified validity dates and conditions", () => {
 });
 
 test("robots allows Google to read noindex on search pages in every serving config", async () => {
-  const files = [
-    new URL("../../public/robots.txt", import.meta.url),
-    new URL("../../server/middleware/seo.ts", import.meta.url),
-  ];
-  const contents = await Promise.all(files.map((url) => readFile(url, "utf8")));
-  for (const content of contents) {
-    assert.doesNotMatch(content, /Disallow:\s*\/search\b/);
-    assert.doesNotMatch(content, /Disallow:\s*\/(?:admin|profil|ilanlarim|mesajlar|favoriler|bildirimler|doping|arsiv|login|ilan-ver)\b/);
-    assert.match(content, /Disallow:\s*\/api\//);
-  }
+  const res = await seoMiddleware({ url: new URL("https://www.geldesat.com/robots.txt") }, () => new Response("next"));
+  assert.ok(res instanceof Response);
+  assert.equal(res.status, 200);
+  const body = await res.text();
+  assert.doesNotMatch(body, /Disallow:\s*\/search\b/);
+  assert.doesNotMatch(body, /Disallow:\s*\/(?:admin|profil|ilanlarim|mesajlar|favoriler|bildirimler|doping|arsiv|login|ilan-ver)\b/);
+  assert.match(body, /Disallow:\s*\/api\//);
 });
 
 test("the sitemap lists the categories that have live listings", async () => {

@@ -63,7 +63,10 @@ const globalRef = globalThis as typeof globalThis & {
 };
 
 export const chatBus = (globalRef.__geldesatChatBus__ ??= new EventEmitter());
-chatBus.setMaxListeners(1000);
+chatBus.setMaxListeners(0);
+
+export const MAX_GLOBAL_SSE_STREAMS = 2000;
+let activeStreamCount = 0;
 
 export function broadcastChatMessage(conversationId: string, message: ChatMessagePayload) {
   chatBus.emit(`chat:${conversationId}`, {
@@ -137,7 +140,8 @@ const MAX_SSE_PER_USER = 8;
 const userStreams = (globalRef.__geldesatSseStreams__ ??= new Map<string, Set<() => void>>());
 
 /** Track an active SSE stream closer for `userId`, closing the oldest if the per-user cap is exceeded. */
-export function registerUserStream(userId: string, close: () => void): () => void {
+export function registerUserStream(userId: string, close: () => void): (() => void) | null {
+  if (activeStreamCount >= MAX_GLOBAL_SSE_STREAMS) return null;
   let set = userStreams.get(userId);
   if (!set) {
     set = new Set();
@@ -147,6 +151,7 @@ export function registerUserStream(userId: string, close: () => void): () => voi
     const oldest = set.values().next().value;
     if (!oldest) break;
     set.delete(oldest);
+    activeStreamCount = Math.max(0, activeStreamCount - 1);
     try {
       oldest();
     } catch {
@@ -154,10 +159,11 @@ export function registerUserStream(userId: string, close: () => void): () => voi
     }
   }
   set.add(close);
+  activeStreamCount += 1;
   return () => {
     const current = userStreams.get(userId);
-    if (!current) return;
-    current.delete(close);
+    if (!current || !current.delete(close)) return;
+    activeStreamCount = Math.max(0, activeStreamCount - 1);
     if (current.size === 0) userStreams.delete(userId);
   };
 }
@@ -167,6 +173,7 @@ export function disconnectUserStreams(userId: string): void {
   const set = userStreams.get(userId);
   if (!set) return;
   userStreams.delete(userId);
+  activeStreamCount = Math.max(0, activeStreamCount - set.size);
   for (const close of set) {
     try {
       close();

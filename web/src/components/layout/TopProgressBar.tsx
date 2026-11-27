@@ -10,9 +10,11 @@ export function TopProgressBar() {
   const [progress, setProgress] = useState(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const finishTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const hasStartedRef = useRef(false);
 
   useEffect(() => {
     if (isPending) {
+      hasStartedRef.current = true;
       // Önceki bitiş zamanlayıcılarını temizle
       if (finishTimeoutRef.current) clearTimeout(finishTimeoutRef.current);
       if (timerRef.current) clearInterval(timerRef.current);
@@ -29,7 +31,7 @@ export function TopProgressBar() {
           return prev;
         });
       }, 150);
-    } else {
+    } else if (hasStartedRef.current) {
       // Yükleme tamamlandı: %100'e fırla ve tatlıca kaybol
       if (timerRef.current) clearInterval(timerRef.current);
 
@@ -38,6 +40,7 @@ export function TopProgressBar() {
         setVisible(false);
         finishTimeoutRef.current = setTimeout(() => {
           setProgress(0);
+          hasStartedRef.current = false;
         }, 200);
       }, 250);
     }

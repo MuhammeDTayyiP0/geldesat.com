@@ -74,7 +74,7 @@ export function CategoryPicker({ visible, onClose, onDismissed, mode, initialPat
       ) : level.isFetching && !level.data ? (
         <ActivityIndicator color={c.primary} style={styles.loading} />
       ) : (
-        <View style={[styles.list, { borderColor: c.border, backgroundColor: c.surface }]}>
+        <View style={[styles.list, { borderColor: c.border, backgroundColor: c.surface }, level.isPlaceholderData && { opacity: 0.5 }]}>
           {children.map((cat, i) => {
             const { icon: Icon, tint } = categoryIcon(cat.icon, dark);
             return (
@@ -83,6 +83,7 @@ export function CategoryPicker({ visible, onClose, onDismissed, mode, initialPat
                 <Pressable
                   accessibilityRole="button"
                   onPress={() => {
+                    if (level.isPlaceholderData) return;
                     const rows = [...pathRows, cat];
                     if (cat.has_children === false) choose(cat, rows);
                     else setPath([...path, cat.id]);

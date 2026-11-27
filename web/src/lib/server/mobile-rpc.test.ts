@@ -9,12 +9,12 @@ import { test } from "node:test";
  */
 const ALLOWED = [
   "archiveConversation", "autocompleteSuggestions", "blockUser", "browseCategories", "bulkImportListings",
-  "checkReviewEligibility", "createSavedSearch", "deleteConversation", "deleteMessage", "deleteSavedSearch",
-  "followSeller", "getAccountSettings", "getCategory", "getChatTemplates", "getDeletionStatus", "getFollowStatus",
+  "checkReviewEligibility", "createSavedSearch", "deleteConversation", "deleteMessage", "deleteSavedSearch", "editMessage",
+  "followSeller", "getAccountSettings", "getCategory", "getCategoryPriceStats", "getChatTemplates", "getDeletionStatus", "getFollowStatus",
   "getLegal", "getListingForEdit", "getListingsByIds", "getMe", "getSiteSettings", "getThread", "homeListings",
   "leaveReview", "listBlockedUsers", "listCategoryRoots", "listConversations", "listSavedSearches", "loadAroundMessage",
-  "loadOlderMessages", "mapCityCounts", "mapListingsInBounds", "markConversationUnread", "markThreadRead",
-  "myCreditOrders", "myFollowedSellers", "myRecentListings", "myStoreApplication", "pollThread", "removeRecentListing",
+  "loadOlderMessages", "mapCityCounts", "mapListingsInBounds", "markConversationUnread", "markThreadRead", "muteConversation",
+  "myCreditOrders", "myFollowedSellers", "myRecentListings", "myStoreApplication", "pinConversation", "pollThread", "quickUpdatePrice", "removeRecentListing",
   "reportConversation", "requestMyAccountDeletion", "respondOffer", "restoreMyAccount", "saveChatTemplates",
   "searchCatalogWithContext", "searchCategoryPaths", "searchMessages", "sendLocation", "sendMessage", "sendOffer", "sendTyping",
   "startConversation", "statsHome", "submitStoreApplication", "toggleSavedSearchNotify", "unblockUser",

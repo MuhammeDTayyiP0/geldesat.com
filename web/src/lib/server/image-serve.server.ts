@@ -85,3 +85,15 @@ async function variant(key: string, data: Uint8Array, width: number): Promise<Bu
   remember(`${key}@${width}`, out);
   return out;
 }
+
+/** Drop cached resized variants for deleted/replaced image keys. */
+export function evictImageVariants(keys: readonly (string | null | undefined)[]): void {
+  const prefixes = keys.filter((k): k is string => Boolean(k)).map((k) => `${k}@`);
+  if (!prefixes.length) return;
+  for (const [cacheKey, buf] of variantCache) {
+    if (prefixes.some((p) => cacheKey.startsWith(p))) {
+      variantCache.delete(cacheKey);
+      cacheBytes = Math.max(0, cacheBytes - buf.byteLength);
+    }
+  }
+}

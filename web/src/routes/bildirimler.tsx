@@ -49,7 +49,9 @@ function Notes() {
         setFailed(false);
         setRows(list);
         if (list.some((n) => !n.read)) {
-          void markNotificationsRead().catch(() => undefined).then(() => setUnread((prev) => ({ ...prev, notifications: 0 })));
+          void markNotificationsRead()
+            .then(() => setUnread((prev) => ({ ...prev, notifications: 0 })))
+            .catch(() => undefined);
         }
       })
       .catch(() => alive && setFailed(true));

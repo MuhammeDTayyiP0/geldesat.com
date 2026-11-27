@@ -12,11 +12,9 @@ node_modules/
 # production & build outputs
 dist
 /web/build
-/web/.next/
 /web/out/
 .output/
 .nitro/
-.vercel
 
 # testing and local app artifacts
 /web/coverage
@@ -30,7 +28,6 @@ attachments/
 # env files (örnek dosyalar hariç tüm gizli anahtarlar yoksayılır)
 .env*
 !.env.example
-!env.ornek
 
 # misc & OS
 .DS_Store
@@ -50,10 +47,8 @@ yarn-error.log*
 .pnpm-debug.log*
 build.log
 
-# typescript & prisma
+# typescript
 *.tsbuildinfo
-next-env.d.ts
-/web/src/generated/prisma
 
 # Uploads & local archives
 /web/public/uploads/*

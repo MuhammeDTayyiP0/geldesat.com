@@ -49,13 +49,18 @@ export const Route = createFileRoute("/api/avatar")({
       DELETE: async ({ request }) => {
         const auth = await authorizeUpload(request);
         if (auth instanceof Response) return auth;
-        const sql = await getSql();
-        await sql.transaction(async (tx) => {
-          await tx.query("delete from user_avatars where user_id=$1", [auth.userId]);
-          await tx.query("update profiles set avatar_url=null where user_id=$1", [auth.userId]);
-          await tx.query('update "user" set image=null where id=$1', [auth.userId]);
-        });
-        return json({ ok: true });
+        try {
+          rateLimit(`avatar-del:${auth.userId}`, 20, 10 * 60_000);
+          const sql = await getSql();
+          await sql.transaction(async (tx) => {
+            await tx.query("delete from user_avatars where user_id=$1", [auth.userId]);
+            await tx.query("update profiles set avatar_url=null where user_id=$1", [auth.userId]);
+            await tx.query('update "user" set image=null where id=$1', [auth.userId]);
+          });
+          return json({ ok: true });
+        } catch (err) {
+          return json({ error: publicErrorMessage(err, "Fotoğraf kaldırılamadı") }, errorStatus(err, 400));
+        }
       },
     },
   },

@@ -84,11 +84,15 @@ export const LEGAL_NAV = [
 function parseLegal(body: string) {
   const parts = body.split(/^## /m);
   const intro = parts[0]?.trim() ?? "";
-  const sections = parts.slice(1).map((block) => {
+  const seen = new Map<string, number>();
+  const sections = parts.slice(1).map((block, idx) => {
     const i = block.indexOf("\n");
     const title = (i === -1 ? block : block.slice(0, i)).trim();
     const content = (i === -1 ? "" : block.slice(i + 1)).trim();
-    return { title, content, id: slugify(title) };
+    const base = slugify(title) || `bolum-${idx + 1}`;
+    const count = (seen.get(base) ?? 0) + 1;
+    seen.set(base, count);
+    return { title, content, id: count === 1 ? base : `${base}-${count}` };
   });
   return { intro, sections };
 }

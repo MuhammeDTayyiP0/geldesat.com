@@ -14,13 +14,14 @@ import {
   Palette,
   ShieldCheck,
   Store,
+  UserCheck,
   UserPen,
   UserRound,
   type LucideIcon,
 } from "lucide-react";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { isAdminSession } from "@/lib/server/account";
-import { unreadCount } from "@/lib/server/social";
+import { useUnread } from "@/lib/unread-store";
 
 type NavTo =
   | "/profil"
@@ -39,6 +40,7 @@ type NavTo =
   | "/ayarlar/hesap"
   | "/ayarlar/engellenenler"
   | "/ayarlar/kayitli-aramalar"
+  | "/ayarlar/takip-ettiklerim"
   | "/ayarlar/sablonlar"
   | "/admin";
 
@@ -72,6 +74,7 @@ export const SETTINGS_SECTIONS: Array<{ title: string; items: AccountNavItem[] }
       { to: "/ayarlar/gizlilik", label: "Gizlilik", icon: Lock, hint: "Telefonumu kimler görebilir, WhatsApp" },
       { to: "/ayarlar/sablonlar", label: "Hazır mesajlarım", icon: MessageSquareText, hint: "Sohbette tek tıkla gönderilecek kalıp mesajlar" },
       { to: "/ayarlar/kayitli-aramalar", label: "Kayıtlı aramalarım", icon: Bookmark, hint: "Kaydettiğiniz aramalar ve yeni ilan bildirimleri" },
+      { to: "/ayarlar/takip-ettiklerim", label: "Takip ettiklerim", icon: UserCheck, hint: "Takip ettiğiniz satıcılar" },
       { to: "/ayarlar/engellenenler", label: "Engellenenler", icon: Ban, hint: "Mesajlaşmayı engellediğiniz kişiler" },
     ],
   },
@@ -86,14 +89,14 @@ export const SETTINGS_ITEMS: AccountNavItem[] = SETTINGS_SECTIONS.flatMap((s) =>
 /** Unread counters and admin flag for the account menu. */
 export function useAccountMeta() {
   const { user } = useCurrentUserState();
-  const [counts, setCounts] = useState({ messages: 0, notifications: 0 });
+  const counts = useUnread();
   const [admin, setAdmin] = useState(false);
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      setAdmin(false);
+      return;
+    }
     let alive = true;
-    unreadCount()
-      .then((c) => alive && setCounts(c))
-      .catch(() => undefined);
     isAdminSession()
       .then((a) => alive && setAdmin(Boolean(a)))
       .catch(() => undefined);

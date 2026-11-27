@@ -3,7 +3,8 @@ import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useInfiniteQuery, useMutation, useQuery } from '@tanstack/react-query';
-import { ArrowUpDown, Bell, Bookmark, ChevronLeft, LayoutGrid, List, MapPin, Search, SearchX, SlidersHorizontal, X } from 'lucide-react-native';
+import * as Location from 'expo-location';
+import { ArrowUpDown, Bell, Bookmark, ChevronLeft, LayoutGrid, List, LocateFixed, MapPin, Search, SearchX, SlidersHorizontal, X } from 'lucide-react-native';
 import { errorMessage } from '@/api/client';
 import { catalog, savedSearches } from '@/api/endpoints';
 import { keys, queryClient } from '@/api/queries';
@@ -50,6 +51,9 @@ type Params = {
   priceDropped?: string;
   title?: string;
   sort?: string;
+  nearLat?: string;
+  nearLng?: string;
+  maxDistanceKm?: string;
 };
 
 function parseAttrsParam(raw?: string): Record<string, string[]> {
@@ -99,6 +103,9 @@ function filtersFromParams(params: Params): FilterState {
     withPhotos: params.withPhotos === '1',
     sellerType,
     priceDropped: params.priceDropped === '1',
+    nearLat: params.nearLat && Number.isFinite(Number(params.nearLat)) ? Number(params.nearLat) : undefined,
+    nearLng: params.nearLng && Number.isFinite(Number(params.nearLng)) ? Number(params.nearLng) : undefined,
+    maxDistanceKm: params.maxDistanceKm && Number.isFinite(Number(params.maxDistanceKm)) ? Number(params.maxDistanceKm) : undefined,
     sort: (SORTS.some((s) => s.value === params.sort) ? params.sort : 'date_desc') as SortKey,
     attrs: parseAttrsParam(params.attrs),
   };
@@ -208,6 +215,43 @@ export default function ResultsScreen() {
     const q = query.trim();
     if (q) void rememberSearch(q);
     setFilters((f) => ({ ...f, q: q || undefined }));
+  };
+
+  const [locating, setLocating] = useState(false);
+  const nearOn = filters.nearLat != null && filters.nearLng != null;
+  const toggleNearMe = async () => {
+    if (nearOn) {
+      setFilters((f) => ({
+        ...f,
+        nearLat: undefined,
+        nearLng: undefined,
+        maxDistanceKm: undefined,
+        sort: f.sort === 'distance' ? 'date_desc' : f.sort,
+      }));
+      return;
+    }
+    if (locating) return;
+    setLocating(true);
+    try {
+      const perm = await Location.requestForegroundPermissionsAsync();
+      if (perm.status !== 'granted') {
+        toast.error('Yakınımdakiler için konum izni gerekli.');
+        return;
+      }
+      const pos =
+        (await Location.getLastKnownPositionAsync({ maxAge: 60_000 })) ??
+        (await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }));
+      setFilters((f) => ({
+        ...f,
+        nearLat: pos.coords.latitude,
+        nearLng: pos.coords.longitude,
+        sort: 'distance',
+      }));
+    } catch {
+      toast.error('Konum alınamadı.');
+    } finally {
+      setLocating(false);
+    }
   };
 
   const saveMutation = useMutation({
@@ -340,6 +384,22 @@ export default function ResultsScreen() {
             label={SORTS.find((s) => s.value === filters.sort)?.label ?? 'Sırala'}
             onPress={() => setSheet('sort')}
           />
+          <Chip
+            icon={LocateFixed}
+            label={locating ? 'Konum…' : 'Yakınımda'}
+            selected={nearOn}
+            onPress={() => void toggleNearMe()}
+          />
+          {nearOn
+            ? [10, 25, 50].map((km) => (
+                <Chip
+                  key={km}
+                  label={`${km} km`}
+                  selected={filters.maxDistanceKm === km}
+                  onPress={() => setFilters((f) => ({ ...f, maxDistanceKm: f.maxDistanceKm === km ? undefined : km }))}
+                />
+              ))
+            : null}
           <Chip icon={MapPin} label="Harita" onPress={() => router.push('/harita' as Href)} />
           {kayitliAramalar ? <Chip icon={Bookmark} label="Aramayı kaydet" onPress={openSaveSheet} /> : null}
           {filters.category ? (

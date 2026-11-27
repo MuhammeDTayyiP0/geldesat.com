@@ -12,6 +12,7 @@ import {
   Card,
   EmptyState,
   ErrorState,
+  InlineQueryError,
   Menu,
   MenuItem,
   PageHeader,
@@ -165,6 +166,7 @@ function UsersPage() {
           ) : null}
         </div>
 
+        {query.isError && query.data ? <InlineQueryError error={query.error} onRetry={() => void query.refetch()} /> : null}
         {query.error && !query.data ? (
           <ErrorState error={query.error} onRetry={() => void query.refetch()} />
         ) : query.isLoading ? (

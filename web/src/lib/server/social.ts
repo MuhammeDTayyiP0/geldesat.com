@@ -8,6 +8,7 @@ import {
   ensureProfile,
   firstInWindow,
   hasOpenReport,
+  isActiveAdmin,
   listingSelect,
   insertListingReport,
   mapListing,
@@ -184,15 +185,16 @@ export const unreadCount = createServerFn({ method: "GET" })
     void sweepMessageDigests().catch((err) => console.warn("[digest] sweep failed", err));
     const sql = await getSql();
     const [a, messages] = await Promise.all([
-      sql.query<{ n: number; role: string | null }>(
+      sql.query<{ n: number; role: string | null; banned_at: unknown; deletion_requested_at: unknown }>(
         `select (select count(*)::int from notifications where user_id=$1 and read_at is null) as n,
-                (select role from profiles where user_id=$1) as role`,
+                p.role, p.banned_at, p.deletion_requested_at
+         from profiles p where p.user_id=$1`,
         [context.userId],
       ),
       unreadMessageCount(sql, context.userId),
     ]);
     // `admin` rides along so the header needs no separate profile request.
-    return { notifications: a[0]?.n ?? 0, messages, admin: a[0]?.role === "ADMIN" };
+    return { notifications: a[0]?.n ?? 0, messages, admin: isActiveAdmin(a[0]) };
   });
 
 export const blockUser = createServerFn({ method: "POST" })
@@ -201,10 +203,16 @@ export const blockUser = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     if (data.userId === context.userId) throw new Error("Kendinizi engelleyemezsiniz");
     const sql = await getSql();
-    await sql.query(
-      "insert into user_blocks (blocker_id, blocked_id) values ($1,$2) on conflict (blocker_id, blocked_id) do nothing",
-      [context.userId, data.userId],
-    );
+    await sql.transaction(async (tx) => {
+      await tx.query(
+        "insert into user_blocks (blocker_id, blocked_id) values ($1,$2) on conflict (blocker_id, blocked_id) do nothing",
+        [context.userId, data.userId],
+      );
+      await tx.query(
+        "delete from seller_follows where (follower_id=$1 and seller_id=$2) or (follower_id=$2 and seller_id=$1)",
+        [context.userId, data.userId],
+      );
+    });
     return { ok: true };
   });
 

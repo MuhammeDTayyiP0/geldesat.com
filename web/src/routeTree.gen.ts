@@ -24,8 +24,6 @@ import { Route as ProfilRouteImport } from './routes/profil'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as SifreSifirlaRouteImport } from './routes/sifre-sifirla'
 import { Route as SonBakilanlarRouteImport } from './routes/son-bakilanlar'
-import { Route as DotwellKnownAppleAppSiteAssociationRouteImport } from './routes/[.]well-known/apple-app-site-association'
-import { Route as DotwellKnownAssetlinksDotjsonRouteImport } from './routes/[.]well-known/assetlinks[.]json'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as AdminAyarlarRouteImport } from './routes/admin/ayarlar'
 import { Route as AdminDuyurularRouteImport } from './routes/admin/duyurular'
@@ -58,6 +56,7 @@ import { Route as AyarlarKayitliAramalarRouteImport } from './routes/ayarlar/kay
 import { Route as AyarlarMagazaRouteImport } from './routes/ayarlar/magaza'
 import { Route as AyarlarProfilRouteImport } from './routes/ayarlar/profil'
 import { Route as AyarlarSablonlarRouteImport } from './routes/ayarlar/sablonlar'
+import { Route as AyarlarTakipEttiklerimRouteImport } from './routes/ayarlar/takip-ettiklerim'
 import { Route as CategorySlugRouteImport } from './routes/category/$slug'
 import { Route as IlanSlugRouteImport } from './routes/ilan/$slug'
 import { Route as MagazaSlugRouteImport } from './routes/magaza/$slug'
@@ -178,18 +177,6 @@ const SonBakilanlarRoute = SonBakilanlarRouteImport.update({
   path: '/son-bakilanlar',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DotwellKnownAppleAppSiteAssociationRoute =
-  DotwellKnownAppleAppSiteAssociationRouteImport.update({
-    id: '/.well-known/apple-app-site-association',
-    path: '/.well-known/apple-app-site-association',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const DotwellKnownAssetlinksDotjsonRoute =
-  DotwellKnownAssetlinksDotjsonRouteImport.update({
-    id: '/.well-known/assetlinks.json',
-    path: '/.well-known/assetlinks.json',
-    getParentRoute: () => rootRouteImport,
-  } as any)
 const AdminIndexRoute = AdminIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -348,6 +335,11 @@ const AyarlarProfilRoute = AyarlarProfilRouteImport.update({
 const AyarlarSablonlarRoute = AyarlarSablonlarRouteImport.update({
   id: '/ayarlar/sablonlar',
   path: '/ayarlar/sablonlar',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AyarlarTakipEttiklerimRoute = AyarlarTakipEttiklerimRouteImport.update({
+  id: '/ayarlar/takip-ettiklerim',
+  path: '/ayarlar/takip-ettiklerim',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CategorySlugRoute = CategorySlugRouteImport.update({
@@ -589,8 +581,6 @@ export interface FileRoutesByFullPath {
   '/search': typeof SearchRoute
   '/sifre-sifirla': typeof SifreSifirlaRoute
   '/son-bakilanlar': typeof SonBakilanlarRoute
-  '/.well-known/apple-app-site-association': typeof DotwellKnownAppleAppSiteAssociationRoute
-  '/.well-known/assetlinks.json': typeof DotwellKnownAssetlinksDotjsonRoute
   '/admin/ayarlar': typeof AdminAyarlarRoute
   '/admin/duyurular': typeof AdminDuyurularRoute
   '/admin/finans': typeof AdminFinansRoute
@@ -621,6 +611,7 @@ export interface FileRoutesByFullPath {
   '/ayarlar/magaza': typeof AyarlarMagazaRoute
   '/ayarlar/profil': typeof AyarlarProfilRoute
   '/ayarlar/sablonlar': typeof AyarlarSablonlarRoute
+  '/ayarlar/takip-ettiklerim': typeof AyarlarTakipEttiklerimRoute
   '/category/$slug': typeof CategorySlugRoute
   '/ilan/$slug': typeof IlanSlugRoute
   '/magaza/$slug': typeof MagazaSlugRoute
@@ -682,8 +673,6 @@ export interface FileRoutesByTo {
   '/search': typeof SearchRoute
   '/sifre-sifirla': typeof SifreSifirlaRoute
   '/son-bakilanlar': typeof SonBakilanlarRoute
-  '/.well-known/apple-app-site-association': typeof DotwellKnownAppleAppSiteAssociationRoute
-  '/.well-known/assetlinks.json': typeof DotwellKnownAssetlinksDotjsonRoute
   '/admin/ayarlar': typeof AdminAyarlarRoute
   '/admin/duyurular': typeof AdminDuyurularRoute
   '/admin/finans': typeof AdminFinansRoute
@@ -714,6 +703,7 @@ export interface FileRoutesByTo {
   '/ayarlar/magaza': typeof AyarlarMagazaRoute
   '/ayarlar/profil': typeof AyarlarProfilRoute
   '/ayarlar/sablonlar': typeof AyarlarSablonlarRoute
+  '/ayarlar/takip-ettiklerim': typeof AyarlarTakipEttiklerimRoute
   '/category/$slug': typeof CategorySlugRoute
   '/ilan/$slug': typeof IlanSlugRoute
   '/magaza/$slug': typeof MagazaSlugRoute
@@ -778,8 +768,6 @@ export interface FileRoutesById {
   '/search': typeof SearchRoute
   '/sifre-sifirla': typeof SifreSifirlaRoute
   '/son-bakilanlar': typeof SonBakilanlarRoute
-  '/.well-known/apple-app-site-association': typeof DotwellKnownAppleAppSiteAssociationRoute
-  '/.well-known/assetlinks.json': typeof DotwellKnownAssetlinksDotjsonRoute
   '/admin/ayarlar': typeof AdminAyarlarRoute
   '/admin/duyurular': typeof AdminDuyurularRoute
   '/admin/finans': typeof AdminFinansRoute
@@ -810,6 +798,7 @@ export interface FileRoutesById {
   '/ayarlar/magaza': typeof AyarlarMagazaRoute
   '/ayarlar/profil': typeof AyarlarProfilRoute
   '/ayarlar/sablonlar': typeof AyarlarSablonlarRoute
+  '/ayarlar/takip-ettiklerim': typeof AyarlarTakipEttiklerimRoute
   '/category/$slug': typeof CategorySlugRoute
   '/ilan/$slug': typeof IlanSlugRoute
   '/magaza/$slug': typeof MagazaSlugRoute
@@ -875,8 +864,6 @@ export interface FileRouteTypes {
     | '/search'
     | '/sifre-sifirla'
     | '/son-bakilanlar'
-    | '/.well-known/apple-app-site-association'
-    | '/.well-known/assetlinks.json'
     | '/admin/ayarlar'
     | '/admin/duyurular'
     | '/admin/finans'
@@ -907,6 +894,7 @@ export interface FileRouteTypes {
     | '/ayarlar/magaza'
     | '/ayarlar/profil'
     | '/ayarlar/sablonlar'
+    | '/ayarlar/takip-ettiklerim'
     | '/category/$slug'
     | '/ilan/$slug'
     | '/magaza/$slug'
@@ -968,8 +956,6 @@ export interface FileRouteTypes {
     | '/search'
     | '/sifre-sifirla'
     | '/son-bakilanlar'
-    | '/.well-known/apple-app-site-association'
-    | '/.well-known/assetlinks.json'
     | '/admin/ayarlar'
     | '/admin/duyurular'
     | '/admin/finans'
@@ -1000,6 +986,7 @@ export interface FileRouteTypes {
     | '/ayarlar/magaza'
     | '/ayarlar/profil'
     | '/ayarlar/sablonlar'
+    | '/ayarlar/takip-ettiklerim'
     | '/category/$slug'
     | '/ilan/$slug'
     | '/magaza/$slug'
@@ -1063,8 +1050,6 @@ export interface FileRouteTypes {
     | '/search'
     | '/sifre-sifirla'
     | '/son-bakilanlar'
-    | '/.well-known/apple-app-site-association'
-    | '/.well-known/assetlinks.json'
     | '/admin/ayarlar'
     | '/admin/duyurular'
     | '/admin/finans'
@@ -1095,6 +1080,7 @@ export interface FileRouteTypes {
     | '/ayarlar/magaza'
     | '/ayarlar/profil'
     | '/ayarlar/sablonlar'
+    | '/ayarlar/takip-ettiklerim'
     | '/category/$slug'
     | '/ilan/$slug'
     | '/magaza/$slug'
@@ -1159,8 +1145,6 @@ export interface RootRouteChildren {
   SearchRoute: typeof SearchRoute
   SifreSifirlaRoute: typeof SifreSifirlaRoute
   SonBakilanlarRoute: typeof SonBakilanlarRoute
-  DotwellKnownAppleAppSiteAssociationRoute: typeof DotwellKnownAppleAppSiteAssociationRoute
-  DotwellKnownAssetlinksDotjsonRoute: typeof DotwellKnownAssetlinksDotjsonRoute
   ApiAvatarRoute: typeof ApiAvatarRouteWithChildren
   ApiGeoRoute: typeof ApiGeoRoute
   ApiHealthRoute: typeof ApiHealthRoute
@@ -1176,6 +1160,7 @@ export interface RootRouteChildren {
   AyarlarMagazaRoute: typeof AyarlarMagazaRoute
   AyarlarProfilRoute: typeof AyarlarProfilRoute
   AyarlarSablonlarRoute: typeof AyarlarSablonlarRoute
+  AyarlarTakipEttiklerimRoute: typeof AyarlarTakipEttiklerimRoute
   CategorySlugRoute: typeof CategorySlugRoute
   IlanSlugRoute: typeof IlanSlugRoute
   MagazaSlugRoute: typeof MagazaSlugRoute
@@ -1320,20 +1305,6 @@ declare module '@tanstack/react-router' {
       path: '/son-bakilanlar'
       fullPath: '/son-bakilanlar'
       preLoaderRoute: typeof SonBakilanlarRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/.well-known/apple-app-site-association': {
-      id: '/.well-known/apple-app-site-association'
-      path: '/.well-known/apple-app-site-association'
-      fullPath: '/.well-known/apple-app-site-association'
-      preLoaderRoute: typeof DotwellKnownAppleAppSiteAssociationRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/.well-known/assetlinks.json': {
-      id: '/.well-known/assetlinks.json'
-      path: '/.well-known/assetlinks.json'
-      fullPath: '/.well-known/assetlinks.json'
-      preLoaderRoute: typeof DotwellKnownAssetlinksDotjsonRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin/': {
@@ -1558,6 +1529,13 @@ declare module '@tanstack/react-router' {
       path: '/ayarlar/sablonlar'
       fullPath: '/ayarlar/sablonlar'
       preLoaderRoute: typeof AyarlarSablonlarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ayarlar/takip-ettiklerim': {
+      id: '/ayarlar/takip-ettiklerim'
+      path: '/ayarlar/takip-ettiklerim'
+      fullPath: '/ayarlar/takip-ettiklerim'
+      preLoaderRoute: typeof AyarlarTakipEttiklerimRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/category/$slug': {
@@ -2013,9 +1991,6 @@ const rootRouteChildren: RootRouteChildren = {
   SearchRoute: SearchRoute,
   SifreSifirlaRoute: SifreSifirlaRoute,
   SonBakilanlarRoute: SonBakilanlarRoute,
-  DotwellKnownAppleAppSiteAssociationRoute:
-    DotwellKnownAppleAppSiteAssociationRoute,
-  DotwellKnownAssetlinksDotjsonRoute: DotwellKnownAssetlinksDotjsonRoute,
   ApiAvatarRoute: ApiAvatarRouteWithChildren,
   ApiGeoRoute: ApiGeoRoute,
   ApiHealthRoute: ApiHealthRoute,
@@ -2031,6 +2006,7 @@ const rootRouteChildren: RootRouteChildren = {
   AyarlarMagazaRoute: AyarlarMagazaRoute,
   AyarlarProfilRoute: AyarlarProfilRoute,
   AyarlarSablonlarRoute: AyarlarSablonlarRoute,
+  AyarlarTakipEttiklerimRoute: AyarlarTakipEttiklerimRoute,
   CategorySlugRoute: CategorySlugRoute,
   IlanSlugRoute: IlanSlugRoute,
   MagazaSlugRoute: MagazaSlugRoute,

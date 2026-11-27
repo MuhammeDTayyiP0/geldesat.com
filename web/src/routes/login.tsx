@@ -34,6 +34,9 @@ function Login() {
   const { user } = useCurrentUserState();
   const next = safeRedirect(redirect);
   const [mode, setMode] = useState<"in" | "up">(startMode ?? "in");
+  useEffect(() => {
+    if (startMode) setMode(startMode);
+  }, [startMode]);
   // Google and e-mail links come back here with the reason they failed.
   useEffect(() => {
     if (redirectError) toast.error(authRedirectErrorText(redirectError));
@@ -62,6 +65,7 @@ function Login() {
       return;
     }
     setBusy(true);
+    let redirected = false;
     try {
       if (mode === "up") {
         const { error } = await authClient.signUp.email({ email, password, name: name.trim(), callbackURL: `/login?verified=1&redirect=${encodeURIComponent(next)}` });
@@ -71,11 +75,12 @@ function Login() {
         const { error } = await authClient.signIn.email({ email, password });
         if (error) throw new Error(authErrorText(error));
       }
+      redirected = true;
       window.location.href = next;
     } catch (err) {
       toast.error(errorText(err, "Giriş başarısız"));
     } finally {
-      setBusy(false);
+      if (!redirected) setBusy(false);
     }
   }
 
@@ -170,8 +175,8 @@ function Login() {
             ) : null}
           </div>
           {mode === "up" ? (
-            <label className="flex items-start gap-2 text-xs text-muted">
-              <input type="checkbox" className="mt-0.5" checked={terms} onChange={(e) => setTerms(e.target.checked)} />
+            <div className="flex items-start gap-2 text-xs text-muted">
+              <input id="login-terms" type="checkbox" className="mt-0.5" checked={terms} onChange={(e) => setTerms(e.target.checked)} />
               <span>
                 <Link to="/sayfa/$slug" params={{ slug: "uyelik" }} className="text-primary hover:underline">
                   Üyelik sözleşmesini
@@ -184,9 +189,11 @@ function Login() {
                 <Link to="/sayfa/$slug" params={{ slug: "kvkk" }} className="text-primary hover:underline">
                   KVKK aydınlatma metnini
                 </Link>{" "}
-                okudum, kabul ediyorum.
+                <label htmlFor="login-terms" className="cursor-pointer">
+                  okudum, kabul ediyorum.
+                </label>
               </span>
-            </label>
+            </div>
           ) : null}
           <Button type="submit" className="w-full" disabled={busy}>
             {busy ? "Gönderiliyor…" : mode === "up" ? "Hesap oluştur" : "Giriş yap"}

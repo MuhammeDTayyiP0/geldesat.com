@@ -1,6 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { z } from "zod";
 import { searchListings } from "@/lib/server/catalog";
 import { publicErrorMessage } from "@/lib/server/errors";
+
+const AttrsSchema = z
+  .record(
+    z.string().max(60),
+    z.union([z.string().max(100), z.number().finite(), z.array(z.string().max(100)).max(20)]),
+  )
+  .refine((obj) => Object.keys(obj).length <= 30);
 
 export const Route = createFileRoute("/api/mobile/listings")({
   server: {
@@ -32,19 +40,26 @@ export const Route = createFileRoute("/api/mobile/listings")({
           const rawAttrs = url.searchParams.get("attrs");
           let attrs: Record<string, string | string[] | number> | undefined;
           if (rawAttrs) {
+            if (rawAttrs.length > 4096) {
+              return Response.json({ success: false, error: "Filtre bilgileri geçersiz." }, { status: 400 });
+            }
             try {
-              const parsed: unknown = JSON.parse(rawAttrs);
-              if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-                attrs = parsed as Record<string, string | string[] | number>;
+              const parsed = AttrsSchema.safeParse(JSON.parse(rawAttrs));
+              if (!parsed.success) {
+                return Response.json({ success: false, error: "Filtre bilgileri geçersiz." }, { status: 400 });
               }
+              attrs = parsed.data;
             } catch {
               return Response.json({ success: false, error: "Filtre bilgileri geçersiz." }, { status: 400 });
             }
           }
           const requestedSort = url.searchParams.get("sort");
-          const sort = ["date_desc", "date_asc", "price_asc", "price_desc", "views_desc"].includes(requestedSort ?? "")
-            ? requestedSort as "date_desc" | "date_asc" | "price_asc" | "price_desc" | "views_desc"
+          const sort = ["date_desc", "date_asc", "price_asc", "price_desc", "views_desc", "distance"].includes(requestedSort ?? "")
+            ? requestedSort as "date_desc" | "date_asc" | "price_asc" | "price_desc" | "views_desc" | "distance"
             : "date_desc";
+          const nearLat = numberParam(url.searchParams.get("nearLat"));
+          const nearLng = numberParam(url.searchParams.get("nearLng"));
+          const maxDistanceKm = numberParam(url.searchParams.get("maxDistanceKm"));
           const rawPostedWithin = url.searchParams.get("postedWithin");
           const postedWithin =
             rawPostedWithin === "1" || rawPostedWithin === "3" || rawPostedWithin === "7" || rawPostedWithin === "30"
@@ -61,6 +76,9 @@ export const Route = createFileRoute("/api/mobile/listings")({
             limit,
             page,
             sort,
+            nearLat: nearLat != null && nearLat >= -90 && nearLat <= 90 ? nearLat : undefined,
+            nearLng: nearLng != null && nearLng >= -180 && nearLng <= 180 ? nearLng : undefined,
+            maxDistanceKm: maxDistanceKm != null && maxDistanceKm >= 1 && maxDistanceKm <= 500 ? maxDistanceKm : undefined,
             category,
             q,
             urgent,
@@ -88,7 +106,7 @@ export const Route = createFileRoute("/api/mobile/listings")({
               success: true,
               total: result.total,
               limit,
-              offset,
+              offset: (result.page - 1) * limit,
               listings: result.listings,
               page: result.page,
               pages: result.pages,

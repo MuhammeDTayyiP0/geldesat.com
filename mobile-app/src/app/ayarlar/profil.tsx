@@ -63,7 +63,8 @@ function ProfileSettings() {
       updateSessionUser({ name: name.trim() });
       await queryClient.invalidateQueries({ queryKey: keys.me });
       toast.success('Profiliniz kaydedildi');
-      router.back();
+      if (router.canGoBack()) router.back();
+      else router.replace('/(tabs)/hesap');
     } catch (e) {
       toast.error(errorMessage(e));
     } finally {
@@ -73,9 +74,13 @@ function ProfileSettings() {
 
   const changeAvatar = async (source: 'camera' | 'library') => {
     setPicker(null);
-    const [photo] = await pickPhotos(source, 1);
-    if (!photo) return;
-    setPendingPhoto(photo);
+    try {
+      const [photo] = await pickPhotos(source, 1);
+      if (!photo) return;
+      setPendingPhoto(photo);
+    } catch (e) {
+      toast.error(errorMessage(e));
+    }
   };
 
   const confirmAvatar = async (cropped: { uri: string; mimeType: string; fileName: string }) => {

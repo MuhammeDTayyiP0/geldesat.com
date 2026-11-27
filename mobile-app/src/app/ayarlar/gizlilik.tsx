@@ -1,15 +1,15 @@
 import { useState } from 'react';
-import { ActivityIndicator, Platform, ScrollView, Share, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Check, CheckCheck, Download, MessageCircle } from 'lucide-react-native';
-import { errorMessage, timedFetch } from '@/api/client';
+import { errorMessage } from '@/api/client';
 import { account } from '@/api/endpoints';
 import { keys, queryClient } from '@/api/queries';
 import type { AccountSettings, PhoneVisibility } from '@/api/types';
-import { getToken } from '@/auth/session';
-import { API_BASE_URL, webUrl } from '@/lib/config';
+import { exportAccountData } from '@/features/account/exportData';
+import { webUrl } from '@/lib/config';
 import { ErrorState, Header, ListRow, Loading, RowGroup, Text, space, toast, useTheme } from '@/ui';
 import { RequireSignIn } from '@/auth/RequireSignIn';
 
@@ -55,19 +55,9 @@ function PrivacySettings() {
       await WebBrowser.openBrowserAsync(webUrl('/ayarlar/hesap'));
       return;
     }
-    const token = getToken();
-    if (!token) {
-      await WebBrowser.openBrowserAsync(webUrl('/ayarlar/hesap'));
-      return;
-    }
     setDownloading(true);
     try {
-      const res = await timedFetch(`${API_BASE_URL}/api/hesap/verilerim`, {
-        headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
-      });
-      if (!res.ok) throw new Error('Veriler indirilemedi');
-      const jsonText = await res.text();
-      await Share.share({ title: 'GeldeSat Verilerim (KVKK)', message: jsonText });
+      await exportAccountData();
     } catch {
       toast.info('Tarayıcı üzerinden indirme sayfası açılıyor…');
       await WebBrowser.openBrowserAsync(webUrl('/ayarlar/hesap'));

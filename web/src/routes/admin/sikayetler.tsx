@@ -10,7 +10,7 @@ import { adminBanUser } from "@/lib/server/admin/users";
 import { useRunner, useSheets } from "@/components/admin/hooks";
 import { BAN_REASONS, dateTime, listingStatus, relative } from "@/components/admin/format";
 import { int, oneOf, str } from "@/components/admin/search";
-import { BulkBar, BulkButton, Card, Checkbox, EmptyState, ErrorState, PageHeader, Pagination, Pill, SearchInput, Segmented, SelectBox, SkeletonRows, Thumb, useConfirm } from "@/components/admin/ui";
+import { BulkBar, BulkButton, Card, Checkbox, EmptyState, ErrorState, InlineQueryError, PageHeader, Pagination, Pill, SearchInput, Segmented, SelectBox, SkeletonRows, Thumb, useConfirm } from "@/components/admin/ui";
 
 const STATUSES = ["OPEN", "CLOSED", "ALL"] as const;
 const KINDS = ["all", "listing", "conversation"] as const;
@@ -122,6 +122,7 @@ function ReportsPage() {
       ) : null}
 
       <div className="mt-3 space-y-3">
+        {query.isError && query.data ? <InlineQueryError error={query.error} onRetry={() => void query.refetch()} /> : null}
         {query.error && !query.data ? (
           <Card>
             <ErrorState error={query.error} onRetry={() => void query.refetch()} />
@@ -162,7 +163,11 @@ function ReportsPage() {
         <BulkButton onClick={() => void closeSelected(false)}>
           <Check className="size-3.5" /> Kapat
         </BulkButton>
-        <BulkButton danger onClick={() => void closeSelected(true)}>
+        <BulkButton
+          danger
+          disabled={!rows.some((r) => selected.has(r.id) && r.kind === "listing" && r.listing_id)}
+          onClick={() => void closeSelected(true)}
+        >
           <ShieldX className="size-3.5" /> Kapat + ilanları kaldır
         </BulkButton>
       </BulkBar>
@@ -311,7 +316,7 @@ function ReportCard({ report: r, selected, onSelect }: { report: AdminReportRow;
                 <ShieldX className="size-4" /> İlanı kaldır ve kapat
               </Button>
             ) : null}
-            {r.reported_user_id && !r.reported_user_banned ? (
+            {r.reported_user_id && !r.reported_user_banned && r.reported_user_role !== "ADMIN" ? (
               <Button size="sm" variant="outline" className="text-danger" disabled={busy} onClick={() => void ban()}>
                 <Ban className="size-4" /> Kullanıcıyı askıya al
               </Button>

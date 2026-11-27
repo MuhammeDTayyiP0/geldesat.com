@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { readJson } from "@/lib/server/request-body";
 import { getSql } from "@/lib/db";
 import { assertMobileJsonWrite, getMobileUserId } from "@/lib/server/mobile-auth";
-import { ensureProfile, firstInWindow, listingSelect, mapListing, notify } from "@/lib/server/helpers";
+import { ensureProfile, firstInWindow, listingSelect, mapListing, notify, rateLimit } from "@/lib/server/helpers";
 import { errorStatus, publicErrorMessage } from "@/lib/server/errors";
 
 export const Route = createFileRoute("/api/mobile/favorites")({
@@ -34,6 +34,7 @@ export const Route = createFileRoute("/api/mobile/favorites")({
           if (csrfError) return csrfError;
           const userId = await getMobileUserId(request);
           if (!userId) return Response.json({ success: false, error: "Favorilere eklemek için giriş yapın." }, { status: 401 });
+          rateLimit(`mobile-fav:${userId}`, 60, 60_000);
           const body = (await readJson(request)) as { listingId?: unknown };
           if (typeof body.listingId !== "string" || !body.listingId) return Response.json({ success: false, error: "İlan bilgisi geçersiz." }, { status: 400 });
           const sql = await getSql();

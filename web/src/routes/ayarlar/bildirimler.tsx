@@ -25,6 +25,7 @@ function NotificationSettings() {
   const [pushDevices, setPushDevices] = useState(0);
   const [email, setEmail] = useState<{ on: boolean; ready: boolean; configured: boolean }>({ on: true, ready: false, configured: false });
   const [busy, setBusy] = useState(false);
+  const [retry, setRetry] = useState(0);
 
   useEffect(() => {
     if (!user) return;
@@ -35,9 +36,21 @@ function NotificationSettings() {
         setEmail({ on: s.message_email, ready: s.email_ready, configured: s.email_configured });
       })
       .catch(() => setFailed(true));
-  }, [user]);
+  }, [user, retry]);
 
-  if (failed) return <AccountShell title="Bildirimler"><ErrorState message="Tercihleriniz yüklenemedi. Sayfayı yenileyip tekrar deneyin." /></AccountShell>;
+  if (failed) {
+    return (
+      <AccountShell title="Bildirimler">
+        <ErrorState
+          message="Tercihleriniz yüklenemedi. Tekrar deneyin."
+          onRetry={() => {
+            setFailed(false);
+            setRetry((r) => r + 1);
+          }}
+        />
+      </AccountShell>
+    );
+  }
   if (isPending || (user && !prefs)) return <BrandSpinner fullPage text="Yükleniyor…" />;
   if (!user || !prefs) return <RedirectToSignIn />;
 

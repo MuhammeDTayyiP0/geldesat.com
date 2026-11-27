@@ -22,6 +22,7 @@ export type ChatMessage = {
   /** The message this one answers, if any (shown as a quote). */
   reply: { id: string; sender_id: string; content: string; kind: string } | null;
   created_at: string;
+  edited_at?: string | null;
   read_at: string | null;
   /** The sender app's own id for the message (retries, replacing the "sending…" bubble). */
   client_id?: string;
@@ -29,6 +30,8 @@ export type ChatMessage = {
 
 /** Sender may delete a message for everyone within this window. */
 export const DELETE_WINDOW_MS = 60 * 60_000;
+/** Sender may edit a text message within this window. */
+export const EDIT_WINDOW_MS = 15 * 60_000;
 
 export const DELETED_MESSAGE_TEXT = "Bu mesaj silindi";
 

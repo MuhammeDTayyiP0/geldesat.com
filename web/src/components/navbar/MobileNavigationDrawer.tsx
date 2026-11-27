@@ -15,7 +15,9 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { signOut } from "@/lib/auth/client";
+import { signedInLink } from "@/lib/auth/login-link";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { LogoMark } from "@/components/brand/LogoMark";
 import { cn } from "@/lib/utils";
@@ -46,9 +48,9 @@ export function MobileNavigationDrawer({
     return () => root.classList.remove("mobile-nav-lock");
   }, [isOpen]);
 
-  if (!isOpen) return null;
+  if (!isOpen || typeof document === "undefined") return null;
 
-  return (
+  return createPortal(
     <div ref={panel} tabIndex={-1} className="fixed inset-0 z-50 md:hidden flex" role="dialog" aria-modal="true" aria-label="Menü">
       {/* Karartma Arkalığı (Backdrop) */}
       <div
@@ -149,7 +151,7 @@ export function MobileNavigationDrawer({
         {/* Hızlı İşlem Linkleri */}
         <div className="grid grid-cols-4 gap-1 p-2 border-b border-border text-center">
           <Link
-            to={user ? "/ilanlarim" : "/login"}
+            {...signedInLink(Boolean(user), "/ilanlarim")}
             onClick={onClose}
             className="flex flex-col items-center gap-1 py-2 px-1 rounded-lg hover:bg-elevated transition-colors text-xs font-medium text-fg"
           >
@@ -157,7 +159,7 @@ export function MobileNavigationDrawer({
             <span>İlanlarım</span>
           </Link>
           <Link
-            to={user ? "/mesajlar" : "/login"}
+            {...signedInLink(Boolean(user), "/mesajlar")}
             onClick={onClose}
             className="flex flex-col items-center gap-1 py-2 px-1 rounded-lg hover:bg-elevated transition-colors text-xs font-medium text-fg relative"
           >
@@ -168,7 +170,7 @@ export function MobileNavigationDrawer({
             )}
           </Link>
           <Link
-            to={user ? "/favoriler" : "/login"}
+            {...signedInLink(Boolean(user), "/favoriler")}
             onClick={onClose}
             className="flex flex-col items-center gap-1 py-2 px-1 rounded-lg hover:bg-elevated transition-colors text-xs font-medium text-fg"
           >
@@ -176,7 +178,7 @@ export function MobileNavigationDrawer({
             <span>Favoriler</span>
           </Link>
           <Link
-            to={user ? "/bildirimler" : "/login"}
+            {...signedInLink(Boolean(user), "/bildirimler")}
             onClick={onClose}
             className="flex flex-col items-center gap-1 py-2 px-1 rounded-lg hover:bg-elevated transition-colors text-xs font-medium text-fg relative"
           >
@@ -254,7 +256,7 @@ export function MobileNavigationDrawer({
         </div>
 
         {/* Alt Kısım Ek Linkler */}
-        <div className="p-3 border-t border-border bg-elevated/40 space-y-1 text-xs text-muted">
+        <div className="p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] border-t border-border bg-elevated/40 space-y-1 text-xs text-muted">
           <Link
             to="/harita"
             onClick={onClose}
@@ -297,7 +299,8 @@ export function MobileNavigationDrawer({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

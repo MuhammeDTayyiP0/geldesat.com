@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Linking, ScrollView, StyleSheet, View } from 'react-native';
+import { AppState, Linking, ScrollView, StyleSheet, View } from 'react-native';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { BellRing, Mail } from 'lucide-react-native';
 import { errorMessage } from '@/api/client';
@@ -37,6 +37,10 @@ function NotificationSettings() {
 
   useEffect(() => {
     void pushPermissionGranted().then(setSystemOn);
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') void pushPermissionGranted().then(setSystemOn);
+    });
+    return () => sub.remove();
   }, []);
 
   // Quick taps send several saves; only the newest one's answer is applied, so an older

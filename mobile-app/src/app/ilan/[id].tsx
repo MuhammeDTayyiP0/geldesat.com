@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Linking, Platform, Pressable, ScrollView, Share, StyleSheet, View, useWindowDimensions } from 'react-native';
 import Svg, { Path as SvgPath, Rect as SvgRect } from 'react-native-svg';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
@@ -123,12 +123,14 @@ export default function ListingScreen() {
   const [expanded, setExpanded] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [prevId, setPrevId] = useState(id);
+  const pendingShareRef = useRef(false);
 
   if (id !== prevId) {
     setPrevId(id);
     setPhone(null);
     setSheet(null);
     setExpanded(false);
+    setScrolled(false);
   }
 
   const detail = useQuery({ queryKey: keys.listing(id), queryFn: () => listings.detail(id) });
@@ -793,7 +795,15 @@ export default function ListingScreen() {
           listing={listing}
           visible={sheet === 'shareCard'}
           onClose={() => setSheet(null)}
-          onShare={share}
+          onShare={() => {
+            pendingShareRef.current = true;
+            setSheet(null);
+          }}
+          onDismissed={() => {
+            if (!pendingShareRef.current) return;
+            pendingShareRef.current = false;
+            share();
+          }}
         />
       ) : null}
       {/* Light icons over the photos, the theme's own when there are no photos or once the header turns solid. */}
@@ -1246,11 +1256,13 @@ function ShareCardSheet({
   visible,
   onClose,
   onShare,
+  onDismissed,
 }: {
   listing: Listing;
   visible: boolean;
   onClose: () => void;
   onShare: () => void;
+  onDismissed?: () => void;
 }) {
   const { c } = useTheme();
   const cover = mediaUrl(listing.images[0], 800);
@@ -1270,7 +1282,7 @@ function ShareCardSheet({
   }, [qr]);
 
   return (
-    <Sheet visible={visible} onClose={onClose} title="Paylaşım kartı">
+    <Sheet visible={visible} onClose={onClose} onDismissed={onDismissed} title="Paylaşım kartı">
       <Card padded={false} style={[styles.shareCard, { borderColor: c.primary }]}>
         <View style={[styles.shareHeader, { backgroundColor: c.primarySoft }]}>
           <Wordmark size={20} />

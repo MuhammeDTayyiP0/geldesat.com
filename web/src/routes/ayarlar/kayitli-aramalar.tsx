@@ -9,6 +9,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { ToggleSwitch } from "@/components/ui/toggle-switch";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { useFlag } from "@/lib/use-flag";
 import { errorText } from "@/lib/error-text";
 import { parseSearch, type CatalogSearch } from "@/lib/search-params";
 import {
@@ -98,6 +99,7 @@ function toSearchParams(s: SavedSearch): CatalogSearch {
 }
 
 function SavedSearchesPage() {
+  const kayitliAramalar = useFlag("kayitli_aramalar");
   const { user, isPending } = useCurrentUserState();
   const [items, setItems] = useState<SavedSearch[] | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -105,7 +107,7 @@ function SavedSearchesPage() {
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !kayitliAramalar) return;
     let alive = true;
     listSavedSearches()
       .then((rows) => {
@@ -119,7 +121,22 @@ function SavedSearchesPage() {
     return () => {
       alive = false;
     };
-  }, [user, attempt]);
+  }, [user, attempt, kayitliAramalar]);
+
+  if (!kayitliAramalar) {
+    return (
+      <AccountShell title="Kayıtlı aramalarım">
+        <div className="rounded-xl border border-border bg-surface p-8 text-center">
+          <Bookmark className="mx-auto size-10 text-subtle" />
+          <p className="mt-3 font-medium">Kayıtlı aramalar şu anda kullanıma kapalı.</p>
+          <p className="mt-1 text-sm text-muted">Bu özellik geçici olarak devre dışı bırakıldı.</p>
+          <Link to="/ayarlar" className={buttonVariants({ variant: "outline", className: "mt-4" })}>
+            Ayarlara dön
+          </Link>
+        </div>
+      </AccountShell>
+    );
+  }
 
   if (failed && !items) {
     return (

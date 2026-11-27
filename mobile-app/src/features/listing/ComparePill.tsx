@@ -25,7 +25,7 @@ export function ComparePill() {
     pathname === '/karsilastir' ||
     pathname === '/ilan-ver' ||
     pathname === '/giris' ||
-    pathname === '/kayit' ||
+    pathname === '/harita' ||
     pathname.startsWith('/mesaj/') ||
     pathname.startsWith('/ilan/')
   ) {

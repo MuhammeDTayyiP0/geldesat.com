@@ -2,12 +2,15 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
-import { CITY_COORDS } from "@/lib/data/geo";
-import { asIso, asJson, listingSlug, newId, num } from "@/lib/utils";
-import { getAppConfig } from "./config";
+import { TURKEY_CITIES } from "@/lib/data/locations";
+import { asIso, asJson, formatPrice, listingSlug, newId, num } from "@/lib/utils";
+import { getAppConfig, resolveFlags } from "./config";
+import { getCategoryTree } from "./category-cache";
+import { notifySellerFollowers } from "./follows";
 import { deleteUnusedListingImages } from "./upload.server";
 import {
   inheritedAttributes,
+  isActiveAdmin,
   mapListing,
   subtreeIds,
   ensureProfile,
@@ -20,6 +23,7 @@ import {
   revealListingPhone,
   viewerKey,
 } from "./helpers";
+import { notifyMatchingSavedSearches } from "./saved-searches";
 import { getRequest } from "@tanstack/react-start/server";
 import { assertOwnerStatus, assertRenewable, isExpired } from "@/lib/listing-status";
 import { audit } from "./admin/common";
@@ -32,7 +36,7 @@ export const isAdminSession = createServerFn({ method: "GET" }).handler(async ()
   const user = await getSessionUser();
   if (!user) return false;
   const profile = await ensureProfile(user.id);
-  return profile.role === "ADMIN";
+  return isActiveAdmin(profile);
 });
 
 export const getMe = createServerFn({ method: "GET" })
@@ -129,7 +133,7 @@ export const updateProfile = createServerFn({ method: "POST" })
         (pgErr.constraint === "profiles_phone_unique" ||
           (err instanceof Error && err.message.includes("profiles_phone_unique")))
       ) {
-        throw new Error("Bu telefon numarası başka bir hesapta kayıtlı.");
+        throw new Error(PHONE_UNAVAILABLE);
       }
       throw err;
     }
@@ -150,38 +154,105 @@ export const setListingStatus = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     const me = await ensureProfile(context.userId);
-    const row = await sql.query<{ user_id: string; status: string; approved_at: string | null; expires_at: unknown; title: string; listing_no: number }>(
-      "select user_id, status, approved_at, expires_at, title, listing_no from listings where id=$1",
-      [data.id],
-    );
-    if (!row[0]) throw new Error("İlan bulunamadı");
-    const isAdmin = me.role === "ADMIN";
-    const isOwner = row[0].user_id === context.userId;
-    if (!isOwner && !isAdmin) throw new Error("Yetkisiz işlem");
-    if (!isAdmin) {
-      if (data.status === "ACTIVE") await assertNotClosing(sql, context.userId);
-      assertOwnerStatus(data.status, { status: row[0].status, approved: Boolean(row[0].approved_at), expired: isExpired(row[0].expires_at as string | null) });
-    }
-    // An admin publishing approves and starts the run; an admin rejecting withdraws the approval.
-    const approval = isAdmin && data.status === "ACTIVE" ? "now()" : isAdmin && data.status === "REJECTED" ? "null" : "approved_at";
-    const expiry = isAdmin && data.status === "ACTIVE" ? "greatest(coalesce(expires_at, now()), now() + interval '30 days')" : "expires_at";
-    await sql.query(`update listings set status=$2, approved_at=${approval}, expires_at=${expiry}, status_before_ban=null, updated_at=now() where id=$1`, [data.id, data.status]);
+    const isAdmin = isActiveAdmin(me);
+
+    const txRes = await sql.transaction(async (tx) => {
+      const row = await tx.query<{
+        user_id: string;
+        status: string;
+        approved_at: string | null;
+        expires_at: unknown;
+        title: string;
+        listing_no: number;
+        slug: string;
+        category_id: string;
+        city: string | null;
+        district: string | null;
+        neighborhood: string | null;
+        price: string | number;
+        images: unknown;
+        attrs: unknown;
+        store_id: string | null;
+      }>(
+        `select user_id, status, approved_at, expires_at, title, listing_no, slug,
+                category_id, city, district, neighborhood, price, images, attrs, store_id
+         from listings where id=$1 for update`,
+        [data.id],
+      );
+      const cur = row[0];
+      if (!cur) throw new Error("İlan bulunamadı");
+      const isOwner = cur.user_id === context.userId;
+      if (!isOwner && !isAdmin) throw new Error("Yetkisiz işlem");
+      if (!isAdmin) {
+        if (data.status === "ACTIVE") await assertNotClosing(tx, context.userId);
+        assertOwnerStatus(data.status, { status: cur.status, approved: Boolean(cur.approved_at), expired: isExpired(cur.expires_at as string | null) });
+      } else if (data.status === "ACTIVE" && !isOwner) {
+        const sellerProf = await tx.query<{ banned_at: unknown; deletion_requested_at: unknown }>(
+          "select banned_at, deletion_requested_at from profiles where user_id=$1",
+          [cur.user_id],
+        );
+        if (sellerProf[0]?.banned_at || sellerProf[0]?.deletion_requested_at) {
+          throw new Error("Askıda veya silinme sürecindeki üyenin ilanı yayına alınamaz.");
+        }
+      }
+
+      const rejectReason = data.status === "REJECTED" ? (data.reason?.trim() || "İlanınız yönetim ve yayın politikalarımıza uygun bulunmadı.") : null;
+      const approval = isAdmin && data.status === "ACTIVE" ? "now()" : isAdmin && data.status === "REJECTED" ? "null" : "approved_at";
+      const expiry = isAdmin && data.status === "ACTIVE" ? "greatest(coalesce(expires_at, now()), now() + interval '30 days')" : "expires_at";
+      await tx.query(
+        `update listings
+         set status=$2, approved_at=${approval}, expires_at=${expiry},
+             rejection_reason=case when $2::text = 'REJECTED' then $3 when $2::text in ('ACTIVE','PENDING') then null else rejection_reason end,
+             status_before_ban=null, updated_at=now()
+         where id=$1`,
+        [data.id, data.status, rejectReason],
+      );
+      return { cur, isOwner, rejectReason };
+    });
+
+    const { cur, isOwner, rejectReason } = txRes;
     if (isAdmin && !isOwner) {
-      await audit(sql, context.userId, "listing.status", "listing", data.id, `#${row[0].listing_no} "${row[0].title}" site üzerinden ${data.status} yapıldı`, { from: row[0].status, to: data.status, reason: data.reason });
+      await audit(sql, context.userId, "listing.status", "listing", data.id, `#${cur.listing_no} "${cur.title}" site üzerinden ${data.status} yapıldı`, { from: cur.status, to: data.status, reason: data.reason });
     }
     // Only a moderator's decision is news to the owner; their own switch is not.
     if (isAdmin && !isOwner && (data.status === "ACTIVE" || data.status === "REJECTED")) {
-      const slug = await sql.query<{ slug: string }>("select slug from listings where id=$1", [data.id]);
-      const rejectReason = data.reason?.trim() || "İlanınız yönetim ve yayın politikalarımıza uygun bulunmadı.";
       await notify(
-        row[0].user_id,
+        cur.user_id,
         "listing",
         data.status === "ACTIVE" ? "İlanınız yayında" : "İlanınız reddedildi",
         data.status === "ACTIVE"
           ? "İlanınız onaylandı ve yayına alındı."
           : `İlanınız şu gerekçeyle reddedildi: ${rejectReason}. İlanınızı düzenleyip tekrar onaya gönderebilirsiniz.`,
-        `/ilan/${slug[0]?.slug ?? data.id}`,
+        `/ilan/${cur.slug}`,
       );
+    }
+    if (cur.status !== "ACTIVE" && data.status === "ACTIVE") {
+      const tree = await getCategoryTree();
+      const cat = tree.byId.get(cur.category_id);
+      const sellerRows = await sql.query<{ display_name: string }>("select display_name from profiles where user_id=$1", [cur.user_id]);
+      const sellerName = sellerRows[0]?.display_name || "Satıcı";
+      void notifyMatchingSavedSearches(sql, {
+        id: data.id,
+        title: cur.title,
+        slug: cur.slug,
+        categoryId: cur.category_id,
+        categorySlug: cat?.slug ?? "",
+        city: cur.city ?? "",
+        district: cur.district ?? "",
+        neighborhood: cur.neighborhood ?? null,
+        price: num(cur.price),
+        userId: cur.user_id,
+        hasImages: asJson<string[]>(cur.images, []).length > 0,
+        isStore: Boolean(cur.store_id),
+        attrs: asJson<Record<string, unknown>>(cur.attrs, {}),
+      }).catch((err) => console.warn("[saved-searches] match notify failed", err));
+      void notifySellerFollowers(sql, {
+        id: data.id,
+        title: cur.title,
+        slug: cur.slug,
+        userId: cur.user_id,
+        sellerName,
+      }).catch((err) => console.warn("[follows] notify failed", err));
     }
     return { ok: true };
   });
@@ -194,7 +265,7 @@ export const deleteListing = createServerFn({ method: "POST" })
     const me = await ensureProfile(context.userId);
     const row = await sql.query<{ user_id: string; images: string[]; title: string; listing_no: number }>("select user_id, images, title, listing_no from listings where id=$1", [data.id]);
     if (!row[0]) throw new Error("İlan bulunamadı");
-    if (row[0].user_id !== context.userId && me.role !== "ADMIN") throw new Error("Yetkisiz işlem");
+    if (row[0].user_id !== context.userId && !isActiveAdmin(me)) throw new Error("Yetkisiz işlem");
     if (row[0].user_id !== context.userId) {
       await audit(sql, context.userId, "listing.delete", "listing", data.id, `#${row[0].listing_no} "${row[0].title}" site üzerinden silindi`);
     }
@@ -588,15 +659,20 @@ export async function bulkImportListingsRecord(
   const me = await ensureProfile(userId);
   await assertNotClosing(sql, userId);
 
-  const stores = await sql.query<{ id: string }>("select id from stores where user_id=$1 limit 1", [userId]);
+  const stores = await sql.query<{ id: string; phone: string | null }>("select id, phone from stores where user_id=$1 limit 1", [userId]);
   const storeId = stores[0]?.id;
   if (!storeId) throw new Error("Toplu ilan yüklemek için mağazanız olmalıdır.");
 
-  const categories = await sql.query<{ id: string; slug: string }>("select id, slug from categories");
-  const catBySlug = new Map(categories.map((c) => [c.slug.toLowerCase(), c.id]));
+  const profPhone = await sql.query<{ phone: string | null }>("select phone from profiles where user_id=$1", [userId]);
+  if (!profPhone[0]?.phone && !stores[0]?.phone) throw new Error("İlan vermek için profilinize telefon ekleyin.");
 
+  const tree = await getCategoryTree();
+  const catBySlug = new Map<string, { id: string; slug: string }>();
+  for (const c of tree.byId.values()) catBySlug.set(c.slug.toLowerCase(), { id: c.id, slug: c.slug });
+
+  const validCitySet = new Set<string>(TURKEY_CITIES.map((c) => c.name));
   const errors: Array<{ index: number; error: string }> = [];
-  const validRows: Array<z.infer<typeof BulkImportRowInput> & { categoryId: string }> = [];
+  const validRows: Array<z.infer<typeof BulkImportRowInput> & { categoryId: string; categorySlug: string }> = [];
 
   for (let index = 0; index < rawRows.length; index++) {
     const parsed = BulkImportRowInput.safeParse(rawRows[index]);
@@ -604,40 +680,74 @@ export async function bulkImportListingsRecord(
       errors.push({ index, error: parsed.error.issues[0]?.message ?? "Geçersiz satır." });
       continue;
     }
-    const categoryId = catBySlug.get(parsed.data.categorySlug.toLowerCase());
-    if (!categoryId) {
+    if (!validCitySet.has(parsed.data.city)) {
+      errors.push({ index, error: `Geçersiz şehir: ${parsed.data.city}` });
+      continue;
+    }
+    const cat = catBySlug.get(parsed.data.categorySlug.toLowerCase());
+    if (!cat) {
       errors.push({ index, error: `Kategori bulunamadı: ${parsed.data.categorySlug}` });
       continue;
     }
-    validRows.push({ ...parsed.data, categoryId });
+    // Check root category for mandatory photo rules (emlak / vasita)
+    let curId: string | null = cat.id;
+    let needsPhoto = false;
+    while (curId) {
+      if (curId === "emlak" || curId === "vasita") {
+        needsPhoto = true;
+        break;
+      }
+      curId = tree.byId.get(curId)?.parent_id ?? null;
+    }
+    if (needsPhoto) {
+      errors.push({ index, error: "Emlak ve vasıta ilanları en az 1 fotoğraf gerektirdiğinden toplu yüklenemez." });
+      continue;
+    }
+    const attrRules = await inheritedAttributes(cat.id);
+    if (attrRules.some((a) => a.required)) {
+      errors.push({ index, error: "Zorunlu kategori özellikleri içeren ilanlar toplu yüklenemez." });
+      continue;
+    }
+    validRows.push({ ...parsed.data, categoryId: cat.id, categorySlug: cat.slug });
   }
 
   if (!validRows.length) return { imported: 0, errors };
 
   const { mode } = await getAppConfig<{ mode: "first_free" | "all" | "none" }>("moderation", { mode: "first_free" });
-  const isAdmin = me.role === "ADMIN";
+  const isAdmin = isActiveAdmin(me);
 
-  const imported = await sql.transaction(async (tx) => {
-    let count = 0;
-    for (const row of validRows) {
-      const claimedFirst =
-        !isAdmin &&
-        mode === "first_free" &&
-        Boolean(
-          (await tx.query("update profiles set first_listing_used=true where user_id=$1 and not first_listing_used returning user_id", [userId]))[0],
-        );
-      const status = isAdmin || mode === "none" || claimedFirst ? "ACTIVE" : "PENDING";
+  const inserted = await sql.transaction(async (tx) => {
+    let firstClaimed = false;
+    if (!isAdmin && mode === "first_free") {
+      firstClaimed = Boolean(
+        (await tx.query("update profiles set first_listing_used=true where user_id=$1 and not first_listing_used returning user_id", [userId]))[0],
+      );
+    }
+    const created: Array<{
+      id: string;
+      slug: string;
+      status: string;
+      title: string;
+      categoryId: string;
+      categorySlug: string;
+      city: string;
+      district: string;
+      neighborhood: string | null;
+      price: number;
+    }> = [];
+    for (let i = 0; i < validRows.length; i++) {
+      const row = validRows[i];
+      const status = isAdmin || mode === "none" || (firstClaimed && i === 0) ? "ACTIVE" : "PENDING";
       const id = newId("lst");
       const listingNo = (await tx.query<{ n: string }>("select nextval('listing_no_seq')::text as n"))[0].n;
       const slug = listingSlug(row.title, listingNo);
-      const coords = CITY_COORDS[row.city];
       const currency = row.currency ?? "TRY";
 
       await tx.query(
         `insert into listings (id,slug,user_id,store_id,category_id,title,description,price,currency,status,city,district,
           neighborhood,lat,lng,images,attrs,expires_at,approved_at,listing_no)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'[]'::jsonb,'{}'::jsonb,now()+interval '30 days',
-           case when $10::text = 'ACTIVE' then now() end,$16::bigint)`,
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,null,null,'[]'::jsonb,'{}'::jsonb,now()+interval '30 days',
+           case when $10::text = 'ACTIVE' then now() end,$14::bigint)`,
         [
           id,
           slug,
@@ -652,22 +762,125 @@ export async function bulkImportListingsRecord(
           row.city,
           row.district,
           row.neighborhood || null,
-          coords?.lat ?? null,
-          coords?.lng ?? null,
           listingNo,
         ],
       );
       await tx.query("insert into price_history (listing_id,price) values ($1,$2)", [id, row.price]);
-      count += 1;
+      created.push({
+        id,
+        slug,
+        status,
+        title: row.title,
+        categoryId: row.categoryId,
+        categorySlug: row.categorySlug,
+        city: row.city,
+        district: row.district,
+        neighborhood: row.neighborhood || null,
+        price: row.price,
+      });
     }
-    return count;
+    return created;
   });
 
-  return { imported, errors };
+  const sellerName = me.display_name || "Satıcı";
+  for (const item of inserted) {
+    if (item.status !== "ACTIVE") continue;
+    void notifyMatchingSavedSearches(sql, {
+      id: item.id,
+      title: item.title,
+      slug: item.slug,
+      categoryId: item.categoryId,
+      categorySlug: item.categorySlug,
+      city: item.city,
+      district: item.district,
+      neighborhood: item.neighborhood,
+      price: item.price,
+      userId,
+      hasImages: false,
+      isStore: true,
+      attrs: {},
+    }).catch((err) => console.warn("[saved-searches] bulk notify failed", err));
+    void notifySellerFollowers(sql, {
+      id: item.id,
+      title: item.title,
+      slug: item.slug,
+      userId,
+      sellerName,
+    }).catch((err) => console.warn("[follows] bulk notify failed", err));
+  }
+
+  return { imported: inserted.length, errors };
 }
 
 export const bulkImportListings = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ rows: z.array(z.unknown()).min(1).max(50) }))
-  .handler(async ({ context, data }) => bulkImportListingsRecord(await getSql(), context.userId, data.rows));
+  .handler(async ({ context, data }) => {
+    const flags = await resolveFlags({ userId: context.userId, anonId: null, platform: "web" });
+    if (!flags.toplu_ilan_aktarim) throw new Error("Toplu ilan aktarımı şu anda kullanıma kapalı.");
+    return bulkImportListingsRecord(await getSql(), context.userId, data.rows);
+  });
+
+export const quickUpdatePrice = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ id: z.string().min(1), price: z.number().finite().positive().max(1_000_000_000) }))
+  .handler(async ({ context, data }) => {
+    rateLimit(`price-update:${context.userId}`, 30, 60_000);
+    const sql = await getSql();
+    const me = await ensureProfile(context.userId);
+    const isAdmin = isActiveAdmin(me);
+    const newPrice = Math.max(1, Math.round(data.price));
+
+    const res = await sql.transaction(async (tx) => {
+      const rows = await tx.query<{
+        user_id: string;
+        status: string;
+        price: number;
+        currency: string;
+        title: string;
+        slug: string;
+      }>("select user_id, status, price, currency, title, slug from listings where id=$1 for update", [data.id]);
+      const cur = rows[0];
+      if (!cur) throw new Error("İlan bulunamadı.");
+      if (cur.user_id !== context.userId && !isAdmin) throw new Error("Yetkisiz işlem.");
+      if (cur.status === "SOLD") throw new Error("Satılmış ilanın fiyatı güncellenemez.");
+      const prevPrice = num(cur.price);
+      if (newPrice !== prevPrice) {
+        await tx.query("update listings set price=$2, updated_at=now() where id=$1", [data.id, newPrice]);
+        await tx.query("insert into price_history (listing_id, price) values ($1, $2)", [data.id, newPrice]);
+      }
+      return {
+        ownerId: cur.user_id,
+        status: cur.status,
+        prevPrice,
+        currency: cur.currency || "TRY",
+        title: cur.title,
+        slug: cur.slug,
+      };
+    });
+
+    if (res.status === "ACTIVE" && newPrice < res.prevPrice) {
+      void sql
+        .query<{ user_id: string }>(
+          "select user_id from favorites where listing_id=$1 and user_id<>$2 limit 500",
+          [data.id, res.ownerId],
+        )
+        .then((favs) =>
+          Promise.allSettled(
+            favs.map(({ user_id: uid }) =>
+              notify(
+                uid,
+                "favorite",
+                "Favori ilanınızda fiyat düştü",
+                `${res.title} — ${formatPrice(newPrice, res.currency)}`,
+                `/ilan/${res.slug}`,
+              ),
+            ),
+          ),
+        )
+        .catch((err) => console.warn("[account] quick price drop notify failed", err));
+    }
+
+    return { ok: true, price: newPrice, previousPrice: res.prevPrice };
+  });
 

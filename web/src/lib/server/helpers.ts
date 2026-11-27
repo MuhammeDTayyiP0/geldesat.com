@@ -1,5 +1,5 @@
 import { getSql } from "@/lib/db";
-import { asIso, asJson, newId, num } from "@/lib/utils";
+import { asIso, asJson, listingNoFromSlug, newId, num } from "@/lib/utils";
 import { resolveNotifyPrefs, type NotifyChannelPrefs, type PhoneVisibility } from "@/lib/notification-prefs";
 import { findCategory, getCategoryTree, subtreeOf } from "./category-cache";
 import { RateLimitError } from "./errors";
@@ -49,6 +49,8 @@ export type ListingCard = {
   store_slug?: string;
   boosts?: string[];
   rejection_reason?: string | null;
+  previous_price?: number | null;
+  distance_km?: number | null;
 };
 
 export type AttrDef = {
@@ -62,17 +64,25 @@ export type AttrDef = {
 
 const MAX_BUCKETS = 50_000;
 const buckets = new Map<string, { n: number; t: number; w: number }>();
+const securityBuckets = new Map<string, { n: number; t: number; w: number }>();
 let lastPrune = 0;
 
 const MAX_DEDUP_BUCKETS = 50_000;
 const dedupBuckets = new Map<string, number>();
 let lastDedupPrune = 0;
 
+const SECURITY_PREFIXES = ["ota-publish-", "account-delete:", "phone-day:", "mobile-oauth-", "admin-"];
+
+function bucketFor(key: string) {
+  return SECURITY_PREFIXES.some((p) => key.startsWith(p)) ? securityBuckets : buckets;
+}
+
 /** Drop expired windows so the map does not grow with every visitor ever seen. */
 function pruneBuckets(now: number, force = false) {
   if (!force && now - lastPrune < 60_000) return;
   lastPrune = now;
   for (const [key, hit] of buckets) if (now - hit.t > hit.w) buckets.delete(key);
+  for (const [key, hit] of securityBuckets) if (now - hit.t > hit.w) securityBuckets.delete(key);
 }
 
 /** Drop expired dedup entries separately so view/error floods never evict security rate-limit buckets. */
@@ -82,6 +92,15 @@ function pruneDedupBuckets(now: number, force = false) {
   for (const [key, expiresAt] of dedupBuckets) if (now >= expiresAt) dedupBuckets.delete(key);
 }
 
+/** Check whether a rate-limit bucket is currently exhausted without incrementing it. */
+export function isRateLimited(key: string, max: number, windowMs: number): boolean {
+  const now = Date.now();
+  const map = bucketFor(key);
+  const hit = map.get(key);
+  if (!hit || now - hit.t > windowMs) return false;
+  return hit.n >= max;
+}
+
 /**
  * Fixed-window, in-process limiter. Correct for the single Node process this
  * app runs as on Coolify; several replicas would each keep their own counts.
@@ -89,16 +108,17 @@ function pruneDedupBuckets(now: number, force = false) {
 export function rateLimit(key: string, max: number, windowMs: number) {
   const now = Date.now();
   pruneBuckets(now);
-  const hit = buckets.get(key);
+  const map = bucketFor(key);
+  const hit = map.get(key);
   if (!hit || now - hit.t > windowMs) {
-    if (!hit && buckets.size >= MAX_BUCKETS) {
+    if (!hit && map.size >= MAX_BUCKETS) {
       pruneBuckets(now, true);
-      if (buckets.size >= MAX_BUCKETS) {
-        const oldest = buckets.keys().next().value;
-        if (oldest !== undefined) buckets.delete(oldest);
+      if (map.size >= MAX_BUCKETS) {
+        const oldest = map.keys().next().value;
+        if (oldest !== undefined) map.delete(oldest);
       }
     }
-    buckets.set(key, { n: 1, t: now, w: windowMs });
+    map.set(key, { n: 1, t: now, w: windowMs });
     return;
   }
   if (hit.n >= max) {
@@ -108,6 +128,7 @@ export function rateLimit(key: string, max: number, windowMs: number) {
 }
 
 export function mapListing(row: Record<string, unknown>): ListingCard {
+  const status = String(row.status);
   return {
     id: String(row.id),
     listing_no: num(row.listing_no),
@@ -119,7 +140,7 @@ export function mapListing(row: Record<string, unknown>): ListingCard {
     description: String(row.description ?? ""),
     price: num(row.price),
     currency: String(row.currency ?? "TRY"),
-    status: String(row.status),
+    status,
     city: row.city ? String(row.city) : null,
     district: row.district ? String(row.district) : null,
     neighborhood: row.neighborhood ? String(row.neighborhood) : null,
@@ -138,6 +159,9 @@ export function mapListing(row: Record<string, unknown>): ListingCard {
     store_name: row.store_name ? String(row.store_name) : undefined,
     store_slug: row.store_slug ? String(row.store_slug) : undefined,
     boosts: asJson<string[]>(row.boosts, []),
+    rejection_reason: status === "REJECTED" && row.rejection_reason ? String(row.rejection_reason) : null,
+    previous_price: row.previous_price != null && num(row.previous_price) > num(row.price) ? num(row.previous_price) : null,
+    distance_km: row.distance_km != null && Number.isFinite(Number(row.distance_km)) ? Math.round(Number(row.distance_km) * 10) / 10 : null,
   };
 }
 
@@ -290,9 +314,15 @@ export async function ensureProfile(
   return row[0] ?? { user_id: userId, role, display_name: name, banned_at: null, deletion_requested_at: null };
 }
 
+export function isActiveAdmin(
+  profile: { role?: unknown; banned_at?: unknown; deletion_requested_at?: unknown } | null | undefined,
+): boolean {
+  return Boolean(profile && profile.role === "ADMIN" && profile.banned_at == null && profile.deletion_requested_at == null);
+}
+
 export async function requireAdmin(userId: string) {
   const profile = await ensureProfile(userId);
-  if (profile.role !== "ADMIN" || profile.banned_at != null || profile.deletion_requested_at != null) {
+  if (!isActiveAdmin(profile)) {
     throw new Error("Yetkisiz işlem");
   }
   return profile;
@@ -390,7 +420,8 @@ export function listingSelect(extra = "", onlyCover = false) {
     ${imagesExpr}, l.attrs, l.view_count, l.featured_until, l.expires_at, l.created_at, l.updated_at,
     c.name as category_name, c.slug as category_slug,
     coalesce(p.display_name, 'Satıcı') as seller_name,
-    s.name as store_name, s.slug as store_slug
+    s.name as store_name, s.slug as store_slug,
+    (select ph.price from price_history ph where ph.listing_id = l.id and ph.price > l.price order by ph.recorded_at desc limit 1) as previous_price
     ${extra}
   `;
 }
@@ -459,7 +490,7 @@ export const REVIEW_NOT_ELIGIBLE = "Yalnızca karşılıklı mesajlaştığını
 /** A user's still-open report on a listing; repeats are dropped instead of queued again. */
 export async function hasOpenReport(sql: QuerySql, listingId: string, reporterId: string): Promise<boolean> {
   const rows = await sql.query<{ id: string }>(
-    "select id from reports where listing_id=$1 and reporter_id=$2 and status='OPEN' limit 1",
+    "select id from reports where listing_id=$1 and reporter_id=$2 and conversation_id is null and status='OPEN' limit 1",
     [listingId, reporterId],
   );
   return Boolean(rows[0]);
@@ -467,31 +498,37 @@ export async function hasOpenReport(sql: QuerySql, listingId: string, reporterId
 
 /** File a listing report with a copy of the listing, so it survives edits and deletion. */
 export async function insertListingReport(sql: QuerySql, listingId: string, reporterId: string, reason: string, details: string | null) {
-  await sql.query(
-    `insert into reports (id, listing_id, reporter_id, reason, details, listing_snapshot)
-     select $1, l.id, $3, $4, $5,
-            jsonb_build_object('title', l.title, 'slug', l.slug, 'listing_no', l.listing_no, 'user_id', l.user_id, 'cover', l.images->>0)
-     from listings l where l.id = $2`,
-    [newId("rep"), listingId, reporterId, reason, details || null],
-  );
+  try {
+    await sql.query(
+      `insert into reports (id, listing_id, reporter_id, reason, details, listing_snapshot)
+       select $1, l.id, $3, $4, $5,
+              jsonb_build_object('title', l.title, 'slug', l.slug, 'listing_no', l.listing_no, 'user_id', l.user_id, 'cover', l.images->>0)
+       from listings l where l.id = $2`,
+      [newId("rep"), listingId, reporterId, reason, details || null],
+    );
+  } catch (err) {
+    if (typeof err === "object" && err !== null && (err as { code?: string }).code === "23505") return;
+    throw err;
+  }
 }
 
 /** Best-effort visitor identity for de-duplicating counters and rate limiting (behind Coolify's proxy). */
 export function viewerKey(headers: Headers, userId?: string | null): string {
   if (userId) return `u:${userId}`;
   // TRUSTED_IP_HEADER names the header the edge overwrites itself (Cloudflare:
-  // cf-connecting-ip). Otherwise prefer x-real-ip, or the rightmost entry of
-  // X-Forwarded-For (appended by our own reverse proxy; leftmost is client-spoofable).
+  // cf-connecting-ip, or x-real-ip when configured). Otherwise prefer the rightmost
+  // entry of X-Forwarded-For (appended by our own reverse proxy), falling back to
+  // x-real-ip only when XFF is absent.
   const trusted = process.env.TRUSTED_IP_HEADER?.trim();
   const fromEdge = trusted ? headers.get(trusted)?.split(",")[0]?.trim() : undefined;
-  const realIp = headers.get("x-real-ip")?.trim();
   const xffParts = (headers.get("x-forwarded-for") ?? "")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
   const hops = Math.max(1, Number(process.env.TRUSTED_PROXY_HOPS) || 1);
   const forwarded = xffParts.length ? xffParts[Math.max(0, xffParts.length - hops)] : undefined;
-  return `ip:${fromEdge || realIp || forwarded || "unknown"}`;
+  const realIp = headers.get("x-real-ip")?.trim();
+  return `ip:${fromEdge || forwarded || realIp || "unknown"}`;
 }
 
 /**
@@ -502,16 +539,33 @@ export async function revealListingPhone(listingRef: string, viewerId: string | 
   // Enough for any real buyer, too little to harvest sellers' numbers.
   if (viewerId) rateLimit(`phone-day:${viewerId}`, 300, 24 * 60 * 60_000);
   const sql = await getSql();
-  const rows = await sql.query<{ id: string; phone_override: string | null; phone: string | null; phone_visibility: PhoneVisibility | null }>(
-    `select l.id, l.phone_override, p.phone, p.phone_visibility
+  const listingNo = listingNoFromSlug(listingRef);
+  const rows = await sql.query<{
+    id: string;
+    user_id: string;
+    phone_override: string | null;
+    phone: string | null;
+    phone_visibility: PhoneVisibility | null;
+    banned_at: unknown;
+    deletion_requested_at: unknown;
+  }>(
+    `select l.id, l.user_id, l.phone_override, p.phone, p.phone_visibility, p.banned_at, p.deletion_requested_at
      from listings l left join profiles p on p.user_id = l.user_id
-     where (l.id=$1 or lower(l.slug)=lower($1)) and l.status='ACTIVE'
+     where (${listingNo ? "l.listing_no = $1::bigint" : "l.id=$1 or lower(l.slug)=lower($1) or lower(l.legacy_slug)=lower($1)"})
+       and l.status='ACTIVE'
        and (l.expires_at is null or l.expires_at > now())
      limit 1`,
-    [listingRef],
+    [listingNo ? String(listingNo) : listingRef],
   );
   const row = rows[0];
-  if (!row) throw new Error("İlan bulunamadı.");
+  if (!row || row.banned_at != null || row.deletion_requested_at != null) throw new Error("İlan bulunamadı.");
+  if (viewerId && viewerId !== row.user_id) {
+    const blocked = await sql.query<{ blocker_id: string }>(
+      "select blocker_id from user_blocks where (blocker_id=$1 and blocked_id=$2) or (blocker_id=$2 and blocked_id=$1) limit 1",
+      [viewerId, row.user_id],
+    );
+    if (blocked[0]) throw new Error("Bu kullanıcıya erişilemiyor.");
+  }
   const visibility = row.phone_visibility ?? "members";
   if (visibility === "hidden") throw new Error("Satıcı telefonunu paylaşmıyor; mesajla ulaşabilirsiniz.");
   if (visibility === "members" && !viewerId) throw new Error("Telefonu görmek için giriş yapın.");

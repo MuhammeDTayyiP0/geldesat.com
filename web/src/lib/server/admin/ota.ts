@@ -151,6 +151,45 @@ export const adminListOtaUpdates = createServerFn({ method: "GET" })
   .middleware([adminMiddleware])
   .handler(async () => listAdminOtaUpdates(await getSql()));
 
+export const adminOtaUpdateErrors = createServerFn({ method: "POST" })
+  .middleware([adminMiddleware])
+  .validator(z.object({ updateIds: z.array(z.string().trim().min(1).max(64)).min(1).max(10) }))
+  .handler(async ({ data }): Promise<AdminClientError[]> => {
+    const sql = await getSql();
+    const lowered = data.updateIds.map((id) => id.toLowerCase());
+    const rows = await sql.query<{
+      id: string | number;
+      created_at: string | Date;
+      platform: "ios" | "android";
+      app_version: string | null;
+      update_id: string | null;
+      device_id: string | null;
+      fatal: boolean;
+      message: string;
+      stack: string | null;
+      screen: string | null;
+    }>(
+      `select id, created_at, platform, app_version, update_id, device_id, fatal, message, stack, screen
+       from client_errors
+       where lower(update_id) = any($1::text[])
+       order by created_at desc
+       limit 200`,
+      [lowered],
+    );
+    return rows.map((r) => ({
+      id: String(r.id),
+      createdAt: new Date(r.created_at).toISOString(),
+      platform: r.platform,
+      appVersion: r.app_version,
+      updateId: r.update_id,
+      deviceId: r.device_id,
+      fatal: r.fatal,
+      message: r.message,
+      stack: r.stack,
+      screen: r.screen,
+    }));
+  });
+
 export const adminSetOtaRollout = createServerFn({ method: "POST" })
   .middleware([adminMiddleware])
   .validator(z.object({ groupId: z.string().min(1).max(60), rollout: z.number().int().min(0).max(100) }))

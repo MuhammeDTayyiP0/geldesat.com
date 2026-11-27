@@ -19,7 +19,7 @@ export const Route = createFileRoute("/api/mobile/my-listings")({
             `select ${listingSelect("", true)}, l.rejection_reason, (l.approved_at is not null) as approved,
                     (select count(*)::int from favorites f where f.listing_id=l.id) as fav_count,
                     (select count(*)::int from conversations cv where cv.listing_id=l.id) as message_count,
-                    (select count(*)::int from phone_reveals pr where pr.listing_id=l.id) as phone_reveal_count,
+                    (select count(distinct pr.viewer_id)::int from phone_reveals pr where pr.listing_id=l.id) as phone_reveal_count,
                     coalesce((select json_agg(b.kind) from boosts b where b.listing_id=l.id and b.ends_at>now()), '[]'::json) as boosts
              from listings l join categories c on c.id=l.category_id left join profiles p on p.user_id=l.user_id left join stores s on s.id=l.store_id
              where l.user_id=$1 order by l.created_at desc limit 500`,

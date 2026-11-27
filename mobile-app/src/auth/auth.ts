@@ -81,12 +81,17 @@ export async function requestPasswordReset(email: string): Promise<void> {
 
 export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
   const token = getToken();
+  if (!token) throw new ApiError('Oturum süresi doldu, lütfen yeniden giriş yapın.', 401);
   const response = await timedFetch(`${API_BASE_URL}/api/auth/change-password`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...originHeaders },
     body: JSON.stringify({ currentPassword, newPassword, revokeOtherSessions: true }),
   });
   const data = ((await response.json().catch(() => ({}))) ?? {}) as AuthBody;
+  if (response.status === 401 && getToken() === token) {
+    void clearSession();
+    void clearLocalPushRegistration();
+  }
   if (!response.ok) throw new ApiError(translateAuthError(data, response.status), response.status);
   // Revoking other sessions issues a fresh token for this one.
   const next = response.headers.get('set-auth-token') || data.token;
@@ -100,11 +105,17 @@ export async function changePassword(currentPassword: string, newPassword: strin
 
 /** End every other session of the account (lost phone, shared computer). This phone stays signed in. */
 export async function signOutOtherDevices(): Promise<void> {
+  const token = getToken();
+  if (!token) throw new ApiError('Oturum süresi doldu, lütfen yeniden giriş yapın.', 401);
   const response = await timedFetch(`${API_BASE_URL}/api/auth/revoke-other-sessions`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}`, ...originHeaders },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...originHeaders },
     body: '{}',
   });
+  if (response.status === 401 && getToken() === token) {
+    void clearSession();
+    void clearLocalPushRegistration();
+  }
   if (!response.ok) {
     const data = ((await response.json().catch(() => ({}))) ?? {}) as AuthBody;
     throw new ApiError(translateAuthError(data, response.status), response.status);

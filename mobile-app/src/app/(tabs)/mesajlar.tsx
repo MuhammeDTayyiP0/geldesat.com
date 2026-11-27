@@ -6,7 +6,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import Swipeable, { type SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
-import { Archive, ArchiveRestore, CheckCheck, ImageIcon, MailOpen, MessageCircle, Search, Trash2, type LucideIcon } from 'lucide-react-native';
+import { Archive, ArchiveRestore, Bell, BellOff, CheckCheck, ImageIcon, MailOpen, MessageCircle, Pin, PinOff, Search, Trash2, type LucideIcon } from 'lucide-react-native';
 import { errorMessage } from '@/api/client';
 import { chat } from '@/api/endpoints';
 import { keys, queryClient } from '@/api/queries';
@@ -89,13 +89,24 @@ export default function InboxScreen() {
   };
 
   const act = useMutation({
-    mutationFn: async ({ cv, action }: { cv: Conversation; action: 'archive' | 'unarchive' | 'unread' | 'read' | 'delete' }) => {
+    mutationFn: async ({ cv, action }: { cv: Conversation; action: InboxAction }) => {
       if (action === 'archive' || action === 'unarchive') await chat.archive(cv.id, action === 'archive');
+      else if (action === 'pin' || action === 'unpin') await chat.pin(cv.id, action === 'pin');
+      else if (action === 'mute' || action === 'unmute') await chat.mute(cv.id, action === 'mute');
       else if (action === 'unread') await chat.markUnread(cv.id, true);
       else if (action === 'read') await chat.markRead(cv.id);
       else await chat.remove(cv.id);
     },
-    onSuccess: () => void refresh(),
+    onSuccess: (_, { action }) => {
+      void refresh();
+      if (action === 'archive') toast.success('Sohbet arşivlendi');
+      else if (action === 'unarchive') toast.success('Sohbet arşivden çıkarıldı');
+      else if (action === 'pin') toast.success('Sohbet sabitlendi');
+      else if (action === 'unpin') toast.success('Sabitleme kaldırıldı');
+      else if (action === 'mute') toast.success('Sohbet sessize alındı');
+      else if (action === 'unmute') toast.success('Bildirimler açıldı');
+      else if (action === 'delete') toast.success('Sohbet silindi');
+    },
     onError: (e) => toast.error(errorMessage(e)),
   });
 
@@ -186,7 +197,7 @@ export default function InboxScreen() {
           keyExtractor={(cv) => cv.id}
           refreshControl={<RefreshControl refreshing={pulling} onRefresh={() => void pull()} tintColor={c.primary} />}
           keyboardShouldPersistTaps="handled"
-          ItemSeparatorComponent={() => <Divider inset={88} />}
+          ItemSeparatorComponent={ListSeparator}
           contentContainerStyle={rows.length ? undefined : styles.emptyWrap}
           ListEmptyComponent={
             <EmptyState
@@ -235,6 +246,16 @@ export default function InboxScreen() {
             ) : (
               <ListRow icon={MailOpen} label="Okunmadı işaretle" onPress={() => fromMenu(menu, 'unread')} />
             )}
+            <ListRow
+              icon={menu.pinned ? PinOff : Pin}
+              label={menu.pinned ? 'Sabitlemeyi kaldır' : 'Sabitle'}
+              onPress={() => fromMenu(menu, menu.pinned ? 'unpin' : 'pin')}
+            />
+            <ListRow
+              icon={menu.muted ? Bell : BellOff}
+              label={menu.muted ? 'Sesi aç' : 'Sessize al'}
+              onPress={() => fromMenu(menu, menu.muted ? 'unmute' : 'mute')}
+            />
             {menu.archived ? (
               <ListRow icon={ArchiveRestore} label="Arşivden çıkar" onPress={() => fromMenu(menu, 'unarchive')} />
             ) : (
@@ -248,7 +269,7 @@ export default function InboxScreen() {
   );
 }
 
-type InboxAction = 'archive' | 'unarchive' | 'unread' | 'read' | 'delete';
+type InboxAction = 'archive' | 'unarchive' | 'unread' | 'read' | 'pin' | 'unpin' | 'mute' | 'unmute' | 'delete';
 
 /**
  * Swipe left for Arşivle / Sil, swipe right to toggle read; long press still
@@ -356,9 +377,13 @@ function InboxRow({
       </View>
       <View style={styles.body}>
         <View style={styles.line}>
-          <Text variant={unread ? 'bodyStrong' : 'body'} numberOfLines={1} style={styles.flex}>
-            {cv.other_name}
-          </Text>
+          <View style={styles.nameIcons}>
+            {cv.pinned ? <Pin size={12} color={c.primary} /> : null}
+            {cv.muted ? <BellOff size={12} color={c.subtle} /> : null}
+            <Text variant={unread ? 'bodyStrong' : 'body'} numberOfLines={1} style={styles.flexShrink}>
+              {cv.other_name}
+            </Text>
+          </View>
           <Text variant="small" tone={unread ? 'primary' : 'subtle'}>
             {inboxTime(cv.updated_at)}
           </Text>
@@ -392,6 +417,8 @@ function InboxRow({
   );
 }
 
+const ListSeparator = () => <Divider inset={88} />;
+
 const styles = StyleSheet.create({
   actions: { flexDirection: 'row' },
   swipeAction: { width: 82, alignItems: 'center', justifyContent: 'center', gap: 4 },
@@ -407,6 +434,8 @@ const styles = StyleSheet.create({
   avatar: { position: 'absolute', right: -6, bottom: -6, borderWidth: 2, borderRadius: 15 },
   online: { position: 'absolute', right: -2, bottom: -2, width: 10, height: 10, borderRadius: 5, borderWidth: 1.5 },
   body: { flex: 1, gap: 2 },
+  nameIcons: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4 },
+  flexShrink: { flexShrink: 1 },
   line: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   bold: { fontWeight: '600' },
   badge: { minWidth: 20, height: 20, borderRadius: 10, paddingHorizontal: 6, alignItems: 'center', justifyContent: 'center' },

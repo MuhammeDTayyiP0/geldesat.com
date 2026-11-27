@@ -58,7 +58,11 @@ export function ListingImageGallery({ images, title, categoryName }: ListingImag
     setZoomed(false);
     setIsFullscreen(true);
     if (typeof window !== "undefined") {
-      window.history.pushState({ gallery_fullscreen: true }, "");
+      const currentState =
+        window.history.state && typeof window.history.state === "object"
+          ? (window.history.state as Record<string, unknown>)
+          : {};
+      window.history.pushState({ ...currentState, gallery_fullscreen: true }, "");
     }
   }, []);
 
@@ -72,14 +76,11 @@ export function ListingImageGallery({ images, title, categoryName }: ListingImag
     return () => window.removeEventListener("popstate", handlePopState);
   }, [isFullscreen]);
 
-  // Keyboard navigation for fullscreen lightbox (ESC, ArrowLeft, ArrowRight)
+  // Keyboard navigation for fullscreen lightbox (ArrowLeft, ArrowRight; Escape handled by useModalPanel)
   React.useEffect(() => {
     if (!isFullscreen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        closeFullscreen();
-      } else if (e.key === "ArrowRight") {
+      if (e.key === "ArrowRight") {
         e.preventDefault();
         nextImage();
       } else if (e.key === "ArrowLeft") {

@@ -4,6 +4,8 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import {
   Archive,
   Ban,
+  Bell,
+  BellOff,
   Check,
   CheckCheck,
   ChevronLeft,
@@ -18,6 +20,9 @@ import {
   MessageSquareText,
   MoreVertical,
   Paperclip,
+  Pencil,
+  Pin,
+  PinOff,
   Send,
   ShieldAlert,
   ShieldCheck,
@@ -30,11 +35,14 @@ import {
   archiveConversation,
   deleteConversation,
   deleteMessage,
+  editMessage,
   getThread,
   loadAroundMessage,
   loadOlderMessages,
   markConversationUnread,
   markThreadRead,
+  muteConversation,
+  pinConversation,
   pollThread,
   reportConversation,
   respondOffer,
@@ -48,7 +56,7 @@ import { blockUser, unblockUser } from "@/lib/server/social";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuSeparator,
@@ -61,6 +69,7 @@ import { LocationPicker } from "@/components/chat/LocationPicker";
 import { MessageBubble } from "@/components/chat/MessageBubble";
 import {
   BUYER_QUICK_REPLIES,
+  EDIT_WINDOW_MS,
   previewText,
   SELLER_QUICK_REPLIES,
   type ChatMessage,
@@ -123,6 +132,7 @@ function Thread() {
   const [showReads, setShowReads] = useState(true);
   const [typingUntil, setTypingUntil] = useState(0);
   const [text, setText] = useState("");
+  const [editingMsg, setEditingMsg] = useState<Msg | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [safetyHidden, setSafetyHidden] = useState(true);
@@ -131,7 +141,18 @@ function Thread() {
   const [staged, setStaged] = useState<StagedPhoto[]>([]);
   const stagedRef = useRef(staged);
   stagedRef.current = staged;
-  useEffect(() => () => stagedRef.current.forEach((p) => URL.revokeObjectURL(p.url)), []);
+  const mountedRef = useRef(true);
+  const timersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+  useEffect(() => {
+    mountedRef.current = true;
+    const timers = timersRef.current;
+    return () => {
+      mountedRef.current = false;
+      for (const t of timers) clearTimeout(t);
+      timers.clear();
+      stagedRef.current.forEach((p) => URL.revokeObjectURL(p.url));
+    };
+  }, []);
   const [dialog, setDialog] = useState<
     | null
     | "offer"
@@ -143,7 +164,7 @@ function Thread() {
     | { deleteMessage: string }
     | { reportMessage: string }
     | { counterTo: string }
-    | { infoMessage: Msg }
+    | { infoMessageId: string }
   >(null);
   const [replyTo, setReplyTo] = useState<Msg | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -541,6 +562,22 @@ function Thread() {
 
   function submit() {
     const content = text.trim();
+    if (editingMsg) {
+      if (!content) return;
+      const targetId = editingMsg.id;
+      setEditingMsg(null);
+      setText("");
+      if (box.current) box.current.style.height = "auto";
+      void editMessage({ data: { messageId: targetId, content } })
+        .then((res) => {
+          merge([res.message]);
+          toast.success("Mesaj düzenlendi");
+        })
+        .catch((err) => {
+          toast.error(errorText(err, "Mesaj düzenlenemedi"));
+        });
+      return;
+    }
     const photos = staged;
     if (!content && !photos.length) return;
     if (photos.length && uploading) return;
@@ -556,6 +593,10 @@ function Thread() {
         // What did not go out stays ready to retry, with its caption.
         const kept = photos.filter((p) => failed.includes(p.file));
         photos.filter((p) => !kept.includes(p)).forEach((p) => URL.revokeObjectURL(p.url));
+        if (!mountedRef.current) {
+          kept.forEach((p) => URL.revokeObjectURL(p.url));
+          return;
+        }
         if (kept.length) {
           setStaged((prev) => [...kept, ...prev]);
           if (content) setText(content);
@@ -762,6 +803,32 @@ function Thread() {
               </MenuItem>
               <MenuItem
                 onSelect={() =>
+                  void pinConversation({ data: { conversationId: id, pinned: !info.pinned } })
+                    .then(() => {
+                      setInfo((prev) => (prev ? { ...prev, pinned: !prev.pinned } : prev));
+                      toast.success(info.pinned ? "Sabitleme kaldırıldı" : "Sohbet sabitlendi");
+                      pingInbox();
+                    })
+                    .catch((err) => toast.error(errorText(err, "İşlem tamamlanamadı")))
+                }
+              >
+                {info.pinned ? <PinOff /> : <Pin />} {info.pinned ? "Sabitlemeyi kaldır" : "Sabitle"}
+              </MenuItem>
+              <MenuItem
+                onSelect={() =>
+                  void muteConversation({ data: { conversationId: id, muted: !info.muted } })
+                    .then(() => {
+                      setInfo((prev) => (prev ? { ...prev, muted: !prev.muted } : prev));
+                      toast.success(info.muted ? "Bildirimler açıldı" : "Sohbet sessize alındı");
+                      pingInbox();
+                    })
+                    .catch((err) => toast.error(errorText(err, "İşlem tamamlanamadı")))
+                }
+              >
+                {info.muted ? <Bell /> : <BellOff />} {info.muted ? "Sesi aç" : "Sessize al"}
+              </MenuItem>
+              <MenuItem
+                onSelect={() =>
                   void archiveConversation({ data: { conversationId: id, archived: true } })
                     .then(() => {
                       toast.success("Sohbet arşivlendi");
@@ -837,31 +904,67 @@ function Thread() {
       {/* Listing strip */}
       {info && (info.listing_slug || info.listing_title) ? (
         <div className="flex items-center gap-3 border-b border-border/70 bg-surface/95 px-3 py-2">
-          {info.listing_image ? (
-            <img
-              src={photoSrc(info.listing_image, 240)}
-              alt=""
-              className="size-10 shrink-0 rounded-lg object-cover ring-1 ring-border"
-            />
-          ) : (
-            <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-elevated text-muted">
-              <ImageIcon className="size-4" />
-            </span>
-          )}
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">{info.listing_title}</p>
-            <p className="text-xs">
-              {info.listing_price != null ? (
-                <span className="font-semibold tabular-nums text-primary">
-                  {formatPrice(info.listing_price, info.listing_currency)}
+          {info.listing_slug ? (
+            <Link
+              to="/ilan/$slug"
+              params={{ slug: info.listing_slug }}
+              className="flex min-w-0 flex-1 items-center gap-3 rounded-lg transition-colors hover:opacity-85"
+            >
+              {info.listing_image ? (
+                <img
+                  src={photoSrc(info.listing_image, 240)}
+                  alt=""
+                  className="size-10 shrink-0 rounded-lg object-cover ring-1 ring-border"
+                />
+              ) : (
+                <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-elevated text-muted">
+                  <ImageIcon className="size-4" />
                 </span>
-              ) : null}
-              <span className="text-muted">
-                {" "}
-                · {isSeller ? "Sizin ilanınız" : "Satıcıyla yazışıyorsunuz"}
-              </span>
-            </p>
-          </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium">{info.listing_title}</p>
+                <p className="text-xs">
+                  {info.listing_price != null ? (
+                    <span className="font-semibold tabular-nums text-primary">
+                      {formatPrice(info.listing_price, info.listing_currency)}
+                    </span>
+                  ) : null}
+                  <span className="text-muted">
+                    {" "}
+                    · {isSeller ? "Sizin ilanınız" : "Satıcıyla yazışıyorsunuz"}
+                  </span>
+                </p>
+              </div>
+            </Link>
+          ) : (
+            <>
+              {info.listing_image ? (
+                <img
+                  src={photoSrc(info.listing_image, 240)}
+                  alt=""
+                  className="size-10 shrink-0 rounded-lg object-cover ring-1 ring-border"
+                />
+              ) : (
+                <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-elevated text-muted">
+                  <ImageIcon className="size-4" />
+                </span>
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium">{info.listing_title}</p>
+                <p className="text-xs">
+                  {info.listing_price != null ? (
+                    <span className="font-semibold tabular-nums text-primary">
+                      {formatPrice(info.listing_price, info.listing_currency)}
+                    </span>
+                  ) : null}
+                  <span className="text-muted">
+                    {" "}
+                    · {isSeller ? "Sizin ilanınız" : "Satıcıyla yazışıyorsunuz"}
+                  </span>
+                </p>
+              </div>
+            </>
+          )}
           {info.listing_slug ? (
             <Link
               to="/ilan/$slug"
@@ -981,8 +1084,22 @@ function Thread() {
                     setReplyTo(m);
                     box.current?.focus();
                   }}
-                  onInfo={mine && !m.deleted && !m.localState ? () => setDialog({ infoMessage: m }) : undefined}
+                  onInfo={mine && !m.deleted && !m.localState ? () => setDialog({ infoMessageId: m.id }) : undefined}
                   onJumpTo={(target) => void jumpTo(target)}
+                  onEdit={
+                    mine &&
+                    !m.deleted &&
+                    !m.localState &&
+                    m.kind === "text" &&
+                    Date.now() - new Date(m.created_at).getTime() <= EDIT_WINDOW_MS
+                      ? () => {
+                          setReplyTo(null);
+                          setEditingMsg(m);
+                          setText(m.content);
+                          box.current?.focus();
+                        }
+                      : undefined
+                  }
                   onCounterOffer={() => setDialog({ counterTo: m.id })}
                   onDelete={() => setDialog({ deleteMessage: m.id })}
                   onReport={() => setDialog({ reportMessage: m.id })}
@@ -1083,6 +1200,26 @@ function Thread() {
         </p>
       ) : (
         <div className="border-t border-border bg-surface">
+          {editingMsg ? (
+            <div className="flex items-center gap-2 border-b border-border/60 bg-primary/5 px-3 py-2">
+              <Pencil className="size-4 shrink-0 text-primary" />
+              <div className="min-w-0 flex-1 text-xs">
+                <p className="font-semibold text-primary">Mesaj düzenleniyor</p>
+                <p className="truncate text-muted">{editingMsg.content}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingMsg(null);
+                  setText("");
+                }}
+                aria-label="Düzenlemeyi iptal et"
+                className="grid size-8 place-items-center rounded-full text-muted hover:bg-elevated"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+          ) : null}
           {replyTo ? (
             <div className="flex items-center gap-2 border-b border-border/60 px-3 py-2">
               <div className="min-w-0 flex-1 border-l-4 border-primary pl-2 text-xs">
@@ -1355,55 +1492,64 @@ function Thread() {
       />
 
       <Dialog
-        open={typeof dialog === "object" && dialog !== null && "infoMessage" in dialog}
+        open={typeof dialog === "object" && dialog !== null && "infoMessageId" in dialog}
         onOpenChange={(o) => !o && setDialog(null)}
       >
         <DialogContent className="border-border bg-surface sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Mesaj bilgisi</DialogTitle>
+            <DialogDescription className="sr-only">Mesajın gönderilme ve okunma zamanı</DialogDescription>
           </DialogHeader>
-          {typeof dialog === "object" && dialog !== null && "infoMessage" in dialog ? (
-            <div className="space-y-3 text-sm">
-              <p className="rounded-xl bg-elevated px-3.5 py-2.5 text-fg line-clamp-4">
-                {previewText(dialog.infoMessage.kind, dialog.infoMessage.content, dialog.infoMessage.deleted)}
-              </p>
-              <dl className="divide-y divide-border overflow-hidden rounded-xl border border-border">
-                <div className="flex items-center justify-between gap-3 px-3.5 py-2.5">
-                  <dt className="flex items-center gap-2 text-muted">
-                    <Check className="size-4 text-primary" aria-hidden="true" /> Gönderildi
-                  </dt>
-                  <dd className="font-medium tabular-nums">
-                    {dayLabel(dialog.infoMessage.created_at)}{" "}
-                    {new Date(dialog.infoMessage.created_at).toLocaleTimeString("tr-TR", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </dd>
-                </div>
-                <div className="flex items-center justify-between gap-3 px-3.5 py-2.5">
-                  <dt className="flex items-center gap-2 text-muted">
-                    <CheckCheck className="size-4 text-primary" aria-hidden="true" /> Okundu
-                  </dt>
-                  <dd className="font-medium tabular-nums">
-                    {!showReads
-                      ? "Okundu bilgisi kapalı"
-                      : dialog.infoMessage.read_at
-                        ? `${dayLabel(dialog.infoMessage.read_at)} ${new Date(dialog.infoMessage.read_at).toLocaleTimeString("tr-TR", {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}`
-                        : "Henüz okunmadı"}
-                  </dd>
-                </div>
-              </dl>
-            </div>
-          ) : null}
+          {(() => {
+            const infoMsg =
+              typeof dialog === "object" && dialog !== null && "infoMessageId" in dialog
+                ? messages.find((m) => m.id === dialog.infoMessageId) ?? null
+                : null;
+            if (!infoMsg) return null;
+            return (
+              <div className="space-y-3 text-sm">
+                <p className="rounded-xl bg-elevated px-3.5 py-2.5 text-fg line-clamp-4">
+                  {previewText(infoMsg.kind, infoMsg.content, infoMsg.deleted)}
+                </p>
+                <dl className="divide-y divide-border overflow-hidden rounded-xl border border-border">
+                  <div className="flex items-center justify-between gap-3 px-3.5 py-2.5">
+                    <dt className="flex items-center gap-2 text-muted">
+                      <Check className="size-4 text-primary" aria-hidden="true" /> Gönderildi
+                    </dt>
+                    <dd className="font-medium tabular-nums">
+                      {dayLabel(infoMsg.created_at)}{" "}
+                      {new Date(infoMsg.created_at).toLocaleTimeString("tr-TR", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </dd>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 px-3.5 py-2.5">
+                    <dt className="flex items-center gap-2 text-muted">
+                      <CheckCheck className="size-4 text-primary" aria-hidden="true" /> Okundu
+                    </dt>
+                    <dd className="font-medium tabular-nums">
+                      {!showReads
+                        ? "Okundu bilgisi kapalı"
+                        : infoMsg.read_at
+                          ? `${dayLabel(infoMsg.read_at)} ${new Date(infoMsg.read_at).toLocaleTimeString("tr-TR", {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}`
+                          : "Henüz okunmadı"}
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
 
       <Dialog open={Boolean(lightbox)} onOpenChange={(o) => !o && setLightbox(null)}>
         <DialogContent className="max-w-[calc(100%-1rem)] border-0 bg-transparent p-0 shadow-none sm:max-w-3xl">
           <DialogTitle className="sr-only">Fotoğraf</DialogTitle>
+          <DialogDescription className="sr-only">Sohbet fotoğrafı büyük önizlemesi</DialogDescription>
           {lightbox ? (
             <img src={lightbox} alt="" className="max-h-[85dvh] w-full rounded-xl object-contain" />
           ) : null}
