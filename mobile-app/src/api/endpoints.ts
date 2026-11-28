@@ -165,8 +165,17 @@ export const follows = {
 
 export const storeApplications = {
   mine: () => rpc<StoreApplication | null>('myStoreApplication'),
-  submit: (data: { name: string; city?: string; phone?: string; taxNo?: string; notes?: string }) =>
-    rpc<StoreApplication>('submitStoreApplication', data),
+  submit: (data: {
+    name: string;
+    businessType: 'SOLE' | 'COMPANY';
+    sector: string;
+    taxOffice: string;
+    taxNo: string;
+    city: string;
+    phone: string;
+    address: string;
+    notes?: string;
+  }) => rpc<StoreApplication>('submitStoreApplication', data),
 };
 
 // ─── Saved Searches ─────────────────────────────────────────────────────────

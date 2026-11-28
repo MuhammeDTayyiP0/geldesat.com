@@ -88,7 +88,7 @@ function deviceLabel(ua: string | null | undefined): { label: string; mobile: bo
 
 export default function SecuritySettingsScreen() {
   return (
-    <RequireSignIn title="Şifre ve güvenlik">
+    <RequireSignIn title="Hesap ve güvenlik">
       <SecuritySettings />
     </RequireSignIn>
   );
@@ -173,7 +173,7 @@ function SecuritySettings() {
 
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
-      <Header title="Şifre ve güvenlik" />
+      <Header title="Hesap ve güvenlik" />
       <KeyboardAwareScrollView bottomOffset={24} keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + space.xxxl }]}>
         {purgeAt ? (
           <Card style={[styles.gap, { backgroundColor: c.dangerSoft, borderColor: c.dangerSoft }]}>

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { getSql } from "@/lib/db";
+import { maxActiveListingsFor } from "@/lib/account-type";
 import { cleanAttrs, type AttrValues } from "@/lib/listing-attrs";
 import { needsReReview, sameAttrs } from "@/lib/listing-status";
 import { asJson, formatPrice, listingSlug, newId, num } from "@/lib/utils";
@@ -47,8 +48,14 @@ export async function saveListingRecord(userId: string, data: ListingInputData) 
   const sql = await getSql();
   const me = await ensureProfile(userId);
   if (!me) throw new Error("Profil yok");
-  const profile = await sql.query<{ phone: string | null; role: string; banned_at: string | null; deletion_requested_at: string | null }>(
-    "select phone, role, banned_at, deletion_requested_at from profiles where user_id = $1",
+  const profile = await sql.query<{
+    phone: string | null;
+    role: string;
+    account_type: string | null;
+    banned_at: string | null;
+    deletion_requested_at: string | null;
+  }>(
+    "select phone, role, account_type, banned_at, deletion_requested_at from profiles where user_id = $1",
     [userId],
   );
   if (profile[0]?.banned_at) throw new Error("Hesabınız askıya alınmış. İlan işlemi yapamazsınız.");
@@ -207,6 +214,25 @@ export async function saveListingRecord(userId: string, data: ListingInputData) 
   }
 
   await assertStoreOwner(userId);
+  if (!isAdmin) {
+    const [storeRow, countRows] = await Promise.all([
+      sql.query<{ plan: string }>("select plan from stores where user_id=$1 limit 1", [userId]),
+      sql.query<{ n: number }>(
+        "select count(*)::int as n from listings where user_id=$1 and status in ('ACTIVE', 'PENDING') and (expires_at is null or expires_at > now())",
+        [userId],
+      ),
+    ]);
+    const accountType = profile[0]?.account_type === "CORPORATE" || Boolean(storeRow[0]) ? "CORPORATE" : "INDIVIDUAL";
+    const maxActive = maxActiveListingsFor(accountType, storeRow[0]?.plan ?? null);
+    const used = num(countRows[0]?.n);
+    if (used >= maxActive) {
+      throw new Error(
+        accountType === "CORPORATE"
+          ? `Mağaza paketinizin aktif ilan limitine (${maxActive}) ulaştınız.`
+          : `Bireysel hesaplarda en fazla ${maxActive} aktif ilan yayınlayabilirsiniz. Daha fazla ilan için Kurumsal Hesaba geçebilirsiniz.`,
+      );
+    }
+  }
   const sent = async () =>
     data.clientKey
       ? (await sql.query<{ id: string; slug: string; status: string }>(

@@ -2,9 +2,10 @@ import { authErrorText } from "@/lib/auth/errors";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { errorText } from "@/lib/error-text";
 import { useEffect, useState, type FormEvent } from "react";
-import { CheckCircle2, Laptop, Mail, MailWarning, Smartphone } from "lucide-react";
+import { CheckCircle2, Download, Laptop, Mail, MailWarning, Smartphone, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { authClient } from "@/lib/auth/client";
+import { requestMyAccountDeletion } from "@/lib/server/settings";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { timeAgo } from "@/lib/utils";
@@ -15,9 +16,11 @@ import { Input, Label } from "@/components/ui/input";
 import { AccountShell } from "@/components/account/AccountShell";
 
 export const Route = createFileRoute("/ayarlar/guvenlik")({
-  head: () => ({ meta: [{ title: "Şifre ve güvenlik | GeldeSat" }, { name: "robots", content: "noindex,nofollow" }] }),
+  head: () => ({ meta: [{ title: "Hesap ve güvenlik | GeldeSat" }, { name: "robots", content: "noindex,nofollow" }] }),
   component: SecuritySettings,
 });
+
+const CONFIRM_WORD = "SİL";
 
 type SessionRow = { id: string; token: string; userAgent?: string | null; ipAddress?: string | null; updatedAt: Date | string; createdAt: Date | string };
 
@@ -40,6 +43,29 @@ function SecuritySettings() {
   const [emailBusy, setEmailBusy] = useState(false);
   const [sessionBusy, setSessionBusy] = useState<string | null>(null);
   const [sessionsFailed, setSessionsFailed] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+
+  async function downloadMyData() {
+    setDownloading(true);
+    try {
+      const res = await fetch("/api/hesap/verilerim");
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(body?.error || (res.status === 429 ? "Çok sık indirme denediniz. Biraz sonra tekrar deneyin." : "Verileriniz hazırlanamadı."));
+      }
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "geldesat-verilerim.json";
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) {
+      toast.error(errorText(err, "Verileriniz indirilemedi"));
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   async function loadSessions() {
     const { data, error } = await authClient.listSessions();
@@ -124,7 +150,7 @@ function SecuritySettings() {
   }
 
   return (
-    <AccountShell title="Şifre ve güvenlik" description="Giriş bilgileriniz ve açık oturumlarınız.">
+    <AccountShell title="Hesap ve güvenlik" description="Giriş bilgileriniz, açık oturumlarınız, kişisel verileriniz ve hesap kapatma.">
       <div className="space-y-5">
         <section className="rounded-2xl border border-border bg-surface p-4 shadow-card sm:p-6">
           <h2 className="text-base font-semibold">E-posta</h2>
@@ -218,7 +244,57 @@ function SecuritySettings() {
             </ul>
           )}
         </section>
+
+        <section className="rounded-2xl border border-border bg-surface p-4 shadow-card sm:p-6">
+          <h2 className="text-base font-semibold">Verilerimi indir</h2>
+          <p className="mt-1 text-sm text-muted">
+            Profiliniz, ilanlarınız, mesajlarınız, favorileriniz, değerlendirmeleriniz ve bildirimleriniz tek bir dosya (JSON) olarak
+            indirilir. KVKK kapsamındaki bilgi edinme hakkınızdır.
+          </p>
+          <Button type="button" variant="outline" className="mt-4" disabled={downloading} onClick={() => void downloadMyData()}>
+            <Download className="size-4" /> {downloading ? "Hazırlanıyor…" : "Verilerimi indir"}
+          </Button>
+        </section>
+
+        <section className="rounded-2xl border border-danger/30 bg-surface p-4 shadow-card sm:p-6">
+          <h2 className="text-base font-semibold text-danger">Hesabı sil</h2>
+          <ol className="mt-3 space-y-3 text-sm">
+            <li className="flex gap-3">
+              <span className="grid size-6 shrink-0 place-items-center rounded-full bg-elevated text-xs font-semibold">1</span>
+              <span>
+                <span className="font-medium">Hemen:</span> <span className="text-muted">oturumunuz kapanır, profiliniz, ilanlarınız ve mağazanız gizlenir.</span>
+              </span>
+            </li>
+            <li className="flex gap-3">
+              <span className="grid size-6 shrink-0 place-items-center rounded-full bg-elevated text-xs font-semibold">2</span>
+              <span>
+                <span className="font-medium">30 gün içinde:</span>{" "}
+                <span className="text-muted">tekrar giriş yapıp “Hesabımı geri al” derseniz her şey eski haline döner.</span>
+              </span>
+            </li>
+            <li className="flex gap-3">
+              <span className="grid size-6 shrink-0 place-items-center rounded-full bg-elevated text-xs font-semibold">3</span>
+              <span>
+                <span className="font-medium">30 gün sonra:</span>{" "}
+                <span className="text-muted">
+                  hesabınız, ilanlarınız, fotoğraflarınız, favorileriniz, bildirimleriniz ve mağazanız kalıcı olarak silinir.
+                </span>
+              </span>
+            </li>
+          </ol>
+          <p className="mt-4 rounded-xl bg-elevated/70 p-3 text-xs leading-relaxed text-muted">
+            <span className="font-semibold text-fg">Mesajlar:</span> yazıştığınız kişiler kendi sohbet geçmişlerini görmeye devam eder; siz
+            “Silinmiş kullanıcı” olarak görünürsünüz. Bir sohbet iki taraftan da kalktığında (silindiğinde veya hesaplar kapandığında) 60 gün daha
+            kimseye gösterilmeden saklanır, ardından tamamen silinir. Yazdığınız satıcı değerlendirmeleri de “Silinmiş kullanıcı” adıyla kalır.
+          </p>
+          <p className="mt-3 text-sm text-muted">Silmeden önce verilerinizi indirmenizi öneririz.</p>
+          <Button type="button" variant="danger" className="mt-4" onClick={() => setDeleteOpen(true)}>
+            <Trash2 className="size-4" /> Hesabımı sil
+          </Button>
+        </section>
       </div>
+
+      <DeleteDialog open={deleteOpen} onOpenChange={setDeleteOpen} needsPassword={hasPassword !== false} />
 
       <Dialog open={emailOpen} onOpenChange={setEmailOpen}>
         <DialogContent>
@@ -309,5 +385,67 @@ function PasswordForm({ onChanged }: { onChanged: () => void }) {
         </Button>
       </div>
     </form>
+  );
+}
+
+function DeleteDialog({ open, onOpenChange, needsPassword }: { open: boolean; onOpenChange: (o: boolean) => void; needsPassword: boolean }) {
+  const [password, setPassword] = useState("");
+  const [word, setWord] = useState("");
+  const [busy, setBusy] = useState(false);
+  // A cancelled dialog must not keep the typed password around.
+  useEffect(() => {
+    if (open) return;
+    setPassword("");
+    setWord("");
+  }, [open]);
+  const ready = word.trim().toLocaleUpperCase("tr").replace(/I/g, "İ") === CONFIRM_WORD && (!needsPassword || password.length > 0);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (!ready) return;
+    setBusy(true);
+    try {
+      await requestMyAccountDeletion({ data: needsPassword ? { password } : {} });
+      // The server already ended every session; clear this browser's cookies too.
+      await authClient.signOut().catch(() => undefined);
+      toast.success("Hesabınız 30 gün içinde silinecek. Bu sürede giriş yapıp sitedeki “Hesabımı geri al” düğmesine basarak geri alabilirsiniz.");
+      setTimeout(() => (window.location.href = "/"), 1200);
+    } catch (err) {
+      toast.error(errorText(err, "Hesap silinemedi"));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !busy && onOpenChange(o)}>
+      <DialogContent className="border-border bg-surface">
+        <form onSubmit={submit} className="space-y-4">
+          <DialogHeader>
+            <DialogTitle>Hesabınız silinsin mi?</DialogTitle>
+            <DialogDescription>Hesabınız hemen gizlenir ve 30 gün sonra kalıcı olarak silinir. Bu süre içinde giriş yapıp “Hesabımı geri al” düğmesine basarak geri alabilirsiniz.</DialogDescription>
+          </DialogHeader>
+          {needsPassword ? (
+            <div>
+              <Label htmlFor="del-password">Şifreniz</Label>
+              <Input id="del-password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+            </div>
+          ) : null}
+          <div>
+            <Label htmlFor="del-word">
+              Onaylamak için <span className="font-bold">{CONFIRM_WORD}</span> yazın
+            </Label>
+            <Input id="del-word" value={word} onChange={(e) => setWord(e.target.value)} autoComplete="off" />
+          </div>
+          <DialogFooter className="gap-2">
+            <Button type="button" variant="ghost" disabled={busy} onClick={() => onOpenChange(false)}>
+              Vazgeç
+            </Button>
+            <Button type="submit" variant="danger" disabled={!ready || busy}>
+              {busy ? "İşleniyor…" : "Hesabımı sil"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

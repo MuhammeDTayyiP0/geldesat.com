@@ -1,17 +1,14 @@
 import { useEffect, useState } from "react";
 import {
-  Ban,
   Bell,
   BellRing,
   Bookmark,
-  FileDown,
   Heart,
   History,
   Lock,
   LayoutGrid,
   MessageCircle,
   MessageSquareText,
-  Palette,
   ShieldCheck,
   Store,
   UserCheck,
@@ -32,13 +29,10 @@ type NavTo =
   | "/bildirimler"
   | "/ayarlar"
   | "/ayarlar/profil"
-  | "/ayarlar/gorunum"
   | "/ayarlar/guvenlik"
   | "/ayarlar/magaza"
   | "/ayarlar/gizlilik"
   | "/ayarlar/bildirimler"
-  | "/ayarlar/hesap"
-  | "/ayarlar/engellenenler"
   | "/ayarlar/kayitli-aramalar"
   | "/ayarlar/takip-ettiklerim"
   | "/ayarlar/sablonlar"
@@ -51,6 +45,8 @@ export const ACCOUNT_ITEMS: AccountNavItem[] = [
   { to: "/profil", label: "Hesabım", icon: UserRound },
   { to: "/ilanlarim", label: "İlanlarım", icon: LayoutGrid, hint: "Yayındaki, bekleyen ve pasif ilanlar" },
   { to: "/favoriler", label: "Favorilerim", icon: Heart, hint: "Kaydettiğiniz ilanlar" },
+  { to: "/ayarlar/kayitli-aramalar", label: "Kayıtlı aramalarım", icon: Bookmark, hint: "Kaydettiğiniz aramalar ve yeni ilan bildirimleri" },
+  { to: "/ayarlar/takip-ettiklerim", label: "Takip ettiklerim", icon: UserCheck, hint: "Takip ettiğiniz satıcılar" },
   { to: "/son-bakilanlar", label: "Son baktıklarım", icon: History, hint: "Son incelediğiniz 50 ilan" },
   { to: "/mesajlar", label: "Mesajlar", icon: MessageCircle, badge: "messages", hint: "Alıcı ve satıcılarla yazışmalar" },
   { to: "/bildirimler", label: "Bildirimler", icon: Bell, badge: "notifications", hint: "Mesaj, favori ve ilan durumu" },
@@ -61,26 +57,18 @@ export const SETTINGS_SECTIONS: Array<{ title: string; items: AccountNavItem[] }
   {
     title: "Hesap",
     items: [
-      { to: "/ayarlar/profil", label: "Profil bilgileri", icon: UserPen, hint: "Fotoğraf, ad, telefon, konum" },
-      { to: "/ayarlar/guvenlik", label: "Şifre ve güvenlik", icon: ShieldCheck, hint: "E-posta, şifre, oturumlar" },
-      { to: "/ayarlar/hesap", label: "Verilerim ve hesabım", icon: FileDown, hint: "Verilerimi indir, hesabı sil" },
+      { to: "/ayarlar/profil", label: "Profil bilgileri", icon: UserPen, hint: "Fotoğraf, ad, telefon, konum, biyografi" },
+      { to: "/ayarlar/guvenlik", label: "Hesap ve güvenlik", icon: ShieldCheck, hint: "E-posta, şifre, oturumlar, veri indir, hesabı sil" },
+      { to: "/ayarlar/magaza", label: "Kurumsal mağaza", icon: Store, hint: "Hesap türü, mağaza bilgileri ve başvuru" },
     ],
   },
   {
-    title: "Tercihler",
+    title: "Gizlilik ve iletişim",
     items: [
-      { to: "/ayarlar/gorunum", label: "Görünüm", icon: Palette, hint: "Açık, koyu veya cihaz ayarı" },
+      { to: "/ayarlar/gizlilik", label: "Gizlilik ve engellenenler", icon: Lock, hint: "Telefon görünürlüğü, okundu bilgisi, engellenenler" },
       { to: "/ayarlar/bildirimler", label: "Bildirimler", icon: BellRing, hint: "Mesaj, favori, ilan durumu" },
-      { to: "/ayarlar/gizlilik", label: "Gizlilik", icon: Lock, hint: "Telefonumu kimler görebilir, WhatsApp" },
       { to: "/ayarlar/sablonlar", label: "Hazır mesajlarım", icon: MessageSquareText, hint: "Sohbette tek tıkla gönderilecek kalıp mesajlar" },
-      { to: "/ayarlar/kayitli-aramalar", label: "Kayıtlı aramalarım", icon: Bookmark, hint: "Kaydettiğiniz aramalar ve yeni ilan bildirimleri" },
-      { to: "/ayarlar/takip-ettiklerim", label: "Takip ettiklerim", icon: UserCheck, hint: "Takip ettiğiniz satıcılar" },
-      { to: "/ayarlar/engellenenler", label: "Engellenenler", icon: Ban, hint: "Mesajlaşmayı engellediğiniz kişiler" },
     ],
-  },
-  {
-    title: "İşletme",
-    items: [{ to: "/ayarlar/magaza", label: "Mağazam", icon: Store, hint: "Kurumsal mağaza bilgileri ve başvuru" }],
   },
 ];
 

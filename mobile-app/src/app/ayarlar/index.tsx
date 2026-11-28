@@ -3,22 +3,23 @@ import { Linking, Pressable, ScrollView, StyleSheet, TextInput, View } from 'rea
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, type Href } from 'expo-router';
 import Constants from 'expo-constants';
+import * as Haptics from 'expo-haptics';
 import * as Updates from 'expo-updates';
 import {
-  Ban,
   BellRing,
-  ChevronRight,
   FileText,
   HelpCircle,
   KeyRound,
   LogOut,
   Mail,
   MessageSquareText,
-  Palette,
+  Monitor,
+  Moon,
   Search,
   Shield,
   Smartphone,
   Store,
+  Sun,
   UserRound,
   type LucideIcon,
 } from 'lucide-react-native';
@@ -28,12 +29,16 @@ import { signOut } from '@/auth/auth';
 import { useSession } from '@/auth/session';
 import { SUPPORT_EMAIL } from '@/lib/config';
 import { runningVersionLabel } from '@/lib/ota';
-import { useThemePref } from '@/lib/themePref';
-import { Avatar, Button, Header, ListRow, RowGroup, Text, confirm, font, hairline, radius, space, toast, useTheme } from '@/ui';
+import { setThemePref, useThemePref, type ThemePref } from '@/lib/themePref';
+import { Button, Header, ListRow, RowGroup, Text, confirm, font, hairline, radius, space, toast, useTheme } from '@/ui';
 
 type Item = { label: string; detail?: string; icon: LucideIcon; to?: Href; onPress?: () => void; value?: string; auth?: boolean };
 
-const THEME_LABEL = { system: 'Cihaz ayarı', light: 'Açık', dark: 'Koyu' } as const;
+const THEME_OPTIONS: { value: ThemePref; label: string; icon: LucideIcon }[] = [
+  { value: 'system', label: 'Cihaz ayarı', icon: Monitor },
+  { value: 'light', label: 'Açık', icon: Sun },
+  { value: 'dark', label: 'Koyu', icon: Moon },
+];
 
 /** Settings list, grouped like a phone's settings app; each row opens its own screen. */
 export default function SettingsScreen() {
@@ -52,30 +57,23 @@ export default function SettingsScreen() {
     {
       title: 'Hesap',
       items: [
-        { label: 'Profil bilgileri', detail: 'Fotoğraf, ad, telefon, konum', icon: UserRound, to: '/ayarlar/profil', auth: true },
-        { label: 'Şifre ve güvenlik', detail: 'Şifre, doğrulama, hesabı silme', icon: KeyRound, to: '/ayarlar/guvenlik', auth: true },
-      ],
-    },
-    {
-      title: 'Tercihler',
-      items: [
-        { label: 'Görünüm', detail: 'Açık, koyu veya cihaz ayarı', icon: Palette, to: '/ayarlar/gorunum' as Href, value: THEME_LABEL[theme] },
-        { label: 'Bildirimler', detail: 'Mesaj, favori, ilan durumu', icon: BellRing, to: '/ayarlar/bildirimler', auth: true },
-        { label: 'Gizlilik', detail: 'Telefon görünürlüğü, okundu bilgisi', icon: Shield, to: '/ayarlar/gizlilik', auth: true },
-        { label: 'Hazır mesajlarım', detail: 'Sohbette tek dokunuşla gönderin', icon: MessageSquareText, to: '/ayarlar/sablonlar', auth: true },
-        { label: 'Engellenen kullanıcılar', icon: Ban, to: '/ayarlar/engellenenler', auth: true },
-      ],
-    },
-    {
-      title: 'İşletme',
-      items: [
+        { label: 'Profil bilgileri', detail: 'Fotoğraf, ad, telefon, konum, biyografi', icon: UserRound, to: '/ayarlar/profil', auth: true },
+        { label: 'Hesap ve güvenlik', detail: 'E-posta, şifre, oturumlar, veri indir, hesabı sil', icon: KeyRound, to: '/ayarlar/guvenlik', auth: true },
         {
-          label: me.data?.store ? 'Mağazam' : 'Kurumsal mağaza',
-          detail: me.data?.store ? me.data.store.name : 'Mağaza başvurusu',
+          label: me.data?.store ? 'Mağazam' : 'Kurumsal Hesaba Geç',
+          detail: me.data?.store ? me.data.store.name : 'İşletme başvurusu ve mağaza avantajları',
           icon: Store,
           to: '/ayarlar/magaza',
           auth: true,
         },
+      ],
+    },
+    {
+      title: 'Gizlilik ve iletişim',
+      items: [
+        { label: 'Gizlilik ve engellenenler', detail: 'Telefon görünürlüğü, okundu bilgisi, engellenenler', icon: Shield, to: '/ayarlar/gizlilik', auth: true },
+        { label: 'Bildirimler', detail: 'Mesaj, favori, ilan durumu', icon: BellRing, to: '/ayarlar/bildirimler', auth: true },
+        { label: 'Hazır mesajlarım', detail: 'Sohbette tek dokunuşla gönderin', icon: MessageSquareText, to: '/ayarlar/sablonlar', auth: true },
       ],
     },
     {
@@ -96,6 +94,7 @@ export default function SettingsScreen() {
   ];
 
   const term = q.trim().toLocaleLowerCase('tr');
+  const showTheme = !term || 'görünüm tema açık koyu karanlık cihaz ayarı mod'.includes(term);
   const visible = sections
     .map((s) => ({
       ...s,
@@ -116,8 +115,6 @@ export default function SettingsScreen() {
     }
   };
 
-  const name = me.data?.profile?.display_name || (signedIn ? session.user.name : '');
-
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
       <Header title="Ayarlar" />
@@ -134,22 +131,34 @@ export default function SettingsScreen() {
           />
         </View>
 
-        {signedIn && !term ? (
-          <Pressable
-            onPress={() => router.push('/ayarlar/profil')}
-            style={({ pressed }) => [styles.profile, { backgroundColor: pressed ? c.elevated : c.surface, borderColor: c.border }]}
-          >
-            <Avatar name={name} uri={me.data?.profile?.avatar_url} size={52} />
-            <View style={styles.flex}>
-              <Text variant="bodyStrong" numberOfLines={1}>
-                {name}
-              </Text>
-              <Text variant="caption" tone="muted" numberOfLines={1}>
-                {session.user.email}
-              </Text>
+        {showTheme ? (
+          <View style={styles.themeSection}>
+            <Text variant="caption" tone="muted" style={styles.themeLabel}>
+              GÖRÜNÜM
+            </Text>
+            <View accessibilityRole="radiogroup" style={[styles.themeGroup, { backgroundColor: c.surface, borderColor: c.border }]}>
+              {THEME_OPTIONS.map((o) => {
+                const selected = theme === o.value;
+                return (
+                  <Pressable
+                    key={o.value}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: selected }}
+                    onPress={() => {
+                      void Haptics.selectionAsync();
+                      setThemePref(o.value);
+                    }}
+                    style={[styles.themeBtn, selected && { backgroundColor: c.primarySolid }]}
+                  >
+                    <o.icon size={16} color={selected ? c.onPrimary : c.muted} />
+                    <Text variant="label" style={{ color: selected ? c.onPrimary : c.muted }} numberOfLines={1}>
+                      {o.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </View>
-            <ChevronRight size={18} color={c.subtle} />
-          </Pressable>
+          </View>
         ) : null}
 
         {visible.map((s) => (
@@ -166,7 +175,7 @@ export default function SettingsScreen() {
             ))}
           </RowGroup>
         ))}
-        {term && !visible.length ? (
+        {term && !visible.length && !showTheme ? (
           <Text tone="muted" center>
             “{q.trim()}” ile eşleşen ayar yok.
           </Text>
@@ -196,9 +205,11 @@ export default function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
   body: { padding: space.lg, gap: space.xl, paddingBottom: space.xxxl },
   search: { flexDirection: 'row', alignItems: 'center', gap: space.sm, height: 42, borderRadius: radius.md, paddingHorizontal: space.md },
   input: { flex: 1, fontSize: font.md, height: 42 },
-  profile: { flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.md, borderRadius: radius.lg, borderWidth: hairline },
+  themeSection: { gap: space.xs },
+  themeLabel: { paddingHorizontal: space.xs, letterSpacing: 0.6, fontWeight: '600' },
+  themeGroup: { flexDirection: 'row', gap: space.xs, padding: space.xs, borderRadius: radius.lg, borderWidth: hairline },
+  themeBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs, paddingVertical: space.sm + 2, paddingHorizontal: space.sm, borderRadius: radius.md },
 });

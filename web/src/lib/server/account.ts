@@ -25,6 +25,12 @@ import {
 } from "./helpers";
 import { notifyMatchingSavedSearches } from "./saved-searches";
 import { getRequest } from "@tanstack/react-start/server";
+import {
+  maxActiveListingsFor,
+  normalizeAndValidateTaxNo,
+  STORE_APP_COOLDOWN_DAYS,
+  type BusinessType,
+} from "@/lib/account-type";
 import { assertOwnerStatus, assertRenewable, isExpired } from "@/lib/listing-status";
 import { audit } from "./admin/common";
 import { getSellerResponseStats } from "./chat";
@@ -59,10 +65,26 @@ export const getMe = createServerFn({ method: "GET" })
       "select * from stores where user_id = $1 limit 1",
       [context.userId],
     );
-    const credits = await creditBalance(context.userId);
+    const [credits, authUserRows, activeOrPendingRows] = await Promise.all([
+      creditBalance(context.userId),
+      sql.query<{ emailVerified: boolean }>('select "emailVerified" from "user" where id = $1 limit 1', [context.userId]).catch(() => []),
+      sql.query<{ n: number }>(
+        "select count(*)::int as n from listings where user_id = $1 and status in ('ACTIVE', 'PENDING') and (expires_at is null or expires_at > now())",
+        [context.userId],
+      ),
+    ]);
     const p = rows[0];
+    const accountType = p?.account_type === "CORPORATE" || Boolean(store[0]) ? "CORPORATE" : "INDIVIDUAL";
+    const storePlan = store[0] ? String(store[0].plan) : null;
+    const maxListings = maxActiveListingsFor(accountType, storePlan);
     return {
       userId: context.userId,
+      emailVerified: Boolean(authUserRows[0]?.emailVerified),
+      listingLimit: {
+        used: num(activeOrPendingRows[0]?.n),
+        max: maxListings,
+        isCorporate: accountType === "CORPORATE",
+      },
       profile: p
         ? {
             display_name: String(p.display_name ?? ""),
@@ -72,6 +94,7 @@ export const getMe = createServerFn({ method: "GET" })
             district: p.district ? String(p.district) : null,
             avatar_url: p.avatar_url ? String(p.avatar_url) : null,
             role: String(p.role),
+            account_type: accountType as "INDIVIDUAL" | "CORPORATE",
             listing_count: num(p.listing_count),
             active_count: num(p.active_count),
             favorite_count: num(p.favorite_count),
@@ -548,15 +571,23 @@ export const getSubtree = createServerFn({ method: "POST" })
 
 const StoreApplicationInput = z.object({
   name: z.string().trim().min(3, "Mağaza adı en az 3 karakter olmalı.").max(60),
-  city: z.string().trim().max(40).optional(),
-  phone: z.string().trim().max(20).optional(),
-  taxNo: z.string().trim().max(30).optional(),
+  businessType: z.enum(["SOLE", "COMPANY"]),
+  sector: z.string().trim().min(2, "Faaliyet alanı seçin.").max(60),
+  taxNo: z.string().trim().min(10, "Vergi veya T.C. kimlik numarası girin.").max(20),
+  taxOffice: z.string().trim().min(2, "Vergi dairesi girin.").max(80),
+  city: z.string().trim().min(2, "İl seçin.").max(40),
+  phone: z.string().trim().min(10, "Geçerli bir işletme telefonu girin.").max(20),
+  address: z.string().trim().min(10, "Açık işletme adresi en az 10 karakter olmalı.").max(300),
   notes: z.string().trim().max(1000).optional(),
 });
 
 export type StoreApplicationRow = {
   id: string;
   name: string;
+  business_type: BusinessType | null;
+  sector: string | null;
+  tax_office: string | null;
+  address: string | null;
   city: string | null;
   phone: string | null;
   tax_no: string | null;
@@ -565,20 +596,37 @@ export type StoreApplicationRow = {
   review_note: string | null;
   created_at: string;
   reviewed_at: string | null;
+  cooldown_until: string | null;
 };
 
+function computeCooldownUntil(status: string, reviewedAt: unknown, createdAt: unknown): string | null {
+  if (status !== "REJECTED") return null;
+  const baseIso = reviewedAt ? asIso(reviewedAt) : asIso(createdAt);
+  const ts = Date.parse(baseIso);
+  if (!Number.isFinite(ts)) return null;
+  const end = ts + STORE_APP_COOLDOWN_DAYS * 86_400_000;
+  return end > Date.now() ? new Date(end).toISOString() : null;
+}
+
 function mapStoreApplication(r: Record<string, unknown>): StoreApplicationRow {
+  const status = String(r.status);
+  const bt = r.business_type === "SOLE" || r.business_type === "COMPANY" ? r.business_type : null;
   return {
     id: String(r.id),
     name: String(r.name),
+    business_type: bt,
+    sector: r.sector ? String(r.sector) : null,
+    tax_office: r.tax_office ? String(r.tax_office) : null,
+    address: r.address ? String(r.address) : null,
     city: r.city ? String(r.city) : null,
     phone: r.phone ? String(r.phone) : null,
     tax_no: r.tax_no ? String(r.tax_no) : null,
     notes: r.notes ? String(r.notes) : null,
-    status: String(r.status),
+    status,
     review_note: r.review_note ? String(r.review_note) : null,
     created_at: asIso(r.created_at),
     reviewed_at: r.reviewed_at ? asIso(r.reviewed_at) : null,
+    cooldown_until: computeCooldownUntil(status, r.reviewed_at, r.created_at),
   };
 }
 
@@ -590,25 +638,51 @@ export async function submitStoreApplicationRecord(
 ): Promise<StoreApplicationRow> {
   rateLimit(`store-app:${userId}`, 5, 60 * 60_000);
   await ensureProfile(userId);
+  const normalizedTaxNo = normalizeAndValidateTaxNo(data.taxNo, data.businessType);
+  const phone = normalizeTrPhone(data.phone);
+
+  const authRows = await sql
+    .query<{ emailVerified: boolean }>('select "emailVerified" from "user" where id=$1 limit 1', [userId])
+    .catch(() => []);
+  if (authRows[0] && !authRows[0].emailVerified) {
+    throw new Error("Kurumsal hesap başvurusu için önce e-posta adresinizi doğrulayın.");
+  }
+
   const existingStore = await sql.query<{ id: string }>("select id from stores where user_id=$1 limit 1", [userId]);
-  if (existingStore[0]) throw new Error("Zaten bir mağazanız var.");
+  if (existingStore[0]) throw new Error("Zaten bir kurumsal mağazanız var.");
   const pendingApp = await sql.query<{ id: string }>(
     "select id from store_applications where user_id=$1 and status='PENDING' limit 1",
     [userId],
   );
-  if (pendingApp[0]) throw new Error("Zaten inceleme bekleyen bir mağaza başvurunuz var.");
-  const phone = data.phone?.trim() ? normalizeTrPhone(data.phone) : null;
+  if (pendingApp[0]) throw new Error("Zaten inceleme bekleyen bir kurumsal başvurunuz var.");
+
+  const rejectedApp = await sql.query<{ reviewed_at: unknown; created_at: unknown }>(
+    "select reviewed_at, created_at from store_applications where user_id=$1 and status='REJECTED' order by created_at desc limit 1",
+    [userId],
+  );
+  if (rejectedApp[0]) {
+    const cooldownUntil = computeCooldownUntil("REJECTED", rejectedApp[0].reviewed_at, rejectedApp[0].created_at);
+    if (cooldownUntil) {
+      const remainingDays = Math.max(1, Math.ceil((Date.parse(cooldownUntil) - Date.now()) / 86_400_000));
+      throw new Error(`Önceki başvurunuz reddedildi. ${remainingDays} gün sonra yeniden başvurabilirsiniz.`);
+    }
+  }
+
   const rows = await sql.query<Record<string, unknown>>(
-    `insert into store_applications (id, user_id, name, city, phone, tax_no, notes, status)
-     values ($1, $2, $3, $4, $5, $6, $7, 'PENDING')
-     returning id, name, city, phone, tax_no, notes, status, review_note, created_at, reviewed_at`,
+    `insert into store_applications (id, user_id, name, business_type, sector, tax_office, address, city, phone, tax_no, notes, status)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'PENDING')
+     returning id, name, business_type, sector, tax_office, address, city, phone, tax_no, notes, status, review_note, created_at, reviewed_at`,
     [
       newId("sapp"),
       userId,
       data.name,
-      data.city || null,
+      data.businessType,
+      data.sector,
+      data.taxOffice,
+      data.address,
+      data.city,
       phone,
-      data.taxNo || null,
+      normalizedTaxNo,
       data.notes || null,
     ],
   );
@@ -621,7 +695,7 @@ export async function myStoreApplicationRecord(
   userId: string,
 ): Promise<StoreApplicationRow | null> {
   const rows = await sql.query<Record<string, unknown>>(
-    `select id, name, city, phone, tax_no, notes, status, review_note, created_at, reviewed_at
+    `select id, name, business_type, sector, tax_office, address, city, phone, tax_no, notes, status, review_note, created_at, reviewed_at
      from store_applications where user_id=$1 order by created_at desc limit 1`,
     [userId],
   );

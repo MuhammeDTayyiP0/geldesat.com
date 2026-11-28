@@ -156,6 +156,7 @@ export const adminSaveStore = createServerFn({ method: "POST" })
       if (data.attachListings) {
         await tx.query("update listings set store_id = $2 where user_id = $1 and store_id is null", [user.user_id, newStoreId]);
       }
+      await tx.query("update profiles set account_type = 'CORPORATE' where user_id = $1", [user.user_id]);
       return { id: newStoreId, ownerRow: user };
     });
     await notify(ownerRow.user_id, "system", "Mağazanız açıldı", `"${data.name}" mağazanız GeldeSat'ta yayında.`, `/satici/${ownerRow.user_id}`);
@@ -176,6 +177,7 @@ export const adminDeleteStore = createServerFn({ method: "POST" })
       )
     )[0];
     if (!cur) throw new Error("Mağaza bulunamadı.");
+    await sql.query("update profiles set account_type = 'INDIVIDUAL' where user_id = $1", [cur.user_id]);
     await audit(sql, context.adminId, "store.delete", "store", data.id, `Mağaza "${cur.name}" kapatıldı`, {
       owner: cur.user_id,
       slug: cur.slug,
@@ -201,7 +203,9 @@ export const adminListStoreApplications = createServerFn({ method: "POST" })
     if (data.status !== "ALL") w.add(`a.status = ${w.param(data.status)}`);
     if (data.q) {
       const like = w.param(likeTerm(data.q));
-      w.add(`(a.name ilike ${like} or a.city ilike ${like} or a.tax_no ilike ${like} or p.display_name ilike ${like} or u.email ilike ${like} or a.id = ${w.param(data.q)})`);
+      w.add(
+        `(a.name ilike ${like} or a.city ilike ${like} or a.tax_no ilike ${like} or a.tax_office ilike ${like} or a.sector ilike ${like} or p.display_name ilike ${like} or u.email ilike ${like} or a.id = ${w.param(data.q)})`,
+      );
     }
     const from = `
       from store_applications a
@@ -212,7 +216,7 @@ export const adminListStoreApplications = createServerFn({ method: "POST" })
     const { limit, offset } = paging(data.page, data.pageSize);
     const [rows, count, totals] = await Promise.all([
       sql.query<Record<string, unknown>>(
-        `select a.id, a.user_id, a.name, a.city, a.phone, a.tax_no, a.notes, a.status,
+        `select a.id, a.user_id, a.name, a.business_type, a.sector, a.tax_office, a.address, a.city, a.phone, a.tax_no, a.notes, a.status,
                 a.reviewed_by, a.review_note, a.created_at, a.reviewed_at,
                 coalesce(p.display_name, 'Üye') as applicant_name,
                 u.email as applicant_email,
@@ -243,6 +247,10 @@ export const adminListStoreApplications = createServerFn({ method: "POST" })
           id: String(r.id),
           user_id: String(r.user_id),
           name: String(r.name),
+          business_type: strOrNull(r.business_type),
+          sector: strOrNull(r.sector),
+          tax_office: strOrNull(r.tax_office),
+          address: strOrNull(r.address),
           city: strOrNull(r.city),
           phone: strOrNull(r.phone),
           tax_no: strOrNull(r.tax_no),
@@ -297,10 +305,18 @@ export const adminResolveStoreApplication = createServerFn({ method: "POST" })
           id: string;
           user_id: string;
           name: string;
+          business_type: string | null;
+          sector: string | null;
+          tax_office: string | null;
+          tax_no: string | null;
+          address: string | null;
           city: string | null;
           phone: string | null;
           status: string;
-        }>("select id, user_id, name, city, phone, status from store_applications where id = $1 for update", [data.id])
+        }>(
+          "select id, user_id, name, business_type, sector, tax_office, tax_no, address, city, phone, status from store_applications where id = $1 for update",
+          [data.id],
+        )
       )[0];
       if (!app) throw new Error("Mağaza başvurusu bulunamadı.");
       if (app.status !== "PENDING") throw new Error("Bu başvuru zaten sonuçlandırıldı.");
@@ -342,11 +358,24 @@ export const adminResolveStoreApplication = createServerFn({ method: "POST" })
             await tx.query("savepoint sp_store_insert");
             try {
               inserted = await tx.query<{ id: string; slug: string }>(
-                `insert into stores (id, user_id, name, slug, city, phone, plan)
-                 values ($1, $2, $3, $4, $5, $6, $7)
+                `insert into stores (id, user_id, name, slug, business_type, sector, tax_office, tax_no, address, city, phone, plan)
+                 values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
                  on conflict (user_id) do nothing
                  returning id, slug`,
-                [newStoreId, app.user_id, app.name, candidate, app.city || null, normalizedPhone, data.plan],
+                [
+                  newStoreId,
+                  app.user_id,
+                  app.name,
+                  candidate,
+                  app.business_type,
+                  app.sector,
+                  app.tax_office,
+                  app.tax_no,
+                  app.address,
+                  app.city || null,
+                  normalizedPhone,
+                  data.plan,
+                ],
               );
               await tx.query("release savepoint sp_store_insert");
               break;
@@ -369,6 +398,7 @@ export const adminResolveStoreApplication = createServerFn({ method: "POST" })
             storeSlug = fallback.slug;
           }
         }
+        await tx.query("update profiles set account_type = 'CORPORATE' where user_id = $1", [app.user_id]);
       }
 
       return { app, storeId, storeSlug };

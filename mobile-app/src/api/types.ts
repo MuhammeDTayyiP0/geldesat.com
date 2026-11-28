@@ -159,6 +159,12 @@ export type AutocompleteResult = {
 
 export type Me = {
   userId: string;
+  emailVerified?: boolean;
+  listingLimit?: {
+    used: number;
+    max: number;
+    isCorporate: boolean;
+  };
   profile: {
     display_name: string;
     phone: string | null;
@@ -167,6 +173,7 @@ export type Me = {
     district: string | null;
     avatar_url: string | null;
     role: string;
+    account_type?: 'INDIVIDUAL' | 'CORPORATE';
     listing_count: number;
     active_count: number;
     favorite_count: number;
@@ -203,9 +210,15 @@ export type FollowedSellerSummary = {
   followed_at: string;
 };
 
+export type BusinessType = 'SOLE' | 'COMPANY';
+
 export type StoreApplication = {
   id: string;
   name: string;
+  business_type: BusinessType | null;
+  sector: string | null;
+  tax_office: string | null;
+  address: string | null;
   city: string | null;
   phone: string | null;
   tax_no: string | null;
@@ -214,6 +227,7 @@ export type StoreApplication = {
   review_note: string | null;
   created_at: string;
   reviewed_at: string | null;
+  cooldown_until: string | null;
 };
 
 export type SellerResponseStats = {

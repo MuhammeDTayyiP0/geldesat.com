@@ -2,7 +2,7 @@ import { useRef, type ComponentRef } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter, useScrollToTop, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Bell, Bookmark, ChevronRight, Heart, History, LayoutGrid, MessageCircle, Rocket, Settings, Store, UserCheck } from 'lucide-react-native';
+import { Bell, Bookmark, ChevronRight, Heart, History, LayoutGrid, MessageCircle, Pencil, Rocket, Settings, Store, UserCheck } from 'lucide-react-native';
 import { keys, queryClient, useCounts, useMe } from '@/api/queries';
 import { useSession } from '@/auth/session';
 import { formatNumber } from '@/lib/format';
@@ -76,30 +76,39 @@ export default function AccountScreen() {
 
       {/* "Hesabım" is only a menu; what others see is the public profile ("Profilimi gör"). */}
       <View style={[styles.card, { backgroundColor: c.surface, borderColor: c.border }]}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Profilimi gör" onPress={openProfile} style={styles.profileRow}>
-          <Avatar name={name} uri={profile?.avatar_url} size={64} />
-          <View style={styles.flex}>
-            <Text variant="heading" numberOfLines={1}>
-              {name}
-            </Text>
-            <Text variant="caption" tone="muted" numberOfLines={1}>
-              {session.user.email}
-            </Text>
-            <View style={styles.rating}>
-              <Text variant="label" tone="primary">
-                Profilimi gör
+        <View style={styles.profileRow}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Profilimi gör" onPress={openProfile} style={[styles.profileRow, styles.flex]}>
+            <Avatar name={name} uri={profile?.avatar_url} size={64} />
+            <View style={styles.flex}>
+              <View style={styles.nameRow}>
+                <Text variant="heading" numberOfLines={1} style={styles.nameText}>
+                  {name}
+                </Text>
+                <Badge
+                  label={profile?.account_type === 'CORPORATE' ? 'Kurumsal' : 'Bireysel'}
+                  tone={profile?.account_type === 'CORPORATE' ? 'primary' : 'neutral'}
+                />
+              </View>
+              <Text variant="caption" tone="muted" numberOfLines={1}>
+                {session.user.email}
               </Text>
-              <ChevronRight size={16} color={c.primary} />
+              <View style={styles.rating}>
+                <Text variant="label" tone="primary">
+                  Profilimi gör
+                </Text>
+                <ChevronRight size={16} color={c.primary} />
+              </View>
             </View>
-          </View>
-        </Pressable>
+          </Pressable>
+          <IconButton icon={Pencil} label="Profili düzenle" filled onPress={() => router.push('/ayarlar/profil')} />
+        </View>
 
         <View style={[styles.stats, { backgroundColor: c.elevated }]}>
-          <Stat label="Yayında" value={profile?.active_count} />
+          <Stat label="Yayında" value={profile?.active_count} onPress={() => router.push('/ilanlarim')} />
           <View style={[styles.statDivider, { backgroundColor: c.border }]} />
-          <Stat label="Favori" value={profile?.favorite_count} />
+          <Stat label="Favori" value={profile?.favorite_count} onPress={() => router.push('/favoriler')} />
           <View style={[styles.statDivider, { backgroundColor: c.border }]} />
-          <View style={styles.stat}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Değerlendirmelerim" onPress={openProfile} style={styles.stat}>
             {profile?.rating_count ? (
               <View style={styles.rating}>
                 <Stars value={profile.rating_avg} size={12} />
@@ -111,7 +120,7 @@ export default function AccountScreen() {
             <Text variant="small" tone="muted">
               {profile?.rating_count ? `${profile.rating_count} değerlendirme` : 'Puan'}
             </Text>
-          </View>
+          </Pressable>
         </View>
 
         {profile && !profile.phone ? (
@@ -165,7 +174,14 @@ export default function AccountScreen() {
         <RowGroup>
           {me.data?.store ? (
             <ListRow icon={Store} label="Mağazam" detail={me.data.store.name} onPress={() => router.push('/ayarlar/magaza')} />
-          ) : null}
+          ) : (
+            <ListRow
+              icon={Store}
+              label="Kurumsal Hesaba Geç"
+              detail="İşletme başvurusu ve mağaza avantajları"
+              onPress={() => router.push('/ayarlar/magaza')}
+            />
+          )}
           {dopingOn ? <ListRow icon={Rocket} label="Doping" detail="İlanınızı öne çıkarın" onPress={() => router.push('/doping')} /> : null}
         </RowGroup>
         <RowGroup>
@@ -182,14 +198,14 @@ function Count({ n }: { n?: number }) {
   return <Badge label={n > 99 ? '99+' : String(n)} tone="urgent" />;
 }
 
-function Stat({ label, value }: { label: string; value?: number }) {
+function Stat({ label, value, onPress }: { label: string; value?: number; onPress?: () => void }) {
   return (
-    <View style={styles.stat}>
+    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={styles.stat}>
       <Text variant="subheading">{value == null ? '–' : formatNumber(value)}</Text>
       <Text variant="small" tone="muted">
         {label}
       </Text>
-    </View>
+    </Pressable>
   );
 }
 
@@ -202,6 +218,8 @@ const styles = StyleSheet.create({
   content: { gap: space.lg, paddingBottom: space.xxxl },
   card: { marginHorizontal: space.lg, borderRadius: radius.xl, borderWidth: hairline, padding: space.lg, gap: space.lg },
   profileRow: { flexDirection: 'row', alignItems: 'center', gap: space.lg },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
+  nameText: { flexShrink: 1 },
   rating: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginTop: 2 },
   stats: { flexDirection: 'row', alignItems: 'center', borderRadius: radius.md, paddingVertical: space.md },
   stat: { flex: 1, alignItems: 'center', gap: 2 },

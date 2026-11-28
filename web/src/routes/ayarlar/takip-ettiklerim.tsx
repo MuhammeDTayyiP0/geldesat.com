@@ -52,8 +52,8 @@ function FollowedSellersPage() {
           <UserCheck className="mx-auto size-10 text-subtle" />
           <p className="mt-3 font-medium">Satıcı takibi şu anda kullanıma kapalı.</p>
           <p className="mt-1 text-sm text-muted">Bu özellik geçici olarak devre dışı bırakıldı.</p>
-          <Link to="/ayarlar" className={buttonVariants({ variant: "outline", className: "mt-4" })}>
-            Ayarlara dön
+          <Link to="/profil" className={buttonVariants({ variant: "outline", className: "mt-4" })}>
+            Hesabıma dön
           </Link>
         </div>
       </AccountShell>

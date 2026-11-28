@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Check, ExternalLink, Inbox, LayoutList, Pencil, Plus, Store, Trash2, User, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { BUSINESS_TYPE_LABELS, type BusinessType } from "@/lib/account-type";
 import { TURKEY_CITIES } from "@/lib/data/locations";
 import { slugify } from "@/lib/utils";
 import {
@@ -368,8 +369,13 @@ function ApplicationsTab({
               return (
                 <tr key={a.id} className="hover:bg-elevated/50">
                   <Td>
-                    <p className="font-semibold">{a.name}</p>
-                    <p className="text-xs text-muted">{[a.city, a.phone].filter(Boolean).join(" · ") || "—"}</p>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <p className="font-semibold">{a.name}</p>
+                      {a.business_type ? (
+                        <Pill tone="muted">{BUSINESS_TYPE_LABELS[a.business_type as BusinessType] ?? a.business_type}</Pill>
+                      ) : null}
+                    </div>
+                    <p className="text-xs text-muted">{[a.sector, a.city, a.phone].filter(Boolean).join(" · ") || "—"}</p>
                   </Td>
                   <Td>
                     <button type="button" onClick={() => openUser(a.user_id)} className="flex items-center gap-2 text-left hover:text-primary">
@@ -386,11 +392,16 @@ function ApplicationsTab({
                     </div>
                   </Td>
                   <Td className="max-w-xs text-xs">
-                    {a.tax_no ? <p className="font-mono text-fg">VN: {a.tax_no}</p> : null}
-                    {a.notes ? (
+                    {a.tax_no ? (
+                      <p className="font-mono text-fg">
+                        VN: {a.tax_no}
+                        {a.tax_office ? <span className="font-sans text-muted"> ({a.tax_office})</span> : null}
+                      </p>
+                    ) : null}
+                    {a.address || a.notes ? (
                       <button type="button" onClick={() => setDetailApp(a)} className="mt-0.5 text-left text-muted hover:text-primary">
-                        <span className="line-clamp-2">{a.notes}</span>
-                        {a.notes.length > 80 ? <span className="text-[11px] font-medium text-primary">Tamamını oku</span> : null}
+                        <span className="line-clamp-2">{a.address ?? a.notes}</span>
+                        <span className="text-[11px] font-medium text-primary">Detayları gör</span>
                       </button>
                     ) : !a.tax_no ? (
                       <span className="text-subtle">—</span>
@@ -456,13 +467,46 @@ function ApplicationsTab({
         <Pagination page={pagination.page} pages={pagination.pages} total={pagination.total} pageSize={pagination.pageSize} onPage={(page) => set({ page }, false)} />
       ) : null}
       {detailApp ? (
-        <Modal open onOpenChange={(o) => !o && setDetailApp(null)} title={`${detailApp.name} — Başvuru notu`} size="md">
+        <Modal open onOpenChange={(o) => !o && setDetailApp(null)} title={`${detailApp.name} — Başvuru detayları`} size="md">
           <div className="space-y-3 text-sm">
-            <p className="text-xs text-muted">
-              Başvuran: <strong className="text-fg">{detailApp.applicant_name}</strong>
-              {detailApp.tax_no ? ` · VN: ${detailApp.tax_no}` : ""}
-            </p>
-            <p className="whitespace-pre-wrap break-words rounded-xl border border-border bg-elevated/40 p-3">{detailApp.notes}</p>
+            <div className="grid gap-2 rounded-xl border border-border bg-elevated/40 p-3 text-xs sm:grid-cols-2">
+              <p>
+                <span className="text-muted">Başvuran:</span> <strong className="text-fg">{detailApp.applicant_name}</strong>
+              </p>
+              <p>
+                <span className="text-muted">İşletme türü:</span>{" "}
+                <strong className="text-fg">
+                  {detailApp.business_type
+                    ? (BUSINESS_TYPE_LABELS[detailApp.business_type as BusinessType] ?? detailApp.business_type)
+                    : "—"}
+                </strong>
+              </p>
+              <p>
+                <span className="text-muted">Sektör:</span> <strong className="text-fg">{detailApp.sector ?? "—"}</strong>
+              </p>
+              <p>
+                <span className="text-muted">Vergi dairesi:</span> <strong className="text-fg">{detailApp.tax_office ?? "—"}</strong>
+              </p>
+              <p>
+                <span className="text-muted">VKN / TCKN:</span> <strong className="font-mono text-fg">{detailApp.tax_no ?? "—"}</strong>
+              </p>
+              <p>
+                <span className="text-muted">İl / Tel:</span>{" "}
+                <strong className="text-fg">{[detailApp.city, detailApp.phone].filter(Boolean).join(" · ") || "—"}</strong>
+              </p>
+            </div>
+            {detailApp.address ? (
+              <div>
+                <p className="mb-1 text-xs font-medium text-muted">Açık işletme adresi</p>
+                <p className="whitespace-pre-wrap break-words rounded-xl border border-border bg-elevated/40 p-3 text-xs">{detailApp.address}</p>
+              </div>
+            ) : null}
+            {detailApp.notes ? (
+              <div>
+                <p className="mb-1 text-xs font-medium text-muted">Başvuru notu</p>
+                <p className="whitespace-pre-wrap break-words rounded-xl border border-border bg-elevated/40 p-3 text-xs">{detailApp.notes}</p>
+              </div>
+            ) : null}
           </div>
         </Modal>
       ) : null}

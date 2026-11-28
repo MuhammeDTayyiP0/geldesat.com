@@ -9,7 +9,7 @@ const SAFE_SHARE_BYTES = 250_000;
 export async function exportAccountData(): Promise<void> {
   const token = getToken();
   if (!token) {
-    await WebBrowser.openBrowserAsync(webUrl('/ayarlar/hesap'));
+    await WebBrowser.openBrowserAsync(webUrl('/ayarlar/guvenlik'));
     return;
   }
 
@@ -49,7 +49,7 @@ export async function exportAccountData(): Promise<void> {
       'Verileriniz doğrudan paylaşım sınırı için büyük. Tarayıcıdan JSON dosyası olarak indirebilirsiniz.',
       [
         { text: 'İptal', style: 'cancel' },
-        { text: 'Tarayıcıda aç', onPress: () => void WebBrowser.openBrowserAsync(webUrl('/ayarlar/hesap')) },
+        { text: 'Tarayıcıda aç', onPress: () => void WebBrowser.openBrowserAsync(webUrl('/ayarlar/guvenlik')) },
       ],
     );
     return;

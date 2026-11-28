@@ -1,16 +1,13 @@
-import { useState } from 'react';
-import { ActivityIndicator, Platform, ScrollView, StyleSheet, View } from 'react-native';
-import * as WebBrowser from 'expo-web-browser';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Check, CheckCheck, Download, MessageCircle } from 'lucide-react-native';
+import { Ban, Check, CheckCheck, MessageCircle } from 'lucide-react-native';
 import { errorMessage } from '@/api/client';
 import { account } from '@/api/endpoints';
 import { keys, queryClient } from '@/api/queries';
-import type { AccountSettings, PhoneVisibility } from '@/api/types';
-import { exportAccountData } from '@/features/account/exportData';
-import { webUrl } from '@/lib/config';
-import { ErrorState, Header, ListRow, Loading, RowGroup, Text, space, toast, useTheme } from '@/ui';
+import type { AccountSettings, BlockedUser, PhoneVisibility } from '@/api/types';
+import { formatDate } from '@/lib/format';
+import { Avatar, Button, ErrorState, Header, ListRow, Loading, RowGroup, Text, space, toast, useTheme } from '@/ui';
 import { RequireSignIn } from '@/auth/RequireSignIn';
 
 const PHONE_OPTIONS: { value: PhoneVisibility; label: string; detail: string }[] = [
@@ -21,7 +18,7 @@ const PHONE_OPTIONS: { value: PhoneVisibility; label: string; detail: string }[]
 
 export default function PrivacySettingsScreen() {
   return (
-    <RequireSignIn title="Gizlilik">
+    <RequireSignIn title="Gizlilik ve engellenenler">
       <PrivacySettings />
     </RequireSignIn>
   );
@@ -31,6 +28,7 @@ function PrivacySettings() {
   const insets = useSafeAreaInsets();
   const { c } = useTheme();
   const settings = useQuery({ queryKey: keys.settings, queryFn: account.settings });
+  const blocked = useQuery({ queryKey: keys.blocked, queryFn: account.blocked });
   const save = useMutation({
     mutationFn: account.updatePrivacy,
     onMutate: (next) => {
@@ -43,32 +41,23 @@ function PrivacySettings() {
       toast.error(errorMessage(e));
     },
   });
-  const [downloading, setDownloading] = useState(false);
+  const unblock = useMutation({
+    mutationFn: (userId: string) => account.unblock(userId),
+    onSuccess: (_, userId) => {
+      queryClient.setQueryData<BlockedUser[]>(keys.blocked, (list) => list?.filter((u) => u.id !== userId));
+      toast.success('Engel kaldırıldı');
+    },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
   const s = settings.data;
   const update = (patch: Partial<Pick<AccountSettings, 'phone_visibility' | 'show_whatsapp' | 'read_receipts'>>) => {
     if (!s) return;
     save.mutate({ phone_visibility: s.phone_visibility, show_whatsapp: s.show_whatsapp, read_receipts: s.read_receipts, ...patch });
   };
-  const downloadData = async () => {
-    if (downloading) return;
-    if (Platform.OS === 'web') {
-      await WebBrowser.openBrowserAsync(webUrl('/ayarlar/hesap'));
-      return;
-    }
-    setDownloading(true);
-    try {
-      await exportAccountData();
-    } catch {
-      toast.info('Tarayıcı üzerinden indirme sayfası açılıyor…');
-      await WebBrowser.openBrowserAsync(webUrl('/ayarlar/hesap'));
-    } finally {
-      setDownloading(false);
-    }
-  };
 
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
-      <Header title="Gizlilik" />
+      <Header title="Gizlilik ve engellenenler" />
       {!s ? (
         settings.isError && !settings.data ? <ErrorState error={settings.error} onRetry={() => settings.refetch()} /> : <Loading />
       ) : (
@@ -106,19 +95,36 @@ function PrivacySettings() {
               onSwitch={(v) => update({ read_receipts: v })}
             />
           </RowGroup>
-          <RowGroup title="Verilerim">
-            <ListRow
-              icon={Download}
-              label="Verilerimi indir"
-              detail="KVKK kapsamında verilerinizin JSON kopyasını kaydedin veya paylaşın."
-              disabled={downloading}
-              right={downloading ? <ActivityIndicator size="small" color={c.primary} /> : undefined}
-              onPress={() => void downloadData()}
-            />
+          <RowGroup title="Engellenen kullanıcılar">
+            {blocked.isLoading ? (
+              <ListRow icon={Ban} label="Yükleniyor…" />
+            ) : blocked.isError && !blocked.data ? (
+              <ListRow icon={Ban} label="Engellenenler yüklenemedi" detail="Tekrar denemek için dokunun" onPress={() => void blocked.refetch()} />
+            ) : !blocked.data?.length ? (
+              <ListRow icon={Ban} label="Engellediğiniz kimse yok" detail="Engellediğiniz kişiler size mesaj gönderemez." />
+            ) : (
+              blocked.data.map((u) => (
+                <View key={u.id} style={[styles.blockedRow, { backgroundColor: c.surface }]}>
+                  <Avatar name={u.name} uri={u.avatar} size={40} />
+                  <View style={styles.flex}>
+                    <Text variant="bodyStrong" numberOfLines={1}>
+                      {u.name}
+                    </Text>
+                    <Text variant="caption" tone="subtle">
+                      {formatDate(u.since)} tarihinde engellendi
+                    </Text>
+                  </View>
+                  <Button
+                    title="Kaldır"
+                    size="sm"
+                    variant="outline"
+                    loading={unblock.isPending && unblock.variables === u.id}
+                    onPress={() => unblock.mutate(u.id)}
+                  />
+                </View>
+              ))
+            )}
           </RowGroup>
-          <Text variant="caption" tone="subtle">
-            Kişisel verileriniz KVKK Aydınlatma Metni’nde açıklandığı şekilde işlenir.
-          </Text>
         </ScrollView>
       )}
     </View>
@@ -126,6 +132,8 @@ function PrivacySettings() {
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   body: { padding: space.lg, gap: space.xl, paddingBottom: space.xxxl },
   spacer: { width: 18 },
+  blockedRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.md },
 });

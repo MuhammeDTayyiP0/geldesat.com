@@ -45,12 +45,7 @@ function NavRow({ item, active, count }: { item: AccountNavItem; active: boolean
 
 /** "Ayarlar" opens the settings page; while one of its pages is shown, its sub-pages are listed below. */
 function SettingsGroup({ pathname }: { pathname: string }) {
-  const savedSearchesOn = useFlag("kayitli_aramalar");
-  const followOn = useFlag("satici_takip");
-  const inside = pathname === "/ayarlar" || pathname.startsWith("/ayarlar/");
-  const items = SETTINGS_ITEMS.filter(
-    (item) => (item.to !== "/ayarlar/kayitli-aramalar" || savedSearchesOn) && (item.to !== "/ayarlar/takip-ettiklerim" || followOn),
-  );
+  const inside = pathname === "/ayarlar" || SETTINGS_ITEMS.some((i) => i.to === pathname);
   return (
     <div>
       <Link
@@ -66,7 +61,7 @@ function SettingsGroup({ pathname }: { pathname: string }) {
       </Link>
       {inside ? (
         <div className="ml-5 mt-0.5 space-y-0.5 border-l border-border pl-2">
-          {items.map((item) => (
+          {SETTINGS_ITEMS.map((item) => (
             <NavRow key={item.to} item={item} active={pathname === item.to} count={0} />
           ))}
         </div>
@@ -78,11 +73,14 @@ function SettingsGroup({ pathname }: { pathname: string }) {
 /** Desktop left menu. */
 function AccountSidebar() {
   const savedSearchesOn = useFlag("kayitli_aramalar");
+  const followOn = useFlag("satici_takip");
   const { user } = useCurrentUserState();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { counts, admin } = useAccountMeta();
   const name = user?.displayName || user?.primaryEmail?.split("@")[0] || "Hesabım";
-  const accountItems = ACCOUNT_ITEMS.filter((item) => item.to !== "/ayarlar/kayitli-aramalar" || savedSearchesOn);
+  const accountItems = ACCOUNT_ITEMS.filter(
+    (item) => (item.to !== "/ayarlar/kayitli-aramalar" || savedSearchesOn) && (item.to !== "/ayarlar/takip-ettiklerim" || followOn),
+  );
   return (
     <nav aria-label="Hesap menüsü" className="space-y-5">
       <Link to="/profil" className="flex items-center gap-3 rounded-xl p-2 hover:bg-elevated">
@@ -153,8 +151,8 @@ export function AccountShell({
 }) {
   const { user } = useCurrentUserState();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  // Settings sub-pages go back to the settings list; everything else to the account hub.
-  const backTo = pathname.startsWith("/ayarlar/") ? "/ayarlar" : "/profil";
+  // Settings sub-pages go back to the settings list; everything else (including saved searches & follows) to the account hub.
+  const backTo = SETTINGS_ITEMS.some((i) => i.to === pathname) ? "/ayarlar" : "/profil";
   return (
     <div className="mx-auto max-w-6xl px-4 pb-8 pt-3 md:pb-12 md:pt-8">
       <div className={cn(user && "md:grid md:grid-cols-[232px_minmax(0,1fr)] md:gap-8 lg:gap-10")}>

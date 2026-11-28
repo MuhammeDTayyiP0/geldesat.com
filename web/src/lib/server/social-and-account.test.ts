@@ -92,32 +92,58 @@ test("followSeller, unfollowSeller, getFollowStatus, and notifySellerFollowers w
   assert.deepEqual(unfollowed, { following: false, followers: 0 });
 });
 
-test("submitStoreApplication creates pending application and rejects duplicates or existing owners", async () => {
+test("submitStoreApplication creates pending application and enforces validation, cooldown, and duplicates", async () => {
   const sql = await getSql();
   assert.equal(await myStoreApplicationRecord(sql, "basvuran-1"), null);
 
-  const created = await submitStoreApplicationRecord(sql, "basvuran-1", {
+  const validApp = {
     name: "Anadolu Emlak",
+    businessType: "COMPANY" as const,
+    sector: "Emlak Ofisi",
+    taxOffice: "Çankaya Vergi Dairesi",
+    taxNo: "1234567890",
     city: "Ankara",
     phone: "05552223344",
-    taxNo: "1234567890",
+    address: "Kızılay Mah. Atatürk Bulvarı No:12 Çankaya/Ankara",
     notes: "Kurumsal mağaza talebi",
-  });
+  };
+
+  await assert.rejects(
+    () => submitStoreApplicationRecord(sql, "basvuran-1", { ...validApp, taxNo: "12345" }),
+    /10 haneli Vergi Kimlik Numarası/,
+  );
+
+  const created = await submitStoreApplicationRecord(sql, "basvuran-1", validApp);
   assert.equal(created.status, "PENDING");
   assert.equal(created.name, "Anadolu Emlak");
+  assert.equal(created.business_type, "COMPANY");
+  assert.equal(created.sector, "Emlak Ofisi");
 
   const fetched = await myStoreApplicationRecord(sql, "basvuran-1");
   assert.equal(fetched?.id, created.id);
 
   await assert.rejects(
-    () => submitStoreApplicationRecord(sql, "basvuran-1", { name: "İkinci Başvuru" }),
+    () => submitStoreApplicationRecord(sql, "basvuran-1", { ...validApp, name: "İkinci Başvuru" }),
     /inceleme bekleyen/,
   );
 
   await assert.rejects(
-    () => submitStoreApplicationRecord(sql, "magazali-1", { name: "Yeni Mağaza" }),
-    /Zaten bir mağazanız var/,
+    () => submitStoreApplicationRecord(sql, "magazali-1", { ...validApp, name: "Yeni Mağaza" }),
+    /Zaten bir kurumsal mağazanız var/,
   );
+
+  // Reddedilen başvuru için 7 gün bekleme süresi uygulanmalı; 8 gün önce reddedilmişse tekrar başvurabilmeli
+  await sql.query(
+    `insert into store_applications (id, user_id, name, status, reviewed_at)
+     values ('sapp-rej-recent', 'basvuran-2', 'Red Mağaza', 'REJECTED', now() - interval '2 days')`,
+  );
+  await assert.rejects(
+    () => submitStoreApplicationRecord(sql, "basvuran-2", validApp),
+    /gün sonra yeniden başvurabilirsiniz/,
+  );
+  await sql.query("update store_applications set reviewed_at = now() - interval '8 days' where id='sapp-rej-recent'");
+  const retried = await submitStoreApplicationRecord(sql, "basvuran-2", { ...validApp, businessType: "SOLE", taxNo: "12345678901" });
+  assert.equal(retried.status, "PENDING");
 });
 
 test("getListingsByIds and mapListingsInBounds return matching live listings", async () => {
