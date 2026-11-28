@@ -3,7 +3,7 @@
     "name": "GeldeSat",
     "slug": "muhammed-tayyip",
     "owner": "thelouss-team",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "runtimeVersion": {
       "policy": "appVersion"
     },
@@ -20,7 +20,10 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.geldesat.app",
-      "associatedDomains": ["applinks:www.geldesat.com", "webcredentials:www.geldesat.com"],
+      "associatedDomains": [
+        "applinks:www.geldesat.com",
+        "webcredentials:www.geldesat.com"
+      ],
       "infoPlist": {
         "NSCameraUsageDescription": "İlan ve mesaj fotoğrafı çekebilmek için kamera izni gereklidir.",
         "NSPhotoLibraryUsageDescription": "İlan ve mesaj fotoğraflarını seçebilmek için galeri izni gereklidir.",
@@ -42,10 +45,21 @@
           "action": "VIEW",
           "autoVerify": true,
           "data": [
-            { "scheme": "https", "host": "www.geldesat.com", "pathPrefix": "/ilan/" },
-            { "scheme": "https", "host": "geldesat.com", "pathPrefix": "/ilan/" }
+            {
+              "scheme": "https",
+              "host": "www.geldesat.com",
+              "pathPrefix": "/ilan/"
+            },
+            {
+              "scheme": "https",
+              "host": "geldesat.com",
+              "pathPrefix": "/ilan/"
+            }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ],
       "permissions": [
@@ -53,7 +67,9 @@
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.POST_NOTIFICATIONS"
       ],
-      "blockedPermissions": ["android.permission.RECORD_AUDIO"]
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "plugins": [
       "expo-router",
@@ -95,7 +111,8 @@
           "icon": "./assets/notification-icon.png",
           "color": "#0A2342"
         }
-      ]
+      ],
+      "expo-sharing"
     ],
     "experiments": {
       "typedRoutes": true

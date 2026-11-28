@@ -15,6 +15,7 @@ import { restoreSession } from '@/auth/auth';
 import { useSession } from '@/auth/session';
 import { clearPrivateQueries, queryClient, useConfig, useCounts } from '@/api/queries';
 import { ForceUpdate } from '@/features/app/ForceUpdate';
+import { OfflineBanner } from '@/features/app/OfflineBanner';
 import { DeletionBanner } from '@/features/account/DeletionBanner';
 import { onStreamResume, resetChatStream, subscribeChatStream } from '@/features/chat/stream';
 import { ComparePill } from '@/features/listing/ComparePill';
@@ -84,17 +85,19 @@ export default function RootLayout() {
               {ready ? (
                 <UpdateGate>
                   <SessionEffects />
-                  <DeletionBanner>
-                    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.bg } }}>
-                      <Stack.Screen name="(tabs)" />
-                      <Stack.Screen name="ilan-ver" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
-                      <Stack.Screen name="giris" options={{ presentation: 'modal' }} />
-                      {/* In chat a drag to the right is "reply", so swipe-back is limited to a wide
-                          strip on the left (not just the thin screen edge, not the whole screen). */}
-                      <Stack.Screen name="mesaj/[id]" options={{ fullScreenGestureEnabled: true, gestureResponseDistance: { end: BACK_SWIPE_END } }} />
-                    </Stack>
-                    <ComparePill />
-                  </DeletionBanner>
+                  <OfflineBanner>
+                    <DeletionBanner>
+                      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.bg } }}>
+                        <Stack.Screen name="(tabs)" />
+                        <Stack.Screen name="ilan-ver" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
+                        <Stack.Screen name="giris" options={{ presentation: 'modal' }} />
+                        {/* In chat a drag to the right is "reply", so swipe-back is limited to a wide
+                            strip on the left (not just the thin screen edge, not the whole screen). */}
+                        <Stack.Screen name="mesaj/[id]" options={{ fullScreenGestureEnabled: true, gestureResponseDistance: { end: BACK_SWIPE_END } }} />
+                      </Stack>
+                      <ComparePill />
+                    </DeletionBanner>
+                  </OfflineBanner>
                 </UpdateGate>
               ) : null}
               <ToastHost />

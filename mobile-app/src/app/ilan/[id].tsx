@@ -3,7 +3,9 @@ import { Linking, Platform, Pressable, ScrollView, Share, StyleSheet, View, useW
 import Svg, { Path as SvgPath, Rect as SvgRect } from 'react-native-svg';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import * as Sharing from 'expo-sharing';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import ViewShot, { type ViewShotRef } from 'react-native-view-shot';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import {
@@ -24,7 +26,9 @@ import {
   Heart,
   HandCoins,
   Home,
+  Image as ImageIcon,
   Layers,
+  Link2,
   MapPin,
   MessageCircle,
   Navigation,
@@ -123,7 +127,7 @@ export default function ListingScreen() {
   const [expanded, setExpanded] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [prevId, setPrevId] = useState(id);
-  const pendingShareRef = useRef(false);
+  const pendingShareRef = useRef<{ kind: 'text' } | { kind: 'image'; uri: string } | null>(null);
 
   if (id !== prevId) {
     setPrevId(id);
@@ -795,13 +799,26 @@ export default function ListingScreen() {
           listing={listing}
           visible={sheet === 'shareCard'}
           onClose={() => setSheet(null)}
+          onShareImage={(uri) => {
+            pendingShareRef.current = { kind: 'image', uri };
+            setSheet(null);
+          }}
           onShare={() => {
-            pendingShareRef.current = true;
+            pendingShareRef.current = { kind: 'text' };
             setSheet(null);
           }}
           onDismissed={() => {
-            if (!pendingShareRef.current) return;
-            pendingShareRef.current = false;
+            const pending = pendingShareRef.current;
+            if (!pending) return;
+            pendingShareRef.current = null;
+            if (pending.kind === 'image') {
+              void Sharing.shareAsync(pending.uri, {
+                mimeType: 'image/png',
+                UTI: 'public.png',
+                dialogTitle: listing.title,
+              }).catch(() => share());
+              return;
+            }
             share();
           }}
         />
@@ -1256,15 +1273,19 @@ function ShareCardSheet({
   visible,
   onClose,
   onShare,
+  onShareImage,
   onDismissed,
 }: {
   listing: Listing;
   visible: boolean;
   onClose: () => void;
   onShare: () => void;
+  onShareImage: (uri: string) => void;
   onDismissed?: () => void;
 }) {
   const { c } = useTheme();
+  const shotRef = useRef<ViewShotRef>(null);
+  const [capturing, setCapturing] = useState(false);
   const cover = mediaUrl(listing.images[0], 800);
   const loc = locationLabel(listing.city, listing.district, listing.neighborhood);
   const shareUrl = webUrl(`/ilan/${listing.slug}`);
@@ -1281,47 +1302,106 @@ function ShareCardSheet({
     return path;
   }, [qr]);
 
+  const handleShareImage = async () => {
+    if (Platform.OS === 'web') {
+      onShare();
+      return;
+    }
+    setCapturing(true);
+    try {
+      const canShare = await Sharing.isAvailableAsync();
+      if (!canShare) {
+        onShare();
+        return;
+      }
+      const uri = await shotRef.current?.capture?.();
+      if (uri) {
+        onShareImage(uri);
+        return;
+      }
+      toast.error('Kart görseli oluşturulamadı, bağlantı paylaşılıyor.');
+      onShare();
+    } catch {
+      toast.error('Kart görseli oluşturulamadı, bağlantı paylaşılıyor.');
+      onShare();
+    } finally {
+      setCapturing(false);
+    }
+  };
+
   return (
     <Sheet visible={visible} onClose={onClose} onDismissed={onDismissed} title="Paylaşım kartı">
-      <Card padded={false} style={[styles.shareCard, { borderColor: c.primary }]}>
-        <View style={[styles.shareHeader, { backgroundColor: c.primarySoft }]}>
-          <Wordmark size={20} />
-          {listing.listing_no ? <Badge label={`#${listing.listing_no}`} tone="primary" /> : null}
-        </View>
-        {cover ? <Image source={cover} style={styles.shareImage} contentFit="cover" /> : null}
-        <View style={styles.shareBody}>
-          <View style={styles.shareFooter}>
-            <View style={styles.shareMeta}>
-              <Text variant="display" tone="primary">
-                {formatPrice(listing.price, listing.currency)}
-              </Text>
-              <Text variant="subheading" numberOfLines={2}>
-                {listing.title}
-              </Text>
-              {loc ? (
-                <View style={styles.metaRow}>
-                  <MapPin size={14} color={c.muted} />
-                  <Text variant="caption" tone="muted" numberOfLines={1} style={styles.flex}>
-                    {loc}
+      <ViewShot
+        ref={shotRef}
+        options={{ format: 'png', quality: 0.95, result: 'tmpfile' }}
+        style={{ backgroundColor: c.surface, borderRadius: radius.lg }}
+      >
+        <View collapsable={false}>
+          <Card padded={false} style={[styles.shareCard, { borderColor: c.primary }]}>
+            <View style={[styles.shareHeader, { backgroundColor: c.primarySoft }]}>
+              <Wordmark size={20} />
+              {listing.listing_no ? <Badge label={`#${listing.listing_no}`} tone="primary" /> : null}
+            </View>
+            {cover ? <Image source={cover} style={styles.shareImage} contentFit="cover" /> : null}
+            <View style={styles.shareBody}>
+              <View style={styles.shareFooter}>
+                <View style={styles.shareMeta}>
+                  <Text variant="display" tone="primary">
+                    {formatPrice(listing.price, listing.currency)}
+                  </Text>
+                  <Text variant="subheading" numberOfLines={2}>
+                    {listing.title}
+                  </Text>
+                  {loc ? (
+                    <View style={styles.metaRow}>
+                      <MapPin size={14} color={c.muted} />
+                      <Text variant="caption" tone="muted" numberOfLines={1} style={styles.flex}>
+                        {loc}
+                      </Text>
+                    </View>
+                  ) : null}
+                  <Text variant="small" tone="subtle" numberOfLines={1}>
+                    {shareUrl}
                   </Text>
                 </View>
-              ) : null}
-              <Text variant="small" tone="subtle" numberOfLines={1}>
-                {shareUrl}
-              </Text>
-            </View>
-            {qrSize > 0 && qrPath ? (
-              <View style={[styles.qrBox, { borderColor: c.border }]}>
-                <Svg width={78} height={78} viewBox={`0 0 ${qrSize} ${qrSize}`} accessibilityLabel="İlan QR kodu">
-                  <SvgRect x={0} y={0} width={qrSize} height={qrSize} fill="#ffffff" />
-                  <SvgPath d={qrPath} fill="#0d1117" />
-                </Svg>
+                {qrSize > 0 && qrPath ? (
+                  <View style={[styles.qrBox, { borderColor: c.border }]}>
+                    <Svg width={78} height={78} viewBox={`0 0 ${qrSize} ${qrSize}`} accessibilityLabel="İlan QR kodu">
+                      <SvgRect x={0} y={0} width={qrSize} height={qrSize} fill="#ffffff" />
+                      <SvgPath d={qrPath} fill="#0d1117" />
+                    </Svg>
+                  </View>
+                ) : null}
               </View>
-            ) : null}
-          </View>
+            </View>
+          </Card>
         </View>
-      </Card>
-      <Button title="Paylaş" icon={Share2} block haptic onPress={onShare} />
+      </ViewShot>
+      <View style={styles.shareActions}>
+        {Platform.OS !== 'web' ? (
+          <>
+            <Button
+              title="Görsel olarak paylaş"
+              icon={ImageIcon}
+              block
+              haptic
+              loading={capturing}
+              disabled={capturing}
+              onPress={() => void handleShareImage()}
+            />
+            <Button
+              title="Bağlantı paylaş"
+              icon={Link2}
+              variant="outline"
+              block
+              disabled={capturing}
+              onPress={onShare}
+            />
+          </>
+        ) : (
+          <Button title="Paylaş" icon={Share2} block haptic onPress={onShare} />
+        )}
+      </View>
     </Sheet>
   );
 }
@@ -1386,6 +1466,7 @@ const styles = StyleSheet.create({
   damageGroup: { gap: space.xs },
   damageBadges: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs },
   shareCard: { overflow: 'hidden', borderWidth: 1 },
+  shareActions: { gap: space.sm },
   shareHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space.lg, paddingVertical: space.md },
   shareImage: { width: '100%', aspectRatio: 16 / 9 },
   shareBody: { padding: space.lg },

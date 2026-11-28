@@ -1,4 +1,6 @@
 import { Alert, Platform, Share } from 'react-native';
+import { File, Paths } from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import * as WebBrowser from 'expo-web-browser';
 import { timedFetch } from '@/api/client';
 import { getToken } from '@/auth/session';
@@ -42,7 +44,19 @@ export async function exportAccountData(): Promise<void> {
     return;
   }
 
-  // Android Binder IPC rejects >~1MB share strings with TransactionTooLargeException.
+  if (await Sharing.isAvailableAsync()) {
+    const file = new File(Paths.cache, 'geldesat-verilerim.json');
+    file.create({ overwrite: true });
+    await file.write(text);
+    await Sharing.shareAsync(file.uri, {
+      mimeType: 'application/json',
+      UTI: 'public.json',
+      dialogTitle: 'Verilerimi kaydet',
+    });
+    return;
+  }
+
+  // Fallback for environments where file sharing is unavailable: Android Binder IPC rejects >~1MB share strings.
   if (text.length > SAFE_SHARE_BYTES) {
     Alert.alert(
       'Dosya boyutu büyük',
