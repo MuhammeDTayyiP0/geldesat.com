@@ -11,7 +11,6 @@ import {
   Search,
   Share2,
   Star,
-  Store as StoreIcon,
   UserCheck,
   UserPlus,
   Users,
@@ -337,13 +336,8 @@ function SellerPage() {
           </p>
           <div className="flex gap-2">
             <Link to="/ayarlar/profil" className={buttonVariants({ variant: "outline", size: "sm" })}>
-                <Pencil className="size-3.5" /> Profili düzenle
-              </Link>
-            {store ? (
-              <Link to="/ayarlar/magaza" className={buttonVariants({ variant: "outline", size: "sm" })}>
-                  <StoreIcon className="size-3.5" /> Mağaza
-                </Link>
-            ) : null}
+              <Pencil className="size-3.5" /> Profili düzenle
+            </Link>
           </div>
         </div>
       ) : null}

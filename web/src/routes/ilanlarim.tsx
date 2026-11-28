@@ -4,9 +4,10 @@ import { useFlag } from "@/lib/use-flag";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { errorText } from "@/lib/error-text";
 import { useEffect, useMemo, useState } from "react";
-import { CircleCheck, Copy, Eye, EyeOff, Heart, ImageIcon, LayoutGrid, MessageCircle, MoreVertical, Pencil, Phone, Plus, RefreshCw, Rocket, Trash2, TrendingDown } from "lucide-react";
+import { CircleCheck, Copy, Eye, EyeOff, FileSpreadsheet, Heart, ImageIcon, LayoutGrid, MessageCircle, MoreVertical, Pencil, Phone, Plus, RefreshCw, Rocket, Trash2, TrendingDown } from "lucide-react";
 import { toast } from "sonner";
-import { deleteListing, myListings, quickUpdatePrice, renewListing, setListingStatus } from "@/lib/server/account";
+import { deleteListing, getMe, myListings, quickUpdatePrice, renewListing, setListingStatus } from "@/lib/server/account";
+import { BulkImportDialog } from "@/components/listing/BulkImportDialog";
 import { Input } from "@/components/ui/input";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
@@ -63,8 +64,11 @@ function daysLeft(iso: string | null): number | null {
 
 function Mine() {
   const istatistikler = useFlag("satici_istatistikleri");
+  const topluAktarim = useFlag("toplu_ilan_aktarim");
   const { user, isPending } = useCurrentUserState();
   const [rows, setRows] = useState<MyListing[] | null>(null);
+  const [hasStore, setHasStore] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
   const [tab, setTab] = useState<Tab>("live");
   const [toDelete, setToDelete] = useState<MyListing | null>(null);
@@ -86,7 +90,11 @@ function Mine() {
       .catch(() => setLoadFailed(true));
   }
   useEffect(() => {
-    if (user) reload();
+    if (!user) return;
+    reload();
+    getMe()
+      .then((m) => setHasStore(Boolean(m.store)))
+      .catch(() => undefined);
   }, [user]);
 
   const groups = useMemo(() => {
@@ -131,9 +139,17 @@ function Mine() {
       title="İlanlarım"
       description={rows ? `${rows.length} ilan` : "Yayındaki, onay bekleyen ve pasif ilanlarınızı yönetin."}
       actions={
-        <Link to="/ilan-ver" className={buttonVariants({ size: "sm" })}>
+        <div className="flex items-center gap-2">
+          {hasStore && topluAktarim ? (
+            <Button type="button" variant="outline" size="sm" onClick={() => setBulkOpen(true)}>
+              <FileSpreadsheet className="size-4" />
+              <span className="hidden sm:inline">Toplu aktar</span>
+            </Button>
+          ) : null}
+          <Link to="/ilan-ver" className={buttonVariants({ size: "sm" })}>
             <Plus className="size-4" /> Yeni
           </Link>
+        </div>
       }
     >
       {loadFailed ? <ErrorState message="İlanlarınız yüklenemedi." onRetry={reload} /> : null}
@@ -308,6 +324,7 @@ function Mine() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <BulkImportDialog open={bulkOpen} onOpenChange={setBulkOpen} onImported={reload} />
     </AccountShell>
   );
 }

@@ -10,7 +10,6 @@ import {
   MessageCircle,
   MessageSquareText,
   ShieldCheck,
-  Store,
   UserCheck,
   UserPen,
   UserRound,
@@ -30,7 +29,6 @@ type NavTo =
   | "/ayarlar"
   | "/ayarlar/profil"
   | "/ayarlar/guvenlik"
-  | "/ayarlar/magaza"
   | "/ayarlar/gizlilik"
   | "/ayarlar/bildirimler"
   | "/ayarlar/kayitli-aramalar"
@@ -59,7 +57,6 @@ export const SETTINGS_SECTIONS: Array<{ title: string; items: AccountNavItem[] }
     items: [
       { to: "/ayarlar/profil", label: "Profil bilgileri", icon: UserPen, hint: "Fotoğraf, ad, telefon, konum, biyografi" },
       { to: "/ayarlar/guvenlik", label: "Hesap ve güvenlik", icon: ShieldCheck, hint: "E-posta, şifre, oturumlar, veri indir, hesabı sil" },
-      { to: "/ayarlar/magaza", label: "Kurumsal mağaza", icon: Store, hint: "Hesap türü, mağaza bilgileri ve başvuru" },
     ],
   },
   {

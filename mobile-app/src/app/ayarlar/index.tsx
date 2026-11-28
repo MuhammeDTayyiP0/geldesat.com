@@ -18,13 +18,11 @@ import {
   Search,
   Shield,
   Smartphone,
-  Store,
   Sun,
   UserRound,
   type LucideIcon,
 } from 'lucide-react-native';
 import { errorMessage } from '@/api/client';
-import { useMe } from '@/api/queries';
 import { signOut } from '@/auth/auth';
 import { useSession } from '@/auth/session';
 import { SUPPORT_EMAIL } from '@/lib/config';
@@ -46,7 +44,6 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const session = useSession();
-  const me = useMe();
   const theme = useThemePref();
   const [q, setQ] = useState('');
   const signedIn = session.status === 'signedIn';
@@ -59,13 +56,6 @@ export default function SettingsScreen() {
       items: [
         { label: 'Profil bilgileri', detail: 'Fotoğraf, ad, telefon, konum, biyografi', icon: UserRound, to: '/ayarlar/profil', auth: true },
         { label: 'Hesap ve güvenlik', detail: 'E-posta, şifre, oturumlar, veri indir, hesabı sil', icon: KeyRound, to: '/ayarlar/guvenlik', auth: true },
-        {
-          label: me.data?.store ? 'Mağazam' : 'Kurumsal Hesaba Geç',
-          detail: me.data?.store ? me.data.store.name : 'İşletme başvurusu ve mağaza avantajları',
-          icon: Store,
-          to: '/ayarlar/magaza',
-          auth: true,
-        },
       ],
     },
     {

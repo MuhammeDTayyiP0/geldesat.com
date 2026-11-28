@@ -190,6 +190,11 @@ export type Me = {
     description: string;
     phone: string | null;
     logo_url?: string | null;
+    business_type?: BusinessType | null;
+    sector?: string | null;
+    tax_office?: string | null;
+    tax_no?: string | null;
+    address?: string | null;
   } | null;
   credits: number;
 };

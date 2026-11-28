@@ -3,7 +3,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScrollView, Share, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useInfiniteQuery, useMutation, useQuery } from '@tanstack/react-query';
-import { BadgeCheck, CalendarDays, Eye, LayoutGrid, MapPin, MessageCircle, Pencil, Search, Share2, Store, UserCheck, UserPlus, Users, UserX, X } from 'lucide-react-native';
+import { BadgeCheck, CalendarDays, Eye, LayoutGrid, MapPin, MessageCircle, Pencil, Search, Share2, UserCheck, UserPlus, Users, UserX, X } from 'lucide-react-native';
 import { ApiError, errorMessage } from '@/api/client';
 import { catalog, follows, listings } from '@/api/endpoints';
 import { keys, queryClient } from '@/api/queries';
@@ -229,9 +229,6 @@ export default function SellerScreen() {
                   </View>
                   <View style={styles.row}>
                     <Button title="Profili düzenle" icon={Pencil} size="sm" variant="outline" onPress={() => router.push('/ayarlar/profil')} />
-                    {store ? (
-                      <Button title="Mağaza" icon={Store} size="sm" variant="outline" onPress={() => router.push('/ayarlar/magaza')} />
-                    ) : null}
                   </View>
                 </View>
               ) : null}

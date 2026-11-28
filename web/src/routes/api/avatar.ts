@@ -37,7 +37,8 @@ export const Route = createFileRoute("/api/avatar")({
               [auth.userId, data],
             );
             await tx.query("update profiles set avatar_url=$2 where user_id=$1", [auth.userId, url]);
-            // Menus read the sign-in record; keep it in step for web and app alike.
+            // Keep store logo and sign-in image in step with the single profile photo.
+            await tx.query("update stores set logo_url=$2 where user_id=$1", [auth.userId, url]);
             await tx.query('update "user" set image=$2 where id=$1', [auth.userId, url]);
           });
           return json({ url });
@@ -55,6 +56,7 @@ export const Route = createFileRoute("/api/avatar")({
           await sql.transaction(async (tx) => {
             await tx.query("delete from user_avatars where user_id=$1", [auth.userId]);
             await tx.query("update profiles set avatar_url=null where user_id=$1", [auth.userId]);
+            await tx.query("update stores set logo_url=null where user_id=$1", [auth.userId]);
             await tx.query('update "user" set image=null where id=$1', [auth.userId]);
           });
           return json({ ok: true });

@@ -398,7 +398,16 @@ export const adminResolveStoreApplication = createServerFn({ method: "POST" })
             storeSlug = fallback.slug;
           }
         }
-        await tx.query("update profiles set account_type = 'CORPORATE' where user_id = $1", [app.user_id]);
+        await tx.query(
+          `update profiles
+           set account_type = 'CORPORATE',
+               display_name = $2,
+               city = coalesce($3, city),
+               phone = coalesce(phone, $4)
+           where user_id = $1`,
+          [app.user_id, app.name, app.city || null, normalizeStorePhone(app.phone)],
+        );
+        await tx.query('update "user" set name = $2 where id = $1', [app.user_id, app.name]);
       }
 
       return { app, storeId, storeSlug };

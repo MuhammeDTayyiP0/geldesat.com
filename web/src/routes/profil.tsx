@@ -136,19 +136,19 @@ function AccountHub() {
           <QuickCard to="/ayarlar" icon={<Settings className="size-5" />} label="Ayarlar" hint="Profil, güvenlik, gizlilik, bildirimler" />
         </div>
 
-        <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface">
-          {me?.store ? (
-            <HubRow to="/ayarlar/magaza" icon={<Store className="size-4.5" />} label="Mağazam" hint={me.store.name} />
-          ) : (
-            <HubRow
-              to="/ayarlar/magaza"
-              icon={<Store className="size-4.5" />}
-              label="Kurumsal Hesaba Geç"
-              hint="İşletme başvurusu ile mağaza vitrini ve yüksek ilan limiti"
-            />
-          )}
-          {dopingOn ? <HubRow to="/doping" icon={<Rocket className="size-4.5" />} label="Doping" hint="İlanınızı öne çıkarın" /> : null}
-        </ul>
+        {!me?.store || dopingOn ? (
+          <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface">
+            {!me?.store ? (
+              <HubRow
+                to="/ayarlar/magaza"
+                icon={<Store className="size-4.5" />}
+                label="Kurumsal Hesaba Geç"
+                hint="İşletme başvurusu ile mağaza vitrini ve yüksek ilan limiti"
+              />
+            ) : null}
+            {dopingOn ? <HubRow to="/doping" icon={<Rocket className="size-4.5" />} label="Doping" hint="İlanınızı öne çıkarın" /> : null}
+          </ul>
+        ) : null}
 
         {/* On phones the account sidebar is hidden, so settings get their own row. */}
         <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface md:hidden">

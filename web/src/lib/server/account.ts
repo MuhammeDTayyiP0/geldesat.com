@@ -113,6 +113,11 @@ export const getMe = createServerFn({ method: "GET" })
             description: store[0].description ? String(store[0].description) : "",
             phone: store[0].phone ? String(store[0].phone) : null,
             logo_url: store[0].logo_url ? String(store[0].logo_url) : null,
+            business_type: store[0].business_type ? String(store[0].business_type) : null,
+            sector: store[0].sector ? String(store[0].sector) : null,
+            tax_office: store[0].tax_office ? String(store[0].tax_office) : null,
+            tax_no: store[0].tax_no ? String(store[0].tax_no) : null,
+            address: store[0].address ? String(store[0].address) : null,
           }
         : null,
       credits,
@@ -148,6 +153,10 @@ export const updateProfile = createServerFn({ method: "POST" })
         `update profiles set display_name=$2, phone=$3, bio=$4, city=$5, district=$6
          where user_id=$1`,
         [context.userId, data.display_name, phone, data.bio || null, data.city || null, data.district || null],
+      );
+      await sql.query(
+        "update stores set name=$2, phone=$3, description=$4, city=$5 where user_id=$1",
+        [context.userId, data.display_name, phone, data.bio || null, data.city || null],
       );
     } catch (err) {
       const pgErr = err as { code?: string; constraint?: string };

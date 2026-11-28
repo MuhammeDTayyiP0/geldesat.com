@@ -3,18 +3,24 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import { Camera, MapPin, Phone, Trash2, UserRound } from 'lucide-react-native';
+import { Camera, MapPin, Phone, Store, Trash2, UserRound } from 'lucide-react-native';
 import { errorMessage } from '@/api/client';
 import { account, uploads } from '@/api/endpoints';
 import { keys, queryClient, useMe } from '@/api/queries';
+import type { BusinessType } from '@/api/types';
 import { updateSessionUser } from '@/auth/session';
 import { TURKEY_CITIES } from '@/data/locations';
 import { OptionPicker } from '@/features/location/OptionPicker';
 import { cleanPhone, maskPhoneInput } from '@/lib/format';
 import { pickPhotos, type PickedPhoto } from '@/lib/photos';
 import { AvatarCropper } from '@/features/photos/AvatarCropper';
-import { Avatar, Button, ErrorState, Header, Input, ListRow, Loading, RowGroup, SelectField, Sheet, Text, space, toast, useTheme } from '@/ui';
+import { Avatar, Badge, Button, Card, ErrorState, Header, Input, ListRow, Loading, RowGroup, SelectField, Sheet, Text, radius, space, toast, useTheme } from '@/ui';
 import { RequireSignIn } from '@/auth/RequireSignIn';
+
+const BUSINESS_TYPE_LABEL: Record<BusinessType, string> = {
+  SOLE: 'Şahıs Şirketi',
+  COMPANY: 'Limited / A.Ş.',
+};
 
 export default function ProfileSettingsScreen() {
   return (
@@ -44,12 +50,14 @@ function ProfileSettings() {
 
   // Fill the form once, when the profile first arrives.
   const p = me.data?.profile;
+  const store = me.data?.store ?? null;
+  const listingLimit = me.data?.listingLimit ?? null;
   if (p && !loaded) {
     setLoaded(true);
-    setName(p.display_name);
-    setPhone(p.phone ? maskPhoneInput(p.phone) : '');
-    setBio(p.bio ?? '');
-    setCity(p.city ?? '');
+    setName(store?.name || p.display_name);
+    setPhone(p.phone ? maskPhoneInput(p.phone) : store?.phone ? maskPhoneInput(store.phone) : '');
+    setBio(p.bio || store?.description || '');
+    setCity(p.city || store?.city || '');
     setDistrict(p.district ?? '');
   }
 
@@ -120,20 +128,30 @@ function ProfileSettings() {
   }
 
   const districts = TURKEY_CITIES.find((x) => x.name === city)?.districts ?? [];
+  const isCorporate = Boolean(store);
+  const avatarUri = store?.logo_url || me.data.profile?.avatar_url;
 
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
-      <Header title="Profil bilgileri" right={<Button title="Kaydet" size="sm" variant="ghost" loading={saving} onPress={() => void save()} />} />
+      <Header
+        title={isCorporate ? 'Profil ve mağaza' : 'Profil bilgileri'}
+        right={<Button title="Kaydet" size="sm" variant="ghost" loading={saving} onPress={() => void save()} />}
+      />
       <KeyboardAwareScrollView bottomOffset={24} keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + space.xxxl }]}>
-        <Pressable onPress={() => setPicker('photo')} style={styles.avatarWrap} accessibilityRole="button" accessibilityLabel="Profil fotoğrafını değiştir">
-          <Avatar name={name || 'Ü'} uri={me.data.profile?.avatar_url} size={96} />
+        <Pressable
+          onPress={() => setPicker('photo')}
+          style={styles.avatarWrap}
+          accessibilityRole="button"
+          accessibilityLabel={isCorporate ? 'Mağaza veya profil fotoğrafını değiştir' : 'Profil fotoğrafını değiştir'}
+        >
+          <Avatar name={name || 'Ü'} uri={avatarUri} size={96} />
           <View style={[styles.camera, { backgroundColor: c.primarySolid, borderColor: c.bg }]}>
             {avatarBusy ? <ActivityIndicator color="#fff" size="small" /> : <Camera size={16} color="#fff" />}
           </View>
         </Pressable>
-        <Input label="Ad soyad" required icon={UserRound} value={name} onChangeText={setName} maxLength={60} />
+        <Input label={isCorporate ? 'Mağaza / İşletme adı' : 'Ad soyad'} required icon={isCorporate ? Store : UserRound} value={name} onChangeText={setName} maxLength={60} />
         <Input
-          label="Telefon"
+          label={isCorporate ? 'İşletme telefonu' : 'Telefon'}
           icon={Phone}
           keyboardType="phone-pad"
           placeholder="05xx xxx xx xx"
@@ -143,8 +161,43 @@ function ProfileSettings() {
         />
         <SelectField label="İl" icon={MapPin} placeholder="Seçin" value={city} onPress={() => setPicker('city')} />
         <SelectField label="İlçe" placeholder={city ? 'Seçin' : 'Önce il seçin'} value={district} disabled={!city} onPress={() => setPicker('district')} />
-        <Input label="Hakkımda" multiline placeholder="Alıcıların sizi tanımasına yardımcı olun" value={bio} onChangeText={setBio} maxLength={400} hint={`${bio.length}/400`} />
+        <Input
+          label={isCorporate ? 'İşletme açıklaması' : 'Hakkımda'}
+          multiline
+          placeholder={isCorporate ? 'İşletmenizi ve hizmetlerinizi tanıtın' : 'Alıcıların sizi tanımasına yardımcı olun'}
+          value={bio}
+          onChangeText={setBio}
+          maxLength={400}
+          hint={`${bio.length}/400`}
+        />
         <Button title="Kaydet" size="lg" loading={saving} onPress={() => void save()} />
+
+        {store ? (
+          <Card style={styles.infoCard}>
+            <View style={styles.infoHead}>
+              <Text variant="bodyStrong">Onaylı İşletme Bilgileri</Text>
+              <Badge label={`Paket: ${store.plan}`} tone="primary" />
+            </View>
+            {store.business_type ? (
+              <InfoRow label="İşletme türü" value={BUSINESS_TYPE_LABEL[store.business_type] ?? store.business_type} />
+            ) : null}
+            {store.sector ? <InfoRow label="Sektör" value={store.sector} /> : null}
+            {store.tax_office ? <InfoRow label="Vergi dairesi" value={store.tax_office} /> : null}
+            {store.tax_no ? <InfoRow label="VKN / TCKN" value={store.tax_no} /> : null}
+            {listingLimit ? <InfoRow label="Aktif ilan hakkı" value={`${listingLimit.used} / ${listingLimit.max}`} /> : null}
+            {store.address ? <InfoRow label="Adres" value={store.address} /> : null}
+          </Card>
+        ) : (
+          <Card style={[styles.upgradeCard, { backgroundColor: c.primarySoft, borderColor: c.primarySoft }]}>
+            <Text variant="bodyStrong" tone="primary">
+              Kurumsal Hesaba Geç
+            </Text>
+            <Text variant="caption" tone="muted">
+              Bireysel hesapta en fazla {listingLimit?.max ?? 5} aktif ilan yayınlayabilirsiniz. İşletme başvurusuyla kurumsal rozet ve 50+ ilan hakkı açılır.
+            </Text>
+            <Button title="Başvuru yap" size="sm" variant="outline" onPress={() => router.push('/ayarlar/magaza')} />
+          </Card>
+        )}
       </KeyboardAwareScrollView>
 
       <OptionPicker visible={picker === 'city'} onClose={() => setPicker(null)} title="İl" value={city} onSelect={(v) => { setCity(v ?? ''); setDistrict(''); }} />
@@ -181,8 +234,27 @@ function ProfileSettings() {
   );
 }
 
+function InfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.infoRow}>
+      <Text variant="caption" tone="muted" style={styles.infoLabel}>
+        {label}
+      </Text>
+      <Text variant="caption" style={styles.flex}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   body: { padding: space.lg, gap: space.lg, paddingBottom: space.xxxl },
   avatarWrap: { alignSelf: 'center', marginVertical: space.md },
   camera: { position: 'absolute', right: 0, bottom: 0, width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', borderWidth: 3 },
+  infoCard: { gap: space.sm, borderRadius: radius.lg },
+  infoHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: space.xs },
+  infoRow: { flexDirection: 'row', gap: space.sm },
+  infoLabel: { width: 105 },
+  upgradeCard: { gap: space.sm, borderRadius: radius.lg },
 });

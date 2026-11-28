@@ -171,19 +171,19 @@ export default function AccountScreen() {
             onPress={() => router.push('/bildirimler')}
           />
         </RowGroup>
-        <RowGroup>
-          {me.data?.store ? (
-            <ListRow icon={Store} label="Mağazam" detail={me.data.store.name} onPress={() => router.push('/ayarlar/magaza')} />
-          ) : (
-            <ListRow
-              icon={Store}
-              label="Kurumsal Hesaba Geç"
-              detail="İşletme başvurusu ve mağaza avantajları"
-              onPress={() => router.push('/ayarlar/magaza')}
-            />
-          )}
-          {dopingOn ? <ListRow icon={Rocket} label="Doping" detail="İlanınızı öne çıkarın" onPress={() => router.push('/doping')} /> : null}
-        </RowGroup>
+        {!me.data?.store || dopingOn ? (
+          <RowGroup>
+            {!me.data?.store ? (
+              <ListRow
+                icon={Store}
+                label="Kurumsal Hesaba Geç"
+                detail="İşletme başvurusu ve mağaza avantajları"
+                onPress={() => router.push('/ayarlar/magaza')}
+              />
+            ) : null}
+            {dopingOn ? <ListRow icon={Rocket} label="Doping" detail="İlanınızı öne çıkarın" onPress={() => router.push('/doping')} /> : null}
+          </RowGroup>
+        ) : null}
         <RowGroup>
           <ListRow icon={Settings} label="Ayarlar" detail="Profil, güvenlik, bildirimler, çıkış" onPress={() => router.push('/ayarlar' as Href)} />
         </RowGroup>
