@@ -13,6 +13,7 @@ import { Toaster } from "sonner";
 import { appCss, criticalFonts } from "@/lib/critical-assets";
 import { jsonLd } from "@/lib/seo";
 import { getThemePref, useThemePref } from "@/lib/theme";
+import { useAutoVersionCheck } from "@/lib/app-version";
 import { getWebFlags } from "@/lib/server/config";
 import { useFlag, useFlagRefresh, type RootLoaderData } from "@/lib/use-flag";
 import { CompareBar } from "@/components/listing/CompareBar";
@@ -117,6 +118,7 @@ function Shell() {
   }, []);
   const theme = useThemePref(Route.useLoaderData()?.theme ?? "system");
   useFlagRefresh();
+  useAutoVersionCheck();
   const isAdmin = useRouterState({
     select: (s) => s.location.pathname === "/admin" || s.location.pathname.startsWith("/admin/"),
   });

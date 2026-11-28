@@ -31,6 +31,7 @@ import {
   STORE_APP_COOLDOWN_DAYS,
   type BusinessType,
 } from "@/lib/account-type";
+import { resolveUserPrefs } from "@/lib/user-prefs";
 import { assertOwnerStatus, assertRenewable, isExpired } from "@/lib/listing-status";
 import { audit } from "./admin/common";
 import { getSellerResponseStats } from "./chat";
@@ -523,6 +524,7 @@ export const getSeller = createServerFn({ method: "POST" })
       sql.query<Record<string, unknown>>("select * from stores where user_id=$1 limit 1", [data.id]),
       getSellerResponseStats(sql, data.id),
     ]);
+    const sellerPrefs = resolveUserPrefs(asJson(p[0].user_prefs, {})).seller_prefs;
     return {
       id: String(p[0].user_id),
       name: String(p[0].display_name ?? "Satıcı"),
@@ -534,6 +536,14 @@ export const getSeller = createServerFn({ method: "POST" })
       rating_avg: num(p[0].rating_avg),
       rating_count: num(p[0].rating_count),
       responseStats,
+      availability: {
+        callHours: sellerPrefs.call_hours_enabled ? `${sellerPrefs.call_hours_start} – ${sellerPrefs.call_hours_end}` : null,
+        awayMode: sellerPrefs.away_mode,
+        awayMessage: sellerPrefs.away_mode
+          ? sellerPrefs.away_message || "Satıcı şu an müsait değil, mesajlarınıza en kısa sürede dönüş yapacaktır."
+          : null,
+        acceptOffers: sellerPrefs.accept_offers,
+      },
       store: store[0]
         ? {
             name: String(store[0].name),

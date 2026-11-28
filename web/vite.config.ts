@@ -79,7 +79,17 @@ function seoDevPlugin(): Plugin {
   };
 }
 
+const APP_BUILD_ID = (
+  process.env.SOURCE_COMMIT ||
+  process.env.GIT_COMMIT ||
+  process.env.RAILWAY_GIT_COMMIT_SHA ||
+  Date.now().toString(36)
+).slice(0, 16);
+
 export default defineConfig(({ command, isPreview }) => ({
+  define: {
+    __APP_BUILD_ID__: JSON.stringify(APP_BUILD_ID),
+  },
   server: {
     host: "0.0.0.0",
     port: 3000,

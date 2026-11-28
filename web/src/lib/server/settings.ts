@@ -2,8 +2,9 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
-import { asIso, asJson } from "@/lib/utils";
+import { asIso, asJson, newId } from "@/lib/utils";
 import { NOTIFY_TYPES, resolveNotifyPrefs, type PhoneVisibility } from "@/lib/notification-prefs";
+import { HHMM_RE, resolveUserPrefs } from "@/lib/user-prefs";
 import { ensureProfile, LIVE_PUSH_TOKEN, rateLimit } from "./helpers";
 import { mailConfigured } from "./mail";
 
@@ -13,8 +14,17 @@ export const getAccountSettings = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const sql = await getSql();
     await ensureProfile(context.userId);
-    const rows = await sql.query<{ phone_visibility: string; show_whatsapp: boolean; read_receipts: boolean; notify_prefs: unknown; push_devices: number; message_email: boolean; email_verified: boolean }>(
-      `select p.phone_visibility, p.show_whatsapp, p.read_receipts, p.notify_prefs, p.message_email,
+    const rows = await sql.query<{
+      phone_visibility: string;
+      show_whatsapp: boolean;
+      read_receipts: boolean;
+      notify_prefs: unknown;
+      user_prefs: unknown;
+      push_devices: number;
+      message_email: boolean;
+      email_verified: boolean;
+    }>(
+      `select p.phone_visibility, p.show_whatsapp, p.read_receipts, p.notify_prefs, p.user_prefs, p.message_email,
               coalesce((select u."emailVerified" from "user" u where u.id = p.user_id), false) as email_verified,
               (select count(*)::int from mobile_push_tokens t where t.user_id = p.user_id and ${LIVE_PUSH_TOKEN}) as push_devices
        from profiles p where p.user_id = $1`,
@@ -26,6 +36,7 @@ export const getAccountSettings = createServerFn({ method: "GET" })
       show_whatsapp: r?.show_whatsapp ?? true,
       read_receipts: r?.read_receipts ?? true,
       notify_prefs: resolveNotifyPrefs(asJson(r?.notify_prefs, {})),
+      user_prefs: resolveUserPrefs(asJson(r?.user_prefs, {})),
       /** Push only reaches the mobile app; the page says so when no device is registered. */
       push_devices: r?.push_devices ?? 0,
       message_email: r?.message_email ?? true,
@@ -74,6 +85,74 @@ export const updateNotifyPrefs = createServerFn({ method: "POST" })
     const prefs = resolveNotifyPrefs(data);
     await sql.query("update profiles set notify_prefs=$2::jsonb where user_id=$1", [context.userId, JSON.stringify(prefs)]);
     return { ok: true, prefs };
+  });
+
+const UserPrefsPatchSchema = z.object({
+  quiet_hours: z
+    .object({
+      enabled: z.boolean(),
+      start: z.string().regex(HHMM_RE),
+      end: z.string().regex(HHMM_RE),
+    })
+    .optional(),
+  seller_prefs: z
+    .object({
+      accept_offers: z.boolean(),
+      call_hours_enabled: z.boolean(),
+      call_hours_start: z.string().regex(HHMM_RE),
+      call_hours_end: z.string().regex(HHMM_RE),
+      away_mode: z.boolean(),
+      away_message: z.string().trim().max(200),
+    })
+    .optional(),
+  browse_prefs: z
+    .object({
+      default_city: z.string().trim().max(40),
+      default_sort: z.enum(["date_desc", "price_asc", "price_desc", "distance"]),
+      default_view: z.enum(["grid", "list"]),
+    })
+    .optional(),
+});
+
+/** Update quiet hours, seller availability/offer preferences, or browse defaults. */
+export const updateUserPrefs = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(UserPrefsPatchSchema)
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    await ensureProfile(context.userId);
+    const rows = await sql.query<{ user_prefs: unknown }>("select user_prefs from profiles where user_id=$1", [context.userId]);
+    const current = resolveUserPrefs(asJson(rows[0]?.user_prefs, {}));
+    const next = resolveUserPrefs({
+      quiet_hours: data.quiet_hours ?? current.quiet_hours,
+      seller_prefs: data.seller_prefs ?? current.seller_prefs,
+      browse_prefs: data.browse_prefs ?? current.browse_prefs,
+    });
+    await sql.query("update profiles set user_prefs=$2::jsonb where user_id=$1", [context.userId, JSON.stringify(next)]);
+    return { ok: true as const, user_prefs: next };
+  });
+
+export const submitFeedback = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(
+    z.object({
+      category: z.enum(["bug", "suggestion", "account", "other"]),
+      message: z.string().trim().min(10, "Mesajınız en az 10 karakter olmalı.").max(1500),
+      page_url: z.string().trim().max(300).optional(),
+      platform: z.enum(["web", "ios", "android"]).default("web"),
+      app_version: z.string().trim().max(40).optional(),
+    }),
+  )
+  .handler(async ({ context, data }) => {
+    rateLimit(`feedback:${context.userId}`, 5, 60 * 60_000);
+    const sql = await getSql();
+    const id = newId("fb");
+    await sql.query(
+      `insert into user_feedback (id, user_id, category, message, page_url, platform, app_version)
+       values ($1, $2, $3, $4, $5, $6, $7)`,
+      [id, context.userId, data.category, data.message, data.page_url || null, data.platform, data.app_version || null],
+    );
+    return { ok: true as const, id };
   });
 
 /** Deletion state of the signed-in account: when it will be purged, or null. */

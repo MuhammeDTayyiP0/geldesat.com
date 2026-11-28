@@ -3,13 +3,16 @@ import {
   Bell,
   BellRing,
   Bookmark,
+  Database,
   Heart,
   History,
   Lock,
   LayoutGrid,
   MessageCircle,
+  MessageSquarePlus,
   MessageSquareText,
   ShieldCheck,
+  SlidersHorizontal,
   UserCheck,
   UserPen,
   UserRound,
@@ -31,6 +34,9 @@ type NavTo =
   | "/ayarlar/guvenlik"
   | "/ayarlar/gizlilik"
   | "/ayarlar/bildirimler"
+  | "/ayarlar/tercihler"
+  | "/ayarlar/depolama"
+  | "/ayarlar/geri-bildirim"
   | "/ayarlar/kayitli-aramalar"
   | "/ayarlar/takip-ettiklerim"
   | "/ayarlar/sablonlar"
@@ -60,14 +66,23 @@ export const SETTINGS_SECTIONS: Array<{ title: string; items: AccountNavItem[] }
     ],
   },
   {
-    title: "Gizlilik ve iletişim",
+    title: "Tercihler",
+    items: [
+      { to: "/ayarlar/tercihler", label: "Alışveriş ve satıcı", icon: SlidersHorizontal, hint: "Varsayılan şehir, sıralama, teklif ve aranabilir saatler" },
+      { to: "/ayarlar/bildirimler", label: "Bildirimler", icon: BellRing, hint: "Mesaj, favori, ilan durumu ve sessiz saatler" },
+      { to: "/ayarlar/sablonlar", label: "Hazır mesajlarım", icon: MessageSquareText, hint: "Sohbette tek tıkla gönderilecek kalıp mesajlar" },
+      { to: "/ayarlar/depolama", label: "Veri ve depolama", icon: Database, hint: "Geçmişi temizle, sürüm ve yenileme" },
+    ],
+  },
+  {
+    title: "Gizlilik",
     items: [
       { to: "/ayarlar/gizlilik", label: "Gizlilik ve engellenenler", icon: Lock, hint: "Telefon görünürlüğü, okundu bilgisi, engellenenler" },
-      { to: "/ayarlar/bildirimler", label: "Bildirimler", icon: BellRing, hint: "Mesaj, favori, ilan durumu" },
-      { to: "/ayarlar/sablonlar", label: "Hazır mesajlarım", icon: MessageSquareText, hint: "Sohbette tek tıkla gönderilecek kalıp mesajlar" },
     ],
   },
 ];
+
+export { MessageSquarePlus };
 
 export const SETTINGS_ITEMS: AccountNavItem[] = SETTINGS_SECTIONS.flatMap((s) => s.items);
 

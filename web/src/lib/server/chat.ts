@@ -4,6 +4,7 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
 import { asIso, asJson, formatPrice, newId, num } from "@/lib/utils";
 import { DELETE_WINDOW_MS, DELETED_MESSAGE_TEXT, EDIT_WINDOW_MS, MAX_TEMPLATE_LENGTH, MAX_TEMPLATES, type ChatMessage, type OfferStatus } from "@/lib/chat-shared";
+import { resolveUserPrefs } from "@/lib/user-prefs";
 import { ensureProfile, firstInWindow, notify, rateLimit, resetWindow } from "./helpers";
 import { chatVisibleTo, DELETED_USER_NAME, hideConversationFor, isClosedAccount, reopenConversation } from "./retention";
 import {
@@ -306,6 +307,13 @@ export const sendOffer = createServerFn({ method: "POST" })
     await assertCanMessage(sql, context.userId, otherOf(conv, context.userId));
     if (!data.counterTo && conv.buyer_id !== context.userId) {
       throw new Error("Satıcı yalnızca gelen bir teklife karşı teklif verebilir.");
+    }
+    if (!data.counterTo) {
+      const sellerRows = await sql.query<{ user_prefs: unknown }>("select user_prefs from profiles where user_id=$1", [conv.seller_id]);
+      const sellerPrefs = resolveUserPrefs(asJson(sellerRows[0]?.user_prefs, {})).seller_prefs;
+      if (!sellerPrefs.accept_offers) {
+        throw new Error("Bu satıcı ilanları için fiyat tekliflerini kapatmış.");
+      }
     }
     return deliverOffer(sql, conv, context.userId, data.amount, data.counterTo, listing.currency ?? "TRY");
   });

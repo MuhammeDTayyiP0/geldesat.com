@@ -17,9 +17,9 @@ const ALLOWED = [
   "myCreditOrders", "myFollowedSellers", "myRecentListings", "myStoreApplication", "pinConversation", "pollThread", "quickUpdatePrice", "removeRecentListing",
   "reportConversation", "requestMyAccountDeletion", "respondOffer", "restoreMyAccount", "saveChatTemplates",
   "searchCatalogWithContext", "searchCategoryPaths", "searchMessages", "sendLocation", "sendMessage", "sendOffer", "sendTyping",
-  "startConversation", "statsHome", "submitStoreApplication", "toggleSavedSearchNotify", "unblockUser",
+  "startConversation", "statsHome", "submitFeedback", "submitStoreApplication", "toggleSavedSearchNotify", "unblockUser",
   "unfollowSeller", "unreadCount", "updateMessageEmail", "updateNotifyPrefs", "updatePrivacySettings", "updateProfile",
-  "upsertStore",
+  "updateUserPrefs", "upsertStore",
 ];
 
 test("the app can only call the functions on this list", async () => {

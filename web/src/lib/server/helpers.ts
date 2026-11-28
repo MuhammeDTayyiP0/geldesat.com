@@ -1,6 +1,7 @@
 import { getSql } from "@/lib/db";
 import { asIso, asJson, listingNoFromSlug, newId, num } from "@/lib/utils";
 import { resolveNotifyPrefs, type NotifyChannelPrefs, type PhoneVisibility } from "@/lib/notification-prefs";
+import { isInQuietHours, resolveUserPrefs } from "@/lib/user-prefs";
 import { findCategory, getCategoryTree, subtreeOf } from "./category-cache";
 import { RateLimitError } from "./errors";
 import { broadcastUserInbox } from "./chat-bus";
@@ -350,7 +351,10 @@ export const LIVE_PUSH_TOKEN = `exists (
 export async function notify(userId: string, type: string, title: string, body: string, link: string) {
   const sql = await getSql();
   // Respect the recipient's notification settings (missing types/keys mean "on").
-  const prefRows = await sql.query<{ notify_prefs: unknown }>("select notify_prefs from profiles where user_id=$1", [userId]);
+  const prefRows = await sql.query<{ notify_prefs: unknown; user_prefs: unknown }>(
+    "select notify_prefs, user_prefs from profiles where user_id=$1",
+    [userId],
+  );
   const prefs = resolveNotifyPrefs(asJson(prefRows[0]?.notify_prefs, {}));
   const channel = (prefs as Record<string, NotifyChannelPrefs | undefined>)[type] ?? { inapp: true, push: true };
 
@@ -363,6 +367,8 @@ export async function notify(userId: string, type: string, title: string, body: 
     broadcastUserInbox(userId, { type: "notification" });
   }
   if (!channel.push) return;
+  const userPrefs = resolveUserPrefs(asJson(prefRows[0]?.user_prefs, {}));
+  if (isInQuietHours(userPrefs.quiet_hours)) return;
 
   // Push delivery is best effort and runs after the answer: a slow or broken Expo
   // must neither fail nor delay the action that created the notification.

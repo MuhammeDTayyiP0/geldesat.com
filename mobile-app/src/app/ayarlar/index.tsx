@@ -7,16 +7,19 @@ import * as Haptics from 'expo-haptics';
 import * as Updates from 'expo-updates';
 import {
   BellRing,
+  Database,
   FileText,
   HelpCircle,
   KeyRound,
   LogOut,
   Mail,
+  MessageSquarePlus,
   MessageSquareText,
   Monitor,
   Moon,
   Search,
   Shield,
+  SlidersHorizontal,
   Smartphone,
   Sun,
   UserRound,
@@ -59,16 +62,24 @@ export default function SettingsScreen() {
       ],
     },
     {
-      title: 'Gizlilik ve iletişim',
+      title: 'Tercihler',
+      items: [
+        { label: 'Alışveriş ve satıcı', detail: 'Varsayılan şehir, sıralama, teklif ve aranabilir saatler', icon: SlidersHorizontal, to: '/ayarlar/tercihler' as Href, auth: true },
+        { label: 'Bildirimler', detail: 'Mesaj, favori, ilan durumu ve sessiz saatler', icon: BellRing, to: '/ayarlar/bildirimler', auth: true },
+        { label: 'Hazır mesajlarım', detail: 'Sohbette tek dokunuşla gönderin', icon: MessageSquareText, to: '/ayarlar/sablonlar', auth: true },
+        { label: 'Veri ve depolama', detail: 'Geçmişi temizle, fotoğraf kalitesi ve önbellek', icon: Database, to: '/ayarlar/depolama' as Href, auth: true },
+      ],
+    },
+    {
+      title: 'Gizlilik',
       items: [
         { label: 'Gizlilik ve engellenenler', detail: 'Telefon görünürlüğü, okundu bilgisi, engellenenler', icon: Shield, to: '/ayarlar/gizlilik', auth: true },
-        { label: 'Bildirimler', detail: 'Mesaj, favori, ilan durumu', icon: BellRing, to: '/ayarlar/bildirimler', auth: true },
-        { label: 'Hazır mesajlarım', detail: 'Sohbette tek dokunuşla gönderin', icon: MessageSquareText, to: '/ayarlar/sablonlar', auth: true },
       ],
     },
     {
       title: 'Destek',
       items: [
+        { label: 'Geri bildirim / Sorun bildir', detail: 'Hata bildir veya öneri paylaş', icon: MessageSquarePlus, to: '/ayarlar/geri-bildirim' as Href, auth: true },
         { label: 'Yardım merkezi', detail: 'Sık sorulanlar ve iletişim', icon: HelpCircle, to: { pathname: '/sayfa/[slug]', params: { slug: 'iletisim' } } },
         { label: 'Bize yazın', icon: Mail, value: SUPPORT_EMAIL, onPress: () => void Linking.openURL(`mailto:${SUPPORT_EMAIL}`) },
         { label: 'Yasal bilgiler', detail: 'Sözleşmeler ve politikalar', icon: FileText, to: '/ayarlar/yasal' },

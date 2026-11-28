@@ -3,7 +3,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScrollView, Share, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useInfiniteQuery, useMutation, useQuery } from '@tanstack/react-query';
-import { BadgeCheck, CalendarDays, Eye, LayoutGrid, MapPin, MessageCircle, Pencil, Search, Share2, UserCheck, UserPlus, Users, UserX, X } from 'lucide-react-native';
+import { BadgeCheck, CalendarDays, Clock, Eye, LayoutGrid, MapPin, MessageCircle, Pencil, Search, Share2, UserCheck, UserPlus, Users, UserX, X } from 'lucide-react-native';
 import { ApiError, errorMessage } from '@/api/client';
 import { catalog, follows, listings } from '@/api/endpoints';
 import { keys, queryClient } from '@/api/queries';
@@ -275,7 +275,17 @@ export default function SellerScreen() {
                       <Badge label={responseBadge} tone="primary" />
                     </View>
                   ) : null}
+                  {seller.availability?.callHours ? (
+                    <Fact icon={Clock} text={`Aranabilir: ${seller.availability.callHours}`} />
+                  ) : null}
                 </View>
+                {seller.availability?.awayMode && seller.availability.awayMessage ? (
+                  <View style={[styles.awayBox, { backgroundColor: c.warnSoft, borderColor: c.warn }]}>
+                    <Text variant="caption" tone="warn">
+                      {seller.availability.awayMessage}
+                    </Text>
+                  </View>
+                ) : null}
                 {store?.description ? <Text>{store.description}</Text> : null}
                 {seller.bio ? <Text tone="muted">{seller.bio}</Text> : null}
                 {followOn && !isOwner ? (
@@ -396,6 +406,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   facts: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md },
   ownerBar: { gap: space.sm, padding: space.md, borderRadius: radius.lg, borderWidth: 1 },
+  awayBox: { borderRadius: radius.md, borderWidth: 1, padding: space.sm },
   bold: { fontWeight: '700' },
   reviews: { gap: space.sm },
   review: { gap: space.xs, padding: space.md },

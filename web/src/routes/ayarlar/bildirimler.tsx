@@ -5,11 +5,13 @@ import { errorText } from "@/lib/error-text";
 import { useEffect, useState } from "react";
 import { Info } from "lucide-react";
 import { toast } from "sonner";
-import { getAccountSettings, updateMessageEmail, updateNotifyPrefs } from "@/lib/server/settings";
+import { getAccountSettings, updateMessageEmail, updateNotifyPrefs, updateUserPrefs } from "@/lib/server/settings";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { NOTIFY_TYPES, type NotifyPrefs } from "@/lib/notification-prefs";
+import type { QuietHours } from "@/lib/user-prefs";
 import { BrandSpinner } from "@/components/brand/BrandSpinner";
+import { Input, Label } from "@/components/ui/input";
 import { ToggleSwitch } from "@/components/ui/toggle-switch";
 import { AccountShell } from "@/components/account/AccountShell";
 
@@ -22,6 +24,7 @@ function NotificationSettings() {
   const { user, isPending } = useCurrentUserState();
   const [failed, setFailed] = useState(false);
   const [prefs, setPrefs] = useState<NotifyPrefs | null>(null);
+  const [quietHours, setQuietHours] = useState<QuietHours>({ enabled: false, start: "23:00", end: "08:00" });
   const [pushDevices, setPushDevices] = useState(0);
   const [email, setEmail] = useState<{ on: boolean; ready: boolean; configured: boolean }>({ on: true, ready: false, configured: false });
   const [busy, setBusy] = useState(false);
@@ -32,6 +35,7 @@ function NotificationSettings() {
     getAccountSettings()
       .then((s) => {
         setPrefs(s.notify_prefs);
+        setQuietHours(s.user_prefs.quiet_hours);
         setPushDevices(s.push_devices);
         setEmail({ on: s.message_email, ready: s.email_ready, configured: s.email_configured });
       })
@@ -143,6 +147,78 @@ function NotificationSettings() {
             <p className="mt-3 text-xs text-warn">
               E-posta adresiniz doğrulanmadığı için gönderilmez. <Link to="/ayarlar/guvenlik" className="underline">Şifre ve güvenlik</Link> sayfasından doğrulayabilirsiniz.
             </p>
+          ) : null}
+        </section>
+
+        <section className="rounded-2xl border border-border bg-surface p-4 shadow-card sm:p-6">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h2 className="text-sm font-semibold">Sessiz saatler (Rahatsız Etme)</h2>
+              <p className="mt-0.5 text-xs text-muted">
+                Belirlediğiniz saat aralığında mobil anlık bildirimler susturulur; site içi bildirimler kaydedilmeye devam eder.
+              </p>
+            </div>
+            <ToggleSwitch
+              label="Sessiz saatler"
+              checked={quietHours.enabled}
+              disabled={busy}
+              onChange={async (v) => {
+                const prev = quietHours;
+                const next = { ...quietHours, enabled: v };
+                setQuietHours(next);
+                try {
+                  await updateUserPrefs({ data: { quiet_hours: next } });
+                  toast.success(v ? "Sessiz saatler açıldı" : "Sessiz saatler kapatıldı");
+                } catch (err) {
+                  setQuietHours(prev);
+                  toast.error(errorText(err, "Kaydedilemedi"));
+                }
+              }}
+            />
+          </div>
+          {quietHours.enabled ? (
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div>
+                <Label htmlFor="qh-start">Başlangıç</Label>
+                <Input
+                  id="qh-start"
+                  type="time"
+                  value={quietHours.start}
+                  onChange={async (e) => {
+                    const prev = quietHours;
+                    const next = { ...quietHours, start: e.target.value };
+                    setQuietHours(next);
+                    if (!e.target.value) return;
+                    try {
+                      await updateUserPrefs({ data: { quiet_hours: next } });
+                    } catch (err) {
+                      setQuietHours(prev);
+                      toast.error(errorText(err, "Kaydedilemedi"));
+                    }
+                  }}
+                />
+              </div>
+              <div>
+                <Label htmlFor="qh-end">Bitiş</Label>
+                <Input
+                  id="qh-end"
+                  type="time"
+                  value={quietHours.end}
+                  onChange={async (e) => {
+                    const prev = quietHours;
+                    const next = { ...quietHours, end: e.target.value };
+                    setQuietHours(next);
+                    if (!e.target.value) return;
+                    try {
+                      await updateUserPrefs({ data: { quiet_hours: next } });
+                    } catch (err) {
+                      setQuietHours(prev);
+                      toast.error(errorText(err, "Kaydedilemedi"));
+                    }
+                  }}
+                />
+              </div>
+            </div>
           ) : null}
         </section>
 

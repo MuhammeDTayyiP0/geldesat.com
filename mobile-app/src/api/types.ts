@@ -254,6 +254,12 @@ export type Seller = {
   reviews: Review[];
   hasMoreReviews?: boolean;
   responseStats?: SellerResponseStats | null;
+  availability?: {
+    callHours: string | null;
+    awayMode: boolean;
+    awayMessage: string | null;
+    acceptOffers: boolean;
+  } | null;
 };
 
 export type Store = {
@@ -375,6 +381,37 @@ export type AccountSettings = {
   message_email: boolean;
   email_ready: boolean;
   email_configured: boolean;
+  user_prefs?: UserPrefs;
+};
+
+export type QuietHours = {
+  enabled: boolean;
+  start: string;
+  end: string;
+};
+
+export type SellerPrefs = {
+  accept_offers: boolean;
+  call_hours_enabled: boolean;
+  call_hours_start: string;
+  call_hours_end: string;
+  away_mode: boolean;
+  away_message: string;
+};
+
+export type BrowseSort = 'date_desc' | 'price_asc' | 'price_desc' | 'distance';
+export type BrowseView = 'grid' | 'list';
+
+export type BrowsePrefs = {
+  default_city: string;
+  default_sort: BrowseSort;
+  default_view: BrowseView;
+};
+
+export type UserPrefs = {
+  quiet_hours: QuietHours;
+  seller_prefs: SellerPrefs;
+  browse_prefs: BrowsePrefs;
 };
 
 export type BlockedUser = { id: string; name: string; avatar: string | null; since: string };

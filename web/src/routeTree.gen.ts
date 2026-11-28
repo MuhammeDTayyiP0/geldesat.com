@@ -45,9 +45,12 @@ import { Route as ApiGeoRouteImport } from './routes/api/geo'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as ApiStoreLogoRouteImport } from './routes/api/store-logo'
 import { Route as ApiUploadRouteImport } from './routes/api/upload'
+import { Route as ApiVersionRouteImport } from './routes/api/version'
 import { Route as AyarlarIndexRouteImport } from './routes/ayarlar/index'
 import { Route as AyarlarBildirimlerRouteImport } from './routes/ayarlar/bildirimler'
+import { Route as AyarlarDepolamaRouteImport } from './routes/ayarlar/depolama'
 import { Route as AyarlarEngellenenlerRouteImport } from './routes/ayarlar/engellenenler'
+import { Route as AyarlarGeriBildirimRouteImport } from './routes/ayarlar/geri-bildirim'
 import { Route as AyarlarGizlilikRouteImport } from './routes/ayarlar/gizlilik'
 import { Route as AyarlarGorunumRouteImport } from './routes/ayarlar/gorunum'
 import { Route as AyarlarGuvenlikRouteImport } from './routes/ayarlar/guvenlik'
@@ -57,6 +60,7 @@ import { Route as AyarlarMagazaRouteImport } from './routes/ayarlar/magaza'
 import { Route as AyarlarProfilRouteImport } from './routes/ayarlar/profil'
 import { Route as AyarlarSablonlarRouteImport } from './routes/ayarlar/sablonlar'
 import { Route as AyarlarTakipEttiklerimRouteImport } from './routes/ayarlar/takip-ettiklerim'
+import { Route as AyarlarTercihlerRouteImport } from './routes/ayarlar/tercihler'
 import { Route as CategorySlugRouteImport } from './routes/category/$slug'
 import { Route as IlanSlugRouteImport } from './routes/ilan/$slug'
 import { Route as MagazaSlugRouteImport } from './routes/magaza/$slug'
@@ -282,6 +286,11 @@ const ApiUploadRoute = ApiUploadRouteImport.update({
   path: '/api/upload',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiVersionRoute = ApiVersionRouteImport.update({
+  id: '/api/version',
+  path: '/api/version',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AyarlarIndexRoute = AyarlarIndexRouteImport.update({
   id: '/ayarlar/',
   path: '/ayarlar/',
@@ -292,9 +301,19 @@ const AyarlarBildirimlerRoute = AyarlarBildirimlerRouteImport.update({
   path: '/ayarlar/bildirimler',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AyarlarDepolamaRoute = AyarlarDepolamaRouteImport.update({
+  id: '/ayarlar/depolama',
+  path: '/ayarlar/depolama',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AyarlarEngellenenlerRoute = AyarlarEngellenenlerRouteImport.update({
   id: '/ayarlar/engellenenler',
   path: '/ayarlar/engellenenler',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AyarlarGeriBildirimRoute = AyarlarGeriBildirimRouteImport.update({
+  id: '/ayarlar/geri-bildirim',
+  path: '/ayarlar/geri-bildirim',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AyarlarGizlilikRoute = AyarlarGizlilikRouteImport.update({
@@ -340,6 +359,11 @@ const AyarlarSablonlarRoute = AyarlarSablonlarRouteImport.update({
 const AyarlarTakipEttiklerimRoute = AyarlarTakipEttiklerimRouteImport.update({
   id: '/ayarlar/takip-ettiklerim',
   path: '/ayarlar/takip-ettiklerim',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AyarlarTercihlerRoute = AyarlarTercihlerRouteImport.update({
+  id: '/ayarlar/tercihler',
+  path: '/ayarlar/tercihler',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CategorySlugRoute = CategorySlugRouteImport.update({
@@ -601,8 +625,11 @@ export interface FileRoutesByFullPath {
   '/api/health': typeof ApiHealthRoute
   '/api/store-logo': typeof ApiStoreLogoRoute
   '/api/upload': typeof ApiUploadRoute
+  '/api/version': typeof ApiVersionRoute
   '/ayarlar/bildirimler': typeof AyarlarBildirimlerRoute
+  '/ayarlar/depolama': typeof AyarlarDepolamaRoute
   '/ayarlar/engellenenler': typeof AyarlarEngellenenlerRoute
+  '/ayarlar/geri-bildirim': typeof AyarlarGeriBildirimRoute
   '/ayarlar/gizlilik': typeof AyarlarGizlilikRoute
   '/ayarlar/gorunum': typeof AyarlarGorunumRoute
   '/ayarlar/guvenlik': typeof AyarlarGuvenlikRoute
@@ -612,6 +639,7 @@ export interface FileRoutesByFullPath {
   '/ayarlar/profil': typeof AyarlarProfilRoute
   '/ayarlar/sablonlar': typeof AyarlarSablonlarRoute
   '/ayarlar/takip-ettiklerim': typeof AyarlarTakipEttiklerimRoute
+  '/ayarlar/tercihler': typeof AyarlarTercihlerRoute
   '/category/$slug': typeof CategorySlugRoute
   '/ilan/$slug': typeof IlanSlugRoute
   '/magaza/$slug': typeof MagazaSlugRoute
@@ -693,8 +721,11 @@ export interface FileRoutesByTo {
   '/api/health': typeof ApiHealthRoute
   '/api/store-logo': typeof ApiStoreLogoRoute
   '/api/upload': typeof ApiUploadRoute
+  '/api/version': typeof ApiVersionRoute
   '/ayarlar/bildirimler': typeof AyarlarBildirimlerRoute
+  '/ayarlar/depolama': typeof AyarlarDepolamaRoute
   '/ayarlar/engellenenler': typeof AyarlarEngellenenlerRoute
+  '/ayarlar/geri-bildirim': typeof AyarlarGeriBildirimRoute
   '/ayarlar/gizlilik': typeof AyarlarGizlilikRoute
   '/ayarlar/gorunum': typeof AyarlarGorunumRoute
   '/ayarlar/guvenlik': typeof AyarlarGuvenlikRoute
@@ -704,6 +735,7 @@ export interface FileRoutesByTo {
   '/ayarlar/profil': typeof AyarlarProfilRoute
   '/ayarlar/sablonlar': typeof AyarlarSablonlarRoute
   '/ayarlar/takip-ettiklerim': typeof AyarlarTakipEttiklerimRoute
+  '/ayarlar/tercihler': typeof AyarlarTercihlerRoute
   '/category/$slug': typeof CategorySlugRoute
   '/ilan/$slug': typeof IlanSlugRoute
   '/magaza/$slug': typeof MagazaSlugRoute
@@ -788,8 +820,11 @@ export interface FileRoutesById {
   '/api/health': typeof ApiHealthRoute
   '/api/store-logo': typeof ApiStoreLogoRoute
   '/api/upload': typeof ApiUploadRoute
+  '/api/version': typeof ApiVersionRoute
   '/ayarlar/bildirimler': typeof AyarlarBildirimlerRoute
+  '/ayarlar/depolama': typeof AyarlarDepolamaRoute
   '/ayarlar/engellenenler': typeof AyarlarEngellenenlerRoute
+  '/ayarlar/geri-bildirim': typeof AyarlarGeriBildirimRoute
   '/ayarlar/gizlilik': typeof AyarlarGizlilikRoute
   '/ayarlar/gorunum': typeof AyarlarGorunumRoute
   '/ayarlar/guvenlik': typeof AyarlarGuvenlikRoute
@@ -799,6 +834,7 @@ export interface FileRoutesById {
   '/ayarlar/profil': typeof AyarlarProfilRoute
   '/ayarlar/sablonlar': typeof AyarlarSablonlarRoute
   '/ayarlar/takip-ettiklerim': typeof AyarlarTakipEttiklerimRoute
+  '/ayarlar/tercihler': typeof AyarlarTercihlerRoute
   '/category/$slug': typeof CategorySlugRoute
   '/ilan/$slug': typeof IlanSlugRoute
   '/magaza/$slug': typeof MagazaSlugRoute
@@ -884,8 +920,11 @@ export interface FileRouteTypes {
     | '/api/health'
     | '/api/store-logo'
     | '/api/upload'
+    | '/api/version'
     | '/ayarlar/bildirimler'
+    | '/ayarlar/depolama'
     | '/ayarlar/engellenenler'
+    | '/ayarlar/geri-bildirim'
     | '/ayarlar/gizlilik'
     | '/ayarlar/gorunum'
     | '/ayarlar/guvenlik'
@@ -895,6 +934,7 @@ export interface FileRouteTypes {
     | '/ayarlar/profil'
     | '/ayarlar/sablonlar'
     | '/ayarlar/takip-ettiklerim'
+    | '/ayarlar/tercihler'
     | '/category/$slug'
     | '/ilan/$slug'
     | '/magaza/$slug'
@@ -976,8 +1016,11 @@ export interface FileRouteTypes {
     | '/api/health'
     | '/api/store-logo'
     | '/api/upload'
+    | '/api/version'
     | '/ayarlar/bildirimler'
+    | '/ayarlar/depolama'
     | '/ayarlar/engellenenler'
+    | '/ayarlar/geri-bildirim'
     | '/ayarlar/gizlilik'
     | '/ayarlar/gorunum'
     | '/ayarlar/guvenlik'
@@ -987,6 +1030,7 @@ export interface FileRouteTypes {
     | '/ayarlar/profil'
     | '/ayarlar/sablonlar'
     | '/ayarlar/takip-ettiklerim'
+    | '/ayarlar/tercihler'
     | '/category/$slug'
     | '/ilan/$slug'
     | '/magaza/$slug'
@@ -1070,8 +1114,11 @@ export interface FileRouteTypes {
     | '/api/health'
     | '/api/store-logo'
     | '/api/upload'
+    | '/api/version'
     | '/ayarlar/bildirimler'
+    | '/ayarlar/depolama'
     | '/ayarlar/engellenenler'
+    | '/ayarlar/geri-bildirim'
     | '/ayarlar/gizlilik'
     | '/ayarlar/gorunum'
     | '/ayarlar/guvenlik'
@@ -1081,6 +1128,7 @@ export interface FileRouteTypes {
     | '/ayarlar/profil'
     | '/ayarlar/sablonlar'
     | '/ayarlar/takip-ettiklerim'
+    | '/ayarlar/tercihler'
     | '/category/$slug'
     | '/ilan/$slug'
     | '/magaza/$slug'
@@ -1150,8 +1198,11 @@ export interface RootRouteChildren {
   ApiHealthRoute: typeof ApiHealthRoute
   ApiStoreLogoRoute: typeof ApiStoreLogoRoute
   ApiUploadRoute: typeof ApiUploadRoute
+  ApiVersionRoute: typeof ApiVersionRoute
   AyarlarBildirimlerRoute: typeof AyarlarBildirimlerRoute
+  AyarlarDepolamaRoute: typeof AyarlarDepolamaRoute
   AyarlarEngellenenlerRoute: typeof AyarlarEngellenenlerRoute
+  AyarlarGeriBildirimRoute: typeof AyarlarGeriBildirimRoute
   AyarlarGizlilikRoute: typeof AyarlarGizlilikRoute
   AyarlarGorunumRoute: typeof AyarlarGorunumRoute
   AyarlarGuvenlikRoute: typeof AyarlarGuvenlikRoute
@@ -1161,6 +1212,7 @@ export interface RootRouteChildren {
   AyarlarProfilRoute: typeof AyarlarProfilRoute
   AyarlarSablonlarRoute: typeof AyarlarSablonlarRoute
   AyarlarTakipEttiklerimRoute: typeof AyarlarTakipEttiklerimRoute
+  AyarlarTercihlerRoute: typeof AyarlarTercihlerRoute
   CategorySlugRoute: typeof CategorySlugRoute
   IlanSlugRoute: typeof IlanSlugRoute
   MagazaSlugRoute: typeof MagazaSlugRoute
@@ -1454,6 +1506,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiUploadRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/version': {
+      id: '/api/version'
+      path: '/api/version'
+      fullPath: '/api/version'
+      preLoaderRoute: typeof ApiVersionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/ayarlar/': {
       id: '/ayarlar/'
       path: '/ayarlar'
@@ -1468,11 +1527,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AyarlarBildirimlerRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/ayarlar/depolama': {
+      id: '/ayarlar/depolama'
+      path: '/ayarlar/depolama'
+      fullPath: '/ayarlar/depolama'
+      preLoaderRoute: typeof AyarlarDepolamaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/ayarlar/engellenenler': {
       id: '/ayarlar/engellenenler'
       path: '/ayarlar/engellenenler'
       fullPath: '/ayarlar/engellenenler'
       preLoaderRoute: typeof AyarlarEngellenenlerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ayarlar/geri-bildirim': {
+      id: '/ayarlar/geri-bildirim'
+      path: '/ayarlar/geri-bildirim'
+      fullPath: '/ayarlar/geri-bildirim'
+      preLoaderRoute: typeof AyarlarGeriBildirimRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/ayarlar/gizlilik': {
@@ -1536,6 +1609,13 @@ declare module '@tanstack/react-router' {
       path: '/ayarlar/takip-ettiklerim'
       fullPath: '/ayarlar/takip-ettiklerim'
       preLoaderRoute: typeof AyarlarTakipEttiklerimRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ayarlar/tercihler': {
+      id: '/ayarlar/tercihler'
+      path: '/ayarlar/tercihler'
+      fullPath: '/ayarlar/tercihler'
+      preLoaderRoute: typeof AyarlarTercihlerRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/category/$slug': {
@@ -1996,8 +2076,11 @@ const rootRouteChildren: RootRouteChildren = {
   ApiHealthRoute: ApiHealthRoute,
   ApiStoreLogoRoute: ApiStoreLogoRoute,
   ApiUploadRoute: ApiUploadRoute,
+  ApiVersionRoute: ApiVersionRoute,
   AyarlarBildirimlerRoute: AyarlarBildirimlerRoute,
+  AyarlarDepolamaRoute: AyarlarDepolamaRoute,
   AyarlarEngellenenlerRoute: AyarlarEngellenenlerRoute,
+  AyarlarGeriBildirimRoute: AyarlarGeriBildirimRoute,
   AyarlarGizlilikRoute: AyarlarGizlilikRoute,
   AyarlarGorunumRoute: AyarlarGorunumRoute,
   AyarlarGuvenlikRoute: AyarlarGuvenlikRoute,
@@ -2007,6 +2090,7 @@ const rootRouteChildren: RootRouteChildren = {
   AyarlarProfilRoute: AyarlarProfilRoute,
   AyarlarSablonlarRoute: AyarlarSablonlarRoute,
   AyarlarTakipEttiklerimRoute: AyarlarTakipEttiklerimRoute,
+  AyarlarTercihlerRoute: AyarlarTercihlerRoute,
   CategorySlugRoute: CategorySlugRoute,
   IlanSlugRoute: IlanSlugRoute,
   MagazaSlugRoute: MagazaSlugRoute,

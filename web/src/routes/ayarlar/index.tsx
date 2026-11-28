@@ -1,6 +1,6 @@
 import { createFileRoute, getRouteApi, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { FileText, HelpCircle, Monitor, Moon, Search, Shield, Sun, type LucideIcon } from "lucide-react";
+import { FileText, HelpCircle, MessageSquarePlus, Monitor, Moon, Search, Shield, Sun, type LucideIcon } from "lucide-react";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { BrandSpinner } from "@/components/brand/BrandSpinner";
@@ -42,7 +42,7 @@ function SettingsHome() {
   })).filter((section) => section.items.length);
   const matches = (words: string) => !term || words.toLocaleLowerCase("tr").includes(term);
   const showTheme = matches("görünüm tema açık koyu karanlık cihaz ayarı mod");
-  const showHelp = matches("yardım destek iletişim kullanım koşulları gizlilik yönetim paneli");
+  const showHelp = matches("yardım destek iletişim kullanım koşulları gizlilik yönetim paneli geri bildirim hata sorun öneri");
   const showSignOut = matches("çıkış yap oturum kapat");
 
   return (
@@ -108,6 +108,11 @@ function SettingsHome() {
                   </Link>
                 </li>
               ) : null}
+              <li>
+                <Link to="/ayarlar/geri-bildirim" className="flex min-h-13 items-center gap-3 px-4 hover:bg-elevated/60">
+                  <MessageSquarePlus className="size-5 text-muted" /> Geri bildirim / Sorun bildir
+                </Link>
+              </li>
               <li>
                 <Link to="/sayfa/$slug" params={{ slug: "iletisim" }} className="flex min-h-13 items-center gap-3 px-4 hover:bg-elevated/60">
                   <HelpCircle className="size-5 text-muted" /> Yardım ve destek

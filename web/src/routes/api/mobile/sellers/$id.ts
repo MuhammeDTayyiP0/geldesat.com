@@ -2,7 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { getSql } from "@/lib/db";
 import { getSellerResponseStats } from "@/lib/server/chat";
 import { listingSelect, mapListing } from "@/lib/server/helpers";
-import { num } from "@/lib/utils";
+import { resolveUserPrefs } from "@/lib/user-prefs";
+import { asJson, num } from "@/lib/utils";
 import { errorStatus, publicErrorMessage } from "@/lib/server/errors";
 
 export const Route = createFileRoute("/api/mobile/sellers/$id")({
@@ -21,7 +22,7 @@ export const Route = createFileRoute("/api/mobile/sellers/$id")({
           const reviewsOffset = (reviewsPage - 1) * reviewsLimit;
           const sql = await getSql();
           const rows = await sql.query<Record<string, unknown>>(
-            `select p.user_id,p.display_name,p.bio,p.city,p.created_at,p.avatar_url,
+            `select p.user_id,p.display_name,p.bio,p.city,p.created_at,p.avatar_url,p.user_prefs,
                     (select count(*)::int from listings where user_id=p.user_id and status='ACTIVE' and (expires_at is null or expires_at>now())) as listing_count,
                     (select coalesce(avg(rating),0) from reviews where seller_id=p.user_id) as rating_avg,
                     (select count(*)::int from reviews where seller_id=p.user_id) as rating_count
@@ -46,11 +47,20 @@ export const Route = createFileRoute("/api/mobile/sellers/$id")({
           const hasMoreReviews = reviewRows.length > reviewsLimit;
           const reviews = reviewRows.slice(0, reviewsLimit);
           const seller = rows[0];
+          const sellerPrefs = resolveUserPrefs(asJson(seller.user_prefs, {})).seller_prefs;
           return Response.json({ success: true, hasMoreReviews, seller: {
             id: String(seller.user_id), name: String(seller.display_name ?? "Satıcı"), bio: String(seller.bio ?? ""), city: String(seller.city ?? ""),
             avatar_url: seller.avatar_url ? String(seller.avatar_url) : null,
             since: new Date(String(seller.created_at)).toISOString(), listing_count: num(seller.listing_count), rating_avg: num(seller.rating_avg), rating_count: num(seller.rating_count),
             responseStats,
+            availability: {
+              callHours: sellerPrefs.call_hours_enabled ? `${sellerPrefs.call_hours_start} – ${sellerPrefs.call_hours_end}` : null,
+              awayMode: sellerPrefs.away_mode,
+              awayMessage: sellerPrefs.away_mode
+                ? sellerPrefs.away_message || "Satıcı şu an müsait değil, mesajlarınıza en kısa sürede dönüş yapacaktır."
+                : null,
+              acceptOffers: sellerPrefs.accept_offers,
+            },
             hasMoreReviews,
             store: stores[0]
               ? {

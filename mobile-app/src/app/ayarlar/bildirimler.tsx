@@ -2,11 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppState, Linking, ScrollView, StyleSheet, View } from 'react-native';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { BellRing, Mail } from 'lucide-react-native';
+import { BellRing, Clock, Mail } from 'lucide-react-native';
 import { errorMessage } from '@/api/client';
 import { account } from '@/api/endpoints';
 import { keys, queryClient } from '@/api/queries';
-import type { AccountSettings, NotifyPrefs, NotifyType } from '@/api/types';
+import type { AccountSettings, NotifyPrefs, NotifyType, QuietHours } from '@/api/types';
+import { OptionPicker } from '@/features/location/OptionPicker';
 import { canAskForPush, pushPermissionGranted, registerForPush } from '@/lib/push';
 import { Button, Card, ErrorState, Header, ListRow, Loading, RowGroup, Text, space, toast, useTheme } from '@/ui';
 import { RequireSignIn } from '@/auth/RequireSignIn';
@@ -27,12 +28,16 @@ export default function NotificationSettingsScreen() {
   );
 }
 
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, h) => `${String(h).padStart(2, '0')}:00`);
+
 function NotificationSettings() {
   const insets = useSafeAreaInsets();
   const { c } = useTheme();
   const settings = useQuery({ queryKey: keys.settings, queryFn: account.settings });
   const [edited, setPrefs] = useState<NotifyPrefs | null>(null);
   const prefs = edited ?? settings.data?.notify_prefs ?? null;
+  const quietHours: QuietHours = settings.data?.user_prefs?.quiet_hours ?? { enabled: false, start: '23:00', end: '08:00' };
+  const [qhPicker, setQhPicker] = useState<'start' | 'end' | null>(null);
   const [systemOn, setSystemOn] = useState(true);
 
   useEffect(() => {
@@ -63,6 +68,20 @@ function NotificationSettings() {
     mutationFn: account.updateMessageEmail,
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: keys.settings }),
     onError: (e) => toast.error(errorMessage(e)),
+  });
+  const saveQuietHours = useMutation({
+    mutationFn: (next: QuietHours) => account.updateUserPrefs({ quiet_hours: next }),
+    onMutate: (next) => {
+      const prev = queryClient.getQueryData<AccountSettings>(keys.settings);
+      queryClient.setQueryData<AccountSettings>(keys.settings, (d) =>
+        d && d.user_prefs ? { ...d, user_prefs: { ...d.user_prefs, quiet_hours: next } } : d,
+      );
+      return { prev };
+    },
+    onError: (e, _, ctx) => {
+      queryClient.setQueryData(keys.settings, ctx?.prev);
+      toast.error(errorMessage(e));
+    },
   });
 
   const toggle = (type: NotifyType, channel: 'inapp' | 'push', value: boolean) => {
@@ -144,8 +163,35 @@ function NotificationSettings() {
               onSwitch={(v) => saveEmail.mutate(v)}
             />
           </RowGroup>
+
+          <RowGroup title="Sessiz saatler (Rahatsız Etme)">
+            <ListRow
+              icon={Clock}
+              label="Sessiz saatler"
+              detail="Bu aralıkta telefon bildirimleri susturulur"
+              switchValue={quietHours.enabled}
+              onSwitch={(v) => saveQuietHours.mutate({ ...quietHours, enabled: v })}
+            />
+            {quietHours.enabled ? (
+              <>
+                <ListRow label="Başlangıç saati" value={quietHours.start} onPress={() => setQhPicker('start')} />
+                <ListRow label="Bitiş saati" value={quietHours.end} onPress={() => setQhPicker('end')} />
+              </>
+            ) : null}
+          </RowGroup>
         </ScrollView>
       )}
+      <OptionPicker
+        visible={qhPicker !== null}
+        onClose={() => setQhPicker(null)}
+        title={qhPicker === 'start' ? 'Sessiz saat başlangıcı' : 'Sessiz saat bitişi'}
+        options={HOUR_OPTIONS}
+        value={qhPicker === 'start' ? quietHours.start : quietHours.end}
+        onSelect={(val) => {
+          if (!val || !qhPicker) return;
+          saveQuietHours.mutate({ ...quietHours, [qhPicker]: val });
+        }}
+      />
     </View>
   );
 }

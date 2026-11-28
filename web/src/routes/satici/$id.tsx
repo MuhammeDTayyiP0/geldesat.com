@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   BadgeCheck,
   CalendarDays,
+  Clock,
   Eye,
   LayoutGrid,
   MapPin,
@@ -421,7 +422,17 @@ function SellerPage() {
               </span>
             </li>
           ) : null}
+          {seller.availability?.callHours ? (
+            <li className="inline-flex items-center gap-1.5">
+              <Clock className="size-4 text-subtle" /> Aranabilir: {seller.availability.callHours}
+            </li>
+          ) : null}
         </ul>
+        {seller.availability?.awayMode && seller.availability.awayMessage ? (
+          <div className="mt-3 rounded-xl border border-warn/30 bg-warn/10 px-3.5 py-2.5 text-sm text-warn">
+            {seller.availability.awayMessage}
+          </div>
+        ) : null}
         {store?.description ? <p className="mt-3 max-w-3xl whitespace-pre-wrap text-sm leading-relaxed">{store.description}</p> : null}
         {seller.bio ? <p className="mt-3 max-w-3xl whitespace-pre-wrap text-sm leading-relaxed">{seller.bio}</p> : null}
       </section>

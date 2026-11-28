@@ -35,9 +35,11 @@ import {
   getDeletionStatus,
   requestMyAccountDeletion,
   restoreMyAccount,
+  submitFeedback,
   updateMessageEmail,
   updateNotifyPrefs,
   updatePrivacySettings,
+  updateUserPrefs,
 } from "@/lib/server/settings";
 import {
   bulkImportListings,
@@ -128,6 +130,8 @@ const FUNCTIONS: Record<string, ServerFn> = {
   updatePrivacySettings,
   updateMessageEmail,
   updateNotifyPrefs,
+  updateUserPrefs,
+  submitFeedback,
   getDeletionStatus,
   requestMyAccountDeletion,
   restoreMyAccount,

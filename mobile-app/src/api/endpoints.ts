@@ -140,6 +140,28 @@ export const account = {
     rpc('updatePrivacySettings', data),
   updateMessageEmail: (enabled: boolean) => rpc('updateMessageEmail', { enabled }),
   updateNotifyPrefs: (prefs: NotifyPrefs) => rpc<{ prefs: NotifyPrefs }>('updateNotifyPrefs', prefs),
+  updateUserPrefs: (patch: {
+    quiet_hours?: { enabled: boolean; start: string; end: string };
+    seller_prefs?: {
+      accept_offers: boolean;
+      call_hours_enabled: boolean;
+      call_hours_start: string;
+      call_hours_end: string;
+      away_mode: boolean;
+      away_message: string;
+    };
+    browse_prefs?: {
+      default_city: string;
+      default_sort: 'date_desc' | 'price_asc' | 'price_desc' | 'distance';
+      default_view: 'grid' | 'list';
+    };
+  }) => rpc<{ ok: true; user_prefs: import('./types').UserPrefs }>('updateUserPrefs', patch),
+  submitFeedback: (data: {
+    category: 'bug' | 'suggestion' | 'account' | 'other';
+    message: string;
+    platform?: 'web' | 'ios' | 'android';
+    app_version?: string;
+  }) => rpc<{ ok: true; id: string }>('submitFeedback', data),
   deletionStatus: () => rpc<{ purgeAt: string | null }>('getDeletionStatus'),
   requestDeletion: (password?: string) => rpc<{ purgeAt: string }>('requestMyAccountDeletion', { password }),
   restore: () => rpc('restoreMyAccount'),
